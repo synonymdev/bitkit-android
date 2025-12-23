@@ -49,7 +49,7 @@ import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-
+private const val LAST_PAGE_INDEX = 3
 @Composable
 fun OnboardingSlidesScreen(
     currentTab: Int = 0,
@@ -90,31 +90,23 @@ fun OnboardingSlidesScreen(
                 )
 
                 2 -> OnboardingTab(
-                    imageResId = R.drawable.spark,
-                    title = stringResource(R.string.onboarding__slide2_header),
-                    titleAccentColor = Colors.Yellow,
-                    text = stringResource(R.string.onboarding__slide2_text),
-                    modifier = Modifier.testTag("Slide2")
-                )
-
-                3 -> OnboardingTab(
                     imageResId = R.drawable.shield,
                     title = stringResource(R.string.onboarding__slide3_header),
                     titleAccentColor = Colors.Green,
                     text = stringResource(R.string.onboarding__slide3_text),
-                    modifier = Modifier.testTag("Slide3")
+                    modifier = Modifier.testTag("Slide2")
                 )
 
-                4 -> CreateWalletScreen(
+                LAST_PAGE_INDEX -> CreateWalletScreen(
                     onCreateClick = onCreateClick,
                     onRestoreClick = onRestoreClick,
-                    modifier = Modifier.testTag("Slide4")
+                    modifier = Modifier.testTag("Slide$LAST_PAGE_INDEX")
                 )
             }
         }
 
         // Dots indicator
-        val isIndicatorVisible = pagerState.currentPage != 4
+        val isIndicatorVisible = pagerState.currentPage != LAST_PAGE_INDEX
         val yOffset by animateDpAsState(
             targetValue = if (isIndicatorVisible) 0.dp else 20.dp,
             animationSpec = tween(durationMillis = 300),
@@ -157,7 +149,7 @@ fun OnboardingSlidesScreen(
         onBackClick = null,
         titleText = null,
         actions = {
-            if (pagerState.currentPage == 4) {
+            if (pagerState.currentPage == LAST_PAGE_INDEX) {
                 TextButton(
                     onClick = onAdvancedSetupClick,
                     modifier = Modifier.testTag("Passphrase")
@@ -276,7 +268,7 @@ private fun OnboardingViewPreview3() {
 private fun OnboardingViewPreview4() {
     AppThemeSurface {
         OnboardingSlidesScreen(
-            currentTab = 4,
+            currentTab = LAST_PAGE_INDEX,
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
