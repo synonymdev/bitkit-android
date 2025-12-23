@@ -1046,9 +1046,12 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.showSanityWarningDialog != null) return
 
         val settings = settingsStore.data.first()
-
+        val balanceToCheck = when (_sendUiState.value.payMethod) {
+            SendMethod.ONCHAIN -> walletRepo.balanceState.value.maxSendOnchainSats
+            SendMethod.LIGHTNING -> walletRepo.balanceState.value.maxSendLightningSats
+        }
         if (
-            amountSats > BigDecimal.valueOf(walletRepo.balanceState.value.totalSats.toLong())
+            amountSats > BigDecimal.valueOf(balanceToCheck.toLong())
                 .times(BigDecimal(MAX_BALANCE_FRACTION)).toLong().toUInt() &&
             SanityWarning.OVER_HALF_BALANCE !in _sendUiState.value.confirmedWarnings
         ) {
