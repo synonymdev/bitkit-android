@@ -11,11 +11,11 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import to.bitkit.test.BaseUnitTest
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.TimedSheetType
 
 class NotificationsTimedSheetTest : BaseUnitTest() {
