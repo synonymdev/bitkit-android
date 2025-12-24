@@ -92,7 +92,6 @@ import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.AppUpdaterService
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.nav.DeepLinkPatterns
 import to.bitkit.ui.nav.Routes
@@ -234,8 +233,8 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
-                if (sheetType != null) {
-                    _currentSheet.update { Sheet.TimedSheet(sheetType) }
+                sheetType?.let {
+                    mainScreenEffect(MainScreenEffect.Navigate(it.toRoute()))
                 }
             }
         }
