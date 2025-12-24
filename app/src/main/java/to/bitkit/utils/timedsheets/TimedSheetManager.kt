@@ -43,13 +43,15 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     }
 
     fun dismissCurrentSheet(skipQueue: Boolean = false) {
+        if (currentTimedSheet == null) return
+
         scope.launch {
             currentTimedSheet?.onDismissed()
+            _currentSheet.value = null
+            currentTimedSheet = null
 
             if (skipQueue) {
                 Logger.debug("Clearing timed sheet queue", context = TAG)
-                _currentSheet.value = null
-                currentTimedSheet = null
             } else {
                 delay(CHECK_DELAY_MILLIS)
                 checkAndShowNextSheet()
@@ -58,6 +60,7 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     }
 
     private suspend fun checkAndShowNextSheet() {
+        Logger.debug("Queued sheets: ${registeredSheets.map { it.type.name }}")
         for (sheet in registeredSheets.toList()) {
             if (sheet.shouldShow()) {
                 Logger.debug(
