@@ -230,9 +230,9 @@ dependencies {
     implementation(libs.charts)
     implementation(libs.haze)
     implementation(libs.haze.materials)
-    // Navigation 3
-    implementation(libs.navigation3.runtime)
-    implementation(libs.navigation3.ui)
+    // Navigation
+    implementation(libs.navigation.runtime)
+    implementation(libs.navigation.ui)
     implementation(libs.hilt.navigation.compose)
     // Hilt - DI
     implementation(libs.hilt.android)
