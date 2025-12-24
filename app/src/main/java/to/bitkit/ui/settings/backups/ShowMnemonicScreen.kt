@@ -52,7 +52,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.ui.nav.MS_TRANSITION_SCREEN
 import to.bitkit.ui.utils.withAccent
 
 @Composable
@@ -97,7 +97,7 @@ private fun ShowMnemonicContent(
     // Scroll to bottom when mnemonic is revealed
     LaunchedEffect(showMnemonic) {
         if (showMnemonic) {
-            delay(TRANSITION_SCREEN_MS) // Wait for the animation to start
+            delay(MS_TRANSITION_SCREEN) // Wait for the animation to start
             scope.launch {
                 scrollState.animateScrollTo(scrollState.maxValue)
             }
