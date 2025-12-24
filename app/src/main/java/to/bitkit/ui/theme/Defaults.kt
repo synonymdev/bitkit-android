@@ -1,6 +1,5 @@
 package to.bitkit.ui.theme
 
-import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -111,9 +110,6 @@ object AppSwitchDefaults {
             uncheckedIconColor = Colors.Gray4,
         )
 }
-
-const val TRANSITION_SCREEN_MS = AnimationConstants.DefaultDurationMillis.toLong() // 300ms
-const val TRANSITION_SHEET_MS = 650L
 
 object Insets {
     val Top: Dp

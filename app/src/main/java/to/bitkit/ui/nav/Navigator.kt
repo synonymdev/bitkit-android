@@ -1,12 +1,12 @@
 package to.bitkit.ui.nav
 
+import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.runtime.Stable
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 
 @Stable
 class Navigator(@PublishedApi internal val backStack: NavBackStack<NavKey>) {
-
     fun navigate(route: Routes) = run { backStack.add(route) }
 
     fun goBack(): Boolean = backStack.removeLastOrNull() != null
@@ -54,3 +54,6 @@ class Navigator(@PublishedApi internal val backStack: NavBackStack<NavKey>) {
         if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro
     )
 }
+
+const val MS_NAV_DELAY = 100L
+const val MS_TRANSITION_SCREEN = AnimationConstants.DefaultDurationMillis.toLong() // 300ms

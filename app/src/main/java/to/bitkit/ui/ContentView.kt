@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.nav.MS_NAV_DELAY
 import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.nav.SheetSceneStrategy
@@ -45,6 +46,7 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
+import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -126,10 +128,9 @@ fun ContentView(
             when (it) {
                 is MainScreenEffect.Navigate -> navigator.navigate(it.route)
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
-                    val isOnHome = backStack.lastOrNull() is Routes.Home
-                    if (!isOnHome) {
+                    if (!navigator.isAtHome()) {
                         navigator.navigateToHome()
-                        delay(100)
+                        delay(MS_NAV_DELAY)
                     }
                     appViewModel.onScanResult(it.data)
                 }
@@ -248,6 +249,8 @@ fun ContentView(
     ) {
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
+
+        AutoReadClipboardHandler()
 
         Box(modifier = modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
