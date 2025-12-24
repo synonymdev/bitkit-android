@@ -3,6 +3,7 @@ package to.bitkit.ui.nav.entries
 import android.content.Intent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -833,23 +834,23 @@ private fun EntryProviderScope<NavKey>.timedSheetEntries(
     entry<Routes.TimedUpdateSheet>(
         metadata = SheetSceneStrategy.sheet()
     ) {
+        DisposableEffect(Unit) {
+            onDispose { appViewModel.dismissTimedSheet() }
+        }
         UpdateSheet(
-            onCancel = {
-                appViewModel.dismissTimedSheet()
-                navigator.goBack()
-            },
+            onCancel = { navigator.goBack() },
         )
     }
 
     entry<Routes.TimedBackupSheet>(
         metadata = SheetSceneStrategy.sheet()
     ) {
+        DisposableEffect(Unit) {
+            onDispose { appViewModel.dismissTimedSheet() }
+        }
         BackupIntroScreen(
             hasFunds = LocalBalances.current.totalSats > 0u,
-            onClose = {
-                appViewModel.dismissTimedSheet()
-                navigator.goBack()
-            },
+            onClose = { navigator.goBack() },
             onConfirm = { navigator.navigate(Routes.BackupShowMnemonic) },
         )
     }
@@ -857,6 +858,9 @@ private fun EntryProviderScope<NavKey>.timedSheetEntries(
     entry<Routes.TimedNotificationsSheet>(
         metadata = SheetSceneStrategy.sheet()
     ) {
+        DisposableEffect(Unit) {
+            onDispose { appViewModel.dismissTimedSheet() }
+        }
         BackgroundPaymentsIntroSheet(
             onContinue = {
                 appViewModel.dismissTimedSheet(skipQueue = true)
@@ -868,6 +872,9 @@ private fun EntryProviderScope<NavKey>.timedSheetEntries(
     entry<Routes.TimedQuickPaySheet>(
         metadata = SheetSceneStrategy.sheet()
     ) {
+        DisposableEffect(Unit) {
+            onDispose { appViewModel.dismissTimedSheet() }
+        }
         QuickPayIntroSheet(
             onContinue = {
                 appViewModel.dismissTimedSheet(skipQueue = true)
@@ -879,12 +886,12 @@ private fun EntryProviderScope<NavKey>.timedSheetEntries(
     entry<Routes.TimedHighBalanceSheet>(
         metadata = SheetSceneStrategy.sheet()
     ) {
+        DisposableEffect(Unit) {
+            onDispose { appViewModel.dismissTimedSheet() }
+        }
         val context = LocalContext.current
         HighBalanceWarningSheet(
-            understoodClick = {
-                appViewModel.dismissTimedSheet()
-                navigator.goBack()
-            },
+            understoodClick = { navigator.goBack() },
             learnMoreClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Env.STORING_BITCOINS_URL.toUri())
                 context.startActivity(intent)

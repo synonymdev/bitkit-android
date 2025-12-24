@@ -17,7 +17,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -26,6 +30,7 @@ import androidx.navigation3.scene.OverlayScene
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.scene.SceneStrategy
 import androidx.navigation3.scene.SceneStrategyScope
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import to.bitkit.ui.components.SheetDragHandle
 import to.bitkit.ui.components.SheetSize
@@ -87,8 +92,21 @@ internal class BitKitSheetScene<T : Any>(
             bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         )
 
+        var isInitialExpansion by remember { mutableStateOf(true) }
+
         LaunchedEffect(Unit) {
             scaffoldState.bottomSheetState.expand()
+            isInitialExpansion = false
+        }
+
+        LaunchedEffect(scaffoldState.bottomSheetState) {
+            snapshotFlow { scaffoldState.bottomSheetState.currentValue }
+                .drop(1)
+                .collect { value: SheetValue ->
+                    if (!isInitialExpansion && value == SheetValue.Hidden) {
+                        onBack()
+                    }
+                }
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
