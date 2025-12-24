@@ -60,7 +60,7 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     }
 
     private suspend fun checkAndShowNextSheet() {
-        Logger.debug("Queued sheets: ${registeredSheets.map { it.type.name }}")
+        Logger.debug("Registered sheets: ${registeredSheets.map { it.type.name }}")
         for (sheet in registeredSheets.toList()) {
             if (sheet.shouldShow()) {
                 Logger.debug(
