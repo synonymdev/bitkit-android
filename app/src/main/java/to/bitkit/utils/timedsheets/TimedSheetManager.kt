@@ -51,6 +51,7 @@ class TimedSheetManager(private val scope: CoroutineScope) {
                 _currentSheet.value = null
                 currentTimedSheet = null
             } else {
+                delay(CHECK_DELAY_MILLIS)
                 checkAndShowNextSheet()
             }
         }
