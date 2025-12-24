@@ -26,6 +26,7 @@ import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
@@ -200,6 +201,14 @@ private fun HomeEntry(
     settingsViewModel: SettingsViewModel,
 ) {
     val mainUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+    val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
+
+    RequestNotificationPermissions(
+        showPermissionDialog = !isRecoveryMode,
+        onPermissionChange = { granted ->
+            settingsViewModel.setNotificationPreference(granted)
+        }
+    )
 
     HomeScreen(
         mainUiState = mainUiState,
