@@ -48,6 +48,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -92,6 +93,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.AppUpdaterService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -130,6 +132,7 @@ class AppViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val appUpdaterService: AppUpdaterService,
     private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
@@ -237,7 +240,9 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
-
+        viewModelScope.launch {
+            checkCriticalAppUpdate()
+        }
         observeLdkNodeEvents()
         observeSendEvents()
     }
@@ -1762,6 +1767,28 @@ class AppViewModel @Inject constructor(
 
     fun dismissTimedSheet(skipQueue: Boolean = false) =
         timedSheetManager.dismissCurrentSheet(skipQueue)
+
+    private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
+        runCatching {
+            val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
+            val currentBuildNumber = BuildConfig.VERSION_CODE
+
+            if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
+
+            if (androidReleaseInfo.isCritical) {
+                mainScreenEffect(
+                    MainScreenEffect.Navigate(
+                        route = Routes.CriticalUpdate,
+                        navOptions = navOptions {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    )
+                )
+            }
+        }.onFailure { e ->
+            Logger.warn("Failure fetching new releases", e = e, context = TAG)
+        }
+    }
 
     companion object {
         private const val TAG = "AppViewModel"
