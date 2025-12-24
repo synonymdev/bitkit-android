@@ -13,11 +13,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import com.synonym.bitkitcore.FeeRates
 import to.bitkit.R
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -27,7 +27,7 @@ import to.bitkit.viewmodels.FeeSettingsViewModel
 
 @Composable
 fun FeeSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: FeeSettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -38,7 +38,7 @@ fun FeeSettingsScreen(
 
     Content(
         uiState = uiState,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
     )
 }
 

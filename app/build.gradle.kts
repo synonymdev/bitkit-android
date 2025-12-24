@@ -230,9 +230,9 @@ dependencies {
     implementation(libs.charts)
     implementation(libs.haze)
     implementation(libs.haze.materials)
-    // Compose Navigation
-    implementation(libs.navigation.compose)
-    androidTestImplementation(libs.navigation.testing)
+    // Navigation
+    implementation(libs.navigation.runtime)
+    implementation(libs.navigation.ui)
     implementation(libs.hilt.navigation.compose)
     // Hilt - DI
     implementation(libs.hilt.android)

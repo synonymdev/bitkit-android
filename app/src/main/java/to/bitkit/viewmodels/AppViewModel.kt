@@ -9,8 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavOptions
-import androidx.navigation.navOptions
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.FeeRates
@@ -67,7 +65,7 @@ import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.minWithdrawableSat
-import to.bitkit.ext.rawId
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
@@ -95,11 +93,12 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.ui.Routes
-import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.TimedSheetType
+import to.bitkit.ui.nav.DeepLinkPatterns
+import to.bitkit.ui.nav.Routes
+import to.bitkit.ui.nav.removeLightningSchemes
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
-import to.bitkit.ui.sheets.SendRoute
-import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
@@ -488,14 +487,12 @@ class AppViewModel @Inject constructor(
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
                     SendEvent.PayConfirmed -> onConfirmPay()
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
-                    SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
+                    SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(Routes.SendAmount()))
                     SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
                 }
             }
         }
     }
-
-    private val isMainScanner get() = currentSheet.value !is Sheet.Send
 
     private fun onEnterManuallyClick() {
         resetAddressInput()
@@ -580,7 +577,7 @@ class AppViewModel @Inject constructor(
                 )
             }
             refreshOnchainSendIfNeeded()
-            setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
+            setSendEffect(SendEffect.PopBack(Routes.SendConfirm))
         }
     }
 
@@ -758,11 +755,7 @@ class AppViewModel @Inject constructor(
             if (quickPayHandled) return
 
             refreshOnchainSendIfNeeded()
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.Confirm))
-            } else {
-                setSendEffect(SendEffect.NavigateToConfirm)
-            }
+            setSendEffect(SendEffect.NavigateToConfirm)
             return
         }
 
@@ -774,11 +767,7 @@ class AppViewModel @Inject constructor(
             context = TAG,
         )
 
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        setSendEffect(SendEffect.NavigateToAmount)
     }
 
     private suspend fun onScanLightning(invoice: LightningInvoice, scanResult: String) {
@@ -815,21 +804,11 @@ class AppViewModel @Inject constructor(
 
         if (invoice.amountSatoshis > 0uL) {
             Logger.info("Found amount in invoice, proceeding with payment", context = TAG)
-
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.Confirm))
-            } else {
-                setSendEffect(SendEffect.NavigateToConfirm)
-            }
+            setSendEffect(SendEffect.NavigateToConfirm)
             return
         }
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)
-
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        setSendEffect(SendEffect.NavigateToAmount)
     }
 
     private suspend fun onScanLnurlPay(data: LnurlPayData) {
@@ -864,20 +843,12 @@ class AppViewModel @Inject constructor(
             val quickPayHandled = handleQuickPayIfApplicable(amountSats = minSendable, lnurlPay = data)
             if (quickPayHandled) return
 
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.Confirm))
-            } else {
-                setSendEffect(SendEffect.NavigateToConfirm)
-            }
+            setSendEffect(SendEffect.NavigateToConfirm)
             return
         }
 
         Logger.info("No amount found in lnurlPay, proceeding to enter amount manually", context = TAG)
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        setSendEffect(SendEffect.NavigateToAmount)
     }
 
     private fun onScanLnurlWithdraw(data: LnurlWithdrawData) {
@@ -908,20 +879,16 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        setSendEffect(SendEffect.NavigateToAmount)
     }
 
-    private suspend fun onScanLnurlAuth(data: LnurlAuthData) {
+    private fun onScanLnurlAuth(data: LnurlAuthData) {
         Logger.debug("LNURL: $data", context = TAG)
-        if (!isMainScanner) {
-            hideSheet()
-            delay(TRANSITION_SCREEN_MS)
-        }
-        showSheet(Sheet.LnurlAuth(domain = data.domain, lnurl = data.uri, k1 = data.k1))
+        mainScreenEffect(
+            MainScreenEffect.Navigate(
+                Routes.LnurlAuthSheet(domain = data.domain, lnurl = data.uri, k1 = data.k1)
+            )
+        )
     }
 
     fun requestLnurlAuth(callback: String, k1: String, domain: String) {
@@ -980,13 +947,13 @@ class AppViewModel @Inject constructor(
         //     return
         // }
         hideSheet() // hide scan sheet if opened
-        val nextRoute = Routes.ExternalConnection(data.url)
-        mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
+        mainScreenEffect(MainScreenEffect.Navigate(Routes.ExternalConnection(data.url)))
     }
 
     private fun onScanGift(code: String, amount: ULong) {
-        hideSheet() // hide scan sheet if opened
-        showSheet(Sheet.Gift(code = code, amount = amount))
+        mainScreenEffect(
+            MainScreenEffect.Navigate(Routes.GiftLoading(code = code, amount = amount))
+        )
     }
 
     private suspend fun handleQuickPayIfApplicable(
@@ -1020,11 +987,7 @@ class AppViewModel @Inject constructor(
 
             Logger.debug("QuickPayData: $quickPayData", context = TAG)
 
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.QuickPay))
-            } else {
-                setSendEffect(SendEffect.NavigateToQuickPay)
-            }
+            setSendEffect(SendEffect.NavigateToQuickPay)
             return true
         }
 
@@ -1291,8 +1254,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideNewTransactionSheet()
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
-                val nextRoute = Routes.ActivityDetail(activity.rawId())
-                mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activity)))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)
@@ -1315,8 +1277,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideSheet()
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
-                val nextRoute = Routes.ActivityDetail(activity.rawId())
-                mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activity)))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)
@@ -1544,27 +1505,11 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Sheets
-    private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
-    val currentSheet = _currentSheet.asStateFlow()
-
-    fun showSheet(sheetType: Sheet) {
-        viewModelScope.launch {
-            _currentSheet.value?.let {
-                _currentSheet.update { null }
-                delay(SCREEN_TRANSITION_DELAY_MS)
-            }
-            _currentSheet.update { sheetType }
-        }
-    }
-
     fun hideSheet() {
-        if (currentSheet.value is Sheet.TimedSheet && timedSheetManager.currentSheet.value != null) {
+        if (timedSheetManager.currentSheet.value != null) {
             dismissTimedSheet()
-        } else {
-            _currentSheet.update { null }
         }
     }
-
     // endregion
 
     // region Toasts
@@ -1730,35 +1675,23 @@ class AppViewModel @Inject constructor(
     }
 
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
-        if (uri.toString().contains("recovery-mode")) {
+        // Step 1: Try Nav3 pattern matching first
+        val patternMatch = DeepLinkPatterns.findMatch(uri)
+
+        // Handle recovery-mode via pattern match
+        if (patternMatch?.routeClass == Routes.RecoveryMode::class) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY_MS)
-            mainScreenEffect(
-                MainScreenEffect.Navigate(
-                    route = Routes.RecoveryMode,
-                    navOptions = navOptions {
-                        popUpTo(0) { inclusive = true }
-                    }
-                )
-            )
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.RecoveryMode))
             return@launch
         }
 
         if (!walletRepo.walletExists()) return@launch
 
+        // Step 2: Fall back to Rust-based parsing for complex URIs
         val data = uri.toString()
         delay(SCREEN_TRANSITION_DELAY_MS)
         handleScan(data.removeLightningSchemes())
-    }
-
-    // TODO Temporary fix while these schemes can't be decoded
-    @Suppress("SpellCheckingInspection")
-    private fun String.removeLightningSchemes(): String {
-        return this
-            .replace("lnurl:", "")
-            .replace("lnurlw:", "")
-            .replace("lnurlc:", "")
-            .replace("lnurlp:", "")
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
@@ -1776,14 +1709,7 @@ class AppViewModel @Inject constructor(
             if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
 
             if (androidReleaseInfo.isCritical) {
-                mainScreenEffect(
-                    MainScreenEffect.Navigate(
-                        route = Routes.CriticalUpdate,
-                        navOptions = navOptions {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    )
-                )
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.CriticalUpdate))
             }
         }.onFailure { e ->
             Logger.warn("Failure fetching new releases", e = e, context = TAG)
@@ -1841,7 +1767,7 @@ sealed class SendFee(open val value: Long) {
 enum class SendMethod { ONCHAIN, LIGHTNING }
 
 sealed class SendEffect {
-    data class PopBack(val route: SendRoute) : SendEffect()
+    data class PopBack(val route: Routes) : SendEffect()
     data object NavigateToAddress : SendEffect()
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
@@ -1856,11 +1782,7 @@ sealed class SendEffect {
 }
 
 sealed class MainScreenEffect {
-    data class Navigate(
-        val route: Routes,
-        val navOptions: NavOptions? = null,
-    ) : MainScreenEffect()
-
+    data class Navigate(val route: Routes) : MainScreenEffect()
     data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }
@@ -1905,3 +1827,11 @@ sealed interface QuickPayData {
     data class LnurlPay(override val sats: ULong, val callback: String) : QuickPayData
 }
 // endregion
+
+private fun TimedSheetType.toRoute(): Routes = when (this) {
+    TimedSheetType.APP_UPDATE -> Routes.TimedUpdateSheet
+    TimedSheetType.BACKUP -> Routes.TimedBackupSheet
+    TimedSheetType.NOTIFICATIONS -> Routes.TimedNotificationsSheet
+    TimedSheetType.QUICK_PAY -> Routes.TimedQuickPaySheet
+    TimedSheetType.HIGH_BALANCE -> Routes.TimedHighBalanceSheet
+}

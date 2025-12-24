@@ -22,13 +22,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -38,7 +38,7 @@ import to.bitkit.ui.utils.withAccentBoldBright
 
 @Composable
 fun CloseConnectionScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: LightningConnectionsViewModel,
 ) {
     val uiState by viewModel.closeConnectionUiState.collectAsState()
@@ -51,13 +51,13 @@ fun CloseConnectionScreen(
     // Handle success navigation
     LaunchedEffect(uiState.closeSuccess) {
         if (uiState.closeSuccess) {
-            navController.popBackStack<Routes.LightningConnections>(inclusive = false)
+            navigator.navigate(Routes.LightningConnections)
         }
     }
 
     Content(
         isLoading = uiState.isLoading,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
         onClickClose = { viewModel.closeChannel() },
     )
 }
