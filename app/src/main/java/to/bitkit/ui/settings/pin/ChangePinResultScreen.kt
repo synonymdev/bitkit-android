@@ -16,11 +16,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
@@ -28,14 +28,14 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun ChangePinResultScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     ChangePinResultContent(
         onOkClick = {
-            navController.popBackStack<Routes.SecuritySettings>(inclusive = false)
+            navigator.navigate(Routes.SecuritySettings)
         },
         onBackClick = {
-            navController.popBackStack()
+            navigator.goBack()
         }
     )
 }

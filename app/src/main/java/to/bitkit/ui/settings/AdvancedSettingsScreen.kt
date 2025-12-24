@@ -16,13 +16,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -31,37 +30,37 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun AdvancedSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: AdvancedSettingsViewModel = hiltViewModel(),
 ) {
     var showResetSuggestionsDialog by remember { mutableStateOf(false) }
 
     Content(
         showResetSuggestionsDialog = showResetSuggestionsDialog,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
         onCoinSelectionClick = {
-            navController.navigate(Routes.CoinSelectPreference)
+            navigator.navigate(Routes.CoinSelectPreference)
         },
         onLightningConnectionsClick = {
-            navController.navigate(Routes.LightningConnections)
+            navigator.navigate(Routes.LightningConnections)
         },
         onLightningNodeClick = {
-            navController.navigate(Routes.NodeInfo)
+            navigator.navigate(Routes.NodeInfo)
         },
         onElectrumServerClick = {
-            navController.navigate(Routes.ElectrumConfig)
+            navigator.navigate(Routes.ElectrumConfig)
         },
         onRgsServerClick = {
-            navController.navigate(Routes.RgsServer)
+            navigator.navigate(Routes.RgsServer)
         },
         onAddressViewerClick = {
-            navController.navigate(Routes.AddressViewer)
+            navigator.navigate(Routes.AddressViewer)
         },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
         onResetSuggestionsDialogConfirm = {
             viewModel.resetSuggestions()
             showResetSuggestionsDialog = false
-            navController.navigateToHome()
+            navigator.navigateToHome()
         },
         onResetSuggestionsDialogCancel = { showResetSuggestionsDialog = false },
     )

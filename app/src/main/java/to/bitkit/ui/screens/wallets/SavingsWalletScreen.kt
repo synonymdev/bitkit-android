@@ -49,7 +49,7 @@ fun SavingsWalletScreen(
     onchainActivities: List<Activity>,
     onAllActivityButtonClick: () -> Unit,
     onEmptyActivityRowClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onTransferToSpendingClick: () -> Unit,
     onBackClick: () -> Unit,
     balances: BalanceState = LocalBalances.current,

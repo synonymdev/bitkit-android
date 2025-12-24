@@ -39,7 +39,7 @@ fun ForceTransferSheet(
     transferViewModel: TransferViewModel,
 ) {
     val isLoading by transferViewModel.isForceTransferLoading.collectAsStateWithLifecycle()
-    Content(
+    ForceTransferContent(
         isLoading = isLoading,
         onForceTransfer = {
             transferViewModel.forceTransfer {
@@ -51,7 +51,7 @@ fun ForceTransferSheet(
 }
 
 @Composable
-private fun Content(
+internal fun ForceTransferContent(
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     onForceTransfer: () -> Unit = {},
@@ -118,7 +118,7 @@ private fun Content(
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content()
+            ForceTransferContent()
         }
     }
 }
@@ -128,7 +128,7 @@ private fun Preview() {
 private fun PreviewLoading() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(isLoading = true)
+            ForceTransferContent(isLoading = true)
         }
     }
 }

@@ -10,17 +10,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.Toast
-import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -30,7 +30,7 @@ import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable
 fun DevSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: DevSettingsViewModel = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
@@ -41,7 +41,7 @@ fun DevSettingsScreen(
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__dev_title),
-            onBackClick = { navController.popBackStack() },
+            onBackClick = { navigator.goBack() },
             actions = { DrawerNavIcon() },
         )
         Column(
@@ -49,12 +49,12 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SettingsButtonRow("Fee Settings") { navController.navigate(Routes.FeeSettings) }
-            SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
-            SettingsButtonRow("LDK Debug") { navController.navigate(Routes.LdkDebug) }
+            SettingsButtonRow("Fee Settings") { navigator.navigate(Routes.FeeSettings) }
+            SettingsButtonRow("Channel Orders") { navigator.navigate(Routes.ChannelOrdersSettings) }
+            SettingsButtonRow("LDK Debug") { navigator.navigate(Routes.LdkDebug) }
 
             SectionHeader("LOGS")
-            SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
+            SettingsButtonRow("Logs") { navigator.navigate(Routes.Logs) }
             SettingsTextButtonRow(
                 title = "Export Logs",
                 onClick = {
@@ -65,7 +65,7 @@ fun DevSettingsScreen(
             if (Env.network == Network.REGTEST) {
                 SectionHeader("REGTEST")
 
-                SettingsButtonRow("Blocktank Regtest") { navController.navigate(Routes.RegtestSettings) }
+                SettingsButtonRow("Blocktank Regtest") { navigator.navigate(Routes.RegtestSettings) }
             }
 
             SectionHeader("APP CACHE")

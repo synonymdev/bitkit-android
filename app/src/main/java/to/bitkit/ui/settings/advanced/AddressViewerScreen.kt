@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.AddressModel
@@ -42,6 +41,7 @@ import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -54,7 +54,7 @@ import to.bitkit.ui.utils.getBlockExplorerUrl
 
 @Composable
 fun AddressViewerScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: AddressViewerViewModel = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
@@ -64,7 +64,7 @@ fun AddressViewerScreen(
 
     AddressViewerContent(
         uiState = uiState,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
         onSearchTextChanged = viewModel::updateSearchText,
         onAddressSelected = { address -> viewModel.selectAddress(address) },
         onSwitchAddressType = viewModel::switchAddressType,

@@ -17,7 +17,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.env.TransactionDefaults
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -31,6 +30,7 @@ import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -40,7 +40,7 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun CustomFeeSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val settings = settingsViewModel ?: return
     val customFeeRate = settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
@@ -83,9 +83,9 @@ fun CustomFeeSettingsScreen(
         onContinue = {
             val feeRate = input.toUIntOrNull() ?: 0u
             settings.setDefaultTransactionSpeed(TransactionSpeed.Custom(feeRate))
-            navController.popBackStack()
+            navigator.goBack()
         },
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
     )
 }
 
