@@ -397,8 +397,8 @@ private fun Content(
                                         title = stringResource(item.title),
                                         description = stringResource(item.description),
                                         icon = item.icon,
-                                        onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
                                         onClick = { onClickSuggestion(item) },
+                                        onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
                                         modifier = Modifier.testTag("Suggestion-${item.name.lowercase()}")
                                     )
                                 }
@@ -674,7 +674,7 @@ private fun TopBar(
                     )
                 }
             },
-            colors = TopAppBarDefaults.largeTopAppBarColors(Color.Transparent),
+            colors = TopAppBarDefaults.topAppBarColors(Color.Transparent),
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -687,14 +687,11 @@ private fun DeleteWidgetAlert(
 ) {
     AppAlertDialog(
         title = stringResource(R.string.widgets__delete__title),
-        text = stringResource(R.string.widgets__delete__description)
-            .replace("{name}", stringResource(type.title)),
+        text = stringResource(R.string.widgets__delete__description).replace("{name}", stringResource(type.title)),
         confirmText = stringResource(R.string.common__delete_yes),
         dismissText = stringResource(R.string.common__dialog_cancel),
         onConfirm = { homeViewModel.deleteWidget(widgetType = type) },
-        onDismiss = {
-            homeViewModel.dismissAlertDeleteWidget()
-        },
+        onDismiss = homeViewModel::dismissAlertDeleteWidget,
     )
 }
 
