@@ -9,6 +9,7 @@ import androidx.navigation3.runtime.NavKey
 import to.bitkit.models.Toast
 import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.nav.Routes
+import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
@@ -30,7 +31,6 @@ import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
-import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel

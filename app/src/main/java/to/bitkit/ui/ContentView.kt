@@ -322,7 +322,6 @@ fun ContentView(
                 navigator = navigator,
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
-                modifier = Modifier.align(Alignment.TopEnd),
             )
         }
     }
