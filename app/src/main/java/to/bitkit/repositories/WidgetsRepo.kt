@@ -69,9 +69,6 @@ class WidgetsRepo @Inject constructor(
         observeWidgetStateChanges()
     }
 
-    /**
-     * Observe widget enable/disable changes and manage coroutine lifecycle
-     */
     private fun observeWidgetStateChanges() {
         repoScope.launch {
             widgetsDataFlow
@@ -83,11 +80,7 @@ class WidgetsRepo @Inject constructor(
         }
     }
 
-    /**
-     * Sync running jobs with enabled widgets
-     * - Cancel jobs for disabled widgets
-     * - Start jobs for newly enabled widgets
-     */
+
     private fun updateWidgetJobs(enabledWidgetTypes: Set<WidgetType>) {
         val widgetTypesWithServices = WidgetType.entries.filter {
             it != WidgetType.CALCULATOR
@@ -105,9 +98,6 @@ class WidgetsRepo @Inject constructor(
         }
     }
 
-    /**
-     * Start periodic refresh for a specific widget type
-     */
     private fun startWidgetRefresh(widgetType: WidgetType) {
         stopWidgetRefresh(widgetType)
 
@@ -153,9 +143,7 @@ class WidgetsRepo @Inject constructor(
         widgetJobs[widgetType] = job
     }
 
-    /**
-     * Stop refresh coroutine for a specific widget type
-     */
+
     private fun stopWidgetRefresh(widgetType: WidgetType) {
         widgetJobs[widgetType]?.cancel()
         widgetJobs.remove(widgetType)
@@ -191,9 +179,7 @@ class WidgetsRepo @Inject constructor(
 
     suspend fun fetchAllPeriods() = withContext(bgDispatcher) { priceService.fetchAllPeriods() }
 
-    /**
-     * Update a specific widget type
-     */
+
     private suspend fun <T> updateWidget(
         service: WidgetService<T>,
         updateStore: suspend (T) -> Unit,
@@ -211,27 +197,6 @@ class WidgetsRepo @Inject constructor(
             }
 
         _refreshStates.update { it + (widgetType to false) }
-    }
-
-    /**
-     * Manually refresh all widgets
-     */
-    suspend fun refreshAllWidgets(): Result<Unit> = runCatching {
-        updateWidget(newsService) { articles ->
-            widgetsStore.updateArticles(articles)
-        }
-        updateWidget(factsService) { facts ->
-            widgetsStore.updateFacts(facts)
-        }
-        updateWidget(blocksService) { block ->
-            widgetsStore.updateBlock(block)
-        }
-        updateWidget(weatherService) { weather ->
-            widgetsStore.updateWeather(weather)
-        }
-        updateWidget(priceService) { price ->
-            widgetsStore.updatePrice(price)
-        }
     }
 
     suspend fun refreshEnabledWidgets() = withContext(bgDispatcher) {
