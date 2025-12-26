@@ -80,7 +80,6 @@ class WidgetsRepo @Inject constructor(
         }
     }
 
-
     private fun updateWidgetJobs(enabledWidgetTypes: Set<WidgetType>) {
         val widgetTypesWithServices = WidgetType.entries.filter {
             it != WidgetType.CALCULATOR
@@ -142,7 +141,6 @@ class WidgetsRepo @Inject constructor(
 
         widgetJobs[widgetType] = job
     }
-
 
     private fun stopWidgetRefresh(widgetType: WidgetType) {
         widgetJobs[widgetType]?.cancel()
