@@ -11,7 +11,7 @@ import to.bitkit.ui.onboarding.RestoreWalletScreen
 import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
 
-private const val LAST_SLIDE_INDEX = 4
+private const val INDEX_LAST_SLIDE = 4
 
 fun EntryProviderScope<NavKey>.onboardingEntries(
     navigator: Navigator,
@@ -28,7 +28,7 @@ fun EntryProviderScope<NavKey>.onboardingEntries(
     entry<Routes.Onboarding.Intro> {
         IntroScreen(
             onStartClick = { navigator.navigate(Routes.Onboarding.Slides()) },
-            onSkipClick = { navigator.navigate(Routes.Onboarding.Slides(LAST_SLIDE_INDEX)) },
+            onSkipClick = { navigator.navigate(Routes.Onboarding.Slides(INDEX_LAST_SLIDE)) },
         )
     }
 
