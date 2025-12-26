@@ -216,11 +216,8 @@ fun HomeScreen(
                 }
 
                 Suggestion.QUICK_PAY -> {
-                    if (!quickPayIntroSeen) {
-                        navigator.navigate(Routes.QuickPayIntro)
-                    } else {
-                        navigator.navigateToQuickPaySettings()
-                    }
+                    val route = if (quickPayIntroSeen) Routes.QuickPaySettings else Routes.QuickPayIntro
+                    navigator.navigate(route)
                 }
 
                 Suggestion.NOTIFICATIONS -> {

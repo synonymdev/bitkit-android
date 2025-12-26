@@ -57,7 +57,10 @@ fun GeneralSettingsScreen(
         onDefaultUnitClick = { navigator.navigate(Routes.DefaultUnitSettings) },
         onTransactionSpeedClick = { navigator.navigate(Routes.TransactionSpeedSettings) },
         onWidgetsClick = { navigator.navigate(Routes.WidgetsSettings) },
-        onQuickPayClick = { navigator.navigateToQuickPaySettings(quickPayIntroSeen) },
+        onQuickPayClick = {
+            val route = if (quickPayIntroSeen) Routes.QuickPaySettings else Routes.QuickPayIntro
+            navigator.navigate(route)
+        },
         onTagsClick = { navigator.navigate(Routes.TagsSettings) },
         onLanguageSettingsClick = { navigator.navigate(Routes.LanguageSettings) },
         onBgPaymentsClick = {

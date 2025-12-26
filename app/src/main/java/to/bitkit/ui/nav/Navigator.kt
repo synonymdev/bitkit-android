@@ -7,7 +7,12 @@ import androidx.navigation3.runtime.NavKey
 
 @Stable
 class Navigator(@PublishedApi internal val backStack: NavBackStack<NavKey>) {
-    fun navigate(route: Routes) = run { backStack.add(route) }
+
+    fun navigate(route: Routes) {
+        if (backStack.lastOrNull() != route) {
+            backStack.add(route)
+        }
+    }
 
     fun goBack(): Boolean = backStack.removeLastOrNull() != null
 
@@ -50,9 +55,6 @@ class Navigator(@PublishedApi internal val backStack: NavBackStack<NavKey>) {
         else -> false
     }
 
-    fun navigateToQuickPaySettings(hasSeenIntro: Boolean = true) = navigate(
-        if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro
-    )
 }
 
 const val MS_NAV_DELAY = 100L
