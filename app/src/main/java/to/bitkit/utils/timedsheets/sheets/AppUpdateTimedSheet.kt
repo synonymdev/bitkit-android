@@ -18,21 +18,19 @@ class AppUpdateTimedSheet @Inject constructor(
     override val priority = 5
 
     override suspend fun shouldShow(): Boolean = withContext(bgDispatcher) {
-        try {
+        return@withContext runCatching {
             val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
             val currentBuildNumber = BuildConfig.VERSION_CODE
 
             if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext false
 
             if (androidReleaseInfo.isCritical) {
-                return@withContext false
+                return@runCatching false
             }
-
-            return@withContext true
-        } catch (e: Exception) {
+            return@runCatching true
+        }.onFailure { e ->
             Logger.warn("Failure fetching new releases", e = e, context = TAG)
-            return@withContext false
-        }
+        }.getOrDefault(false)
     }
 
     override suspend fun onShown() {
