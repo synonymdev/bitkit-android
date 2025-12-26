@@ -51,7 +51,7 @@ fun CloseConnectionScreen(
     // Handle success navigation
     LaunchedEffect(uiState.closeSuccess) {
         if (uiState.closeSuccess) {
-            navigator.navigate(Routes.LightningConnections)
+            navigator.navigate(Routes.Settings.LightningConnections)
         }
     }
 

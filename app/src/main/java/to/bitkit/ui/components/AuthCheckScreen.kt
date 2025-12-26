@@ -54,7 +54,7 @@ fun AuthCheckScreen(
                 }
 
                 AuthCheckAction.NAV_TO_RESET -> {
-                    navigator.navigate(Routes.ResetAndRestoreSettings)
+                    navigator.navigate(Routes.Settings.ResetAndRestore)
                 }
             }
         },

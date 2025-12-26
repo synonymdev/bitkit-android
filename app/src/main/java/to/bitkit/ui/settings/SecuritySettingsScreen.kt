@@ -57,13 +57,13 @@ fun SecuritySettingsScreen(
         isBiometrySupported = rememberBiometricAuthSupported(),
         onPinClick = {
             if (!isPinEnabled) {
-                navigator.navigate(Routes.PinPrompt())
+                navigator.navigate(Routes.Pin.Prompt())
             } else {
-                navigator.navigate(Routes.DisablePin)
+                navigator.navigate(Routes.Settings.DisablePin)
             }
         },
         onChangePinClick = {
-            navigator.navigate(Routes.ChangePin)
+            navigator.navigate(Routes.ChangePin.Start)
         },
         onPinOnLaunchClick = {
             navigator.navigate(

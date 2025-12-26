@@ -56,7 +56,7 @@ fun BackupIntroScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .testTag("BackupIntroViewImage")
+                    .testTag("BackupIntroViewImage"),
             )
             Display(
                 text = stringResource(R.string.security__backup_title).withAccent(accentColor = Colors.Blue),

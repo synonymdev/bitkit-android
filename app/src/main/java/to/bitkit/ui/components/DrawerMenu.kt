@@ -96,29 +96,29 @@ fun DrawerMenu(
                 scope.launch { drawerState.close() }
             },
             onActivityClick = {
-                navigator.navigate(Routes.AllActivity)
+                navigator.navigate(Routes.Activity.All)
                 scope.launch { drawerState.close() }
             },
             onContactsClick = null, // TODO IMPLEMENT CONTACTS
             onProfileClick = null, // TODO IMPLEMENT PROFILE
             onWidgetsClick = {
                 if (!hasSeenWidgetsIntro) {
-                    navigator.navigate(Routes.WidgetsIntro)
+                    navigator.navigate(Routes.Widgets.Intro)
                 } else {
-                    navigator.navigate(Routes.AddWidget)
+                    navigator.navigate(Routes.Widgets.Add)
                 }
                 scope.launch { drawerState.close() }
             },
             onShopClick = {
                 if (!hasSeenShopIntro) {
-                    navigator.navigate(Routes.ShopIntro)
+                    navigator.navigate(Routes.Shop.Intro)
                 } else {
-                    navigator.navigate(Routes.ShopDiscover)
+                    navigator.navigate(Routes.Shop.Discover)
                 }
                 scope.launch { drawerState.close() }
             },
             onSettingsClick = {
-                navigator.navigate(Routes.Settings)
+                navigator.navigate(Routes.Settings.Main)
                 scope.launch { drawerState.close() }
             },
             onAppStatusClick = {

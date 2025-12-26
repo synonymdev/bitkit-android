@@ -49,12 +49,12 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SettingsButtonRow("Fee Settings") { navigator.navigate(Routes.FeeSettings) }
-            SettingsButtonRow("Channel Orders") { navigator.navigate(Routes.ChannelOrdersSettings) }
-            SettingsButtonRow("LDK Debug") { navigator.navigate(Routes.LdkDebug) }
+            SettingsButtonRow("Fee Settings") { navigator.navigate(Routes.Settings.Fee) }
+            SettingsButtonRow("Channel Orders") { navigator.navigate(Routes.Settings.Dev.ChannelOrders) }
+            SettingsButtonRow("LDK Debug") { navigator.navigate(Routes.Settings.Dev.LdkDebug) }
 
             SectionHeader("LOGS")
-            SettingsButtonRow("Logs") { navigator.navigate(Routes.Logs) }
+            SettingsButtonRow("Logs") { navigator.navigate(Routes.Settings.Dev.Log.List) }
             SettingsTextButtonRow(
                 title = "Export Logs",
                 onClick = {
@@ -65,7 +65,7 @@ fun DevSettingsScreen(
             if (Env.network == Network.REGTEST) {
                 SectionHeader("REGTEST")
 
-                SettingsButtonRow("Blocktank Regtest") { navigator.navigate(Routes.RegtestSettings) }
+                SettingsButtonRow("Blocktank Regtest") { navigator.navigate(Routes.Settings.Dev.Regtest) }
             }
 
             SectionHeader("APP CACHE")

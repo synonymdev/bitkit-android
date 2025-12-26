@@ -85,7 +85,7 @@ fun LogsScreen(
                         )
                     },
                     modifier = Modifier.clickableAlpha {
-                        navigator.navigate(Routes.LogDetail(logFile.fileName))
+                        navigator.navigate(Routes.Settings.Dev.Log.Detail(logFile.fileName))
                     }
                 )
                 HorizontalDivider()

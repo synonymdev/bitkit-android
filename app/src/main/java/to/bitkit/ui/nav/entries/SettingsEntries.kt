@@ -54,9 +54,6 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 
-/**
- * Settings section entry providers for Navigation 3.
- */
 @Suppress("LongMethod", "LongParameterList")
 fun EntryProviderScope<NavKey>.settingsEntries(
     navigator: Navigator,
@@ -65,79 +62,79 @@ fun EntryProviderScope<NavKey>.settingsEntries(
     currencyViewModel: CurrencyViewModel,
     lightningConnectionsViewModel: LightningConnectionsViewModel,
 ) {
-    entry<Routes.Settings> {
+    entry<Routes.Settings.Main> {
         SettingsScreen(navigator)
     }
 
-    entry<Routes.GeneralSettings> {
+    entry<Routes.Settings.General> {
         GeneralSettingsScreen(navigator)
     }
 
-    entry<Routes.SecuritySettings> {
+    entry<Routes.Settings.Security> {
         SecuritySettingsScreen(navigator)
     }
 
-    entry<Routes.AdvancedSettings> {
+    entry<Routes.Settings.Advanced> {
         AdvancedSettingsScreen(navigator)
     }
 
-    entry<Routes.AboutSettings> {
+    entry<Routes.Settings.About> {
         AboutScreen(onBack = { navigator.goBack() })
     }
 
-    entry<Routes.TransactionSpeedSettings> {
+    entry<Routes.Settings.TransactionSpeed> {
         TransactionSpeedSettingsScreen(navigator)
     }
 
-    entry<Routes.CustomFeeSettings> {
+    entry<Routes.Settings.CustomFee> {
         CustomFeeSettingsScreen(navigator)
     }
 
-    entry<Routes.WidgetsSettings> {
+    entry<Routes.Settings.Widgets> {
         WidgetsSettingsScreen(navigator)
     }
 
-    entry<Routes.TagsSettings> {
+    entry<Routes.Settings.Tags> {
         TagsSettingsScreen(navigator)
     }
 
-    entry<Routes.NodeInfo> {
+    entry<Routes.Settings.NodeInfo> {
         NodeInfoScreen(navigator)
     }
 
-    entry<Routes.CoinSelectPreference> {
+    entry<Routes.Settings.CoinSelectPreference> {
         CoinSelectPreferenceScreen(navigator)
     }
 
-    entry<Routes.ElectrumConfig> {
+    entry<Routes.Settings.ElectrumConfig> {
         ElectrumConfigScreen(navigator)
     }
 
-    entry<Routes.RgsServer> {
+    entry<Routes.Settings.RgsServer> {
         RgsServerScreen(navigator)
     }
 
-    entry<Routes.AddressViewer> {
+    entry<Routes.Settings.AddressViewer> {
         AddressViewerScreen(navigator)
     }
 
-    entry<Routes.DisablePin> {
+    entry<Routes.Settings.DisablePin> {
         DisablePinScreen(navigator)
     }
 
-    entry<Routes.ChangePin> {
+    entry<Routes.ChangePin.Start> {
         ChangePinScreen(navigator)
     }
 
-    entry<Routes.ChangePinNew> {
+    entry<Routes.ChangePin.New> {
         ChangePinNewScreen(navigator)
     }
 
-    entry<Routes.ChangePinConfirm> { route ->
+    entry<Routes.ChangePin.Confirm> { route ->
         ChangePinConfirmScreen(newPin = route.newPin, navigator = navigator)
     }
 
-    entry<Routes.ChangePinResult> {
+    entry<Routes.ChangePin.Result> {
         ChangePinResultScreen(navigator)
     }
 
@@ -150,103 +147,103 @@ fun EntryProviderScope<NavKey>.settingsEntries(
         )
     }
 
-    entry<Routes.DefaultUnitSettings> {
+    entry<Routes.Settings.DefaultUnit> {
         DefaultUnitSettingsScreen(currencyViewModel = currencyViewModel, navigator = navigator)
     }
 
-    entry<Routes.LocalCurrencySettings> {
+    entry<Routes.Settings.LocalCurrency> {
         LocalCurrencySettingsScreen(currencyViewModel = currencyViewModel, navigator = navigator)
     }
 
-    entry<Routes.BackupSettings> {
+    entry<Routes.Settings.BackupSettings> {
         BackupSettingsScreen(navigator)
     }
 
-    entry<Routes.ResetAndRestoreSettings> {
+    entry<Routes.Settings.ResetAndRestore> {
         ResetAndRestoreScreen(navigator)
     }
 
-    entry<Routes.ChannelOrdersSettings> {
+    entry<Routes.Settings.Dev.ChannelOrders> {
         ChannelOrdersScreen(
             onBackClick = { navigator.goBack() },
-            onOrderItemClick = { orderId -> navigator.navigate(Routes.OrderDetail(orderId)) },
-            onCjitItemClick = { entryId -> navigator.navigate(Routes.CjitDetail(entryId)) },
+            onOrderItemClick = { orderId -> navigator.navigate(Routes.Settings.Dev.OrderDetail(orderId)) },
+            onCjitItemClick = { entryId -> navigator.navigate(Routes.Settings.Dev.CjitDetail(entryId)) },
         )
     }
 
-    entry<Routes.OrderDetail> { route ->
+    entry<Routes.Settings.Dev.OrderDetail> { route ->
         OrderDetailScreen(
             orderId = route.orderId,
             onBackClick = { navigator.goBack() },
         )
     }
 
-    entry<Routes.CjitDetail> { route ->
+    entry<Routes.Settings.Dev.CjitDetail> { route ->
         CJitDetailScreen(
             entryId = route.entryId,
             onBackClick = { navigator.goBack() },
         )
     }
 
-    entry<Routes.LightningConnections> {
+    entry<Routes.Settings.LightningConnections> {
         LightningConnectionsScreen(navigator = navigator, viewModel = lightningConnectionsViewModel)
     }
 
-    entry<Routes.ChannelDetail> {
+    entry<Routes.Settings.ChannelDetail> {
         ChannelDetailScreen(navigator = navigator, viewModel = lightningConnectionsViewModel)
     }
 
-    entry<Routes.CloseConnection> {
+    entry<Routes.Settings.CloseConnection> {
         CloseConnectionScreen(navigator = navigator, viewModel = lightningConnectionsViewModel)
     }
 
-    entry<Routes.Logs> {
+    entry<Routes.Settings.Dev.Log.List> {
         LogsScreen(navigator)
     }
 
-    entry<Routes.LogDetail> { route ->
+    entry<Routes.Settings.Dev.Log.Detail> { route ->
         LogDetailScreen(navigator = navigator, fileName = route.fileName)
     }
 
-    entry<Routes.QuickPayIntro> {
+    entry<Routes.QuickPay.Intro> {
         QuickPayIntroScreen(
             onBack = { navigator.goBack() },
-            onContinue = { navigator.navigateToQuickPaySettings() },
+            onContinue = { navigator.navigate(Routes.QuickPay.Settings) },
         )
     }
 
-    entry<Routes.QuickPaySettings> {
+    entry<Routes.QuickPay.Settings> {
         QuickPaySettingsScreen(onBack = { navigator.goBack() })
     }
 
-    entry<Routes.LanguageSettings> {
+    entry<Routes.Settings.Language> {
         LanguageSettingsScreen(onBackClick = { navigator.goBack() })
     }
 
-    entry<Routes.BackgroundPaymentsIntro> {
+    entry<Routes.BackgroundPayments.Intro> {
         BackgroundPaymentsIntroScreen(
             onBack = { navigator.goBack() },
-            onContinue = { navigator.navigate(Routes.BackgroundPaymentsSettings) },
+            onContinue = { navigator.navigate(Routes.BackgroundPayments.Settings) },
         )
     }
 
-    entry<Routes.BackgroundPaymentsSettings> {
+    entry<Routes.BackgroundPayments.Settings> {
         BackgroundPaymentsSettings(onBack = { navigator.goBack() })
     }
 
-    entry<Routes.DevSettings> {
+    entry<Routes.Settings.Dev.Main> {
         DevSettingsScreen(navigator)
     }
 
-    entry<Routes.LdkDebug> {
+    entry<Routes.Settings.Dev.LdkDebug> {
         LdkDebugScreen(navigator)
     }
 
-    entry<Routes.FeeSettings> {
+    entry<Routes.Settings.Fee> {
         FeeSettingsScreen(navigator)
     }
 
-    entry<Routes.RegtestSettings> {
+    entry<Routes.Settings.Dev.Regtest> {
         BlocktankRegtestScreen(navigator)
     }
 
@@ -258,20 +255,20 @@ fun EntryProviderScope<NavKey>.settingsEntries(
         SupportScreen(navigator)
     }
 
-    entry<Routes.ReportIssue> {
+    entry<Routes.ReportIssue.Form> {
         ReportIssueScreen(
             onBack = { navigator.goBack() },
             navigateResultScreen = { success ->
                 if (success) {
-                    navigator.navigate(Routes.ReportIssueSuccess)
+                    navigator.navigate(Routes.ReportIssue.Success)
                 } else {
-                    navigator.navigate(Routes.ReportIssueFailure)
+                    navigator.navigate(Routes.ReportIssue.Failure)
                 }
             }
         )
     }
 
-    entry<Routes.ReportIssueSuccess> {
+    entry<Routes.ReportIssue.Success> {
         ReportIssueResultScreen(
             isSuccess = true,
             onBack = { navigator.goBack() },
@@ -279,7 +276,7 @@ fun EntryProviderScope<NavKey>.settingsEntries(
         )
     }
 
-    entry<Routes.ReportIssueFailure> {
+    entry<Routes.ReportIssue.Failure> {
         ReportIssueResultScreen(
             isSuccess = false,
             onBack = { navigator.goBack() },
