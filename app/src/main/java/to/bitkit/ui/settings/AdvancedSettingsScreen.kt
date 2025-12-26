@@ -39,22 +39,22 @@ fun AdvancedSettingsScreen(
         showResetSuggestionsDialog = showResetSuggestionsDialog,
         onBack = { navigator.goBack() },
         onCoinSelectionClick = {
-            navigator.navigate(Routes.CoinSelectPreference)
+            navigator.navigate(Routes.Settings.CoinSelectPreference)
         },
         onLightningConnectionsClick = {
-            navigator.navigate(Routes.LightningConnections)
+            navigator.navigate(Routes.Settings.LightningConnections)
         },
         onLightningNodeClick = {
-            navigator.navigate(Routes.NodeInfo)
+            navigator.navigate(Routes.Settings.NodeInfo)
         },
         onElectrumServerClick = {
-            navigator.navigate(Routes.ElectrumConfig)
+            navigator.navigate(Routes.Settings.ElectrumConfig)
         },
         onRgsServerClick = {
-            navigator.navigate(Routes.RgsServer)
+            navigator.navigate(Routes.Settings.RgsServer)
         },
         onAddressViewerClick = {
-            navigator.navigate(Routes.AddressViewer)
+            navigator.navigate(Routes.Settings.AddressViewer)
         },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
         onResetSuggestionsDialogConfirm = {

@@ -51,10 +51,9 @@ class Navigator(@PublishedApi internal val backStack: NavBackStack<NavKey>) {
     fun isAtHome(): Boolean = backStack.lastOrNull() is Routes.Home
 
     fun shouldShowTabBar(): Boolean = when (backStack.lastOrNull()) {
-        is Routes.Home, is Routes.Savings, is Routes.Spending, is Routes.AllActivity -> true
+        is Routes.Home, is Routes.Savings, is Routes.Spending, is Routes.Activity.All -> true
         else -> false
     }
-
 }
 
 const val MS_NAV_DELAY = 100L

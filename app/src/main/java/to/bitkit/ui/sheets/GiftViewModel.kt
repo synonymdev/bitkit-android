@@ -67,7 +67,7 @@ class GiftViewModel @Inject constructor(
                 onSuccess = { result ->
                     when (result) {
                         is GiftClaimResult.SuccessWithLiquidity -> {
-                            _navigationEvent.emit(Routes.GiftSuccess)
+                            _navigationEvent.emit(Routes.Gift.Success)
                         }
                         is GiftClaimResult.SuccessWithoutLiquidity -> {
                             insertGiftActivity(result)
@@ -79,7 +79,7 @@ class GiftViewModel @Inject constructor(
                                     sats = result.sats,
                                 )
                             )
-                            _navigationEvent.emit(Routes.GiftSuccess)
+                            _navigationEvent.emit(Routes.Gift.Success)
                         }
                     }
                 },
@@ -112,9 +112,9 @@ class GiftViewModel @Inject constructor(
         Logger.error("Gift claim failed: $error", error, context = TAG)
 
         val route = when {
-            errorContains(error, "GIFT_CODE_ALREADY_USED") -> Routes.GiftUsed
-            errorContains(error, "GIFT_CODE_USED_UP") -> Routes.GiftUsedUp
-            else -> Routes.GiftError
+            errorContains(error, "GIFT_CODE_ALREADY_USED") -> Routes.Gift.Used
+            errorContains(error, "GIFT_CODE_USED_UP") -> Routes.Gift.UsedUp
+            else -> Routes.Gift.Error
         }
 
         _navigationEvent.emit(route)

@@ -156,9 +156,9 @@ fun HomeScreen(
         },
         onClickProfile = {
             if (!hasSeenProfileIntro) {
-                navigator.navigate(Routes.ProfileIntro)
+                navigator.navigate(Routes.Profile.Intro)
             } else {
-                navigator.navigate(Routes.CreateProfile)
+                navigator.navigate(Routes.Profile.Create)
             }
         },
         onRemoveSuggestion = { suggestion ->
@@ -172,18 +172,18 @@ fun HomeScreen(
 
                 Suggestion.LIGHTNING -> {
                     if (!hasSeenTransferIntro) {
-                        navigator.navigate(Routes.TransferIntro)
+                        navigator.navigate(Routes.Transfer.Intro)
                     } else {
-                        navigator.navigate(Routes.Funding)
+                        navigator.navigate(Routes.Transfer.Funding)
                     }
                 }
 
                 Suggestion.BACK_UP -> {
-                    navigator.navigate(Routes.BackupIntro)
+                    navigator.navigate(Routes.Backup.Intro)
                 }
 
                 Suggestion.SECURE -> {
-                    navigator.navigate(Routes.PinPrompt(showLaterButton = true))
+                    navigator.navigate(Routes.Pin.Prompt(showLaterButton = true))
                 }
 
                 Suggestion.SUPPORT -> {
@@ -201,51 +201,51 @@ fun HomeScreen(
 
                 Suggestion.PROFILE -> {
                     if (!hasSeenProfileIntro) {
-                        navigator.navigate(Routes.ProfileIntro)
+                        navigator.navigate(Routes.Profile.Intro)
                     } else {
-                        navigator.navigate(Routes.CreateProfile)
+                        navigator.navigate(Routes.Profile.Create)
                     }
                 }
 
                 Suggestion.SHOP -> {
                     if (!hasSeenShopIntro) {
-                        navigator.navigate(Routes.ShopIntro)
+                        navigator.navigate(Routes.Shop.Intro)
                     } else {
-                        navigator.navigate(Routes.ShopDiscover)
+                        navigator.navigate(Routes.Shop.Discover)
                     }
                 }
 
                 Suggestion.QUICK_PAY -> {
-                    val route = if (quickPayIntroSeen) Routes.QuickPaySettings else Routes.QuickPayIntro
+                    val route = if (quickPayIntroSeen) Routes.QuickPay.Settings else Routes.QuickPay.Intro
                     navigator.navigate(route)
                 }
 
                 Suggestion.NOTIFICATIONS -> {
                     if (bgPaymentsIntroSeen) {
-                        navigator.navigate(Routes.BackgroundPaymentsSettings)
+                        navigator.navigate(Routes.BackgroundPayments.Settings)
                     } else {
-                        navigator.navigate(Routes.BackgroundPaymentsIntro)
+                        navigator.navigate(Routes.BackgroundPayments.Intro)
                     }
                 }
             }
         },
         onClickAddWidget = {
             if (!hasSeenWidgetsIntro) {
-                navigator.navigate(Routes.WidgetsIntro)
+                navigator.navigate(Routes.Widgets.Intro)
             } else {
-                navigator.navigate(Routes.AddWidget)
+                navigator.navigate(Routes.Widgets.Add)
             }
         },
         onClickEditWidgetList = homeViewModel::onClickEditWidgetList,
         onClickEditWidget = { widgetType ->
             homeViewModel.disableEditMode()
             when (widgetType) {
-                WidgetType.BLOCK -> navigator.navigate(Routes.BlocksPreview)
-                WidgetType.CALCULATOR -> navigator.navigate(Routes.CalculatorPreview)
-                WidgetType.FACTS -> navigator.navigate(Routes.FactsPreview)
-                WidgetType.NEWS -> navigator.navigate(Routes.HeadlinesPreview)
-                WidgetType.PRICE -> navigator.navigate(Routes.PricePreview)
-                WidgetType.WEATHER -> navigator.navigate(Routes.WeatherPreview)
+                WidgetType.BLOCK -> navigator.navigate(Routes.Widgets.Blocks.Preview)
+                WidgetType.CALCULATOR -> navigator.navigate(Routes.Widgets.Calculator.Preview)
+                WidgetType.FACTS -> navigator.navigate(Routes.Widgets.Facts.Preview)
+                WidgetType.NEWS -> navigator.navigate(Routes.Widgets.Headlines.Preview)
+                WidgetType.PRICE -> navigator.navigate(Routes.Widgets.Price.Preview)
+                WidgetType.WEATHER -> navigator.navigate(Routes.Widgets.Weather.Preview)
             }
         },
         onClickDeleteWidget = { widgetType ->
@@ -255,12 +255,12 @@ fun HomeScreen(
             homeViewModel.moveWidget(fromIndex, toIndex)
         },
         onDismissEmptyState = homeViewModel::dismissEmptyState,
-        onClickEmptyActivityRow = { navigator.navigate(Routes.ReceiveQr) },
+        onClickEmptyActivityRow = { navigator.navigate(Routes.Receive.Qr) },
         onClickSavings = { navigator.navigate(Routes.Savings) },
         onClickSpending = { navigator.navigate(Routes.Spending) },
-        onAllActivityClick = { navigator.navigate(Routes.AllActivity) },
-        onActivityItemClick = { navigator.navigate(Routes.ActivityDetail(it)) },
-        onClickSettingUp = { navigator.navigate(Routes.SettingUp) },
+        onAllActivityClick = { navigator.navigate(Routes.Activity.All) },
+        onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
+        onClickSettingUp = { navigator.navigate(Routes.Transfer.SettingUp) },
         onClickAppStatus = { navigator.navigate(Routes.AppStatus) },
         onOpenDrawer = { scope.launch { drawerState.open() } },
     )

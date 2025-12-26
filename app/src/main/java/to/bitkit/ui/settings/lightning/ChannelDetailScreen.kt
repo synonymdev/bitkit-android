@@ -141,7 +141,7 @@ fun ChannelDetailScreen(
             context.startActivity(intent)
         },
         onSupport = { order -> contactSupport(order, channel, walletState.nodeId, context) },
-        onCloseConnection = { navigator.navigate(Routes.CloseConnection) },
+        onCloseConnection = { navigator.navigate(Routes.Settings.CloseConnection) },
     )
 }
 

@@ -64,12 +64,12 @@ fun BackupSettingsScreen(
 
     BackupSettingsScreenContent(
         uiState = uiState,
-        onBackupClick = { navigator.navigate(Routes.BackupIntro) },
+        onBackupClick = { navigator.navigate(Routes.Backup.Intro) },
         onResetAndRestoreClick = {
             if (isPinEnabled) {
                 navigator.navigate(Routes.AuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET))
             } else {
-                navigator.navigate(Routes.ResetAndRestoreSettings)
+                navigator.navigate(Routes.Settings.ResetAndRestore)
             }
         },
         onRetryBackup = { category -> viewModel.retryBackup(category) },
