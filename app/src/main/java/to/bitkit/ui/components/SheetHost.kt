@@ -14,7 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,12 +35,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val MS_DURATION_ANIM = 300
@@ -96,6 +96,18 @@ fun SheetHost(
             progress = 1f - offsetY.value,
             onClick = { dismiss() },
         )
+
+        // Fixed background extension - covers gap when sheet drags up
+        val density = LocalDensity.current
+        if (sheetVisible && sheetHeightPx > 0f) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(with(density) { (sheetHeightPx * abs(OFFSET_MIN_DRAG)).toDp() })
+                    .background(sheetContainerColor)
+            )
+        }
 
         AnimatedVisibility(
             visible = sheetVisible,
@@ -167,12 +179,6 @@ fun SheetHost(
                 ) {
                     content()
                 }
-                // Extended background tail to cover gap when dragging sheet up
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                )
             }
         }
     }
