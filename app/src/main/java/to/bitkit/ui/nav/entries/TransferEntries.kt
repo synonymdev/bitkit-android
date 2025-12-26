@@ -36,9 +36,6 @@ import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
-/**
- * Transfer flow entry providers for Navigation 3.
- */
 @Suppress("LongMethod", "LongParameterList")
 fun EntryProviderScope<NavKey>.transferEntries(
     navigator: Navigator,
@@ -47,7 +44,6 @@ fun EntryProviderScope<NavKey>.transferEntries(
     transferViewModel: TransferViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
-    // Transfer Intro
     entry<Routes.Transfer.Intro> {
         TransferIntroScreen(
             onContinueClick = {
@@ -58,7 +54,6 @@ fun EntryProviderScope<NavKey>.transferEntries(
         )
     }
 
-    // Savings Flow
     entry<Routes.Transfer.ToSavings.Intro> {
         SavingsIntroScreen(
             onContinueClick = {
@@ -101,7 +96,6 @@ fun EntryProviderScope<NavKey>.transferEntries(
         )
     }
 
-    // Spending Flow
     entry<Routes.Transfer.ToSpending.Intro> {
         SpendingIntroScreen(
             onContinueClick = {
@@ -161,7 +155,6 @@ fun EntryProviderScope<NavKey>.transferEntries(
         )
     }
 
-    // Funding Flow
     entry<Routes.Transfer.Funding> {
         FundingEntry(
             navigator = navigator,
@@ -178,7 +171,6 @@ fun EntryProviderScope<NavKey>.transferEntries(
         )
     }
 
-    // External Node Flow
     externalNodeEntries(
         navigator = navigator,
         walletViewModel = walletViewModel,
