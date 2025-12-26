@@ -46,7 +46,7 @@ import kotlin.math.roundToInt
 
 private const val MS_DURATION_ANIM = 300
 private const val THRESHOLD_DISMISS = 0.33f
-private const val VELOCITY_DISMISS = 1000f
+private const val VELOCITY_DISMISS = 2500f
 private const val OFFSET_MIN_DRAG = -0.1f
 private val sheetContainerColor = Color.Black
 
