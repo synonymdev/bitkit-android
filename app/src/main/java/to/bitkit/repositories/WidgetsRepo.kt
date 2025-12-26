@@ -147,6 +147,7 @@ class WidgetsRepo @Inject constructor(
     private fun stopWidgetRefresh(widgetType: WidgetType) {
         widgetJobs[widgetType]?.cancel()
         widgetJobs.remove(widgetType)
+        Logger.verbose("Stopped refresh coroutine for $widgetType", context = TAG)
     }
 
     suspend fun addWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.addWidget(type) }
@@ -190,7 +191,7 @@ class WidgetsRepo @Inject constructor(
         service.fetchData()
             .onSuccess { data ->
                 updateStore(data)
-                Logger.verbose("Updated $widgetType widget successfully")
+                Logger.verbose("Updated $widgetType widget successfully", context = TAG)
             }
             .onFailure { e ->
                 Logger.verbose("Failed to update $widgetType widget", e = e, context = TAG)
