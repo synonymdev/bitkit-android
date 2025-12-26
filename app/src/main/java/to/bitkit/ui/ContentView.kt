@@ -126,7 +126,18 @@ fun ContentView(
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
-                is MainScreenEffect.Navigate -> navigator.navigate(it.route)
+                is MainScreenEffect.Navigate -> {
+                    when (it.route) {
+                        is Routes.CriticalUpdate -> {
+                            navigator.navigateToCriticalUpdate()
+                        }
+
+                        else -> {
+                            navigator.navigate(it.route)
+                        }
+                    }
+                }
+
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     if (!navigator.isAtHome()) {
                         navigator.navigateToHome()

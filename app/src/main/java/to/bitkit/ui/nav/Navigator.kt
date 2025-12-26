@@ -53,6 +53,11 @@ class Navigator(@PublishedApi internal val backStack: NavBackStack<NavKey>) {
     fun navigateToQuickPaySettings(hasSeenIntro: Boolean = true) = navigate(
         if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro
     )
+
+    fun navigateToCriticalUpdate() {
+        backStack.clear()
+        backStack.add(Routes.CriticalUpdate)
+    }
 }
 
 const val MS_NAV_DELAY = 100L
