@@ -39,7 +39,7 @@ fun ChangePinNewScreen(
 
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
-            navigator.navigate(Routes.ChangePinConfirm(pin))
+            navigator.navigate(Routes.ChangePin.Confirm(pin))
         }
     }
 

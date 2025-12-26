@@ -48,7 +48,7 @@ fun ShopIntroScreen(
 
             Display(
                 text = stringResource(R.string.other__shop__intro__title).withAccent(accentColor = Colors.Brand),
-                color = Colors.Yellow
+                color = Colors.Yellow,
             )
             Spacer(Modifier.height(8.dp))
             BodyM(text = stringResource(R.string.other__shop__intro__description), color = Colors.White64)

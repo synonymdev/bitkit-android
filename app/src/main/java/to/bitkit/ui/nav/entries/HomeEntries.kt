@@ -32,9 +32,6 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
-/**
- * Home section entry providers for Navigation 3.
- */
 @Suppress("LongParameterList", "LongMethod")
 fun EntryProviderScope<NavKey>.homeEntries(
     navigator: Navigator,
@@ -73,21 +70,21 @@ fun EntryProviderScope<NavKey>.homeEntries(
         )
     }
 
-    entry<Routes.AllActivity> {
+    entry<Routes.Activity.All> {
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = {
                 activityListViewModel.clearFilters()
                 navigator.navigateToHome()
             },
-            onActivityItemClick = { navigator.navigate(Routes.ActivityDetail(it)) },
-            onTagClick = { navigator.navigate(Routes.ActivityTagSelectorSheet) },
-            onDateRangeClick = { navigator.navigate(Routes.ActivityDateRangeSelectorSheet) },
-            onEmptyActivityRowClick = { navigator.navigate(Routes.ReceiveQr) },
+            onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
+            onTagClick = { navigator.navigate(Routes.Activity.TagSelectorSheet) },
+            onDateRangeClick = { navigator.navigate(Routes.Activity.DateRangeSelectorSheet) },
+            onEmptyActivityRowClick = { navigator.navigate(Routes.Receive.Qr) },
         )
     }
 
-    entry<Routes.ActivityDetail> { route ->
+    entry<Routes.Activity.Detail> { route ->
         ActivityDetailScreen(
             navigator = navigator,
             activityId = route.activity.rawId(),
@@ -95,7 +92,7 @@ fun EntryProviderScope<NavKey>.homeEntries(
         )
     }
 
-    entry<Routes.ActivityExplore> { route ->
+    entry<Routes.Activity.Explore> { route ->
         ActivityExploreScreen(
             navigator = navigator,
             activityId = route.id,
@@ -113,25 +110,20 @@ fun EntryProviderScope<NavKey>.homeEntries(
         )
     }
 
-    // Profile Flow
     profileEntries(navigator, settingsViewModel)
 
-    // Shop Flow
     shopEntries(navigator, appViewModel, settingsViewModel)
 
-    // Buy Flow
     entry<Routes.BuyIntro> {
         BuyIntroScreen(
             onBackClick = { navigator.goBack() },
         )
     }
 
-    // App Status
     entry<Routes.CriticalUpdate> {
         CriticalUpdateScreen()
     }
 
-    // Recovery Flow
     recoveryEntries(navigator, appViewModel, settingsViewModel)
 }
 
@@ -149,14 +141,14 @@ private fun SavingsEntry(
     SavingsWalletScreen(
         isGeoBlocked = isGeoBlocked,
         onchainActivities = onchainActivities.orEmpty(),
-        onAllActivityButtonClick = { navigator.navigate(Routes.AllActivity) },
-        onActivityItemClick = { navigator.navigate(Routes.ActivityDetail(it)) },
-        onEmptyActivityRowClick = { navigator.navigate(Routes.ReceiveQr) },
+        onAllActivityButtonClick = { navigator.navigate(Routes.Activity.All) },
+        onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
+        onEmptyActivityRowClick = { navigator.navigate(Routes.Receive.Qr) },
         onTransferToSpendingClick = {
             if (!hasSeenSpendingIntro) {
-                navigator.navigate(Routes.SpendingIntro)
+                navigator.navigate(Routes.Transfer.ToSpending.Intro)
             } else {
-                navigator.navigate(Routes.SpendingAmount)
+                navigator.navigate(Routes.Transfer.ToSpending.Amount)
             }
         },
         onBackClick = { navigator.goBack() },
@@ -177,14 +169,14 @@ private fun SpendingEntry(
     SpendingWalletScreen(
         uiState = uiState,
         lightningActivities = lightningActivities.orEmpty(),
-        onAllActivityButtonClick = { navigator.navigate(Routes.AllActivity) },
-        onActivityItemClick = { navigator.navigate(Routes.ActivityDetail(it)) },
-        onEmptyActivityRowClick = { navigator.navigate(Routes.ReceiveQr) },
+        onAllActivityButtonClick = { navigator.navigate(Routes.Activity.All) },
+        onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
+        onEmptyActivityRowClick = { navigator.navigate(Routes.Receive.Qr) },
         onTransferToSavingsClick = {
             if (!hasSeenSavingsIntro) {
-                navigator.navigate(Routes.SavingsIntro)
+                navigator.navigate(Routes.Transfer.ToSavings.Intro)
             } else {
-                navigator.navigate(Routes.SavingsAvailability)
+                navigator.navigate(Routes.Transfer.ToSavings.Availability)
             }
         },
         onBackClick = { navigator.goBack() },
@@ -228,17 +220,17 @@ private fun EntryProviderScope<NavKey>.profileEntries(
     navigator: Navigator,
     settingsViewModel: SettingsViewModel,
 ) {
-    entry<Routes.ProfileIntro> {
+    entry<Routes.Profile.Intro> {
         ProfileIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenProfileIntro(true)
-                navigator.navigate(Routes.CreateProfile)
+                navigator.navigate(Routes.Profile.Create)
             },
             onBackClick = { navigator.goBack() },
         )
     }
 
-    entry<Routes.CreateProfile> {
+    entry<Routes.Profile.Create> {
         CreateProfileScreen(
             onBack = { navigator.goBack() },
         )
@@ -253,26 +245,26 @@ private fun EntryProviderScope<NavKey>.shopEntries(
     appViewModel: AppViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
-    entry<Routes.ShopIntro> {
+    entry<Routes.Shop.Intro> {
         ShopIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenShopIntro(true)
-                navigator.navigate(Routes.ShopDiscover)
+                navigator.navigate(Routes.Shop.Discover)
             },
             onBackClick = { navigator.goBack() },
         )
     }
 
-    entry<Routes.ShopDiscover> {
+    entry<Routes.Shop.Discover> {
         ShopDiscoverScreen(
             onBack = { navigator.goBack() },
             navigateWebView = { page, title ->
-                navigator.navigate(Routes.ShopWebView(page, title))
+                navigator.navigate(Routes.Shop.WebView(page, title))
             },
         )
     }
 
-    entry<Routes.ShopWebView> { route ->
+    entry<Routes.Shop.WebView> { route ->
         ShopWebViewScreen(
             page = route.page,
             title = route.title,
@@ -293,15 +285,15 @@ private fun EntryProviderScope<NavKey>.recoveryEntries(
     appViewModel: AppViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
-    entry<Routes.RecoveryMode> {
+    entry<Routes.Recovery.Mode> {
         RecoveryModeScreen(
             appViewModel = appViewModel,
             settingsViewModel = settingsViewModel,
-            onNavigateToSeed = { navigator.navigate(Routes.RecoveryMnemonic) },
+            onNavigateToSeed = { navigator.navigate(Routes.Recovery.Mnemonic) },
         )
     }
 
-    entry<Routes.RecoveryMnemonic> {
+    entry<Routes.Recovery.Mnemonic> {
         RecoveryMnemonicScreen(
             onNavigateBack = { navigator.goBack() },
         )

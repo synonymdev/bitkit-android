@@ -144,19 +144,19 @@ fun ContentView(
     LaunchedEffect(appViewModel, navigator) {
         appViewModel.sendEffect.collect { effect ->
             when (effect) {
-                is SendEffect.NavigateToAddress -> navigator.navigate(Routes.SendAddress)
-                is SendEffect.NavigateToAmount -> navigator.navigate(Routes.SendAmount())
-                is SendEffect.NavigateToScan -> navigator.navigate(Routes.SendQrScanner)
-                is SendEffect.NavigateToCoinSelection -> navigator.navigate(Routes.SendCoinSelection)
-                is SendEffect.NavigateToConfirm -> navigator.navigate(Routes.SendConfirm)
-                is SendEffect.NavigateToQuickPay -> navigator.navigate(Routes.SendQuickPay)
-                is SendEffect.NavigateToWithdrawConfirm -> navigator.navigate(Routes.SendWithdrawConfirm)
-                is SendEffect.NavigateToWithdrawError -> navigator.navigate(Routes.SendWithdrawError)
-                is SendEffect.NavigateToFee -> navigator.navigate(Routes.SendFeeRate)
-                is SendEffect.NavigateToFeeCustom -> navigator.navigate(Routes.SendFeeCustom)
+                is SendEffect.NavigateToAddress -> navigator.navigate(Routes.Send.Address)
+                is SendEffect.NavigateToAmount -> navigator.navigate(Routes.Send.Amount())
+                is SendEffect.NavigateToScan -> navigator.navigate(Routes.Send.QrScanner)
+                is SendEffect.NavigateToCoinSelection -> navigator.navigate(Routes.Send.CoinSelection)
+                is SendEffect.NavigateToConfirm -> navigator.navigate(Routes.Send.Confirm)
+                is SendEffect.NavigateToQuickPay -> navigator.navigate(Routes.Send.QuickPay)
+                is SendEffect.NavigateToWithdrawConfirm -> navigator.navigate(Routes.Send.WithdrawConfirm)
+                is SendEffect.NavigateToWithdrawError -> navigator.navigate(Routes.Send.WithdrawError)
+                is SendEffect.NavigateToFee -> navigator.navigate(Routes.Send.FeeRate)
+                is SendEffect.NavigateToFeeCustom -> navigator.navigate(Routes.Send.FeeCustom)
                 is SendEffect.PaymentSuccess -> {
                     appViewModel.clearClipboardForAutoRead()
-                    navigator.navigate(Routes.SendSuccess)
+                    navigator.navigate(Routes.Send.Success)
                 }
 
                 is SendEffect.PopBack -> navigator.popBackTo(effect.route)
@@ -310,8 +310,8 @@ fun ContentView(
                     modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
                     TabBar(
-                        onSendClick = { navigator.navigate(Routes.SendRecipient) },
-                        onReceiveClick = { navigator.navigate(Routes.ReceiveQr) },
+                        onSendClick = { navigator.navigate(Routes.Send.Recipient) },
+                        onReceiveClick = { navigator.navigate(Routes.Receive.Qr) },
                         onScanClick = { navigator.navigate(Routes.QrScanner) },
                     )
                 }
@@ -322,7 +322,6 @@ fun ContentView(
                 navigator = navigator,
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
-                modifier = Modifier.align(Alignment.TopEnd),
             )
         }
     }

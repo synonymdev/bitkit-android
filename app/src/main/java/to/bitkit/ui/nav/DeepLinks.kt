@@ -108,42 +108,42 @@ class DeepLinkMatcher<T : Routes>(
 object DeepLinkPatterns {
     // bitkit:// scheme patterns
     val RECOVERY_MODE = DeepLinkPattern(
-        routeClass = Routes.RecoveryMode::class,
+        routeClass = Routes.Recovery.Mode::class,
         uriPattern = "${UriScheme.BITKIT.withSlashes}recovery-mode".toUri()
     )
 
     // bitcoin:// scheme patterns (BIP21)
     // Note: bitcoin: URIs use address as "host" not path
     val SEND_BITCOIN = DeepLinkPattern(
-        routeClass = Routes.SendAddress::class,
+        routeClass = Routes.Send.Address::class,
         uriPattern = "${UriScheme.BITCOIN.withSlashes}{address}".toUri()
     )
 
     // lightning:// scheme patterns
     val SEND_LIGHTNING = DeepLinkPattern(
-        routeClass = Routes.SendAddress::class,
+        routeClass = Routes.Send.Address::class,
         uriPattern = "${UriScheme.LIGHTNING.withSlashes}{invoice}".toUri()
     )
 
     // lnurl:// scheme patterns
     val LNURL_PAY = DeepLinkPattern(
-        routeClass = Routes.SendAddress::class,
+        routeClass = Routes.Send.Address::class,
         uriPattern = "${UriScheme.LNURL_PAY.withSlashes}{data}".toUri()
     )
 
     val LNURL_WITHDRAW = DeepLinkPattern(
-        routeClass = Routes.ReceiveQr::class,
+        routeClass = Routes.Receive.Qr::class,
         uriPattern = "${UriScheme.LNURL_WITHDRAW.withSlashes}{data}".toUri()
     )
 
     val LNURL_CHANNEL = DeepLinkPattern(
-        routeClass = Routes.LnurlChannel::class,
+        routeClass = Routes.Sheet.LnurlChannel::class,
         uriPattern = "${UriScheme.LNURL_CHANNEL.withSlashes}{data}".toUri()
     )
 
     // https:// scheme patterns (App Links)
     val TREASURE_HUNT = DeepLinkPattern(
-        routeClass = Routes.GiftLoading::class,
+        routeClass = Routes.Gift.Loading::class,
         uriPattern = "${UriScheme.HTTPS.withSlashes}www.bitkit.to/treasure-hunt".toUri()
     )
 
