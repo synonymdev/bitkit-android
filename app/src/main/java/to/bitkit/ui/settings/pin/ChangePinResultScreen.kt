@@ -32,7 +32,7 @@ fun ChangePinResultScreen(
 ) {
     ChangePinResultContent(
         onOkClick = {
-            navigator.navigate(Routes.SecuritySettings)
+            navigator.navigate(Routes.Settings.Security)
         },
         onBackClick = {
             navigator.goBack()

@@ -38,7 +38,7 @@ fun TransactionSpeedSettingsScreen(
             settings.setDefaultTransactionSpeed(it)
             navigator.goBack()
         },
-        onCustomFeeClick = { navigator.navigate(Routes.CustomFeeSettings) },
+        onCustomFeeClick = { navigator.navigate(Routes.Settings.CustomFee) },
         onBackClick = { navigator.goBack() },
     )
 }

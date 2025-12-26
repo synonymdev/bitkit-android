@@ -53,21 +53,21 @@ fun GeneralSettingsScreen(
         defaultTransactionSpeed = defaultTransactionSpeed,
         showTagsButton = lastUsedTags.isNotEmpty(),
         onBackClick = { navigator.goBack() },
-        onLocalCurrencyClick = { navigator.navigate(Routes.LocalCurrencySettings) },
-        onDefaultUnitClick = { navigator.navigate(Routes.DefaultUnitSettings) },
-        onTransactionSpeedClick = { navigator.navigate(Routes.TransactionSpeedSettings) },
-        onWidgetsClick = { navigator.navigate(Routes.WidgetsSettings) },
+        onLocalCurrencyClick = { navigator.navigate(Routes.Settings.LocalCurrency) },
+        onDefaultUnitClick = { navigator.navigate(Routes.Settings.DefaultUnit) },
+        onTransactionSpeedClick = { navigator.navigate(Routes.Settings.TransactionSpeed) },
+        onWidgetsClick = { navigator.navigate(Routes.Settings.Widgets) },
         onQuickPayClick = {
-            val route = if (quickPayIntroSeen) Routes.QuickPaySettings else Routes.QuickPayIntro
+            val route = if (quickPayIntroSeen) Routes.QuickPay.Settings else Routes.QuickPay.Intro
             navigator.navigate(route)
         },
-        onTagsClick = { navigator.navigate(Routes.TagsSettings) },
-        onLanguageSettingsClick = { navigator.navigate(Routes.LanguageSettings) },
+        onTagsClick = { navigator.navigate(Routes.Settings.Tags) },
+        onLanguageSettingsClick = { navigator.navigate(Routes.Settings.Language) },
         onBgPaymentsClick = {
             if (bgPaymentsIntroSeen || notificationsGranted) {
-                navigator.navigate(Routes.BackgroundPaymentsSettings)
+                navigator.navigate(Routes.BackgroundPayments.Settings)
             } else {
-                navigator.navigate(Routes.BackgroundPaymentsIntro)
+                navigator.navigate(Routes.BackgroundPayments.Intro)
             }
         },
         selectedLanguage = languageUiState.selectedLanguage.displayName,

@@ -97,10 +97,10 @@ fun ActivityDetailScreen(
         activityId = activityId,
         listViewModel = listViewModel,
         detailViewModel = detailViewModel,
-        onExploreClick = { id -> navigator.navigate(Routes.ActivityExplore(id)) },
+        onExploreClick = { id -> navigator.navigate(Routes.Activity.Explore(id)) },
         onBackClick = { navigator.goBack() },
         onCloseClick = { navigator.navigateToHome() },
-        onChannelClick = { navigator.navigate(Routes.ChannelDetail) },
+        onChannelClick = { navigator.navigate(Routes.Settings.ChannelDetail) },
     )
 }
 

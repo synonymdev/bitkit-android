@@ -19,44 +19,44 @@ fun EntryProviderScope<NavKey>.onboardingEntries(
     onCreateWallet: (passphrase: String?) -> Unit,
     onRestoreWallet: (mnemonic: String, passphrase: String?) -> Unit,
 ) {
-    entry<Routes.Terms> {
+    entry<Routes.Onboarding.Terms> {
         TermsOfUseScreen(
-            onNavigateToIntro = { navigator.navigate(Routes.Intro) }
+            onNavigateToIntro = { navigator.navigate(Routes.Onboarding.Intro) }
         )
     }
 
-    entry<Routes.Intro> {
+    entry<Routes.Onboarding.Intro> {
         IntroScreen(
-            onStartClick = { navigator.navigate(Routes.Slides()) },
-            onSkipClick = { navigator.navigate(Routes.Slides(LAST_SLIDE_INDEX)) },
+            onStartClick = { navigator.navigate(Routes.Onboarding.Slides()) },
+            onSkipClick = { navigator.navigate(Routes.Onboarding.Slides(LAST_SLIDE_INDEX)) },
         )
     }
 
-    entry<Routes.Slides> { route ->
+    entry<Routes.Onboarding.Slides> { route ->
         OnboardingSlidesScreen(
             currentTab = route.tab,
             isGeoBlocked = isGeoBlocked,
-            onAdvancedSetupClick = { navigator.navigate(Routes.Advanced) },
+            onAdvancedSetupClick = { navigator.navigate(Routes.Onboarding.Advanced) },
             onCreateClick = { onCreateWallet(null) },
-            onRestoreClick = { navigator.navigate(Routes.WarningMultipleDevices) },
+            onRestoreClick = { navigator.navigate(Routes.Onboarding.WarningMultipleDevices) },
         )
     }
 
-    entry<Routes.WarningMultipleDevices> {
+    entry<Routes.Onboarding.WarningMultipleDevices> {
         WarningMultipleDevicesScreen(
             onBackClick = { navigator.goBack() },
-            onConfirmClick = { navigator.navigate(Routes.Restore) }
+            onConfirmClick = { navigator.navigate(Routes.Onboarding.Restore) }
         )
     }
 
-    entry<Routes.Restore> {
+    entry<Routes.Onboarding.Restore> {
         RestoreWalletScreen(
             onBackClick = { navigator.goBack() },
             onRestoreClick = onRestoreWallet
         )
     }
 
-    entry<Routes.Advanced> {
+    entry<Routes.Onboarding.Advanced> {
         CreateWalletWithPassphraseScreen(
             onBackClick = { navigator.goBack() },
             onCreateClick = onCreateWallet,

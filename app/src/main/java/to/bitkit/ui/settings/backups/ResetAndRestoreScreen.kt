@@ -53,7 +53,7 @@ fun ResetAndRestoreScreen(
 
     Content(
         showConfirmDialog = showDialog,
-        onClickBackup = { navigator.navigate(Routes.BackupIntro) },
+        onClickBackup = { navigator.navigate(Routes.Backup.Intro) },
         onClickReset = { showDialog = true },
         onResetConfirm = { wallet.wipeWallet() },
         onResetDismiss = { showDialog = false },
