@@ -13,7 +13,7 @@ class SheetSceneStrategy<T : Any> : SceneStrategy<T> {
 
     override fun SceneStrategyScope<T>.calculateScene(entries: List<NavEntry<T>>): Scene<T>? {
         val lastEntry = entries.lastOrNull()
-        val sheetProperties = lastEntry?.metadata?.get(SHEET_KEY) as? SheetProperties
+        val sheetProperties = lastEntry?.metadata?.get(KEY_SHEET) as? SheetProperties
         return sheetProperties?.let { props ->
             @Suppress("UNCHECKED_CAST")
             SheetScene(
@@ -29,10 +29,10 @@ class SheetSceneStrategy<T : Any> : SceneStrategy<T> {
 
     companion object {
         fun sheet(size: SheetSize = SheetSize.LARGE): Map<String, Any> = mapOf(
-            SHEET_KEY to SheetProperties(size),
+            KEY_SHEET to SheetProperties(size),
         )
 
-        internal const val SHEET_KEY = "bitkit_sheet"
+        internal const val KEY_SHEET = "bitkit_sheet"
     }
 }
 

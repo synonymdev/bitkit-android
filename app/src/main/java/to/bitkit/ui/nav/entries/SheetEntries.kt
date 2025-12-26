@@ -871,7 +871,7 @@ private fun EntryProviderScope<NavKey>.timedSheetEntries(
         QuickPayIntroSheet(
             onContinue = {
                 appViewModel.dismissTimedSheet(skipQueue = true)
-                navigator.navigateToQuickPaySettings()
+                navigator.navigate(Routes.QuickPaySettings)
             },
         )
     }

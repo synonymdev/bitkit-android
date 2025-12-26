@@ -211,7 +211,7 @@ fun EntryProviderScope<NavKey>.settingsEntries(
     entry<Routes.QuickPayIntro> {
         QuickPayIntroScreen(
             onBack = { navigator.goBack() },
-            onContinue = { navigator.navigateToQuickPaySettings() },
+            onContinue = { navigator.navigate(Routes.QuickPaySettings) },
         )
     }
 
