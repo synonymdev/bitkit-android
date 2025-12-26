@@ -30,7 +30,6 @@ import androidx.navigation3.scene.OverlayScene
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.scene.SceneStrategy
 import androidx.navigation3.scene.SceneStrategyScope
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import to.bitkit.ui.components.SheetDragHandle
 import to.bitkit.ui.components.SheetSize
@@ -101,7 +100,6 @@ internal class BitKitSheetScene<T : Any>(
 
         LaunchedEffect(scaffoldState.bottomSheetState) {
             snapshotFlow { scaffoldState.bottomSheetState.currentValue }
-                .drop(1)
                 .collect { value: SheetValue ->
                     if (!isInitialExpansion && value == SheetValue.Hidden) {
                         onBack()
