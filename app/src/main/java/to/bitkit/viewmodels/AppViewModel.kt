@@ -1700,6 +1700,8 @@ class AppViewModel @Inject constructor(
         timedSheetManager.dismissCurrentSheet(skipQueue)
 
     private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
+        delay(SCREEN_TRANSITION_DELAY_MS)
+
         runCatching {
             val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
             val currentBuildNumber = BuildConfig.VERSION_CODE
