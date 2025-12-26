@@ -671,7 +671,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleScan(result: String) = withContext(bgDispatcher) {
+    private suspend fun handleScan(result: String, isQrCode: Boolean) = withContext(bgDispatcher) {
         // always reset state on new scan
         resetSendState()
         resetQuickPayData()
@@ -695,8 +695,8 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Unhandled scan data: $scan", context = TAG)
                 toast(
                     type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.other__scan_err_decoding),
-                    description = context.getString(R.string.other__scan_err_interpret_title),
+                    title = context.getString(R.string.other__qr_error_header),
+                    description = context.getString(R.string.other__qr_error_text),
                 )
             }
         }
