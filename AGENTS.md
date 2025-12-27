@@ -192,6 +192,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
+- ALWAYS use a single root layout node in composables that emit UI
 - ALWAYS list 3 suggested commit messages after implementation work for the entire set of uncommitted changes
 - NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
 - ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking { }`
