@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.regtestMine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -25,9 +26,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -224,7 +227,19 @@ class TransferViewModel @Inject constructor(
             // Step 0: Starting
             settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_0) }
             Logger.debug("LN setup step: $LN_SETUP_STEP_0", context = TAG)
-            delay(MIN_STEP_DELAY_MS)
+            delay(MS_DELAY_STEP)
+
+            // Auto-mine on regtest: delay to let tx propagate, then mine
+            if (Env.network == Network.REGTEST) {
+                delay(MS_DELAY_REGTEST_MINE)
+                try {
+                    Logger.debug("Auto-mining a block for order: '$orderId'", context = TAG)
+                    regtestMine(1u)
+                    Logger.debug("Successfully mined a block", context = TAG)
+                } catch (e: Throwable) {
+                    Logger.warn("Failed to mine block", e, context = TAG)
+                }
+            }
 
             // Poll until payment is confirmed (order state becomes PAID or EXECUTED)
             val paidOrder = pollUntil(orderId) { order ->
@@ -234,7 +249,7 @@ class TransferViewModel @Inject constructor(
             // Step 1: Payment confirmed
             settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_1) }
             Logger.debug("LN setup step: $LN_SETUP_STEP_1", context = TAG)
-            delay(MIN_STEP_DELAY_MS)
+            delay(MS_DELAY_STEP)
 
             // Try to open channel (idempotent - safe to call multiple times)
             blocktankRepo.openChannel(paidOrder.id)
@@ -242,7 +257,7 @@ class TransferViewModel @Inject constructor(
             // Step 2: Channel opening requested
             settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_2) }
             Logger.debug("LN setup step: $LN_SETUP_STEP_2", context = TAG)
-            delay(MIN_STEP_DELAY_MS)
+            delay(MS_DELAY_STEP)
 
             // Poll until channel is ready (EXECUTED state or channel has state)
             pollUntil(orderId) { order ->
@@ -278,7 +293,7 @@ class TransferViewModel @Inject constructor(
             if (condition(order)) {
                 return order
             }
-            delay(POLL_INTERVAL_MS)
+            delay(MS_INTERVAL_POLL)
         }
     }
 
@@ -492,8 +507,9 @@ class TransferViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "TransferViewModel"
-        private const val MIN_STEP_DELAY_MS = 500L
-        private const val POLL_INTERVAL_MS = 2_500L
+        private const val MS_DELAY_STEP = 500L
+        private const val MS_INTERVAL_POLL = 2_500L
+        private const val MS_DELAY_REGTEST_MINE = 5_000L
         const val LN_SETUP_STEP_0 = 0
         const val LN_SETUP_STEP_1 = 1
         const val LN_SETUP_STEP_2 = 2
