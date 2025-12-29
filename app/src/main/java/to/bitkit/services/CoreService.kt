@@ -1112,6 +1112,35 @@ class ActivityService(
         markActivityAsSeen(activity.id, seenAt)
     }
 
+    suspend fun markAllUnseenActivitiesAsSeen() = ServiceQueue.CORE.background {
+        val timestamp = (System.currentTimeMillis() / 1000).toULong()
+        val activities = getActivities(
+            filter = ActivityFilter.ALL,
+            txType = null,
+            tags = null,
+            search = null,
+            minDate = null,
+            maxDate = null,
+            limit = null,
+            sortDirection = null,
+        )
+
+        for (activity in activities) {
+            val isSeen = when (activity) {
+                is Activity.Onchain -> activity.v1.seenAt != null
+                is Activity.Lightning -> activity.v1.seenAt != null
+            }
+
+            if (!isSeen) {
+                val activityId = when (activity) {
+                    is Activity.Onchain -> activity.v1.id
+                    is Activity.Lightning -> activity.v1.id
+                }
+                markActivityAsSeen(activityId, timestamp)
+            }
+        }
+    }
+
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
         return ServiceQueue.CORE.background {
             val doesExistMap = mutableMapOf<String, Boolean>()

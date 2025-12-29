@@ -18,6 +18,7 @@ import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelConfig
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
@@ -79,6 +80,7 @@ class LightningService @Inject constructor(
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
         trustedPeers: List<PeerDetails>? = null,
+        channelMigration: ChannelDataMigration? = null,
     ) {
         Logger.debug("Building node…")
 
@@ -88,6 +90,7 @@ class LightningService @Inject constructor(
             customServerUrl,
             customRgsServerUrl,
             config,
+            channelMigration,
         )
 
         Logger.info("LDK node setup")
@@ -123,11 +126,21 @@ class LightningService @Inject constructor(
         customServerUrl: String?,
         customRgsServerUrl: String?,
         config: Config,
+        channelMigration: ChannelDataMigration? = null,
     ): Node = ServiceQueue.LDK.background {
         val builder = Builder.fromConfig(config).apply {
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
+
+            if (channelMigration != null) {
+                setChannelDataMigration(channelMigration)
+                Logger.info(
+                    "Applied channel migration: ${channelMigration.channelMonitors.size} monitors",
+                    context = "Migration"
+                )
+            }
+
             setEntropyBip39Mnemonic(
                 mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound,
                 passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),

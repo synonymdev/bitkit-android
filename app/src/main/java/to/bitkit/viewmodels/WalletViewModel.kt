@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -44,6 +45,7 @@ class WalletViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val migrationService: to.bitkit.services.MigrationService,
 ) : ViewModel() {
 
     val lightningState = lightningRepo.lightningState
@@ -56,6 +58,8 @@ class WalletViewModel @Inject constructor(
 
     val isRecoveryMode = lightningRepo.isRecoveryMode
 
+    val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
+
     var restoreState by mutableStateOf<RestoreState>(RestoreState.Initial)
         private set
 
@@ -67,10 +71,60 @@ class WalletViewModel @Inject constructor(
     private var syncJob: Job? = null
 
     init {
+        checkAndPerformRNMigration()
+        collectStates()
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun checkAndPerformRNMigration() {
+        viewModelScope.launch(bgDispatcher) {
+            val isChecked = migrationService.isMigrationChecked()
+            if (isChecked) {
+                loadCacheIfWalletExists()
+                return@launch
+            }
+
+            val hasNative = migrationService.hasNativeWalletData()
+            if (hasNative) {
+                migrationService.markMigrationChecked()
+                loadCacheIfWalletExists()
+                return@launch
+            }
+
+            val hasRN = migrationService.hasRNWalletData()
+            if (!hasRN) {
+                migrationService.markMigrationChecked()
+                loadCacheIfWalletExists()
+                return@launch
+            }
+
+            migrationService.setShowingMigrationLoading(true)
+
+            try {
+                migrationService.migrateFromReactNative()
+                walletRepo.setWalletExistsState()
+                walletExists = walletRepo.walletExists()
+                loadCacheIfWalletExists()
+                if (!walletExists) {
+                    migrationService.setShowingMigrationLoading(false)
+                }
+            } catch (e: Exception) {
+                Logger.error("RN migration failed: $e", e, context = "WalletViewModel")
+                migrationService.markMigrationChecked()
+                migrationService.setShowingMigrationLoading(false)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Migration Failed",
+                    description = "Please restore your wallet manually using your recovery phrase"
+                )
+            }
+        }
+    }
+
+    private fun loadCacheIfWalletExists() {
         if (walletExists) {
             walletRepo.loadFromCache()
         }
-        collectStates()
     }
 
     private fun collectStates() {
@@ -135,7 +189,16 @@ class WalletViewModel @Inject constructor(
         if (!walletExists) return
 
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.start(walletIndex)
+            var channelMigration: org.lightningdevkit.ldknode.ChannelDataMigration? = null
+            migrationService.pendingChannelMigration?.let { migration ->
+                channelMigration = org.lightningdevkit.ldknode.ChannelDataMigration(
+                    channelManager = migration.channelManager.map { it.toUByte() },
+                    channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
+                )
+                migrationService.pendingChannelMigration = null
+            }
+
+            lightningRepo.start(walletIndex, channelMigration = channelMigration)
                 .onSuccess {
                     walletRepo.setWalletExistsState()
                     walletRepo.syncBalances()

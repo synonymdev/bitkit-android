@@ -29,6 +29,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
@@ -46,6 +47,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -135,6 +137,7 @@ class AppViewModel @Inject constructor(
     private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
+    private val migrationService: to.bitkit.services.MigrationService,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -175,6 +178,7 @@ class AppViewModel @Inject constructor(
     private var timedSheetsScope: CoroutineScope? = null
     private var timedSheetQueue: List<TimedSheetType> = emptyList()
     private var currentTimedSheet: TimedSheetType? = null
+    private var isCompletingMigration = false
 
     fun setShowForgotPin(value: Boolean) {
         _showForgotPinSheet.value = value
@@ -230,6 +234,27 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             walletRepo.balanceState.collect {
                 checkTimedSheets()
+            }
+        }
+
+        viewModelScope.launch {
+            migrationService.isShowingMigrationLoading.collect { isShowing ->
+                if (isShowing) {
+                    @Suppress("SwallowedException")
+                    try {
+                        withTimeout(MIGRATION_LOADING_TIMEOUT_MS) {
+                            migrationService.isShowingMigrationLoading.first { !it }
+                        }
+                    } catch (e: TimeoutCancellationException) {
+                        if (!isCompletingMigration) {
+                            Logger.warn(
+                                "Migration loading screen timeout after 2 minutes, completing migration anyway",
+                                context = TAG
+                            )
+                            completeMigration()
+                        }
+                    }
+                }
             }
         }
     }
@@ -292,7 +317,78 @@ class AppViewModel @Inject constructor(
         walletRepo.syncBalances()
     }
 
-    private fun handleSyncCompleted() = walletRepo.debounceSyncByEvent()
+    private suspend fun handleSyncCompleted() {
+        walletRepo.debounceSyncByEvent()
+
+        if (migrationService.isShowingMigrationLoading.value && !isCompletingMigration) {
+            completeMigration()
+        }
+    }
+
+    private suspend fun completeMigration() {
+        if (isCompletingMigration) return
+        isCompletingMigration = true
+
+        try {
+            lightningRepo.getPayments().onSuccess { payments ->
+                activityRepo.syncLdkNodePayments(payments)
+            }.onFailure { e ->
+                Logger.warn("Failed to get payments during migration: $e", e, context = TAG)
+            }
+            activityRepo.markAllUnseenActivitiesAsSeen()
+
+            lightningRepo.restart()
+                .onSuccess {
+                    walletRepo.syncNodeAndWallet()
+                        .onSuccess {
+                            lightningRepo.getPayments().onSuccess { payments ->
+                                activityRepo.syncLdkNodePayments(payments)
+                            }
+                            transferRepo.syncTransferStates()
+                            migrationService.reapplyMetadataAfterSync()
+
+                            migrationService.setShowingMigrationLoading(false)
+
+                            toast(
+                                type = Toast.ToastType.SUCCESS,
+                                title = "Migration Complete",
+                                description = "Your wallet has been successfully migrated"
+                            )
+                        }
+                        .onFailure { e ->
+                            Logger.warn("Sync failed after restart during migration: $e", e, context = TAG)
+                            walletRepo.syncBalances()
+                            lightningRepo.getPayments().onSuccess { payments ->
+                                activityRepo.syncLdkNodePayments(payments)
+                            }
+                            transferRepo.syncTransferStates()
+                            migrationService.reapplyMetadataAfterSync()
+
+                            migrationService.setShowingMigrationLoading(false)
+
+                            toast(
+                                type = Toast.ToastType.SUCCESS,
+                                title = "Migration Complete",
+                                description = "Your wallet has been successfully migrated"
+                            )
+                        }
+                }
+                .onFailure { e ->
+                    Logger.error("Failed to restart node after migration: $e", e, context = TAG)
+                    migrationService.setShowingMigrationLoading(false)
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = "Migration Warning",
+                        description = "Migration completed but node restart failed. Please restart the app."
+                    )
+                }
+        } catch (e: Exception) {
+            Logger.error("Migration completion error: $e", e, context = TAG)
+            migrationService.setShowingMigrationLoading(false)
+        } finally {
+            isCompletingMigration = false
+        }
+    }
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
         activityRepo.handleOnchainTransactionConfirmed(event.txid, event.details)
@@ -2001,6 +2097,7 @@ class AppViewModel @Inject constructor(
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val SCREEN_TRANSITION_DELAY_MS = 300L
+        private const val MIGRATION_LOADING_TIMEOUT_MS = 150_000L
 
         /**How high the balance must be to show this warning to the user (in USD)*/
         private const val BALANCE_THRESHOLD_USD = 500L
