@@ -579,9 +579,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         )
     }
 
-    entry<Routes.Receive.Amount>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.Amount> {
         ReceiveAmountScreen(
             onCjitCreated = { entry ->
                 walletViewModel.setPendingCjitEntry(entry)
@@ -591,18 +589,14 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         )
     }
 
-    entry<Routes.Receive.GeoBlock>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.GeoBlock> {
         LocationBlockScreen(
             onBackPressed = { navigator.goBack() },
             navigateAdvancedSetup = { navigator.navigate(Routes.External.Connection()) },
         )
     }
 
-    entry<Routes.Receive.Confirm>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.Confirm> {
         val entry by walletViewModel.pendingCjitEntry.collectAsStateWithLifecycle()
         entry?.let { entryDetails ->
             ReceiveConfirmScreen(
@@ -617,9 +611,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         }
     }
 
-    entry<Routes.Receive.ConfirmInbound>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.ConfirmInbound> {
         val entry by walletViewModel.pendingCjitEntry.collectAsStateWithLifecycle()
         entry?.let { entryDetails ->
             ReceiveConfirmScreen(
@@ -635,9 +627,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         }
     }
 
-    entry<Routes.Receive.Liquidity>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.Liquidity> {
         val entry by walletViewModel.pendingCjitEntry.collectAsStateWithLifecycle()
         val settingsViewModel = hiltViewModel<SettingsViewModel>()
         val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
@@ -654,9 +644,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         }
     }
 
-    entry<Routes.Receive.LiquidityAdditional>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.LiquidityAdditional> {
         val entry by walletViewModel.pendingCjitEntry.collectAsStateWithLifecycle()
         val settingsViewModel = hiltViewModel<SettingsViewModel>()
         val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
@@ -674,13 +662,11 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         }
     }
 
-    entry<Routes.Receive.EditInvoice>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.EditInvoice> {
         val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
         EditInvoiceScreen(
             walletUiState = walletState,
-            onBack = { navigator.popBackTo(Routes.Receive.Qr, inclusive = true) },
+            onBack = { navigator.goBack() },
             updateInvoice = walletViewModel::updateBip21Invoice,
             onClickAddTag = { navigator.navigate(Routes.Receive.AddTag) },
             onClickTag = walletViewModel::removeTag,
@@ -692,9 +678,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         )
     }
 
-    entry<Routes.Receive.AddTag>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Receive.AddTag> {
         AddTagScreen(
             onBack = { navigator.goBack() },
             onTagSelected = { tag ->
