@@ -217,7 +217,7 @@ private fun OnboardingContent(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
 ) {
-    val backStack = rememberNavBackStack(Routes.Terms)
+    val backStack = rememberNavBackStack(Routes.Onboarding.Terms)
     val navigator = remember(backStack) { Navigator(backStack) }
     val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
 

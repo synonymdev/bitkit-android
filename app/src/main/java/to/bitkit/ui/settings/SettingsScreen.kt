@@ -52,13 +52,13 @@ fun SettingsScreen(
 
     SettingsScreenContent(
         isDevModeEnabled = isDevModeEnabled,
-        onGeneralClick = { navigator.navigate(Routes.GeneralSettings) },
-        onSecurityClick = { navigator.navigate(Routes.SecuritySettings) },
-        onBackupClick = { navigator.navigate(Routes.BackupSettings) },
-        onAdvancedClick = { navigator.navigate(Routes.AdvancedSettings) },
+        onGeneralClick = { navigator.navigate(Routes.Settings.General) },
+        onSecurityClick = { navigator.navigate(Routes.Settings.Security) },
+        onBackupClick = { navigator.navigate(Routes.Settings.BackupSettings) },
+        onAdvancedClick = { navigator.navigate(Routes.Settings.Advanced) },
         onSupportClick = { navigator.navigate(Routes.Support) },
-        onAboutClick = { navigator.navigate(Routes.AboutSettings) },
-        onDevClick = { navigator.navigate(Routes.DevSettings) },
+        onAboutClick = { navigator.navigate(Routes.Settings.About) },
+        onDevClick = { navigator.navigate(Routes.Settings.Dev.Main) },
         onBackClick = { navigator.goBack() },
         onCogTap = {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)

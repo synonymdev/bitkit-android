@@ -56,6 +56,7 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val DISMISS_THRESHOLD_DP = 40
@@ -120,8 +121,8 @@ fun ToastView(
                             }
 
                             coroutineScope.launch {
-                                val horizontalSwipeDistance = kotlin.math.abs(dragOffsetX.value)
-                                val verticalSwipeDistance = kotlin.math.abs(dragOffsetY.value)
+                                val horizontalSwipeDistance = abs(dragOffsetX.value)
+                                val verticalSwipeDistance = abs(dragOffsetY.value)
 
                                 // Determine if this is primarily horizontal or vertical swipe
                                 val isHorizontalSwipe = horizontalSwipeDistance > verticalSwipeDistance

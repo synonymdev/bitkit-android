@@ -50,7 +50,7 @@ fun ChangePinConfirmScreen(
         if (pin.length == Env.PIN_LENGTH) {
             if (pin == newPin) {
                 app.editPin(newPin)
-                navigator.navigate(Routes.ChangePinResult)
+                navigator.navigate(Routes.Pin.Change.Result)
             } else {
                 showError = true
                 delay(500)

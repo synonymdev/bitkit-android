@@ -38,8 +38,7 @@ data class DeepLinkRequest(
     val scheme: String? = uri.scheme?.lowercase()
     val host: String? = uri.host?.lowercase()
     val pathSegments: List<String> = uri.pathSegments
-    val queryParams: Map<String, String> = uri.queryParameterNames
-        .associateWith { uri.getQueryParameter(it) ?: "" }
+    val queryParams: Map<String, String> = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
 }
 
 /**
@@ -51,7 +50,7 @@ data class DeepLinkMatchResult<T : Routes>(
 )
 
 /**
- * Matches a DeepLinkRequest against a DeepLinkPattern.
+ * Matches a [DeepLinkRequest] against a [DeepLinkPattern].
  */
 class DeepLinkMatcher<T : Routes>(
     private val request: DeepLinkRequest,
@@ -99,57 +98,52 @@ class DeepLinkMatcher<T : Routes>(
 }
 
 /**
- * Registry of all supported deep link patterns.
+ * Registry of supported deep link patterns for type-safe documentation and early pattern matching.
  *
- * Note: The Rust-based bitkitcore.decode() remains the primary parser for complex
- * Bitcoin/Lightning URIs. These patterns provide type-safe documentation and
- * early pattern matching for known routes.
+ * Note: [com.synonym.bitkitcore.decode] remains the primary parser for complex Bitcoin/Lightning URIs.
  */
 object DeepLinkPatterns {
     // bitkit:// scheme patterns
     val RECOVERY_MODE = DeepLinkPattern(
-        routeClass = Routes.RecoveryMode::class,
+        routeClass = Routes.Recovery.Mode::class,
         uriPattern = "${UriScheme.BITKIT.withSlashes}recovery-mode".toUri()
     )
 
     // bitcoin:// scheme patterns (BIP21)
     // Note: bitcoin: URIs use address as "host" not path
     val SEND_BITCOIN = DeepLinkPattern(
-        routeClass = Routes.SendAddress::class,
+        routeClass = Routes.Send.Address::class,
         uriPattern = "${UriScheme.BITCOIN.withSlashes}{address}".toUri()
     )
 
     // lightning:// scheme patterns
     val SEND_LIGHTNING = DeepLinkPattern(
-        routeClass = Routes.SendAddress::class,
+        routeClass = Routes.Send.Address::class,
         uriPattern = "${UriScheme.LIGHTNING.withSlashes}{invoice}".toUri()
     )
 
     // lnurl:// scheme patterns
     val LNURL_PAY = DeepLinkPattern(
-        routeClass = Routes.SendAddress::class,
+        routeClass = Routes.Send.Address::class,
         uriPattern = "${UriScheme.LNURL_PAY.withSlashes}{data}".toUri()
     )
 
     val LNURL_WITHDRAW = DeepLinkPattern(
-        routeClass = Routes.ReceiveQr::class,
+        routeClass = Routes.Receive.Qr::class,
         uriPattern = "${UriScheme.LNURL_WITHDRAW.withSlashes}{data}".toUri()
     )
 
     val LNURL_CHANNEL = DeepLinkPattern(
-        routeClass = Routes.LnurlChannel::class,
+        routeClass = Routes.Sheet.LnurlChannel::class,
         uriPattern = "${UriScheme.LNURL_CHANNEL.withSlashes}{data}".toUri()
     )
 
     // https:// scheme patterns (App Links)
     val TREASURE_HUNT = DeepLinkPattern(
-        routeClass = Routes.GiftLoading::class,
+        routeClass = Routes.Gift.Loading::class,
         uriPattern = "${UriScheme.HTTPS.withSlashes}www.bitkit.to/treasure-hunt".toUri()
     )
 
-    /**
-     * All registered patterns for matching.
-     */
     val all: List<DeepLinkPattern<out Routes>> = listOf(
         RECOVERY_MODE,
         SEND_BITCOIN,
@@ -172,7 +166,7 @@ object DeepLinkPatterns {
     }
 }
 
-// TODO Temporary fix while these schemes can't be decoded
+// TODO Temporary fix while these schemes can't be decoded via bitkit-core
 fun String.removeLightningSchemes(): String = listOf(
     UriScheme.LNURL,
     UriScheme.LNURL_PAY,

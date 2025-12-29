@@ -90,13 +90,13 @@ fun LightningConnectionsScreen(
     Content(
         uiState = uiState,
         onBack = { navigator.goBack() },
-        onClickAddConnection = { navigator.navigate(Routes.Funding) },
+        onClickAddConnection = { navigator.navigate(Routes.Transfer.Funding) },
         onClickExportLogs = {
             viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
         },
         onClickChannel = { channelUi ->
             viewModel.setSelectedChannel(channelUi)
-            navigator.navigate(Routes.ChannelDetail)
+            navigator.navigate(Routes.Settings.ChannelDetail)
         },
         onRefresh = {
             viewModel.onPullToRefresh()
