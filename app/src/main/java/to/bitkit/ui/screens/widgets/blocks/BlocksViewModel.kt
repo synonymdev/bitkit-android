@@ -122,6 +122,12 @@ class BlocksViewModel @Inject constructor(
         }
     }
 
+    fun refreshOnDisplay() {
+        viewModelScope.launch {
+            widgetsRepo.refreshWidget(WidgetType.BLOCK)
+        }
+    }
+
     // MARK: - Private Methods
 
     private fun initializeCustomPreferences() {
