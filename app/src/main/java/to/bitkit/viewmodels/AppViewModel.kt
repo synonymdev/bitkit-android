@@ -1710,7 +1710,7 @@ class AppViewModel @Inject constructor(
             if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
 
             if (androidReleaseInfo.isCritical) {
-                mainScreenEffect(MainScreenEffect.Navigate(Routes.CriticalUpdate))
+                mainScreenEffect(MainScreenEffect.NavigateAndClearBackstack(Routes.CriticalUpdate))
             }
         }.onFailure { e ->
             Logger.warn("Failure fetching new releases", e = e, context = TAG)
@@ -1784,6 +1784,7 @@ sealed class SendEffect {
 
 sealed class MainScreenEffect {
     data class Navigate(val route: Routes) : MainScreenEffect()
+    data class NavigateAndClearBackstack(val route: Routes) : MainScreenEffect()
     data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }
