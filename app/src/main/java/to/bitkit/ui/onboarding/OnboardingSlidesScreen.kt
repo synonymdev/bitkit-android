@@ -51,6 +51,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 private const val LAST_PAGE_INDEX = 3
+private const val PAGE_COUNT = LAST_PAGE_INDEX + 1
 
 @Composable
 fun OnboardingSlidesScreen(
@@ -61,7 +62,7 @@ fun OnboardingSlidesScreen(
     onRestoreClick: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = currentTab, pageCount = { 5 })
+    val pagerState = rememberPagerState(initialPage = currentTab, pageCount = { PAGE_COUNT })
 
     Box(
         modifier = Modifier
@@ -129,7 +130,7 @@ fun OnboardingSlidesScreen(
                 .offset { IntOffset(0, yOffset.roundToPx()) }
                 .alpha(alpha)
         ) {
-            repeat(LAST_PAGE_INDEX + 1) { index ->
+            repeat(PAGE_COUNT) { index ->
                 val size by animateDpAsState(
                     targetValue = if (index == pagerState.currentPage) 10.dp else 7.dp,
                     animationSpec = tween(durationMillis = 300),
