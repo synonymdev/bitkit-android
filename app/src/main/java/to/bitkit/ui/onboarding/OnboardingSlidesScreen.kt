@@ -50,6 +50,9 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
+private const val LAST_PAGE_INDEX = 3
+private const val PAGE_COUNT = LAST_PAGE_INDEX + 1
+
 @Composable
 fun OnboardingSlidesScreen(
     currentTab: Int = 0,
@@ -59,7 +62,7 @@ fun OnboardingSlidesScreen(
     onRestoreClick: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = currentTab, pageCount = { 5 })
+    val pagerState = rememberPagerState(initialPage = currentTab, pageCount = { PAGE_COUNT })
 
     Box(
         modifier = Modifier
@@ -90,31 +93,23 @@ fun OnboardingSlidesScreen(
                 )
 
                 2 -> OnboardingTab(
-                    imageResId = R.drawable.spark,
-                    title = stringResource(R.string.onboarding__slide2_header),
-                    titleAccentColor = Colors.Yellow,
-                    text = stringResource(R.string.onboarding__slide2_text),
-                    modifier = Modifier.testTag("Slide2")
-                )
-
-                3 -> OnboardingTab(
                     imageResId = R.drawable.shield,
                     title = stringResource(R.string.onboarding__slide3_header),
                     titleAccentColor = Colors.Green,
                     text = stringResource(R.string.onboarding__slide3_text),
-                    modifier = Modifier.testTag("Slide3")
+                    modifier = Modifier.testTag("Slide2")
                 )
 
-                4 -> CreateWalletScreen(
+                LAST_PAGE_INDEX -> CreateWalletScreen(
                     onCreateClick = onCreateClick,
                     onRestoreClick = onRestoreClick,
-                    modifier = Modifier.testTag("Slide4")
+                    modifier = Modifier.testTag("Slide$LAST_PAGE_INDEX")
                 )
             }
         }
 
         // Dots indicator
-        val isIndicatorVisible = pagerState.currentPage != 4
+        val isIndicatorVisible = pagerState.currentPage != LAST_PAGE_INDEX
         val yOffset by animateDpAsState(
             targetValue = if (isIndicatorVisible) 0.dp else 20.dp,
             animationSpec = tween(durationMillis = 300),
@@ -135,7 +130,7 @@ fun OnboardingSlidesScreen(
                 .offset { IntOffset(0, yOffset.roundToPx()) }
                 .alpha(alpha)
         ) {
-            repeat(5) { index ->
+            repeat(PAGE_COUNT) { index ->
                 val size by animateDpAsState(
                     targetValue = if (index == pagerState.currentPage) 10.dp else 7.dp,
                     animationSpec = tween(durationMillis = 300),
@@ -157,7 +152,7 @@ fun OnboardingSlidesScreen(
         onBackClick = null,
         titleText = null,
         actions = {
-            if (pagerState.currentPage == 4) {
+            if (pagerState.currentPage == LAST_PAGE_INDEX) {
                 TextButton(
                     onClick = onAdvancedSetupClick,
                     modifier = Modifier.testTag("Passphrase")
@@ -276,7 +271,7 @@ private fun OnboardingViewPreview3() {
 private fun OnboardingViewPreview4() {
     AppThemeSurface {
         OnboardingSlidesScreen(
-            currentTab = 4,
+            currentTab = LAST_PAGE_INDEX,
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
