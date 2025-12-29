@@ -151,7 +151,54 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 }
 ```
 
-### Rules
+### Sheet Navigation Flows
+
+Each flow has a ROOT route with `metadata = SheetSceneStrategy.sheet()`. Sub-routes navigate WITHIN the same sheet (no sheet metadata).
+
+**Pattern:**
+
+- Root route: Has `metadata = SheetSceneStrategy.sheet()`
+- Sub-routes: No metadata, navigate within the parent sheet
+
+**Flows:**
+
+1. **Pin Flow** (root: `Pin.Prompt`)
+
+- Pin.Prompt → Pin.Choose → Pin.Confirm → Pin.Biometrics → Pin.Result
+
+2. **Backup Flow** (root: `Backup.Intro`)
+
+- Backup.Intro → ShowMnemonic → ShowPassphrase → ConfirmMnemonic → ConfirmPassphrase → Warning → Success → MultipleDevices → Metadata
+
+3. **Send Flow** (root: `Send.Recipient`)
+
+- Send.Recipient → Address → Amount → QrScanner → CoinSelection → FeeRate → FeeCustom → Confirm → Success/Error
+- Also: WithdrawConfirm, WithdrawError, Support, AddTag, PinCheck, QuickPay
+
+4. **Receive Flow** (root: `Receive.Qr`)
+
+- Receive.Qr → EditInvoice → AddTag
+- Receive.Qr → Amount → Confirm → Liquidity
+- Receive.Qr → GeoBlock
+- Also: ConfirmInbound, LiquidityAdditional
+
+5. **Gift Flow** (root: `Gift.Loading`)
+
+- Gift.Loading → Used/UsedUp/Error/Success
+
+**Standalone Sheets** (single-screen, each has sheet metadata):
+
+- Activity.DateRangeSelectorSheet
+- Activity.TagSelectorSheet
+- Sheet.LnurlAuth
+- Sheet.ForceTransfer
+- Sheet.Update
+- Sheet.Backup
+- Sheet.Notifications
+- Sheet.QuickPay
+- Sheet.HighBalance
+
+## Rules
 
 - USE coding rules from `.cursor/default.rules.mdc`
 - ALWAYS run `./gradlew compileDevDebugKotlin` after code changes to verify code compiles
