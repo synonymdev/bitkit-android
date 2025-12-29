@@ -189,13 +189,11 @@ class WalletViewModel @Inject constructor(
         if (!walletExists) return
 
         viewModelScope.launch(bgDispatcher) {
-            var channelMigration: org.lightningdevkit.ldknode.ChannelDataMigration? = null
-            migrationService.pendingChannelMigration?.let { migration ->
-                channelMigration = org.lightningdevkit.ldknode.ChannelDataMigration(
+            val channelMigration = migrationService.consumePendingChannelMigration()?.let { migration ->
+                org.lightningdevkit.ldknode.ChannelDataMigration(
                     channelManager = migration.channelManager.map { it.toUByte() },
                     channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
                 )
-                migrationService.pendingChannelMigration = null
             }
 
             lightningRepo.start(walletIndex, channelMigration = channelMigration)

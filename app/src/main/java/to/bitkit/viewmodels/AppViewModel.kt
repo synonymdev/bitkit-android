@@ -248,7 +248,7 @@ class AppViewModel @Inject constructor(
                     } catch (e: TimeoutCancellationException) {
                         if (!isCompletingMigration) {
                             Logger.warn(
-                                "Migration loading screen timeout after 2 minutes, completing migration anyway",
+                                "Migration loading screen timeout after 2.5 minutes, completing migration anyway",
                                 context = TAG
                             )
                             completeMigration()

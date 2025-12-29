@@ -83,7 +83,12 @@ class MigrationService @Inject constructor(
         _isShowingMigrationLoading.value = value
     }
 
-    var pendingChannelMigration: PendingChannelMigration? = null
+    @Volatile
+    private var pendingChannelMigration: PendingChannelMigration? = null
+
+    fun consumePendingChannelMigration(): PendingChannelMigration? {
+        return pendingChannelMigration.also { pendingChannelMigration = null }
+    }
 
     private val rnNetworkString: String
         get() = when (Env.network) {
@@ -97,7 +102,14 @@ class MigrationService @Inject constructor(
         get() = File(context.filesDir, "ldk")
 
     private val rnLdkAccountPath: File
-        get() = File(rnLdkBasePath, "${Companion.RN_WALLET_NAME}${rnNetworkString}ldkaccountv3")
+        get() {
+            val accountName = buildString {
+                append(RN_WALLET_NAME)
+                append(rnNetworkString)
+                append("ldkaccountv3")
+            }
+            return File(rnLdkBasePath, accountName)
+        }
 
     private val rnMmkvPath: File
         get() = File(context.filesDir, "mmkv/mmkv.default")
@@ -281,7 +293,9 @@ class MigrationService @Inject constructor(
             } else {
                 markMigrationChecked()
                 setShowingMigrationLoading(false)
-                throw to.bitkit.utils.AppError("RN keychain data not found")
+                throw to.bitkit.utils.AppError(
+                    "Migration data unavailable. Please restore your wallet using your recovery phrase."
+                )
             }
         } catch (e: Exception) {
             Logger.error("RN migration failed: $e", e, context = TAG)
@@ -295,26 +309,19 @@ class MigrationService @Inject constructor(
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
 
         if (mnemonic.isNullOrEmpty()) {
-            throw to.bitkit.utils.AppError(buildMnemonicNotFoundErrorMessage())
+            throw to.bitkit.utils.AppError(
+                "Migration data unavailable. Please restore your wallet using your recovery phrase."
+            )
         }
 
         val words = mnemonic.split(" ").filter { it.isNotBlank() }
         if (words.size != MNEMONIC_WORD_COUNT_12 && words.size != MNEMONIC_WORD_COUNT_24) {
-            throw to.bitkit.utils.AppError("Invalid mnemonic: ${words.size} words")
+            throw to.bitkit.utils.AppError(
+                "Recovery phrase format is invalid. Please use your 12 or 24 word recovery phrase to restore manually."
+            )
         }
 
         keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-    }
-
-    private fun buildMnemonicNotFoundErrorMessage(): String {
-        val keystore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        val hasWallet0Alias = keystore.containsAlias("wallet0")
-
-        return if (hasWallet0Alias) {
-            "RN keychain data not found"
-        } else {
-            "No RN mnemonic found"
-        }
     }
 
     private suspend fun migratePassphrase() {
