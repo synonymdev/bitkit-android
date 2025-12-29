@@ -70,7 +70,6 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 @Suppress("ViewModelForwarding")
 @Composable
 fun EditInvoiceScreen(
-    amountInputViewModel: AmountInputViewModel,
     walletUiState: WalletState,
     updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
@@ -80,11 +79,21 @@ fun EditInvoiceScreen(
     navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
+    amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
     val blocktankVM = blocktankViewModel ?: return
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        val amount = walletUiState.bip21AmountSats?.toLong() ?: 0L
+        if (amount > 0) {
+            amountInputViewModel.setSats(amount, currencies)
+        } else {
+            amountInputViewModel.clearInput()
+        }
+    }
 
     LaunchedEffect(Unit) {
         editInvoiceVM.editInvoiceEffect.collect { effect ->

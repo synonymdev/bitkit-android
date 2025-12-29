@@ -76,7 +76,6 @@ import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.viewmodels.ActivityListViewModel
-import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
@@ -679,12 +678,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         metadata = SheetSceneStrategy.sheet()
     ) {
         val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
-        val editInvoiceAmountViewModel = hiltViewModel<AmountInputViewModel>()
-
-        LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
-
         EditInvoiceScreen(
-            amountInputViewModel = editInvoiceAmountViewModel,
             walletUiState = walletState,
             onBack = { navigator.popBackTo(Routes.Receive.Qr, inclusive = true) },
             updateInvoice = walletViewModel::updateBip21Invoice,
