@@ -30,61 +30,50 @@ import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 
-/**
- * Widget flow entry providers for Navigation 3.
- */
 @Suppress("LongMethod")
 fun EntryProviderScope<NavKey>.widgetEntries(
     navigator: Navigator,
     currencyViewModel: CurrencyViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
-    // Widgets Intro
-    entry<Routes.WidgetsIntro> {
+    entry<Routes.Widgets.Intro> {
         WidgetsIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenWidgetsIntro(true)
-                navigator.navigate(Routes.AddWidget)
+                navigator.navigate(Routes.Widgets.Add)
             },
             onBackClick = { navigator.goBack() },
         )
     }
 
-    // Add Widget
-    entry<Routes.AddWidget> {
+    entry<Routes.Widgets.Add> {
         AddWidgetsScreen(
             fiatSymbol = LocalCurrencies.current.currencySymbol,
             onWidgetSelected = { widgetType ->
                 when (widgetType) {
-                    WidgetType.NEWS -> navigator.navigate(Routes.Headlines)
-                    WidgetType.FACTS -> navigator.navigate(Routes.Facts)
-                    WidgetType.BLOCK -> navigator.navigate(Routes.Blocks)
-                    WidgetType.WEATHER -> navigator.navigate(Routes.Weather)
-                    WidgetType.PRICE -> navigator.navigate(Routes.Price)
-                    WidgetType.CALCULATOR -> navigator.navigate(Routes.CalculatorPreview)
+                    WidgetType.NEWS -> navigator.navigate(Routes.Widgets.Headlines.Main)
+                    WidgetType.FACTS -> navigator.navigate(Routes.Widgets.Facts.Main)
+                    WidgetType.BLOCK -> navigator.navigate(Routes.Widgets.Blocks.Main)
+                    WidgetType.WEATHER -> navigator.navigate(Routes.Widgets.Weather.Main)
+                    WidgetType.PRICE -> navigator.navigate(Routes.Widgets.Price.Main)
+                    WidgetType.CALCULATOR -> navigator.navigate(Routes.Widgets.Calculator.Preview)
                 }
             },
             onBackCLick = { navigator.goBack() },
         )
     }
 
-    // Headlines Flow
     headlinesEntries(navigator)
 
-    // Facts Flow
     factsEntries(navigator)
 
-    // Blocks Flow
     blocksEntries(navigator)
 
-    // Weather Flow
     weatherEntries(navigator)
 
-    // Price Flow
     priceEntries(navigator)
 
-    // Calculator Preview
-    entry<Routes.CalculatorPreview> {
+    entry<Routes.Widgets.Calculator.Preview> {
         CalculatorEntry(
             navigator = navigator,
             currencyViewModel = currencyViewModel,
@@ -93,15 +82,15 @@ fun EntryProviderScope<NavKey>.widgetEntries(
 }
 
 private fun EntryProviderScope<NavKey>.headlinesEntries(navigator: Navigator) {
-    entry<Routes.Headlines> {
+    entry<Routes.Widgets.Headlines.Main> {
         HeadlinesPreviewEntry(navigator)
     }
 
-    entry<Routes.HeadlinesPreview> {
+    entry<Routes.Widgets.Headlines.Preview> {
         HeadlinesPreviewEntry(navigator)
     }
 
-    entry<Routes.HeadlinesEdit> {
+    entry<Routes.Widgets.Headlines.Edit> {
         HeadlinesEditEntry(navigator)
     }
 }
@@ -115,7 +104,7 @@ private fun HeadlinesPreviewEntry(
         headlinesViewModel = viewModel,
         onClose = { navigator.navigateToHome() },
         onBack = { navigator.goBack() },
-        navigateEditWidget = { navigator.navigate(Routes.HeadlinesEdit) },
+        navigateEditWidget = { navigator.navigate(Routes.Widgets.Headlines.Edit) },
     )
 }
 
@@ -127,20 +116,20 @@ private fun HeadlinesEditEntry(
     HeadlinesEditScreen(
         headlinesViewModel = viewModel,
         onBack = { navigator.goBack() },
-        navigatePreview = { navigator.navigate(Routes.HeadlinesPreview) },
+        navigatePreview = { navigator.navigate(Routes.Widgets.Headlines.Preview) },
     )
 }
 
 private fun EntryProviderScope<NavKey>.factsEntries(navigator: Navigator) {
-    entry<Routes.Facts> {
+    entry<Routes.Widgets.Facts.Main> {
         FactsPreviewEntry(navigator)
     }
 
-    entry<Routes.FactsPreview> {
+    entry<Routes.Widgets.Facts.Preview> {
         FactsPreviewEntry(navigator)
     }
 
-    entry<Routes.FactsEdit> {
+    entry<Routes.Widgets.Facts.Edit> {
         FactsEditEntry(navigator)
     }
 }
@@ -154,7 +143,7 @@ private fun FactsPreviewEntry(
         factsViewModel = viewModel,
         onClose = { navigator.navigateToHome() },
         onBack = { navigator.goBack() },
-        navigateEditWidget = { navigator.navigate(Routes.FactsEdit) },
+        navigateEditWidget = { navigator.navigate(Routes.Widgets.Facts.Edit) },
     )
 }
 
@@ -166,20 +155,20 @@ private fun FactsEditEntry(
     FactsEditScreen(
         factsViewModel = viewModel,
         onBack = { navigator.goBack() },
-        navigatePreview = { navigator.navigate(Routes.FactsPreview) },
+        navigatePreview = { navigator.navigate(Routes.Widgets.Facts.Preview) },
     )
 }
 
 private fun EntryProviderScope<NavKey>.blocksEntries(navigator: Navigator) {
-    entry<Routes.Blocks> {
+    entry<Routes.Widgets.Blocks.Main> {
         BlocksPreviewEntry(navigator)
     }
 
-    entry<Routes.BlocksPreview> {
+    entry<Routes.Widgets.Blocks.Preview> {
         BlocksPreviewEntry(navigator)
     }
 
-    entry<Routes.BlocksEdit> {
+    entry<Routes.Widgets.Blocks.Edit> {
         BlocksEditEntry(navigator)
     }
 }
@@ -193,7 +182,7 @@ private fun BlocksPreviewEntry(
         blocksViewModel = viewModel,
         onClose = { navigator.navigateToHome() },
         onBack = { navigator.goBack() },
-        navigateEditWidget = { navigator.navigate(Routes.BlocksEdit) },
+        navigateEditWidget = { navigator.navigate(Routes.Widgets.Blocks.Edit) },
     )
 }
 
@@ -205,20 +194,20 @@ private fun BlocksEditEntry(
     BlocksEditScreen(
         blocksViewModel = viewModel,
         onBack = { navigator.goBack() },
-        navigatePreview = { navigator.navigate(Routes.BlocksPreview) },
+        navigatePreview = { navigator.navigate(Routes.Widgets.Blocks.Preview) },
     )
 }
 
 private fun EntryProviderScope<NavKey>.weatherEntries(navigator: Navigator) {
-    entry<Routes.Weather> {
+    entry<Routes.Widgets.Weather.Main> {
         WeatherPreviewEntry(navigator)
     }
 
-    entry<Routes.WeatherPreview> {
+    entry<Routes.Widgets.Weather.Preview> {
         WeatherPreviewEntry(navigator)
     }
 
-    entry<Routes.WeatherEdit> {
+    entry<Routes.Widgets.Weather.Edit> {
         WeatherEditEntry(navigator)
     }
 }
@@ -232,7 +221,7 @@ private fun WeatherPreviewEntry(
         weatherViewModel = viewModel,
         onClose = { navigator.navigateToHome() },
         onBack = { navigator.goBack() },
-        navigateEditWidget = { navigator.navigate(Routes.WeatherEdit) },
+        navigateEditWidget = { navigator.navigate(Routes.Widgets.Weather.Edit) },
     )
 }
 
@@ -244,20 +233,20 @@ private fun WeatherEditEntry(
     WeatherEditScreen(
         weatherViewModel = viewModel,
         onBack = { navigator.goBack() },
-        navigatePreview = { navigator.navigate(Routes.WeatherPreview) },
+        navigatePreview = { navigator.navigate(Routes.Widgets.Weather.Preview) },
     )
 }
 
 private fun EntryProviderScope<NavKey>.priceEntries(navigator: Navigator) {
-    entry<Routes.Price> {
+    entry<Routes.Widgets.Price.Main> {
         PricePreviewEntry(navigator)
     }
 
-    entry<Routes.PricePreview> {
+    entry<Routes.Widgets.Price.Preview> {
         PricePreviewEntry(navigator)
     }
 
-    entry<Routes.PriceEdit> {
+    entry<Routes.Widgets.Price.Edit> {
         PriceEditEntry(navigator)
     }
 }
@@ -271,7 +260,7 @@ private fun PricePreviewEntry(
         priceViewModel = viewModel,
         onClose = { navigator.navigateToHome() },
         onBack = { navigator.goBack() },
-        navigateEditWidget = { navigator.navigate(Routes.PriceEdit) },
+        navigateEditWidget = { navigator.navigate(Routes.Widgets.Price.Edit) },
     )
 }
 
@@ -283,7 +272,7 @@ private fun PriceEditEntry(
     PriceEditScreen(
         viewModel = priceViewModel,
         onBack = { navigator.goBack() },
-        navigatePreview = { navigator.navigate(Routes.PricePreview) },
+        navigatePreview = { navigator.navigate(Routes.Widgets.Price.Preview) },
     )
 }
 

@@ -67,7 +67,7 @@ class WipeWalletUseCase @Inject constructor(
         }
     }
 
-    companion object Companion {
+    companion object {
         const val TAG = "WipeWalletUseCase"
     }
 }

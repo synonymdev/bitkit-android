@@ -60,10 +60,10 @@ fun AppStatusScreen(
         uiState = uiState,
         onBack = { navigator.goBack() },
         onInternetClick = { context.startActivityAppSettings() },
-        onElectrumClick = { navigator.navigate(Routes.ElectrumConfig) },
-        onNodeClick = { navigator.navigate(Routes.NodeInfo) },
-        onChannelsClick = { navigator.navigate(Routes.LightningConnections) },
-        onBackupClick = { navigator.navigate(Routes.BackupSettings) },
+        onElectrumClick = { navigator.navigate(Routes.Settings.ElectrumConfig) },
+        onNodeClick = { navigator.navigate(Routes.Settings.NodeInfo) },
+        onChannelsClick = { navigator.navigate(Routes.Settings.LightningConnections) },
+        onBackupClick = { navigator.navigate(Routes.Settings.BackupSettings) },
     )
 }
 

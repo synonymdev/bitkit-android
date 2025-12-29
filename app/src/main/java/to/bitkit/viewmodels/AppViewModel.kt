@@ -470,7 +470,7 @@ class AppViewModel @Inject constructor(
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
                     SendEvent.PayConfirmed -> onConfirmPay()
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
-                    SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(Routes.SendAmount()))
+                    SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(Routes.Send.Amount()))
                     SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
                 }
             }
@@ -560,7 +560,7 @@ class AppViewModel @Inject constructor(
                 )
             }
             refreshOnchainSendIfNeeded()
-            setSendEffect(SendEffect.PopBack(Routes.SendConfirm))
+            setSendEffect(SendEffect.PopBack(Routes.Send.Confirm))
         }
     }
 
@@ -869,7 +869,7 @@ class AppViewModel @Inject constructor(
         Logger.debug("LNURL: $data", context = TAG)
         mainScreenEffect(
             MainScreenEffect.Navigate(
-                Routes.LnurlAuthSheet(domain = data.domain, lnurl = data.uri, k1 = data.k1)
+                Routes.Sheet.LnurlAuth(domain = data.domain, lnurl = data.uri, k1 = data.k1)
             )
         )
     }
@@ -908,7 +908,7 @@ class AppViewModel @Inject constructor(
         hideSheet() // hide scan sheet if opened
         mainScreenEffect(
             MainScreenEffect.Navigate(
-                Routes.LnurlChannel(uri = data.uri, callback = data.callback, k1 = data.k1)
+                Routes.Sheet.LnurlChannel(uri = data.uri, callback = data.callback, k1 = data.k1)
             )
         )
     }
@@ -930,12 +930,12 @@ class AppViewModel @Inject constructor(
         //     return
         // }
         hideSheet() // hide scan sheet if opened
-        mainScreenEffect(MainScreenEffect.Navigate(Routes.ExternalConnection(data.url)))
+        mainScreenEffect(MainScreenEffect.Navigate(Routes.External.Connection(data.url)))
     }
 
     private fun onScanGift(code: String, amount: ULong) {
         mainScreenEffect(
-            MainScreenEffect.Navigate(Routes.GiftLoading(code = code, amount = amount))
+            MainScreenEffect.Navigate(Routes.Gift.Loading(code = code, amount = amount))
         )
     }
 
@@ -1237,7 +1237,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideNewTransactionSheet()
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
-                mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activity)))
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.Activity.Detail(activity)))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)
@@ -1260,7 +1260,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideSheet()
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
-                mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activity)))
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.Activity.Detail(activity)))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)
@@ -1662,10 +1662,10 @@ class AppViewModel @Inject constructor(
         val patternMatch = DeepLinkPatterns.findMatch(uri)
 
         // Handle recovery-mode via pattern match
-        if (patternMatch?.routeClass == Routes.RecoveryMode::class) {
+        if (patternMatch?.routeClass == Routes.Recovery.Mode::class) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY_MS)
-            mainScreenEffect(MainScreenEffect.Navigate(Routes.RecoveryMode))
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.Recovery.Mode))
             return@launch
         }
 
@@ -2004,9 +2004,9 @@ sealed interface QuickPayData {
 // endregion
 
 private fun TimedSheetType.toRoute(): Routes = when (this) {
-    TimedSheetType.APP_UPDATE -> Routes.TimedUpdateSheet
-    TimedSheetType.BACKUP -> Routes.TimedBackupSheet
-    TimedSheetType.NOTIFICATIONS -> Routes.TimedNotificationsSheet
-    TimedSheetType.QUICK_PAY -> Routes.TimedQuickPaySheet
-    TimedSheetType.HIGH_BALANCE -> Routes.TimedHighBalanceSheet
+    TimedSheetType.APP_UPDATE -> Routes.Sheet.Update
+    TimedSheetType.BACKUP -> Routes.Sheet.Backup
+    TimedSheetType.NOTIFICATIONS -> Routes.Sheet.Notifications
+    TimedSheetType.QUICK_PAY -> Routes.Sheet.QuickPay
+    TimedSheetType.HIGH_BALANCE -> Routes.Sheet.HighBalance
 }

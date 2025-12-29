@@ -48,11 +48,11 @@ private const val MAX_ALPHA_GRADIENT = 0.9f
 
 @Composable
 fun SuggestionCard(
-    modifier: Modifier = Modifier,
     gradientColor: Color,
     title: String,
     description: String,
     @DrawableRes icon: Int,
+    modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null,
     size: Int = 152,
     disableGlow: Boolean = false,
@@ -122,7 +122,7 @@ fun SuggestionCard(
                     painter = painterResource(icon),
                     contentDescription = null,
                     contentScale = ContentScale.FillHeight,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
 
                 if (onClose != null) {
@@ -184,7 +184,7 @@ private fun Preview() {
                 description = stringResource(item.description),
                 icon = item.icon,
                 onClose = {},
-                onClick = {}, // All cards are clickable
+                onClick = {},
             )
         }
     }

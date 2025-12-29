@@ -29,8 +29,8 @@ import to.bitkit.ui.LocalDrawerState
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.theme.AppThemeSurface
 
-@Composable
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun AppTopBar(
     titleText: String?,
     onBackClick: (() -> Unit)?,
@@ -60,12 +60,15 @@ fun AppTopBar(
                                 .size(32.dp)
                         )
                     }
-                    Title(text = titleText, maxLines = 1)
+                    Title(
+                        text = titleText,
+                        maxLines = 1,
+                    )
                 }
             }
         },
         actions = actions,
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+        colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,
             scrolledContainerColor = Color.Transparent,
         ),
