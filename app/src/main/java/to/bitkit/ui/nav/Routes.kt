@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.Activity as BitkitCoreActivity
 
 @Stable
 sealed interface Routes : NavKey {
+
     @Serializable
     data object Home : Routes
 
@@ -254,20 +255,6 @@ sealed interface Routes : NavKey {
         }
     }
 
-    object ChangePin {
-        @Serializable
-        data object Start : Routes
-
-        @Serializable
-        data object New : Routes
-
-        @Serializable
-        data class Confirm(val newPin: String) : Routes
-
-        @Serializable
-        data object Result : Routes
-    }
-
     object Send {
         @Serializable
         data object Recipient : Routes
@@ -362,6 +349,20 @@ sealed interface Routes : NavKey {
 
         @Serializable
         data class Result(val isBioOn: Boolean) : Routes
+
+        object Change {
+            @Serializable
+            data object Start : Routes
+
+            @Serializable
+            data object New : Routes
+
+            @Serializable
+            data class Confirm(val newPin: String) : Routes
+
+            @Serializable
+            data object Result : Routes
+        }
     }
 
     object Backup {

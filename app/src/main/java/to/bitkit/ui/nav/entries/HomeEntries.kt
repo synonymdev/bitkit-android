@@ -213,9 +213,6 @@ private fun HomeEntry(
     )
 }
 
-/**
- * Profile flow entries.
- */
 private fun EntryProviderScope<NavKey>.profileEntries(
     navigator: Navigator,
     settingsViewModel: SettingsViewModel,
@@ -237,9 +234,6 @@ private fun EntryProviderScope<NavKey>.profileEntries(
     }
 }
 
-/**
- * Shop flow entries.
- */
 private fun EntryProviderScope<NavKey>.shopEntries(
     navigator: Navigator,
     appViewModel: AppViewModel,
@@ -277,9 +271,6 @@ private fun EntryProviderScope<NavKey>.shopEntries(
     }
 }
 
-/**
- * Recovery flow entries.
- */
 private fun EntryProviderScope<NavKey>.recoveryEntries(
     navigator: Navigator,
     appViewModel: AppViewModel,

@@ -122,19 +122,19 @@ fun EntryProviderScope<NavKey>.settingsEntries(
         DisablePinScreen(navigator)
     }
 
-    entry<Routes.ChangePin.Start> {
+    entry<Routes.Pin.Change.Start> {
         ChangePinScreen(navigator)
     }
 
-    entry<Routes.ChangePin.New> {
+    entry<Routes.Pin.Change.New> {
         ChangePinNewScreen(navigator)
     }
 
-    entry<Routes.ChangePin.Confirm> { route ->
+    entry<Routes.Pin.Change.Confirm> { route ->
         ChangePinConfirmScreen(newPin = route.newPin, navigator = navigator)
     }
 
-    entry<Routes.ChangePin.Result> {
+    entry<Routes.Pin.Change.Result> {
         ChangePinResultScreen(navigator)
     }
 

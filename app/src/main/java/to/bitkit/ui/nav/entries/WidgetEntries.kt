@@ -36,7 +36,6 @@ fun EntryProviderScope<NavKey>.widgetEntries(
     currencyViewModel: CurrencyViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
-    // Widgets Intro
     entry<Routes.Widgets.Intro> {
         WidgetsIntroScreen(
             onContinue = {
@@ -47,7 +46,6 @@ fun EntryProviderScope<NavKey>.widgetEntries(
         )
     }
 
-    // Add Widget
     entry<Routes.Widgets.Add> {
         AddWidgetsScreen(
             fiatSymbol = LocalCurrencies.current.currencySymbol,
@@ -65,22 +63,16 @@ fun EntryProviderScope<NavKey>.widgetEntries(
         )
     }
 
-    // Headlines Flow
     headlinesEntries(navigator)
 
-    // Facts Flow
     factsEntries(navigator)
 
-    // Blocks Flow
     blocksEntries(navigator)
 
-    // Weather Flow
     weatherEntries(navigator)
 
-    // Price Flow
     priceEntries(navigator)
 
-    // Calculator Preview
     entry<Routes.Widgets.Calculator.Preview> {
         CalculatorEntry(
             navigator = navigator,

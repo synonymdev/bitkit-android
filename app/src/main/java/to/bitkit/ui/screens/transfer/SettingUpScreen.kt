@@ -20,11 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.synonym.bitkitcore.regtestMine
-import kotlinx.coroutines.delay
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
-import to.bitkit.env.Env
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
@@ -51,20 +47,7 @@ fun SettingUpScreen(
     val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
 
     LaunchedEffect(Unit) {
-        Logger.debug("SettingUp view appeared - TransferViewModel is handling order updates")
-
-        // Auto-mine a block on regtest after a 5-seconds delay
-        if (Env.network == Network.REGTEST) {
-            delay(5000)
-
-            try {
-                Logger.debug("Auto-mining a block", context = "SettingUpScreen")
-                regtestMine(1u)
-                Logger.debug("Successfully mined a block", context = "SettingUpScreen")
-            } catch (e: Throwable) {
-                Logger.error("Failed to mine block: $e", context = "SettingUpScreen")
-            }
-        }
+        Logger.debug("SettingUp screen appeared - TransferViewModel is handling order updates")
     }
 
     // Effect to disable new transaction sheet for channel purchase

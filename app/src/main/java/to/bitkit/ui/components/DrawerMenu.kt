@@ -63,69 +63,70 @@ fun DrawerMenu(
 ) {
     val scope = rememberCoroutineScope()
 
-    Scrim(
-        visible = drawerState.currentValue == DrawerValue.Open,
-        onClick = {
-            scope.launch {
-                drawerState.close()
-            }
-        },
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(zIndexScrim)
-    )
+    Box(modifier = modifier.fillMaxSize()) {
+        Scrim(
+            visible = drawerState.currentValue == DrawerValue.Open,
+            onClick = {
+                scope.launch {
+                    drawerState.close()
+                }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(zIndexScrim)
+        )
 
-    AnimatedVisibility(
-        visible = drawerState.currentValue == DrawerValue.Open,
-        enter = slideInHorizontally(
-            initialOffsetX = { it }
-        ),
-        exit = slideOutHorizontally(
-            targetOffsetX = { it }
-        ),
-        modifier = modifier.then(
-            Modifier
+        AnimatedVisibility(
+            visible = drawerState.currentValue == DrawerValue.Open,
+            enter = slideInHorizontally(
+                initialOffsetX = { it }
+            ),
+            exit = slideOutHorizontally(
+                targetOffsetX = { it }
+            ),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
                 .fillMaxHeight()
                 .zIndex(zIndexMenu)
                 .blockPointerInputPassthrough()
-        )
-    ) {
-        MenuContent(
-            onWalletClick = {
-                if (!navigator.isAtHome()) navigator.navigateToHome()
-                scope.launch { drawerState.close() }
-            },
-            onActivityClick = {
-                navigator.navigate(Routes.Activity.All)
-                scope.launch { drawerState.close() }
-            },
-            onContactsClick = null, // TODO IMPLEMENT CONTACTS
-            onProfileClick = null, // TODO IMPLEMENT PROFILE
-            onWidgetsClick = {
-                if (!hasSeenWidgetsIntro) {
-                    navigator.navigate(Routes.Widgets.Intro)
-                } else {
-                    navigator.navigate(Routes.Widgets.Add)
-                }
-                scope.launch { drawerState.close() }
-            },
-            onShopClick = {
-                if (!hasSeenShopIntro) {
-                    navigator.navigate(Routes.Shop.Intro)
-                } else {
-                    navigator.navigate(Routes.Shop.Discover)
-                }
-                scope.launch { drawerState.close() }
-            },
-            onSettingsClick = {
-                navigator.navigate(Routes.Settings.Main)
-                scope.launch { drawerState.close() }
-            },
-            onAppStatusClick = {
-                navigator.navigate(Routes.AppStatus)
-                scope.launch { drawerState.close() }
-            },
-        )
+        ) {
+            MenuContent(
+                onWalletClick = {
+                    if (!navigator.isAtHome()) navigator.navigateToHome()
+                    scope.launch { drawerState.close() }
+                },
+                onActivityClick = {
+                    navigator.navigate(Routes.Activity.All)
+                    scope.launch { drawerState.close() }
+                },
+                onContactsClick = null, // TODO IMPLEMENT CONTACTS
+                onProfileClick = null, // TODO IMPLEMENT PROFILE
+                onWidgetsClick = {
+                    if (!hasSeenWidgetsIntro) {
+                        navigator.navigate(Routes.Widgets.Intro)
+                    } else {
+                        navigator.navigate(Routes.Widgets.Add)
+                    }
+                    scope.launch { drawerState.close() }
+                },
+                onShopClick = {
+                    if (!hasSeenShopIntro) {
+                        navigator.navigate(Routes.Shop.Intro)
+                    } else {
+                        navigator.navigate(Routes.Shop.Discover)
+                    }
+                    scope.launch { drawerState.close() }
+                },
+                onSettingsClick = {
+                    navigator.navigate(Routes.Settings.Main)
+                    scope.launch { drawerState.close() }
+                },
+                onAppStatusClick = {
+                    navigator.navigate(Routes.AppStatus)
+                    scope.launch { drawerState.close() }
+                },
+            )
+        }
     }
 }
 
@@ -294,17 +295,19 @@ private fun DrawerItem(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Box {
-            MenuContent(
-                onWalletClick = {},
-                onActivityClick = {},
-                onContactsClick = null,
-                onProfileClick = null,
-                onWidgetsClick = {},
-                onShopClick = {},
-                onSettingsClick = {},
-                onAppStatusClick = {},
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.align(Alignment.TopEnd)) {
+                MenuContent(
+                    onWalletClick = {},
+                    onActivityClick = {},
+                    onContactsClick = null,
+                    onProfileClick = null,
+                    onWidgetsClick = {},
+                    onShopClick = {},
+                    onSettingsClick = {},
+                    onAppStatusClick = {},
+                )
+            }
         }
     }
 }

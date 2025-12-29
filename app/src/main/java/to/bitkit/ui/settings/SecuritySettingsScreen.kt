@@ -63,7 +63,7 @@ fun SecuritySettingsScreen(
             }
         },
         onChangePinClick = {
-            navigator.navigate(Routes.ChangePin.Start)
+            navigator.navigate(Routes.Pin.Change.Start)
         },
         onPinOnLaunchClick = {
             navigator.navigate(
