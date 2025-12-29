@@ -671,7 +671,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleScan(result: String, isQrCode: Boolean) = withContext(bgDispatcher) {
+    private suspend fun handleScan(result: String) = withContext(bgDispatcher) {
         // always reset state on new scan
         resetSendState()
         resetQuickPayData()
