@@ -50,6 +50,11 @@ class Navigator(@PublishedApi internal val backStack: NavBackStack<NavKey>) {
 
     fun isAtHome(): Boolean = backStack.lastOrNull() is Routes.Home
 
+    fun navigateAndClearBackstack(route: Routes) {
+        backStack.clear()
+        backStack.add(route)
+    }
+
     fun shouldShowTabBar(): Boolean = when (backStack.lastOrNull()) {
         is Routes.Home, is Routes.Savings, is Routes.Spending, is Routes.Activity.All -> true
         else -> false

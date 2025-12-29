@@ -61,6 +61,10 @@ fun PricePreviewScreen(
     val isLoading by priceViewModel.isLoading.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
+        priceViewModel.refreshOnDisplay()
+    }
+
+    LaunchedEffect(Unit) {
         priceViewModel.priceEffect.collect { effect ->
             when (effect) {
                 PriceEffect.NavigateHome -> onClose()

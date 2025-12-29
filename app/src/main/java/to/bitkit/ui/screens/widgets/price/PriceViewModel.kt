@@ -130,6 +130,12 @@ class PriceViewModel @Inject constructor(
         }
     }
 
+    fun refreshOnDisplay() {
+        viewModelScope.launch {
+            widgetsRepo.refreshWidget(WidgetType.PRICE)
+        }
+    }
+
     private fun initializeCustomPreferences() {
         viewModelScope.launch {
             pricePreferences.collect { preferences ->

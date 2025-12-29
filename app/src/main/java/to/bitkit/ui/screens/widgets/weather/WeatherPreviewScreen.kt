@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +53,10 @@ fun WeatherPreviewScreen(
     val customWeatherPreferences by weatherViewModel.customPreferences.collectAsStateWithLifecycle()
     val weather by weatherViewModel.currentWeather.collectAsStateWithLifecycle()
     val isWeatherWidgetEnabled by weatherViewModel.isWeatherWidgetEnabled.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        weatherViewModel.refreshOnDisplay()
+    }
 
     WeatherPreviewContent(
         onBack = onBack,
