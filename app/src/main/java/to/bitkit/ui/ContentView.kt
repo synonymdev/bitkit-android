@@ -127,6 +127,7 @@ fun ContentView(
         appViewModel.mainScreenEffect.collect {
             when (it) {
                 is MainScreenEffect.Navigate -> navigator.navigate(it.route)
+                is MainScreenEffect.NavigateAndClearBackstack -> navigator.navigateAndClearBackstack(it.route)
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     if (!navigator.isAtHome()) {
                         navigator.navigateToHome()
