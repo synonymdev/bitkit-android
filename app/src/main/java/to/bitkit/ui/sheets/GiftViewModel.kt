@@ -33,7 +33,7 @@ class GiftViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
 
-    private val _navigationEvent = MutableSharedFlow<Routes>(extraBufferCapacity = 1)
+    private val _navigationEvent = MutableSharedFlow<Routes.Gift>(extraBufferCapacity = 1)
     val navigationEvent = _navigationEvent.asSharedFlow()
 
     private val _successEvent = MutableSharedFlow<NewTransactionSheetDetails>(extraBufferCapacity = 1)

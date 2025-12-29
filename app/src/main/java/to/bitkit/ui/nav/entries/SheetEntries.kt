@@ -735,7 +735,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
                     is Routes.Gift.UsedUp -> navigator.navigate(Routes.Gift.UsedUp)
                     is Routes.Gift.Error -> navigator.navigate(Routes.Gift.Error)
                     is Routes.Gift.Success -> navigator.navigateToHome()
-                    else -> { /* Ignore other routes */ }
+                    is Routes.Gift.Loading -> Unit
                 }
             }
         }
