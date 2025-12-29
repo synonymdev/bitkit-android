@@ -33,6 +33,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
+import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
@@ -89,6 +90,12 @@ fun SendAmountScreen(
 
     LaunchedEffect(amountInputUiState.sats) {
         currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
+    }
+
+    LaunchedEffect(uiState.decodedInvoice, uiState.payMethod) {
+        if (uiState.payMethod == SendMethod.LIGHTNING && uiState.decodedInvoice != null) {
+            currentOnEvent(SendEvent.EstimateMaxRoutingFee)
+        }
     }
 
     SendAmountContent(
@@ -190,7 +197,11 @@ private fun SendAmountNodeRunning(
         val availableAmount = when {
             isLnurlWithdraw -> uiState.lnurl.data.maxWithdrawableSat().toLong()
             uiState.payMethod == SendMethod.ONCHAIN -> balances.maxSendOnchainSats.toLong()
-            else -> balances.maxSendLightningSats.toLong()
+            else -> {
+                val maxLightning = balances.maxSendLightningSats
+                val routingFee = uiState.estimatedRoutingFee
+                (maxLightning.safe() - routingFee.safe()).toLong()
+            }
         }
 
         Column(
