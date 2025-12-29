@@ -158,6 +158,7 @@ fun EntryProviderScope<NavKey>.transferEntries(
     entry<Routes.Transfer.Funding> {
         FundingEntry(
             navigator = navigator,
+            walletViewModel = walletViewModel,
             appViewModel = appViewModel,
             settingsViewModel = settingsViewModel,
         )
@@ -180,6 +181,7 @@ fun EntryProviderScope<NavKey>.transferEntries(
 @Composable
 private fun FundingEntry(
     navigator: Navigator,
+    walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
@@ -195,6 +197,7 @@ private fun FundingEntry(
             }
         },
         onFund = {
+            walletViewModel.resetReceiveState()
             navigator.navigate(Routes.Receive.Qr)
         },
         onAdvanced = { navigator.navigate(Routes.Transfer.FundingAdvanced) },

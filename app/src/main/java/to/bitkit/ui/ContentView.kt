@@ -12,6 +12,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -304,15 +305,23 @@ fun ContentView(
                     }
                 )
 
+                // Use derivedStateOf to ensure reactive observation of backStack changes
+                val showTabBar by remember {
+                    derivedStateOf { navigator.shouldShowTabBar() }
+                }
+
                 AnimatedVisibility(
-                    visible = navigator.shouldShowTabBar(),
+                    visible = showTabBar,
                     enter = slideInVertically { it },
                     exit = slideOutVertically { it },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
                     TabBar(
                         onSendClick = { navigator.navigate(Routes.Send.Recipient) },
-                        onReceiveClick = { navigator.navigate(Routes.Receive.Qr) },
+                        onReceiveClick = {
+                            walletViewModel.resetReceiveState()
+                            navigator.navigate(Routes.Receive.Qr)
+                        },
                         onScanClick = { navigator.navigate(Routes.QrScanner) },
                     )
                 }

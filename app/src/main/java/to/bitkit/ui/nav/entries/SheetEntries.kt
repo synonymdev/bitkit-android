@@ -183,18 +183,14 @@ private fun EntryProviderScope<NavKey>.pinFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Pin.Choose>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Pin.Choose> {
         PinChooseScreen(
             onPinChosen = { pin -> navigator.navigate(Routes.Pin.Confirm(pin)) },
             onBack = { navigator.goBack() },
         )
     }
 
-    entry<Routes.Pin.Confirm>(
-        metadata = SheetSceneStrategy.sheet()
-    ) { route ->
+    entry<Routes.Pin.Confirm> { route ->
         PinConfirmScreen(
             originalPin = route.pin,
             onPinConfirmed = { navigator.navigate(Routes.Pin.Biometrics) },
@@ -202,9 +198,7 @@ private fun EntryProviderScope<NavKey>.pinFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Pin.Biometrics>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Pin.Biometrics> {
         PinBiometricsScreen(
             onContinue = { isBioOn -> navigator.navigate(Routes.Pin.Result(isBioOn)) },
             onSkip = { navigator.navigate(Routes.Pin.Result(isBioOn = false)) },
@@ -212,9 +206,7 @@ private fun EntryProviderScope<NavKey>.pinFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Pin.Result>(
-        metadata = SheetSceneStrategy.sheet()
-    ) { route ->
+    entry<Routes.Pin.Result> { route ->
         PinResultScreen(
             isBioOn = route.isBioOn,
             onDismiss = { navigator.navigateToHome() },
@@ -235,9 +227,7 @@ private fun EntryProviderScope<NavKey>.backupFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Backup.ShowMnemonic>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.ShowMnemonic> {
         val viewModel = hiltViewModel<BackupNavSheetViewModel>()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         ShowMnemonicScreen(
@@ -247,9 +237,7 @@ private fun EntryProviderScope<NavKey>.backupFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Backup.ShowPassphrase>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.ShowPassphrase> {
         val viewModel = hiltViewModel<BackupNavSheetViewModel>()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         ShowPassphraseScreen(
@@ -259,9 +247,7 @@ private fun EntryProviderScope<NavKey>.backupFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Backup.ConfirmMnemonic>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.ConfirmMnemonic> {
         val viewModel = hiltViewModel<BackupNavSheetViewModel>()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         ConfirmMnemonicScreen(
@@ -271,9 +257,7 @@ private fun EntryProviderScope<NavKey>.backupFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Backup.ConfirmPassphrase>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.ConfirmPassphrase> {
         val viewModel = hiltViewModel<BackupNavSheetViewModel>()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         ConfirmPassphraseScreen(
@@ -284,36 +268,28 @@ private fun EntryProviderScope<NavKey>.backupFlowEntries(navigator: Navigator) {
         )
     }
 
-    entry<Routes.Backup.Warning>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.Warning> {
         WarningScreen(
             onContinue = { navigator.navigate(Routes.Backup.Success) },
             onBack = { navigator.goBack() },
         )
     }
 
-    entry<Routes.Backup.Success>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.Success> {
         SuccessScreen(
             onContinue = { navigator.navigate(Routes.Backup.MultipleDevices) },
             onBack = { navigator.goBack() },
         )
     }
 
-    entry<Routes.Backup.MultipleDevices>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.MultipleDevices> {
         MultipleDevicesScreen(
             onContinue = { navigator.navigate(Routes.Backup.Metadata) },
             onBack = { navigator.goBack() },
         )
     }
 
-    entry<Routes.Backup.Metadata>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Backup.Metadata> {
         val viewModel = hiltViewModel<BackupNavSheetViewModel>()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         MetadataScreen(
@@ -342,9 +318,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.Address>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.Address> {
         val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         SendAddressScreen(
             uiState = uiState,
@@ -353,9 +327,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.Amount>(
-        metadata = SheetSceneStrategy.sheet()
-    ) { route ->
+    entry<Routes.Send.Amount> { route ->
         val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -374,9 +346,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.QrScanner>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.QrScanner> {
         QrScanningScreen(
             navigator = navigator,
             onScanSuccess = { qrCode ->
@@ -386,9 +356,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.CoinSelection>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.CoinSelection> {
         val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         SendCoinSelectionScreen(
             requiredAmount = sendUiState.amount,
@@ -398,9 +366,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.FeeRate>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.FeeRate> {
         val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         val viewModel = hiltViewModel<SendFeeViewModel>()
         SendFeeRateScreen(
@@ -412,9 +378,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.FeeCustom>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.FeeCustom> {
         val viewModel = hiltViewModel<SendFeeViewModel>()
         SendFeeCustomScreen(
             viewModel = viewModel,
@@ -423,9 +387,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.Confirm>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.Confirm> {
         val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -442,9 +404,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.Success>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.Success> {
         val sendDetail by appViewModel.successSendUiState.collectAsStateWithLifecycle()
         NewTransactionSheetView(
             details = sendDetail,
@@ -458,9 +418,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.Error>(
-        metadata = SheetSceneStrategy.sheet()
-    ) { route ->
+    entry<Routes.Send.Error> { route ->
         SendErrorScreen(
             errorMessage = route.message,
             onRetry = { navigator.navigate(Routes.Send.Recipient) },
@@ -468,9 +426,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.WithdrawConfirm>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.WithdrawConfirm> {
         val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         WithdrawConfirmScreen(
             uiState = uiState,
@@ -479,9 +435,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.WithdrawError>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.WithdrawError> {
         val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         WithdrawErrorScreen(
             uiState = uiState,
@@ -491,15 +445,11 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.Support>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.Support> {
         SupportScreen(navigator)
     }
 
-    entry<Routes.Send.AddTag>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.AddTag> {
         AddTagScreen(
             onBack = { navigator.goBack() },
             onTagSelected = { tag ->
@@ -511,9 +461,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.PinCheck>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.PinCheck> {
         SendPinCheckScreen(
             onBack = { navigator.goBack() },
             onSuccess = {
@@ -523,9 +471,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.QuickPay>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Send.QuickPay> {
         val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
         quickPayData?.let { data ->
             SendQuickPayScreen(
@@ -561,7 +507,6 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
 
         LaunchedEffect(Unit) {
-            walletViewModel.resetPreActivityMetadataTagsForCurrentInvoice()
             walletViewModel.refreshReceiveState()
         }
 
@@ -727,9 +672,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
         GiftLoading(viewModel = viewModel)
     }
 
-    entry<Routes.Gift.Used>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Gift.Used> {
         GiftErrorSheet(
             titleRes = R.string.other__gift__used__title,
             textRes = R.string.other__gift__used__text,
@@ -738,9 +681,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
         )
     }
 
-    entry<Routes.Gift.UsedUp>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Gift.UsedUp> {
         GiftErrorSheet(
             titleRes = R.string.other__gift__used_up__title,
             textRes = R.string.other__gift__used_up__text,
@@ -749,9 +690,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
         )
     }
 
-    entry<Routes.Gift.Error>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Gift.Error> {
         GiftErrorSheet(
             titleRes = R.string.other__gift__error__title,
             textRes = R.string.other__gift__error__text,
@@ -760,9 +699,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
         )
     }
 
-    entry<Routes.Gift.Success>(
-        metadata = SheetSceneStrategy.sheet()
-    ) {
+    entry<Routes.Gift.Success> {
         // This route is not navigated directly, success triggers navigation to home and shows transaction sheet.
         LaunchedEffect(Unit) {
             navigator.navigateToHome()

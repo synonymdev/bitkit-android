@@ -55,6 +55,7 @@ fun EntryProviderScope<NavKey>.homeEntries(
     entry<Routes.Savings> {
         SavingsEntry(
             navigator = navigator,
+            walletViewModel = walletViewModel,
             appViewModel = appViewModel,
             activityListViewModel = activityListViewModel,
             settingsViewModel = settingsViewModel,
@@ -80,7 +81,10 @@ fun EntryProviderScope<NavKey>.homeEntries(
             onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
             onTagClick = { navigator.navigate(Routes.Activity.TagSelectorSheet) },
             onDateRangeClick = { navigator.navigate(Routes.Activity.DateRangeSelectorSheet) },
-            onEmptyActivityRowClick = { navigator.navigate(Routes.Receive.Qr) },
+            onEmptyActivityRowClick = {
+                walletViewModel.resetReceiveState()
+                navigator.navigate(Routes.Receive.Qr)
+            },
         )
     }
 
@@ -130,6 +134,7 @@ fun EntryProviderScope<NavKey>.homeEntries(
 @Composable
 private fun SavingsEntry(
     navigator: Navigator,
+    walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
     activityListViewModel: ActivityListViewModel,
     settingsViewModel: SettingsViewModel,
@@ -143,7 +148,10 @@ private fun SavingsEntry(
         onchainActivities = onchainActivities.orEmpty(),
         onAllActivityButtonClick = { navigator.navigate(Routes.Activity.All) },
         onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
-        onEmptyActivityRowClick = { navigator.navigate(Routes.Receive.Qr) },
+        onEmptyActivityRowClick = {
+            walletViewModel.resetReceiveState()
+            navigator.navigate(Routes.Receive.Qr)
+        },
         onTransferToSpendingClick = {
             if (!hasSeenSpendingIntro) {
                 navigator.navigate(Routes.Transfer.ToSpending.Intro)
@@ -171,7 +179,10 @@ private fun SpendingEntry(
         lightningActivities = lightningActivities.orEmpty(),
         onAllActivityButtonClick = { navigator.navigate(Routes.Activity.All) },
         onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
-        onEmptyActivityRowClick = { navigator.navigate(Routes.Receive.Qr) },
+        onEmptyActivityRowClick = {
+            walletViewModel.resetReceiveState()
+            navigator.navigate(Routes.Receive.Qr)
+        },
         onTransferToSavingsClick = {
             if (!hasSeenSavingsIntro) {
                 navigator.navigate(Routes.Transfer.ToSavings.Intro)

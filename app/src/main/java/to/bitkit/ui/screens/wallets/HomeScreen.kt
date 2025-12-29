@@ -255,7 +255,10 @@ fun HomeScreen(
             homeViewModel.moveWidget(fromIndex, toIndex)
         },
         onDismissEmptyState = homeViewModel::dismissEmptyState,
-        onClickEmptyActivityRow = { navigator.navigate(Routes.Receive.Qr) },
+        onClickEmptyActivityRow = {
+            walletViewModel.resetReceiveState()
+            navigator.navigate(Routes.Receive.Qr)
+        },
         onClickSavings = { navigator.navigate(Routes.Savings) },
         onClickSpending = { navigator.navigate(Routes.Spending) },
         onAllActivityClick = { navigator.navigate(Routes.Activity.All) },

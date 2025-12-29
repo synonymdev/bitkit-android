@@ -137,7 +137,10 @@ fun EditInvoiceScreen(
         noteText = walletUiState.bip21Description,
         currencies = currencies,
         tags = walletUiState.selectedTags,
-        onBack = onBack,
+        onBack = {
+            updateInvoice(amountInputUiState.sats.toULong())
+            onBack()
+        },
         onTextChanged = onDescriptionUpdate,
         keyboardVisible = keyboardVisible,
         onClickBalance = {

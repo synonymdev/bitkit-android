@@ -110,6 +110,10 @@ class WalletRepo @Inject constructor(
     suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Refreshing bip21", context = TAG)
 
+        // Preserve current amount/description before clearing
+        val currentAmount = _walletState.value.bip21AmountSats
+        val currentDescription = _walletState.value.bip21Description
+
         // Get old payment ID and tags before refreshing (which may change payment ID)
         val oldPaymentId = paymentId()
         val tagsToMigrate = if (oldPaymentId != null && oldPaymentId.isNotEmpty()) {
@@ -123,7 +127,7 @@ class WalletRepo @Inject constructor(
 
         clearBip21State(clearTags = false)
         refreshAddressIfNeeded()
-        updateBip21Invoice()
+        updateBip21Invoice(amountSats = currentAmount, description = currentDescription)
 
         val newPaymentId = paymentId()
         val newBip21Url = _walletState.value.bip21

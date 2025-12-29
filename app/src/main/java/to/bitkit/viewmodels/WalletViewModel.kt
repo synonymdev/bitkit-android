@@ -305,7 +305,8 @@ class WalletViewModel @Inject constructor(
 
     fun setPendingCjitInvoice(invoice: String?) = _pendingCjitInvoice.update { invoice }
 
-    fun resetReceiveFlowState() {
+    fun resetReceiveState() {
+        walletRepo.clearBip21State()
         _pendingCjitEntry.update { null }
         _pendingCjitInvoice.update { null }
     }
