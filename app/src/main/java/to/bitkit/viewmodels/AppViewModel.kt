@@ -83,6 +83,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
@@ -472,6 +473,10 @@ class AppViewModel @Inject constructor(
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
+                    SendEvent.EstimateMaxRoutingFee -> viewModelScope.launch {
+                        estimateMaxAmountRoutingFee()
+                    }
+
                     SendEvent.PayConfirmed -> onConfirmPay()
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                     SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
@@ -1042,9 +1047,12 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.showSanityWarningDialog != null) return
 
         val settings = settingsStore.data.first()
-
+        val balanceToCheck = when (_sendUiState.value.payMethod) {
+            SendMethod.ONCHAIN -> walletRepo.balanceState.value.maxSendOnchainSats
+            SendMethod.LIGHTNING -> walletRepo.balanceState.value.maxSendLightningSats
+        }
         if (
-            amountSats > BigDecimal.valueOf(walletRepo.balanceState.value.totalSats.toLong())
+            amountSats > BigDecimal.valueOf(balanceToCheck.toLong())
                 .times(BigDecimal(MAX_BALANCE_FRACTION)).toLong().toUInt() &&
             SanityWarning.OVER_HALF_BALANCE !in _sendUiState.value.confirmedWarnings
         ) {
@@ -1455,6 +1463,37 @@ class AppViewModel @Inject constructor(
                     fee = SendFee.Lightning(fee.toLong())
                 )
             }
+        }
+    }
+
+    private suspend fun estimateMaxAmountRoutingFee() {
+        val currentState = _sendUiState.value
+        if (currentState.payMethod != SendMethod.LIGHTNING) return
+
+        val decodedInvoice = currentState.decodedInvoice ?: return
+        val bolt11 = decodedInvoice.bolt11
+
+        val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
+        if (maxSendLightning == 0uL) {
+            _sendUiState.update { it.copy(estimatedRoutingFee = 0uL) }
+            return
+        }
+
+        val buffer = 2uL
+        val amountToEstimate = maxSendLightning.safe() - buffer.safe()
+
+        val feeResult = lightningRepo.estimateRoutingFeesForAmount(
+            bolt11 = bolt11,
+            amountSats = amountToEstimate
+        )
+
+        feeResult.onSuccess { fee ->
+            _sendUiState.update {
+                it.copy(estimatedRoutingFee = fee + buffer)
+            }
+        }.onFailure { e ->
+            Logger.error("Failed to estimate routing fee for max amount", e, context = TAG)
+            _sendUiState.update { it.copy(estimatedRoutingFee = 0uL) }
         }
     }
 
@@ -2001,6 +2040,7 @@ data class SendUiState(
     val feeRates: FeeRates? = null,
     val fee: SendFee? = null,
     val fees: Map<FeeRate, Long> = emptyMap(),
+    val estimatedRoutingFee: ULong = 0uL,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
@@ -2064,6 +2104,7 @@ sealed interface SendEvent {
     data object SpeedAndFee : SendEvent
     data object PaymentMethodSwitch : SendEvent
     data class ConfirmAmountWarning(val warning: SanityWarning) : SendEvent
+    data object EstimateMaxRoutingFee : SendEvent
     data object DismissAmountWarning : SendEvent
     data object PayConfirmed : SendEvent
     data object ClearPayConfirmation : SendEvent
