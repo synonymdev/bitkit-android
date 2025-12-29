@@ -184,8 +184,8 @@ fun ReceiveQrScreen(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("ReceiveScreen")
             .keepScreenOn()
+            .testTag("ReceiveScreen")
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
         Column {

@@ -686,7 +686,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         EditInvoiceScreen(
             amountInputViewModel = editInvoiceAmountViewModel,
             walletUiState = walletState,
-            onBack = { navigator.goBack() },
+            onBack = { navigator.popBackTo(Routes.Receive.Qr, inclusive = true) },
             updateInvoice = walletViewModel::updateBip21Invoice,
             onClickAddTag = { navigator.navigate(Routes.Receive.AddTag) },
             onClickTag = walletViewModel::removeTag,
