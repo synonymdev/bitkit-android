@@ -76,6 +76,7 @@ import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.viewmodels.ActivityListViewModel
+import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
@@ -309,9 +310,12 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
     entry<Routes.Send.Recipient>(
         metadata = SheetSceneStrategy.sheet()
     ) {
+        val amountInputViewModel = hiltViewModel<AmountInputViewModel>()
+
         LaunchedEffect(Unit) {
             appViewModel.resetSendState()
             appViewModel.resetQuickPayData()
+            amountInputViewModel.clearInput()
         }
         SendRecipientScreen(
             onEvent = { appViewModel.setSendEvent(it) },
@@ -502,6 +506,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
     entry<Routes.Receive.Qr>(
         metadata = SheetSceneStrategy.sheet()
     ) {
+        val amountInputViewModel = hiltViewModel<AmountInputViewModel>()
         val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
         val cjitInvoice by walletViewModel.pendingCjitInvoice.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
@@ -509,6 +514,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         LaunchedEffect(Unit) {
             walletViewModel.resetPreActivityMetadataTagsForCurrentInvoice()
             walletViewModel.refreshReceiveState()
+            amountInputViewModel.clearInput()
         }
 
         ReceiveQrScreen(
