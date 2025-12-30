@@ -12,16 +12,16 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import to.bitkit.test.BaseUnitTest
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
-import java.util.Locale
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.TimedSheetType
 import java.math.BigDecimal
+import java.util.Locale
 
 class HighBalanceTimedSheetTest : BaseUnitTest() {
     private lateinit var settingsStore: SettingsStore
@@ -64,15 +64,17 @@ class HighBalanceTimedSheetTest : BaseUnitTest() {
             MutableStateFlow(BalanceState(totalOnchainSats = 10000U))
         )
         whenever(currencyRepo.convertSatsToFiat(10000L, "USD")).thenReturn(
-            Result.success(ConvertedAmount(
-                value = BigDecimal("100"),
-                formatted = "100.00",
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = 10000L,
-                locale = Locale.US
-            ))
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal("100"),
+                    formatted = "100.00",
+                    symbol = "$",
+                    currency = "USD",
+                    flag = "",
+                    sats = 10000L,
+                    locale = Locale.US
+                )
+            )
         )
 
         val result = sut.shouldShow()
@@ -100,15 +102,17 @@ class HighBalanceTimedSheetTest : BaseUnitTest() {
             MutableStateFlow(BalanceState(totalOnchainSats = 100000U))
         )
         whenever(currencyRepo.convertSatsToFiat(100000L, "USD")).thenReturn(
-            Result.success(ConvertedAmount(
-                value = BigDecimal("600"),
-                formatted = "600.00",
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = 100000L,
-                locale = Locale.US
-            ))
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal("600"),
+                    formatted = "600.00",
+                    symbol = "$",
+                    currency = "USD",
+                    flag = "",
+                    sats = 100000L,
+                    locale = Locale.US
+                )
+            )
         )
         settingsFlow.value = defaultSettings.copy(balanceWarningTimes = 3)
 
@@ -124,15 +128,17 @@ class HighBalanceTimedSheetTest : BaseUnitTest() {
             MutableStateFlow(BalanceState(totalOnchainSats = 100000U))
         )
         whenever(currencyRepo.convertSatsToFiat(100000L, "USD")).thenReturn(
-            Result.success(ConvertedAmount(
-                value = BigDecimal("600"),
-                formatted = "600.00",
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = 100000L,
-                locale = Locale.US
-            ))
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal("600"),
+                    formatted = "600.00",
+                    symbol = "$",
+                    currency = "USD",
+                    flag = "",
+                    sats = 100000L,
+                    locale = Locale.US
+                )
+            )
         )
         settingsFlow.value = defaultSettings.copy(
             balanceWarningTimes = 0,
@@ -151,15 +157,17 @@ class HighBalanceTimedSheetTest : BaseUnitTest() {
             MutableStateFlow(BalanceState(totalOnchainSats = 100000U))
         )
         whenever(currencyRepo.convertSatsToFiat(100000L, "USD")).thenReturn(
-            Result.success(ConvertedAmount(
-                value = BigDecimal("600"),
-                formatted = "600.00",
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = 100000L,
-                locale = Locale.US
-            ))
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal("600"),
+                    formatted = "600.00",
+                    symbol = "$",
+                    currency = "USD",
+                    flag = "",
+                    sats = 100000L,
+                    locale = Locale.US
+                )
+            )
         )
         settingsFlow.value = defaultSettings.copy(
             balanceWarningTimes = 0,
@@ -177,15 +185,17 @@ class HighBalanceTimedSheetTest : BaseUnitTest() {
             MutableStateFlow(BalanceState(totalOnchainSats = 100000U))
         )
         whenever(currencyRepo.convertSatsToFiat(100000L, "USD")).thenReturn(
-            Result.success(ConvertedAmount(
-                value = BigDecimal("600"),
-                formatted = "600.00",
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = 100000L,
-                locale = Locale.US
-            ))
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal("600"),
+                    formatted = "600.00",
+                    symbol = "$",
+                    currency = "USD",
+                    flag = "",
+                    sats = 100000L,
+                    locale = Locale.US
+                )
+            )
         )
         settingsFlow.value = defaultSettings.copy(
             balanceWarningTimes = 0,
@@ -203,15 +213,17 @@ class HighBalanceTimedSheetTest : BaseUnitTest() {
             MutableStateFlow(BalanceState(totalOnchainSats = 10000U))
         )
         whenever(currencyRepo.convertSatsToFiat(10000L, "USD")).thenReturn(
-            Result.success(ConvertedAmount(
-                value = BigDecimal("100"),
-                formatted = "100.00",
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = 10000L,
-                locale = Locale.US
-            ))
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal("100"),
+                    formatted = "100.00",
+                    symbol = "$",
+                    currency = "USD",
+                    flag = "",
+                    sats = 10000L,
+                    locale = Locale.US
+                )
+            )
         )
         settingsFlow.value = defaultSettings.copy(balanceWarningTimes = 2)
 
@@ -239,15 +251,17 @@ class HighBalanceTimedSheetTest : BaseUnitTest() {
             MutableStateFlow(BalanceState(totalOnchainSats = 100000U))
         )
         whenever(currencyRepo.convertSatsToFiat(100000L, "USD")).thenReturn(
-            Result.success(ConvertedAmount(
-                value = BigDecimal("600"),
-                formatted = "600.00",
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = 100000L,
-                locale = Locale.US
-            ))
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal("600"),
+                    formatted = "600.00",
+                    symbol = "$",
+                    currency = "USD",
+                    flag = "",
+                    sats = 100000L,
+                    locale = Locale.US
+                )
+            )
         )
 
         settingsFlow.value = defaultSettings.copy(

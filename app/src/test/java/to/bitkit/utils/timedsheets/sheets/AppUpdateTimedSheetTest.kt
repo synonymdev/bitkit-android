@@ -8,12 +8,12 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import to.bitkit.test.BaseUnitTest
 import to.bitkit.BuildConfig
 import to.bitkit.data.dto.PlatformDetails
 import to.bitkit.data.dto.Platforms
 import to.bitkit.data.dto.ReleaseInfoDTO
 import to.bitkit.services.AppUpdaterService
+import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.TimedSheetType
 
 class AppUpdateTimedSheetTest : BaseUnitTest() {
