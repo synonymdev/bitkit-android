@@ -42,21 +42,20 @@ class TimedSheetManager(private val scope: CoroutineScope) {
         checkJob = null
     }
 
-    fun dismissCurrentSheet(skipQueue: Boolean = false) {
+    fun dismissCurrentSheet() {
+        if (currentTimedSheet == null) return
+
         scope.launch {
             currentTimedSheet?.onDismissed()
+            _currentSheet.value = null
+            currentTimedSheet = null
 
-            if (skipQueue) {
-                Logger.debug("Clearing timed sheet queue", context = TAG)
-                _currentSheet.value = null
-                currentTimedSheet = null
-            } else {
-                checkAndShowNextSheet()
-            }
+            Logger.debug("Clearing timed sheet queue", context = TAG)
         }
     }
 
     private suspend fun checkAndShowNextSheet() {
+        Logger.debug("Registered sheets: ${registeredSheets.map { it.type.name }}")
         for (sheet in registeredSheets.toList()) {
             if (sheet.shouldShow()) {
                 Logger.debug(

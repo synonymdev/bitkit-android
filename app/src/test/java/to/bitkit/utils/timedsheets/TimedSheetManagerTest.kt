@@ -103,7 +103,7 @@ class TimedSheetManagerTest : BaseUnitTest() {
 
         assertEquals(TimedSheetType.APP_UPDATE, sut.currentSheet.value)
 
-        sut.dismissCurrentSheet(skipQueue = true)
+        sut.dismissCurrentSheet()
         testScope.advanceTimeBy(100)
 
         assertNull(sut.currentSheet.value)
@@ -139,7 +139,7 @@ class TimedSheetManagerTest : BaseUnitTest() {
 
         assertEquals(TimedSheetType.BACKUP, sut.currentSheet.value)
 
-        sut.dismissCurrentSheet(skipQueue = false)
+        sut.dismissCurrentSheet()
         testScope.advanceTimeBy(100)
 
         assertNull(sut.currentSheet.value)
