@@ -745,7 +745,7 @@ private fun EntryProviderScope<NavKey>.sheetFlowEntries(
         }
         BackgroundPaymentsIntroSheet(
             onContinue = {
-                appViewModel.dismissTimedSheet(skipQueue = true)
+                appViewModel.dismissTimedSheet()
                 navigator.navigate(Routes.BackgroundPayments.Settings)
             },
         )
@@ -759,7 +759,7 @@ private fun EntryProviderScope<NavKey>.sheetFlowEntries(
         }
         QuickPayIntroSheet(
             onContinue = {
-                appViewModel.dismissTimedSheet(skipQueue = true)
+                appViewModel.dismissTimedSheet()
                 navigator.navigate(Routes.QuickPay.Settings)
             },
         )
@@ -777,7 +777,7 @@ private fun EntryProviderScope<NavKey>.sheetFlowEntries(
             learnMoreClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Env.STORING_BITCOINS_URL.toUri())
                 context.startActivity(intent)
-                appViewModel.dismissTimedSheet(skipQueue = true)
+                appViewModel.dismissTimedSheet()
                 navigator.goBack()
             },
         )

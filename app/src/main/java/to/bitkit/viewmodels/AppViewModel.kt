@@ -1736,8 +1736,7 @@ class AppViewModel @Inject constructor(
 
     fun onLeftHome() = timedSheetManager.onHomeScreenExited()
 
-    fun dismissTimedSheet(skipQueue: Boolean = false) =
-        timedSheetManager.dismissCurrentSheet(skipQueue)
+    fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
     private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
         delay(SCREEN_TRANSITION_DELAY_MS)
