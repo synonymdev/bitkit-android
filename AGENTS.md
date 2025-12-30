@@ -20,11 +20,14 @@ This file provides guidance to AI agents like Cursor/Claude Code/Codex/WARP when
 # Run instrumented tests
 ./gradlew connectedDevDebugAndroidTest
 
-# Build for E2E tests
+# Build for E2E tests (UI hooks enabled, local Electrum by default)
 E2E=true ./gradlew assembleDevRelease
 
 # Build for E2E tests with geoblocking disabled
 GEO=false E2E=true ./gradlew assembleDevRelease
+
+# Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
+E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
 
 # Lint using detekt
 ./gradlew detekt
@@ -88,7 +91,7 @@ GEO=false E2E=true ./gradlew assembleDevRelease
 
 - **dev**: Regtest network for development
 - **tnet**: Testnet network
-- **mainnet**: Production (currently commented out)
+- **mainnet**: Production
 
 ## Common Pitfalls
 
