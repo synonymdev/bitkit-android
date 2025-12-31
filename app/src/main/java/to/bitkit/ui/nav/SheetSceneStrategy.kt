@@ -1,13 +1,6 @@
 package to.bitkit.ui.nav
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.scene.OverlayScene
@@ -68,8 +61,6 @@ data class SheetProperties(
     val size: SheetSize = SheetSize.LARGE,
 )
 
-private const val MS_ANIM_DURATION = 300
-
 private data class IndexedEntry<T : Any>(
     val index: Int,
     val entry: NavEntry<T>,
@@ -102,32 +93,9 @@ internal class SheetScene<T : Any>(
                 transitionSpec = {
                     val isForward = targetState.index > initialState.index
                     if (isForward) {
-                        // Forward navigation: slide in from right, slide out to left
-                        slideInHorizontally(
-                            initialOffsetX = { it },
-                            animationSpec = tween(MS_ANIM_DURATION, easing = FastOutSlowInEasing)
-                        ) + fadeIn(
-                            animationSpec = tween(MS_ANIM_DURATION, easing = FastOutSlowInEasing),
-                            initialAlpha = 0.8f
-                        ) togetherWith slideOutHorizontally(
-                            targetOffsetX = { -it / 3 },
-                            animationSpec = tween(MS_ANIM_DURATION, easing = FastOutSlowInEasing)
-                        ) + fadeOut(
-                            animationSpec = tween(MS_ANIM_DURATION, easing = FastOutSlowInEasing),
-                            targetAlpha = 0.8f
-                        )
+                        Transitions.screenDefault.invoke(this)
                     } else {
-                        // Backward navigation: slide in from left, slide out to right
-                        slideInHorizontally(
-                            initialOffsetX = { -it / 3 },
-                            animationSpec = tween(MS_ANIM_DURATION, easing = FastOutSlowInEasing)
-                        ) + fadeIn(
-                            animationSpec = tween(MS_ANIM_DURATION, easing = FastOutSlowInEasing),
-                            initialAlpha = 0.8f
-                        ) togetherWith slideOutHorizontally(
-                            targetOffsetX = { it },
-                            animationSpec = tween(MS_ANIM_DURATION, easing = FastOutSlowInEasing)
-                        )
+                        Transitions.screenDefaultPop.invoke(this)
                     }
                 },
                 label = "SheetContentTransition",
