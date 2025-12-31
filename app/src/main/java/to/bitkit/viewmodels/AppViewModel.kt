@@ -320,9 +320,22 @@ class AppViewModel @Inject constructor(
     private suspend fun handleSyncCompleted() {
         walletRepo.debounceSyncByEvent()
 
-        if (migrationService.isShowingMigrationLoading.value && !isCompletingMigration) {
-            completeMigration()
+        when {
+            migrationService.isShowingMigrationLoading.value && !isCompletingMigration -> {
+                completeMigration()
+            }
+            migrationService.isRestoringFromRNRemoteBackup.value -> {
+                completeRNRemoteBackupRestore()
+            }
         }
+    }
+
+    private suspend fun completeRNRemoteBackupRestore() {
+        lightningRepo.getPayments().onSuccess { activityRepo.syncLdkNodePayments(it) }
+        migrationService.reapplyMetadataAfterSync()
+        activityRepo.syncActivities()
+        migrationService.setRestoringFromRNRemoteBackup(false)
+        migrationService.setShowingMigrationLoading(false)
     }
 
     private suspend fun completeMigration() {

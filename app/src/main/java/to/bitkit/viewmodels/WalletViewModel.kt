@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +18,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PeerDetails
@@ -29,6 +33,8 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.RecoveryModeException
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.MigrationService
+import to.bitkit.services.PendingChannelMigration
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -36,6 +42,7 @@ import to.bitkit.utils.isTxSyncTimeout
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class WalletViewModel @Inject constructor(
@@ -45,12 +52,20 @@ class WalletViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
-    private val migrationService: to.bitkit.services.MigrationService,
+    private val migrationService: MigrationService,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "WalletViewModel"
+        private val RESTORE_WAIT_TIMEOUT = 30.seconds
+        private const val NODE_RESTART_DELAY_MS = 500L
+    }
 
     val lightningState = lightningRepo.lightningState
     val walletState = walletRepo.walletState
     val balanceState = walletRepo.balanceState
+
+    @Volatile
+    private var isStarting = false
 
     // Local UI state
     var walletExists by mutableStateOf(walletRepo.walletExists())
@@ -60,8 +75,11 @@ class WalletViewModel @Inject constructor(
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
 
-    var restoreState by mutableStateOf<RestoreState>(RestoreState.Initial)
-        private set
+    val isRestoringFromRNRemoteBackup: StateFlow<Boolean> =
+        migrationService.isRestoringFromRNRemoteBackup
+
+    private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Initial)
+    val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
 
     private val _uiState = MutableStateFlow(MainUiState())
 
@@ -141,7 +159,7 @@ class WalletViewModel @Inject constructor(
                         selectedTags = state.selectedTags,
                     )
                 }
-                if (state.walletExists && restoreState == RestoreState.InProgress.Wallet) {
+                if (state.walletExists && _restoreState.value == RestoreState.InProgress.Wallet) {
                     restoreFromBackup()
                 }
             }
@@ -163,14 +181,56 @@ class WalletViewModel @Inject constructor(
     }
 
     private suspend fun restoreFromBackup() {
-        restoreState = RestoreState.InProgress.Metadata
-        backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
-        // data backup is not critical and mostly for user convenience so there is no reason to propagate errors up
-        restoreState = RestoreState.Completed
+        _restoreState.update { RestoreState.InProgress.Metadata }
+        try {
+            restoreFromMostRecentBackup()
+        } catch (e: Exception) {
+            Logger.error("Restore from backup failed", e, context = TAG)
+        } finally {
+            _restoreState.update { RestoreState.Completed }
+        }
+    }
+
+    private suspend fun restoreFromMostRecentBackup() {
+        val (rnTimestamp, vssTimestamp) = coroutineScope {
+            val rn = async { migrationService.getRNRemoteBackupTimestamp() }
+            val vss = async { backupRepo.getLatestBackupTime() }
+            rn.await() to vss.await()
+        }
+
+        val shouldRestoreRN = when {
+            rnTimestamp == null -> false
+            vssTimestamp == null || vssTimestamp == 0uL -> true
+            else -> rnTimestamp >= vssTimestamp
+        }
+
+        if (shouldRestoreRN) {
+            restoreFromRNRemoteBackup()
+        } else {
+            backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+        }
+    }
+
+    private suspend fun restoreFromRNRemoteBackup() {
+        runCatching {
+            migrationService.restoreFromRNRemoteBackup()
+            walletRepo.loadFromCache()
+
+            val pendingMigration = migrationService.peekPendingChannelMigration() ?: return@runCatching
+            val nodeState = lightningState.value.nodeLifecycleState
+            if (nodeState.isRunningOrStarting()) {
+                lightningRepo.stop()
+                delay(NODE_RESTART_DELAY_MS)
+                startWithChannelMigration(pendingMigration)
+            }
+        }.onFailure { e ->
+            Logger.warn("RN remote backup restore failed, falling back to VSS", e, context = TAG)
+            backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+        }
     }
 
     fun onRestoreContinue() {
-        restoreState = RestoreState.Settled
+        _restoreState.update { RestoreState.Settled }
     }
 
     fun proceedWithoutRestore(onDone: () -> Unit) {
@@ -178,7 +238,7 @@ class WalletViewModel @Inject constructor(
             // TODO start LDK without trying to restore backup state from VSS if possible
             lightningRepo.stop()
             delay(LOADING_MS.milliseconds)
-            restoreState = RestoreState.Settled
+            _restoreState.update { RestoreState.Settled }
             onDone()
         }
     }
@@ -186,31 +246,81 @@ class WalletViewModel @Inject constructor(
     fun setInitNodeLifecycleState() = lightningRepo.setInitNodeLifecycleState()
 
     fun start(walletIndex: Int = 0) {
-        if (!walletExists) return
+        if (!walletExists || isStarting) return
 
         viewModelScope.launch(bgDispatcher) {
-            val channelMigration = migrationService.consumePendingChannelMigration()?.let { migration ->
-                org.lightningdevkit.ldknode.ChannelDataMigration(
+            isStarting = true
+            try {
+                waitForRestoreIfNeeded()
+                val channelMigration = buildChannelMigrationIfAvailable()
+                startNode(walletIndex, channelMigration)
+            } finally {
+                isStarting = false
+            }
+        }
+    }
+
+    private suspend fun waitForRestoreIfNeeded() {
+        if (!_restoreState.value.isOngoing()) return
+        withTimeoutOrNull(RESTORE_WAIT_TIMEOUT) {
+            _restoreState.first { !it.isOngoing() }
+        } ?: Logger.warn("Restore wait timed out, proceeding anyway", context = TAG)
+    }
+
+    private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
+        val migration = migrationService.peekPendingChannelMigration() ?: return null
+        return ChannelDataMigration(
+            channelManager = migration.channelManager.map { it.toUByte() },
+            channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
+        )
+    }
+
+    private suspend fun startNode(
+        walletIndex: Int = 0,
+        channelMigration: ChannelDataMigration?,
+    ) {
+        lightningRepo.start(walletIndex, channelMigration = channelMigration)
+            .onSuccess {
+                walletRepo.setWalletExistsState()
+                walletRepo.syncBalances()
+                if (_restoreState.value.isIdle()) {
+                    walletRepo.refreshBip21()
+                }
+            }
+            .onFailure { error ->
+                Logger.error("Node startup error", error, context = TAG)
+                if (error !is RecoveryModeException) {
+                    ToastEventBus.send(error)
+                }
+            }
+    }
+
+    private fun startWithChannelMigration(migration: PendingChannelMigration) {
+        if (!walletExists || isStarting) return
+
+        viewModelScope.launch(bgDispatcher) {
+            isStarting = true
+            try {
+                val channelMigration = ChannelDataMigration(
                     channelManager = migration.channelManager.map { it.toUByte() },
                     channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
                 )
-            }
+                migrationService.consumePendingChannelMigration()
 
-            lightningRepo.start(walletIndex, channelMigration = channelMigration)
-                .onSuccess {
-                    walletRepo.setWalletExistsState()
-                    walletRepo.syncBalances()
-                    // Skip refresh during restore, it will be called after completion
-                    if (restoreState.isIdle()) {
-                        walletRepo.refreshBip21()
+                lightningRepo.start(channelMigration = channelMigration)
+                    .onSuccess {
+                        walletRepo.syncBalances()
+                        migrationService.setRestoringFromRNRemoteBackup(true)
                     }
-                }
-                .onFailure { error ->
-                    Logger.error("Node startup error", error)
-                    if (error !is RecoveryModeException) {
-                        ToastEventBus.send(error)
+                    .onFailure { error ->
+                        Logger.error("Node restart with migration error", error, context = TAG)
+                        if (error !is RecoveryModeException) {
+                            ToastEventBus.send(error)
+                        }
                     }
-                }
+            } finally {
+                isStarting = false
+            }
         }
     }
 
@@ -312,7 +422,7 @@ class WalletViewModel @Inject constructor(
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
         setInitNodeLifecycleState()
-        restoreState = RestoreState.InProgress.Wallet
+        _restoreState.update { RestoreState.InProgress.Wallet }
 
         walletRepo.restoreWallet(
             mnemonic = mnemonic,

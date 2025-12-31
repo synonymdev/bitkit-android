@@ -14,13 +14,17 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -52,6 +56,57 @@ private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDa
     name = "RN_KEYCHAIN"
 )
 
+@Serializable
+private data class RNRemoteActivityItem(
+    val id: String,
+    val activityType: String,
+    val txType: String,
+    val txId: String? = null,
+    val value: Long,
+    val fee: Long? = null,
+    val feeRate: Long? = null,
+    val address: String? = null,
+    val confirmed: Boolean? = null,
+    val timestamp: Long,
+    val isBoosted: Boolean? = null,
+    val isTransfer: Boolean? = null,
+    val exists: Boolean? = null,
+    val confirmTimestamp: Long? = null,
+    val channelId: String? = null,
+    val transferTxId: String? = null,
+    val status: String? = null,
+    val message: String? = null,
+    val preimage: String? = null,
+)
+
+@Serializable
+private data class RNRemoteWalletBackup(
+    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
+    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+)
+
+@Serializable
+private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
+
+@Serializable
+private data class RNRemoteBoostedTx(val oldTxId: String? = null, val newTxId: String? = null)
+
+@Serializable
+private data class RNRemoteBlocktankBackup(
+    val orders: List<RNRemoteBlocktankOrder>? = null,
+    val paidOrders: List<String>? = null,
+)
+
+@Serializable
+private data class RNRemoteBlocktankOrder(
+    val id: String,
+    val state: String? = null,
+    val lspBalanceSat: ULong? = null,
+    val clientBalanceSat: ULong? = null,
+    val channelExpiryWeeks: Int? = null,
+    val createdAt: String? = null,
+)
+
 @Suppress("LargeClass", "TooManyFunctions")
 @Singleton
 class MigrationService @Inject constructor(
@@ -61,6 +116,7 @@ class MigrationService @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val activityRepo: ActivityRepo,
     private val coreService: CoreService,
+    private val rnBackupClient: RNBackupClient,
 ) {
     companion object {
         private const val TAG = "Migration"
@@ -76,19 +132,50 @@ class MigrationService @Inject constructor(
 
     private val rnMigrationStore = context.rnMigrationDataStore
 
+    private inline fun <reified T> decodeBackupData(data: ByteArray): T {
+        val jsonElement = json.parseToJsonElement(String(data))
+        val dataElement = jsonElement.jsonObject["data"] ?: error("Missing 'data' field")
+        return json.decodeFromJsonElement(dataElement)
+    }
+
     private val _isShowingMigrationLoading = MutableStateFlow(false)
     val isShowingMigrationLoading: StateFlow<Boolean> = _isShowingMigrationLoading.asStateFlow()
 
     fun setShowingMigrationLoading(value: Boolean) {
-        _isShowingMigrationLoading.value = value
+        _isShowingMigrationLoading.update { value }
+    }
+
+    private val _isRestoringFromRNRemoteBackup = MutableStateFlow(false)
+    val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = _isRestoringFromRNRemoteBackup.asStateFlow()
+
+    fun setRestoringFromRNRemoteBackup(value: Boolean) {
+        _isRestoringFromRNRemoteBackup.update { value }
     }
 
     @Volatile
     private var pendingChannelMigration: PendingChannelMigration? = null
 
     fun consumePendingChannelMigration(): PendingChannelMigration? {
-        return pendingChannelMigration.also { pendingChannelMigration = null }
+        val migration = pendingChannelMigration ?: return null
+        pendingChannelMigration = null
+        return migration
     }
+
+    fun peekPendingChannelMigration(): PendingChannelMigration? {
+        return pendingChannelMigration
+    }
+
+    @Volatile
+    private var pendingRemoteActivityData: List<RNActivityItem>? = null
+
+    @Volatile
+    private var pendingRemoteTransfers: Map<String, String>? = null
+
+    @Volatile
+    private var pendingRemoteBoosts: Map<String, String>? = null
+
+    @Volatile
+    private var pendingRemoteMetadata: RNMetadata? = null
 
     private val rnNetworkString: String
         get() = when (Env.network) {
@@ -824,17 +911,271 @@ class MigrationService @Inject constructor(
         }
     }
 
-    suspend fun reapplyMetadataAfterSync() {
-        if (!hasRNMmkvData()) return
+    suspend fun hasRNRemoteBackup(): Boolean = runCatching {
+        rnBackupClient.hasBackup()
+    }.onFailure { e ->
+        Logger.error("Failed to check RN remote backup", e, context = TAG)
+    }.getOrDefault(false)
 
-        val mmkvData = loadRNMmkvData() ?: return
+    suspend fun getRNRemoteBackupTimestamp(): ULong? = runCatching {
+        rnBackupClient.getLatestBackupTimestamp()
+    }.getOrNull()
 
-        extractRNMetadata(mmkvData)?.let { metadata ->
-            applyRNMetadata(metadata)
+    suspend fun restoreFromRNRemoteBackup() {
+        setRestoringFromRNRemoteBackup(true)
+
+        try {
+            fetchRNRemoteLdkData()
+            val bitkitFiles = rnBackupClient.listFiles(fileGroup = "bitkit")?.list ?: emptyList()
+            retrieveAndApplyBitkitBackups(bitkitFiles)
+            markMigrationCompleted()
+        } catch (e: Exception) {
+            Logger.error("RN remote backup restore failed", e, context = TAG)
+            throw e
+        }
+    }
+
+    private suspend fun retrieveAndApplyBitkitBackups(availableFiles: List<String>) = coroutineScope {
+        fun fileExists(name: String) = availableFiles.any { it.removeSuffix(".bin") == name }
+
+        suspend fun retrieve(name: String): ByteArray? {
+            if (!fileExists(name)) return null
+            return rnBackupClient.retrieve(name, fileGroup = "bitkit")
         }
 
-        extractRNActivities(mmkvData)?.let { activities ->
-            applyOnchainMetadata(activities)
+        val settingsData = async { retrieve("bitkit_settings") }
+        val widgetsData = async { retrieve("bitkit_widgets") }
+        val activityData = async { retrieve("bitkit_lightning_activity") }
+        val metadataData = async { retrieve("bitkit_metadata") }
+        val walletData = async { retrieve("bitkit_wallet") }
+        val blocktankData = async { retrieve("bitkit_blocktank_orders") }
+
+        settingsData.await()?.let { applyRNRemoteSettings(it) }
+        widgetsData.await()?.let { applyRNRemoteWidgets(it) }
+        activityData.await()?.let { applyRNRemoteActivity(it) }
+        metadataData.await()?.let { applyRNRemoteMetadata(it) }
+        walletData.await()?.let { applyRNRemoteWallet(it) }
+        blocktankData.await()?.let { applyRNRemoteBlocktank(it) }
+    }
+
+    private suspend fun markMigrationCompleted() {
+        rnMigrationStore.edit {
+            it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
+            it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
+        }
+    }
+
+    private suspend fun fetchRNRemoteLdkData() {
+        runCatching {
+            val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching
+            if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching
+
+            val managerData = rnBackupClient.retrieve("channel_manager", fileGroup = "ldk")
+                ?: return@runCatching
+
+            val monitors = coroutineScope {
+                files.channelMonitors.map { monitorFile ->
+                    async {
+                        val channelId = monitorFile.replace(".bin", "")
+                        rnBackupClient.retrieveChannelMonitor(channelId)
+                    }
+                }.mapNotNull { it.await() }
+            }
+
+            if (monitors.isNotEmpty()) {
+                pendingChannelMigration = PendingChannelMigration(
+                    channelManager = managerData,
+                    channelMonitors = monitors,
+                )
+            }
+        }.onFailure { e ->
+            Logger.error("Failed to fetch remote LDK data", e, context = TAG)
+        }
+    }
+
+    private suspend fun applyRNRemoteSettings(data: ByteArray) {
+        runCatching {
+            applyRNSettings(decodeBackupData<RNSettings>(data))
+        }.onFailure { e ->
+            Logger.warn("Failed to decode RN remote settings backup: $e", context = TAG)
+        }
+    }
+
+    private suspend fun applyRNRemoteWidgets(data: ByteArray) {
+        runCatching {
+            val widgets = decodeBackupData<RNWidgets>(data)
+            val rawJson = runCatching { json.parseToJsonElement(String(data)) }.getOrNull()
+            val widgetOptions = rawJson?.jsonObject?.get("data")?.jsonObject?.let { dataObj ->
+                convertRNWidgetPreferences(dataObj["widgets"]?.jsonObject ?: dataObj)
+            } ?: emptyMap()
+
+            applyRNWidgets(RNWidgetsWithOptions(widgets = widgets, widgetOptions = widgetOptions))
+        }.onFailure { e ->
+            Logger.warn("Failed to decode RN remote widgets backup: $e", context = TAG)
+        }
+    }
+
+    private suspend fun applyRNRemoteActivity(data: ByteArray) {
+        runCatching {
+            val items = decodeBackupData<List<RNRemoteActivityItem>>(data).map { item ->
+                RNActivityItem(
+                    id = item.id,
+                    activityType = item.activityType,
+                    txType = item.txType,
+                    txId = item.txId,
+                    value = item.value,
+                    fee = item.fee,
+                    feeRate = item.feeRate,
+                    address = item.address,
+                    confirmed = item.confirmed,
+                    timestamp = item.timestamp,
+                    isBoosted = item.isBoosted,
+                    isTransfer = item.isTransfer,
+                    exists = item.exists,
+                    confirmTimestamp = item.confirmTimestamp,
+                    channelId = item.channelId,
+                    transferTxId = item.transferTxId,
+                    status = item.status,
+                    message = item.message,
+                    preimage = item.preimage,
+                )
+            }
+
+            pendingRemoteActivityData = items
+            applyRNActivities(items)
+        }.onFailure { e ->
+            Logger.warn("Failed to decode RN remote activity backup: $e", context = TAG)
+        }
+    }
+
+    private suspend fun applyRNRemoteMetadata(data: ByteArray) {
+        runCatching {
+            pendingRemoteMetadata = decodeBackupData<RNMetadata>(data)
+        }.onFailure { e ->
+            Logger.warn("Failed to decode RN remote metadata backup: $e", context = TAG)
+        }
+    }
+
+    private suspend fun applyRNRemoteWallet(data: ByteArray) {
+        runCatching {
+            val backup = decodeBackupData<RNRemoteWalletBackup>(data)
+
+            backup.transfers?.let { transfers ->
+                val transferMap = mutableMapOf<String, String>()
+                transfers.values.flatten().forEach { transfer ->
+                    transfer.txId?.let { txId ->
+                        transfer.type?.let { type ->
+                            transferMap[txId] = type
+                        }
+                    }
+                }
+                if (transferMap.isNotEmpty()) {
+                    pendingRemoteTransfers = transferMap
+                }
+            }
+
+            backup.boostedTransactions?.let { boostedTxs ->
+                val boostMap = mutableMapOf<String, String>()
+                boostedTxs.values.forEach { networkBoosts ->
+                    networkBoosts.forEach { (oldTxId, boost) ->
+                        boost.newTxId?.let { newTxId ->
+                            boostMap[oldTxId] = newTxId
+                        }
+                    }
+                }
+                if (boostMap.isNotEmpty()) {
+                    pendingRemoteBoosts = boostMap
+                }
+            }
+        }.onFailure { e ->
+            Logger.warn("Failed to decode RN remote wallet backup: $e", context = TAG)
+        }
+    }
+
+    private suspend fun applyRNRemoteBlocktank(data: ByteArray) {
+        runCatching {
+            val backup = decodeBackupData<RNRemoteBlocktankBackup>(data)
+            val orderIds = mutableListOf<String>()
+
+            backup.orders?.let { orders ->
+                orderIds.addAll(orders.map { it.id })
+            }
+
+            backup.paidOrders?.let { paidOrderIds ->
+                orderIds.addAll(paidOrderIds)
+            }
+
+            if (orderIds.isNotEmpty()) {
+                runCatching {
+                    val fetchedOrders = coreService.blocktank.orders(
+                        orderIds = orderIds,
+                        filter = null,
+                        refresh = true,
+                    )
+                    if (fetchedOrders.isNotEmpty()) {
+                        coreService.blocktank.upsertOrderList(fetchedOrders)
+                    }
+                }.onFailure { e ->
+                    Logger.warn("Failed to fetch and upsert Blocktank orders: $e", context = TAG)
+                }
+            }
+        }.onFailure { e ->
+            Logger.warn("Failed to decode RN remote blocktank backup: $e", context = TAG)
+        }
+    }
+
+    suspend fun reapplyMetadataAfterSync() {
+        if (hasRNMmkvData()) {
+            val mmkvData = loadRNMmkvData() ?: return
+
+            extractRNMetadata(mmkvData)?.let { metadata ->
+                applyRNMetadata(metadata)
+            }
+
+            extractRNActivities(mmkvData)?.let { activities ->
+                applyOnchainMetadata(activities)
+            }
+        }
+
+        pendingRemoteActivityData?.let { remoteActivities ->
+            applyOnchainMetadata(remoteActivities)
+            pendingRemoteActivityData = null
+        }
+
+        pendingRemoteTransfers?.let { transfers ->
+            applyRemoteTransfers(transfers)
+            pendingRemoteTransfers = null
+        }
+
+        pendingRemoteBoosts?.let { boosts ->
+            applyRemoteBoosts(boosts)
+            pendingRemoteBoosts = null
+        }
+
+        pendingRemoteMetadata?.let { metadata ->
+            applyRNMetadata(metadata)
+            pendingRemoteMetadata = null
+        }
+    }
+
+    private suspend fun applyRemoteTransfers(transfers: Map<String, String>) {
+        transfers.forEach { (txId, channelId) ->
+            val onchain = activityRepo.getOnchainActivityByTxId(txId) ?: return@forEach
+            val updated = onchain.copy(isTransfer = true, channelId = channelId)
+            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated))
+        }
+    }
+
+    private suspend fun applyRemoteBoosts(boosts: Map<String, String>) {
+        boosts.forEach { (oldTxId, newTxId) ->
+            val onchain = activityRepo.getOnchainActivityByTxId(newTxId) ?: return@forEach
+            val updatedBoostTxIds = if (oldTxId !in onchain.boostTxIds) {
+                onchain.boostTxIds + oldTxId
+            } else {
+                onchain.boostTxIds
+            }
+            val updated = onchain.copy(isBoosted = true, boostTxIds = updatedBoostTxIds)
+            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated))
         }
     }
 

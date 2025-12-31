@@ -112,7 +112,7 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                if (isShowingMigrationLoading) {
+                if (isShowingMigrationLoading && !isRecoveryMode) {
                     MigrationLoadingScreen(isVisible = true)
                 } else if (!walletViewModel.walletExists && !isRecoveryMode) {
                     OnboardingNav(

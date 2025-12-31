@@ -29,6 +29,7 @@ import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
 import org.lightningdevkit.ldknode.ChannelConfig
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
@@ -167,7 +168,7 @@ class LightningRepo @Inject constructor(
         walletIndex: Int,
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
-        channelMigration: org.lightningdevkit.ldknode.ChannelDataMigration? = null,
+        channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         return@withContext try {
             val trustedPeers = getTrustedPeersFromBlocktank()
@@ -197,7 +198,7 @@ class LightningRepo @Inject constructor(
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
         eventHandler: NodeEventHandler? = null,
-        channelMigration: org.lightningdevkit.ldknode.ChannelDataMigration? = null,
+        channelMigration: ChannelDataMigration? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeException())

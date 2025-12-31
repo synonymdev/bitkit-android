@@ -586,19 +586,15 @@ class ActivityService(
         timestamp: ULong,
     ): ConfirmationData {
         var isConfirmed = false
-        var confirmedTimestamp: ULong? = null
+        var blockTimestamp: ULong? = null
 
         val status = kind.status
         if (status is ConfirmationStatus.Confirmed) {
             isConfirmed = true
-            confirmedTimestamp = status.timestamp
+            blockTimestamp = status.timestamp
         }
 
-        if (isConfirmed && confirmedTimestamp != null && confirmedTimestamp < timestamp) {
-            confirmedTimestamp = timestamp
-        }
-
-        return ConfirmationData(isConfirmed, confirmedTimestamp, timestamp)
+        return ConfirmationData(isConfirmed, blockTimestamp, timestamp)
     }
 
     private fun buildUpdatedOnchainActivity(
@@ -636,6 +632,14 @@ class ActivityService(
         channelId: String? = null,
     ): OnchainActivity {
         val isTransfer = channelId != null
+        val paymentTimestamp = confirmationData.timestamp
+        val blockTimestamp = confirmationData.confirmedTimestamp
+
+        val activityTimestamp = if (blockTimestamp != null && blockTimestamp < paymentTimestamp) {
+            blockTimestamp
+        } else {
+            paymentTimestamp
+        }
 
         return OnchainActivity.create(
             id = payment.id,
@@ -644,10 +648,10 @@ class ActivityService(
             value = payment.amountSats ?: 0u,
             fee = (payment.feePaidMsat ?: 0u) / 1000u,
             address = resolvedAddress ?: "Loading...",
-            timestamp = confirmationData.timestamp,
+            timestamp = activityTimestamp,
             confirmed = confirmationData.isConfirmed,
             isTransfer = isTransfer,
-            confirmTimestamp = confirmationData.confirmedTimestamp,
+            confirmTimestamp = blockTimestamp,
             channelId = channelId,
             seenAt = null,
         )
