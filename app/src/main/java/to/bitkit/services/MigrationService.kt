@@ -31,6 +31,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.resetPin
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.env.Env
@@ -355,13 +356,14 @@ class MigrationService @Inject constructor(
                 migratePin()
 
                 if (hasRNLdkData()) {
-                    migrateLdkData().onFailure { e ->
-                        Logger.warn(
-                            "LDK data migration failed, continuing with other migrations: $e",
-                            e,
-                            context = TAG
-                        )
-                    }
+                    migrateLdkData()
+                        .onFailure { e ->
+                            Logger.warn(
+                                "LDK data migration failed, continuing with other migrations: $e",
+                                e,
+                                context = TAG
+                            )
+                        }
                 }
 
                 if (hasRNMmkvData()) {
@@ -1011,6 +1013,7 @@ class MigrationService @Inject constructor(
     private suspend fun applyRNRemoteSettings(data: ByteArray) {
         runCatching {
             applyRNSettings(decodeBackupData<RNSettings>(data))
+            settingsStore.update { it.resetPin() }
         }.onFailure { e ->
             Logger.warn("Failed to decode RN remote settings backup: $e", context = TAG)
         }

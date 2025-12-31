@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -320,11 +321,14 @@ class AppViewModel @Inject constructor(
     private suspend fun handleSyncCompleted() {
         walletRepo.debounceSyncByEvent()
 
+        val isShowingLoading = migrationService.isShowingMigrationLoading.value
+        val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
+
         when {
-            migrationService.isShowingMigrationLoading.value && !isCompletingMigration -> {
+            isShowingLoading && !isCompletingMigration -> {
                 completeMigration()
             }
-            migrationService.isRestoringFromRNRemoteBackup.value -> {
+            isRestoringRemote -> {
                 completeRNRemoteBackupRestore()
             }
         }
@@ -338,8 +342,18 @@ class AppViewModel @Inject constructor(
         migrationService.setShowingMigrationLoading(false)
     }
 
+    private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
+        val migration = migrationService.peekPendingChannelMigration() ?: return null
+        return ChannelDataMigration(
+            channelManager = migration.channelManager.map { it.toUByte() },
+            channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
+        )
+    }
+
     private suspend fun completeMigration() {
-        if (isCompletingMigration) return
+        if (isCompletingMigration) {
+            return
+        }
         isCompletingMigration = true
 
         try {
@@ -350,8 +364,14 @@ class AppViewModel @Inject constructor(
             }
             activityRepo.markAllUnseenActivitiesAsSeen()
 
-            lightningRepo.restart()
+            val channelMigration = buildChannelMigrationIfAvailable()
+            lightningRepo.stop().onFailure {
+                Logger.error("Failed to stop node during migration restart", it, context = TAG)
+            }
+            delay(500)
+            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
                 .onSuccess {
+                    migrationService.consumePendingChannelMigration()
                     walletRepo.syncNodeAndWallet()
                         .onSuccess {
                             lightningRepo.getPayments().onSuccess { payments ->

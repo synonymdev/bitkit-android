@@ -215,14 +215,6 @@ class WalletViewModel @Inject constructor(
         runCatching {
             migrationService.restoreFromRNRemoteBackup()
             walletRepo.loadFromCache()
-
-            val pendingMigration = migrationService.peekPendingChannelMigration() ?: return@runCatching
-            val nodeState = lightningState.value.nodeLifecycleState
-            if (nodeState.isRunningOrStarting()) {
-                lightningRepo.stop()
-                delay(NODE_RESTART_DELAY_MS)
-                startWithChannelMigration(pendingMigration)
-            }
         }.onFailure { e ->
             Logger.warn("RN remote backup restore failed, falling back to VSS", e, context = TAG)
             backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
@@ -253,15 +245,6 @@ class WalletViewModel @Inject constructor(
             try {
                 waitForRestoreIfNeeded()
 
-                val hasPendingMigration = migrationService.peekPendingChannelMigration() != null
-                val nodeState = lightningState.value.nodeLifecycleState
-                val nodeAlreadyRunning = nodeState.isRunningOrStarting()
-
-                if (hasPendingMigration && nodeAlreadyRunning) {
-                    lightningRepo.stop()
-                    delay(NODE_RESTART_DELAY_MS)
-                }
-
                 val channelMigration = buildChannelMigrationIfAvailable()
                 startNode(walletIndex, channelMigration)
             } finally {
@@ -278,7 +261,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
-        val migration = migrationService.consumePendingChannelMigration() ?: return null
+        val migration = migrationService.peekPendingChannelMigration() ?: return null
         return ChannelDataMigration(
             channelManager = migration.channelManager.map { it.toUByte() },
             channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
@@ -305,34 +288,6 @@ class WalletViewModel @Inject constructor(
             }
     }
 
-    private fun startWithChannelMigration(migration: PendingChannelMigration) {
-        if (!walletExists || isStarting) return
-
-        viewModelScope.launch(bgDispatcher) {
-            isStarting = true
-            try {
-                val channelMigration = ChannelDataMigration(
-                    channelManager = migration.channelManager.map { it.toUByte() },
-                    channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
-                )
-                migrationService.consumePendingChannelMigration()
-
-                lightningRepo.start(channelMigration = channelMigration)
-                    .onSuccess {
-                        walletRepo.syncBalances()
-                        migrationService.setRestoringFromRNRemoteBackup(true)
-                    }
-                    .onFailure { error ->
-                        Logger.error("Node restart with migration error", error, context = TAG)
-                        if (error !is RecoveryModeException) {
-                            ToastEventBus.send(error)
-                        }
-                    }
-            } finally {
-                isStarting = false
-            }
-        }
-    }
 
     fun stop() {
         if (!walletExists) return
