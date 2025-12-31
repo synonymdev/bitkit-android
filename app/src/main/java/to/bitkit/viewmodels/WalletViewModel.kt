@@ -252,6 +252,16 @@ class WalletViewModel @Inject constructor(
             isStarting = true
             try {
                 waitForRestoreIfNeeded()
+
+                val hasPendingMigration = migrationService.peekPendingChannelMigration() != null
+                val nodeState = lightningState.value.nodeLifecycleState
+                val nodeAlreadyRunning = nodeState.isRunningOrStarting()
+
+                if (hasPendingMigration && nodeAlreadyRunning) {
+                    lightningRepo.stop()
+                    delay(NODE_RESTART_DELAY_MS)
+                }
+
                 val channelMigration = buildChannelMigrationIfAvailable()
                 startNode(walletIndex, channelMigration)
             } finally {
@@ -268,7 +278,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
-        val migration = migrationService.peekPendingChannelMigration() ?: return null
+        val migration = migrationService.consumePendingChannelMigration() ?: return null
         return ChannelDataMigration(
             channelManager = migration.channelManager.map { it.toUByte() },
             channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },

@@ -81,8 +81,17 @@ class LightningNodeServiceTest : BaseUnitTest() {
     @Before
     fun setUp() = runBlocking {
         hiltRule.inject()
-        whenever(lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), captor.capture()))
-            .thenReturn(Result.success(Unit))
+        whenever(
+            lightningRepo.start(
+                any(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                captor.capture(),
+                anyOrNull(),
+            )
+        ).thenReturn(Result.success(Unit))
         whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
 
         // Set up CacheStore mock

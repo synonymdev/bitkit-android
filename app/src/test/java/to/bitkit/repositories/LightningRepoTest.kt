@@ -83,7 +83,7 @@ class LightningRepoTest : BaseUnitTest() {
     private suspend fun startNodeForTesting() {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         val blocktank = mock<BlocktankService>()
@@ -97,7 +97,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should transition through correct states`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
@@ -435,7 +435,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -588,7 +588,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should load trusted peers from blocktank info`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
 
@@ -623,7 +623,8 @@ class LightningRepoTest : BaseUnitTest() {
                 peers?.size == 2 &&
                     peers.any { it.nodeId == "node1pubkey" && it.address == "node1.example.com:9735" } &&
                     peers.any { it.nodeId == "node2pubkey" && it.address == "node2.example.com:9735" }
-            }
+            },
+            anyOrNull(),
         )
     }
 
@@ -631,7 +632,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should pass null trusted peers when blocktank returns null`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
 
@@ -643,6 +644,6 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull())
+        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
     }
 }

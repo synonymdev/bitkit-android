@@ -19,6 +19,7 @@ import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
+import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertTrue
 
@@ -35,6 +36,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
+    private val migrationService = mock<MigrationService>()
 
     private lateinit var sut: WipeWalletUseCase
 
@@ -59,6 +61,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             activityRepo = activityRepo,
             lightningRepo = lightningRepo,
             firebaseMessaging = firebaseMessaging,
+            migrationService = migrationService,
         )
     }
 

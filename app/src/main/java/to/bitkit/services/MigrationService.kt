@@ -41,16 +41,16 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.services.core.Bip39Service
 import to.bitkit.utils.Logger
 import java.io.File
 import java.security.KeyStore
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.rnMigrationDataStore:
-    androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by preferencesDataStore(
-        name = "rn_migration"
-    )
+private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "rn_migration"
+)
 
 private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "RN_KEYCHAIN"
@@ -117,6 +117,7 @@ class MigrationService @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val coreService: CoreService,
     private val rnBackupClient: RNBackupClient,
+    private val bip39Service: Bip39Service,
 ) {
     companion object {
         private const val TAG = "Migration"
@@ -401,10 +402,9 @@ class MigrationService @Inject constructor(
             )
         }
 
-        val words = mnemonic.split(" ").filter { it.isNotBlank() }
-        if (words.size != MNEMONIC_WORD_COUNT_12 && words.size != MNEMONIC_WORD_COUNT_24) {
+        bip39Service.validateMnemonic(mnemonic).onFailure {
             throw to.bitkit.utils.AppError(
-                "Recovery phrase format is invalid. Please use your 12 or 24 word recovery phrase to restore manually."
+                "Recovery phrase is invalid. Please use your 12 or 24 word recovery phrase to restore manually."
             )
         }
 
@@ -424,6 +424,20 @@ class MigrationService @Inject constructor(
         if (pin.isNullOrEmpty()) {
             return
         }
+
+        if (pin.length != Env.PIN_LENGTH) {
+            Logger.warn(
+                "Invalid PIN length during migration: ${pin.length}, expected: ${Env.PIN_LENGTH}",
+                context = TAG,
+            )
+            return
+        }
+
+        if (!pin.all { it.isDigit() }) {
+            Logger.warn("Invalid PIN format during migration: contains non-numeric characters", context = TAG)
+            return
+        }
+
         keychain.saveString(Keychain.Key.PIN.name, pin)
     }
 
@@ -611,6 +625,9 @@ class MigrationService @Inject constructor(
                     "branchAndBound" -> CoinSelectionPreference.BranchAndBound
                     else -> CoinSelectionPreference.SmallestFirst
                 },
+                isPinEnabled = settings.pin ?: current.isPinEnabled,
+                isPinOnLaunchEnabled = settings.pinOnLaunch ?: current.isPinOnLaunchEnabled,
+                isPinOnIdleEnabled = settings.pinOnIdle ?: current.isPinOnIdleEnabled,
                 isPinForPaymentsEnabled = settings.pinForPayments ?: current.isPinForPaymentsEnabled,
                 isBiometricEnabled = settings.biometrics ?: current.isBiometricEnabled,
                 quickPayIntroSeen = settings.quickpayIntroSeen ?: current.quickPayIntroSeen,
