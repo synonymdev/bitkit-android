@@ -220,9 +220,9 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             // Delays are required for auth check on launch functionality
-            delay(1000)
+            delay(AUTH_CHECK_INITIAL_DELAY_MS)
             resetIsAuthenticatedState()
-            delay(500)
+            delay(AUTH_CHECK_SPLASH_DELAY_MS)
             splashVisible = false
         }
         viewModelScope.launch {
@@ -249,7 +249,7 @@ class AppViewModel @Inject constructor(
                     } catch (e: TimeoutCancellationException) {
                         if (!isCompletingMigration) {
                             Logger.warn(
-                                "Migration loading screen timeout after 2.5 minutes, completing migration anyway",
+                                "Migration loading screen timeout, completing migration anyway",
                                 context = TAG
                             )
                             completeMigration()
@@ -319,18 +319,14 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleSyncCompleted() {
-        walletRepo.debounceSyncByEvent()
-
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
 
         when {
-            isShowingLoading && !isCompletingMigration -> {
-                completeMigration()
-            }
-            isRestoringRemote -> {
-                completeRNRemoteBackupRestore()
-            }
+            isShowingLoading && !isCompletingMigration -> completeMigration()
+            isRestoringRemote -> completeRNRemoteBackupRestore()
+            !isShowingLoading && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
+            else -> Unit
         }
     }
 
@@ -351,9 +347,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun completeMigration() {
-        if (isCompletingMigration) {
-            return
-        }
+        if (isCompletingMigration) return
         isCompletingMigration = true
 
         try {
@@ -368,59 +362,77 @@ class AppViewModel @Inject constructor(
             lightningRepo.stop().onFailure {
                 Logger.error("Failed to stop node during migration restart", it, context = TAG)
             }
-            delay(500)
+            delay(MIGRATION_NODE_RESTART_DELAY_MS)
             lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
                 .onSuccess {
                     migrationService.consumePendingChannelMigration()
                     walletRepo.syncNodeAndWallet()
                         .onSuccess {
-                            lightningRepo.getPayments().onSuccess { payments ->
-                                activityRepo.syncLdkNodePayments(payments)
-                            }
-                            transferRepo.syncTransferStates()
-                            migrationService.reapplyMetadataAfterSync()
-
-                            migrationService.setShowingMigrationLoading(false)
-
-                            toast(
-                                type = Toast.ToastType.SUCCESS,
-                                title = "Migration Complete",
-                                description = "Your wallet has been successfully migrated"
-                            )
+                            finishMigrationSuccessfully()
                         }
                         .onFailure { e ->
                             Logger.warn("Sync failed after restart during migration: $e", e, context = TAG)
-                            walletRepo.syncBalances()
-                            lightningRepo.getPayments().onSuccess { payments ->
-                                activityRepo.syncLdkNodePayments(payments)
-                            }
-                            transferRepo.syncTransferStates()
-                            migrationService.reapplyMetadataAfterSync()
-
-                            migrationService.setShowingMigrationLoading(false)
-
-                            toast(
-                                type = Toast.ToastType.SUCCESS,
-                                title = "Migration Complete",
-                                description = "Your wallet has been successfully migrated"
-                            )
+                            finishMigrationWithFallbackSync()
                         }
                 }
                 .onFailure { e ->
                     Logger.error("Failed to restart node after migration: $e", e, context = TAG)
-                    migrationService.setShowingMigrationLoading(false)
-                    toast(
-                        type = Toast.ToastType.ERROR,
-                        title = "Migration Warning",
-                        description = "Migration completed but node restart failed. Please restart the app."
-                    )
+                    finishMigrationWithError()
                 }
         } catch (e: Exception) {
             Logger.error("Migration completion error: $e", e, context = TAG)
-            migrationService.setShowingMigrationLoading(false)
+            finishMigrationWithError()
         } finally {
             isCompletingMigration = false
         }
+    }
+
+    private suspend fun finishMigrationSuccessfully() {
+        lightningRepo.getPayments().onSuccess { payments ->
+            activityRepo.syncLdkNodePayments(payments)
+        }
+        transferRepo.syncTransferStates()
+        migrationService.reapplyMetadataAfterSync()
+
+        migrationService.setShowingMigrationLoading(false)
+        delay(MIGRATION_AUTH_RESET_DELAY_MS)
+        resetIsAuthenticatedStateInternal()
+
+        toast(
+            type = Toast.ToastType.SUCCESS,
+            title = "Migration Complete",
+            description = "Your wallet has been successfully migrated"
+        )
+    }
+
+    private suspend fun finishMigrationWithFallbackSync() {
+        walletRepo.syncBalances()
+        lightningRepo.getPayments().onSuccess { payments ->
+            activityRepo.syncLdkNodePayments(payments)
+        }
+        transferRepo.syncTransferStates()
+        migrationService.reapplyMetadataAfterSync()
+
+        migrationService.setShowingMigrationLoading(false)
+        delay(MIGRATION_AUTH_RESET_DELAY_MS)
+        resetIsAuthenticatedStateInternal()
+
+        toast(
+            type = Toast.ToastType.SUCCESS,
+            title = "Migration Complete",
+            description = "Your wallet has been successfully migrated"
+        )
+    }
+
+    private suspend fun finishMigrationWithError() {
+        migrationService.setShowingMigrationLoading(false)
+        delay(MIGRATION_AUTH_RESET_DELAY_MS)
+        resetIsAuthenticatedStateInternal()
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = "Migration Warning",
+            description = "Migration completed but node restart failed. Please restart the app."
+        )
     }
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
@@ -1767,13 +1779,15 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region security
+    private suspend fun resetIsAuthenticatedStateInternal() {
+        val settings = settingsStore.data.first()
+        val needsAuth = settings.isPinEnabled && settings.isPinOnLaunchEnabled
+        _isAuthenticated.value = !needsAuth
+    }
+
     fun resetIsAuthenticatedState() {
         viewModelScope.launch {
-            val settings = settingsStore.data.first()
-            val needsAuth = settings.isPinEnabled && settings.isPinOnLaunchEnabled
-            if (!needsAuth) {
-                _isAuthenticated.value = true
-            }
+            resetIsAuthenticatedStateInternal()
         }
     }
 
@@ -2130,7 +2144,11 @@ class AppViewModel @Inject constructor(
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val SCREEN_TRANSITION_DELAY_MS = 300L
-        private const val MIGRATION_LOADING_TIMEOUT_MS = 150_000L
+        private const val MIGRATION_LOADING_TIMEOUT_MS = 300_000L
+        private const val MIGRATION_NODE_RESTART_DELAY_MS = 500L
+        private const val MIGRATION_AUTH_RESET_DELAY_MS = 500L
+        private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
+        private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
 
         /**How high the balance must be to show this warning to the user (in USD)*/
         private const val BALANCE_THRESHOLD_USD = 500L

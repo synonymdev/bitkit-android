@@ -34,7 +34,6 @@ import to.bitkit.repositories.RecoveryModeException
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.MigrationService
-import to.bitkit.services.PendingChannelMigration
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -57,7 +56,6 @@ class WalletViewModel @Inject constructor(
     companion object {
         private const val TAG = "WalletViewModel"
         private val RESTORE_WAIT_TIMEOUT = 30.seconds
-        private const val NODE_RESTART_DELAY_MS = 500L
     }
 
     val lightningState = lightningRepo.lightningState
@@ -123,7 +121,9 @@ class WalletViewModel @Inject constructor(
                 walletRepo.setWalletExistsState()
                 walletExists = walletRepo.walletExists()
                 loadCacheIfWalletExists()
-                if (!walletExists) {
+                if (walletExists) {
+                    startNode(0, channelMigration = null)
+                } else {
                     migrationService.setShowingMigrationLoading(false)
                 }
             } catch (e: Exception) {
@@ -287,7 +287,6 @@ class WalletViewModel @Inject constructor(
                 }
             }
     }
-
 
     fun stop() {
         if (!walletExists) return

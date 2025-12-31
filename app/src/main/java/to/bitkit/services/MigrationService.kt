@@ -31,8 +31,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
-import to.bitkit.data.resetPin
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.resetPin
 import to.bitkit.di.json
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
@@ -373,10 +373,6 @@ class MigrationService @Inject constructor(
                 rnMigrationStore.edit {
                     it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
                     it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
-                }
-
-                if (!hasRNLdkData()) {
-                    setShowingMigrationLoading(false)
                 }
             } else {
                 markMigrationChecked()
