@@ -37,6 +37,7 @@ val keystoreProperties by lazy {
 }
 
 val locales = listOf("en", "ar", "ca", "cs", "de", "el", "es", "fr", "it", "nl", "pl", "pt", "ru")
+val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 
 android {
     namespace = "to.bitkit"
@@ -52,6 +53,7 @@ android {
             useSupportLibrary = true
         }
         buildConfigField("boolean", "E2E", System.getenv("E2E")?.toBoolean()?.toString() ?: "false")
+        buildConfigField("String", "E2E_BACKEND", "\"$e2eBackendEnv\"")
         buildConfigField("boolean", "GEO", System.getenv("GEO")?.toBoolean()?.toString() ?: "true")
         buildConfigField("String", "LOCALES", "\"${locales.joinToString(",")}\"")
     }

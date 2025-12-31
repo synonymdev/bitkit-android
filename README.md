@@ -119,10 +119,23 @@ To build the mainnet flavor:
 
 ### Build for E2E Testing
 
-Simply pass `E2E=true` as environment variable and build any flavor.
+Pass `E2E=true` and build any flavor. By default, E2E uses a local Electrum override.
 
 ```sh
 E2E=true ./gradlew assembleDevRelease
+```
+
+#### Use Network Electrum (Staging/Mainnet)
+
+Set `E2E_BACKEND=network` to use the network Electrum based on the build flavor:
+
+```sh
+# regtest (dev flavor)
+E2E=true E2E_BACKEND=network ./gradlew assembleDevRelease
+# testnet (tnet flavor)
+E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
+# mainnet
+E2E=true E2E_BACKEND=network ./gradlew assembleMainnetRelease
 ```
 
 #### Disable Geoblocking Checks

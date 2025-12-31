@@ -17,6 +17,7 @@ internal object Env {
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
+    private val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     val walletSyncIntervalSecs = 10_uL // TODO review
@@ -98,7 +99,7 @@ internal object Env {
 
     val electrumServerUrl: String
         get() {
-            if (isE2eTest) return ElectrumServers.E2E
+            if (isE2eTest && e2eBackend == "local") return ElectrumServers.E2E
             return when (network) {
                 Network.REGTEST -> ElectrumServers.REGTEST
                 Network.TESTNET -> ElectrumServers.TESTNET
