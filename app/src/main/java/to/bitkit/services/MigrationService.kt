@@ -124,8 +124,6 @@ class MigrationService @Inject constructor(
         const val RN_MIGRATION_COMPLETED_KEY = "rnMigrationCompleted"
         const val RN_MIGRATION_CHECKED_KEY = "rnMigrationChecked"
         private const val RN_WALLET_NAME = "wallet0"
-        private const val MNEMONIC_WORD_COUNT_12 = 12
-        private const val MNEMONIC_WORD_COUNT_24 = 24
         private const val MILLISECONDS_TO_SECONDS = 1000
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 128
