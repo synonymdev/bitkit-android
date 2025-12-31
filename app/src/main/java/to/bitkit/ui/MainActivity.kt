@@ -26,6 +26,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.CoroutineScope
+import javax.inject.Inject
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import to.bitkit.androidServices.LightningNodeService
@@ -57,6 +58,8 @@ import to.bitkit.viewmodels.WalletViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+    @Inject lateinit var navigator: Navigator
+
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
@@ -117,6 +120,7 @@ class MainActivity : FragmentActivity() {
                     IsOnlineTracker(appViewModel)
                     InactivityTracker(appViewModel, settingsViewModel) {
                         ContentView(
+                            navigator = navigator,
                             appViewModel = appViewModel,
                             walletViewModel = walletViewModel,
                             blocktankViewModel = blocktankViewModel,

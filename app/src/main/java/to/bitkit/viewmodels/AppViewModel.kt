@@ -95,6 +95,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.nav.DeepLinkPatterns
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.nav.removeLightningSchemes
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -122,6 +123,7 @@ class AppViewModel @Inject constructor(
     timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val navigator: Navigator,
     private val keychain: Keychain,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
@@ -157,10 +159,6 @@ class AppViewModel @Inject constructor(
 
     private val _quickPayData = MutableStateFlow<QuickPayData?>(null)
     val quickPayData = _quickPayData.asStateFlow()
-
-    private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
-    val sendEffect = _sendEffect.asSharedFlow()
-    private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
 
     private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(extraBufferCapacity = 1)
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
@@ -235,7 +233,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
                 sheetType?.let {
-                    mainScreenEffect(MainScreenEffect.Navigate(it.toRoute()))
+                    navigator.navigate(it.toRoute())
                 }
             }
         }
@@ -481,7 +479,7 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
-                    SendEvent.SpeedAndFee -> setSendEffect(SendEffect.NavigateToFee)
+                    SendEvent.SpeedAndFee -> navigator.navigate(Routes.Send.FeeRate)
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
@@ -491,8 +489,8 @@ class AppViewModel @Inject constructor(
 
                     SendEvent.PayConfirmed -> onConfirmPay()
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
-                    SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(Routes.Send.Amount()))
-                    SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
+                    SendEvent.BackToAmount -> navigator.popBackTo(Routes.Send.Amount())
+                    SendEvent.NavToAddress -> navigator.navigate(Routes.Send.Address)
                 }
             }
         }
@@ -500,7 +498,7 @@ class AppViewModel @Inject constructor(
 
     private fun onEnterManuallyClick() {
         resetAddressInput()
-        setSendEffect(SendEffect.NavigateToAddress)
+        navigator.navigate(Routes.Send.Address)
     }
 
     private fun resetAddressInput() {
@@ -551,7 +549,7 @@ class AppViewModel @Inject constructor(
 
     fun onSelectSpeed(speed: TransactionSpeed) {
         if (speed is TransactionSpeed.Custom && speed.satsPerVByte == 0u) {
-            setSendEffect(SendEffect.NavigateToFeeCustom)
+            navigator.navigate(Routes.Send.FeeCustom)
         } else {
             setTransactionSpeed(speed)
         }
@@ -581,7 +579,7 @@ class AppViewModel @Inject constructor(
                 )
             }
             refreshOnchainSendIfNeeded()
-            setSendEffect(SendEffect.PopBack(Routes.Send.Confirm))
+            navigator.popBackTo(Routes.Send.Confirm)
         }
     }
 
@@ -606,7 +604,7 @@ class AppViewModel @Inject constructor(
         }
 
         if (_sendUiState.value.payMethod != SendMethod.LIGHTNING && !settingsStore.data.first().coinSelectAuto) {
-            setSendEffect(SendEffect.NavigateToCoinSelection)
+            navigator.navigate(Routes.Send.CoinSelection)
             return
         }
 
@@ -625,7 +623,7 @@ class AppViewModel @Inject constructor(
             }
         }
         if (lnurl is LnurlParams.LnurlWithdraw) {
-            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            navigator.navigate(Routes.Send.WithdrawConfirm)
             return
         }
 
@@ -634,7 +632,7 @@ class AppViewModel @Inject constructor(
         estimateLightningRoutingFeesIfNeeded()
         _sendUiState.update { it.copy(isLoading = false) }
 
-        setSendEffect(SendEffect.NavigateToConfirm)
+        navigator.navigate(Routes.Send.Confirm)
     }
 
     private suspend fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
@@ -642,7 +640,7 @@ class AppViewModel @Inject constructor(
             it.copy(selectedUtxos = utxos)
         }
         refreshFeeEstimates()
-        setSendEffect(SendEffect.NavigateToConfirm)
+        navigator.navigate(Routes.Send.Confirm)
     }
 
     private suspend fun validateAmount(
@@ -682,7 +680,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onScanClick() {
-        setSendEffect(SendEffect.NavigateToScan)
+        navigator.navigate(Routes.Send.QrScanner)
     }
 
     fun onScanResult(data: String, delayMs: Long = 0) {
@@ -759,7 +757,7 @@ class AppViewModel @Inject constructor(
             if (quickPayHandled) return
 
             refreshOnchainSendIfNeeded()
-            setSendEffect(SendEffect.NavigateToConfirm)
+            navigator.navigate(Routes.Send.Confirm)
             return
         }
 
@@ -771,7 +769,7 @@ class AppViewModel @Inject constructor(
             context = TAG,
         )
 
-        setSendEffect(SendEffect.NavigateToAmount)
+        navigator.navigate(Routes.Send.Amount())
     }
 
     private suspend fun onScanLightning(invoice: LightningInvoice, scanResult: String) {
@@ -808,11 +806,11 @@ class AppViewModel @Inject constructor(
 
         if (invoice.amountSatoshis > 0uL) {
             Logger.info("Found amount in invoice, proceeding with payment", context = TAG)
-            setSendEffect(SendEffect.NavigateToConfirm)
+            navigator.navigate(Routes.Send.Confirm)
             return
         }
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)
-        setSendEffect(SendEffect.NavigateToAmount)
+        navigator.navigate(Routes.Send.Amount())
     }
 
     private suspend fun onScanLnurlPay(data: LnurlPayData) {
@@ -847,12 +845,12 @@ class AppViewModel @Inject constructor(
             val quickPayHandled = handleQuickPayIfApplicable(amountSats = minSendable, lnurlPay = data)
             if (quickPayHandled) return
 
-            setSendEffect(SendEffect.NavigateToConfirm)
+            navigator.navigate(Routes.Send.Confirm)
             return
         }
 
         Logger.info("No amount found in lnurlPay, proceeding to enter amount manually", context = TAG)
-        setSendEffect(SendEffect.NavigateToAmount)
+        navigator.navigate(Routes.Send.Amount())
     }
 
     private fun onScanLnurlWithdraw(data: LnurlWithdrawData) {
@@ -879,19 +877,17 @@ class AppViewModel @Inject constructor(
         }
 
         if (minWithdrawable == maxWithdrawable) {
-            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            navigator.navigate(Routes.Send.WithdrawConfirm)
             return
         }
 
-        setSendEffect(SendEffect.NavigateToAmount)
+        navigator.navigate(Routes.Send.Amount())
     }
 
     private fun onScanLnurlAuth(data: LnurlAuthData) {
         Logger.debug("LNURL: $data", context = TAG)
-        mainScreenEffect(
-            MainScreenEffect.Navigate(
-                Routes.Sheet.LnurlAuth(domain = data.domain, lnurl = data.uri, k1 = data.k1)
-            )
+        navigator.navigate(
+            Routes.Sheet.LnurlAuth(domain = data.domain, lnurl = data.uri, k1 = data.k1)
         )
     }
 
@@ -927,10 +923,8 @@ class AppViewModel @Inject constructor(
     private fun onScanLnurlChannel(data: LnurlChannelData) {
         Logger.debug("LNURL: $data", context = TAG)
         hideSheet() // hide scan sheet if opened
-        mainScreenEffect(
-            MainScreenEffect.Navigate(
-                Routes.Sheet.LnurlChannel(uri = data.uri, callback = data.callback, k1 = data.k1)
-            )
+        navigator.navigate(
+            Routes.Sheet.LnurlChannel(uri = data.uri, callback = data.callback, k1 = data.k1)
         )
     }
 
@@ -951,13 +945,11 @@ class AppViewModel @Inject constructor(
         //     return
         // }
         hideSheet() // hide scan sheet if opened
-        mainScreenEffect(MainScreenEffect.Navigate(Routes.External.Connection(data.url)))
+        navigator.navigate(Routes.External.Connection(data.url))
     }
 
     private fun onScanGift(code: String, amount: ULong) {
-        mainScreenEffect(
-            MainScreenEffect.Navigate(Routes.Gift.Loading(code = code, amount = amount))
-        )
+        navigator.navigate(Routes.Gift.Loading(code = code, amount = amount))
     }
 
     private suspend fun handleQuickPayIfApplicable(
@@ -991,7 +983,7 @@ class AppViewModel @Inject constructor(
 
             Logger.debug("QuickPayData: $quickPayData", context = TAG)
 
-            setSendEffect(SendEffect.NavigateToQuickPay)
+            navigator.navigate(Routes.Send.QuickPay)
             return true
         }
 
@@ -1204,7 +1196,7 @@ class AppViewModel @Inject constructor(
             val lnurl = _sendUiState.value.lnurl as? LnurlParams.LnurlWithdraw
 
             if (lnurl == null) {
-                setSendEffect(SendEffect.NavigateToWithdrawError)
+                navigator.navigate(Routes.Send.WithdrawError)
                 return@launch
             }
 
@@ -1223,7 +1215,7 @@ class AppViewModel @Inject constructor(
             ).getOrNull()
 
             if (invoice == null) {
-                setSendEffect(SendEffect.NavigateToWithdrawError)
+                navigator.navigate(Routes.Send.WithdrawError)
                 return@launch
             }
 
@@ -1239,10 +1231,10 @@ class AppViewModel @Inject constructor(
                 )
                 hideSheet()
                 _sendUiState.update { it.copy(isLoading = false) }
-                mainScreenEffect(MainScreenEffect.Navigate(Routes.Home))
+                navigator.navigate(Routes.Home)
             }.onFailure {
                 _sendUiState.update { it.copy(isLoading = false) }
-                setSendEffect(SendEffect.NavigateToWithdrawError)
+                navigator.navigate(Routes.Send.WithdrawError)
             }
         }
     }
@@ -1261,7 +1253,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideNewTransactionSheet()
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
-                mainScreenEffect(MainScreenEffect.Navigate(Routes.Activity.Detail(activity)))
+                navigator.navigate(Routes.Activity.Detail(activity))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)
@@ -1284,7 +1276,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideSheet()
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
-                mainScreenEffect(MainScreenEffect.Navigate(Routes.Activity.Detail(activity)))
+                navigator.navigate(Routes.Activity.Detail(activity))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)
@@ -1702,7 +1694,8 @@ class AppViewModel @Inject constructor(
         }
 
         _successSendUiState.update { details }
-        setSendEffect(SendEffect.PaymentSuccess(details))
+        clearClipboardForAutoRead()
+        navigator.navigate(Routes.Send.Success)
     }
 
     fun handleDeeplinkIntent(intent: Intent) {
@@ -1720,7 +1713,7 @@ class AppViewModel @Inject constructor(
         if (patternMatch?.routeClass == Routes.Recovery.Mode::class) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY_MS)
-            mainScreenEffect(MainScreenEffect.Navigate(Routes.Recovery.Mode))
+            navigator.navigate(Routes.Recovery.Mode)
             return@launch
         }
 
@@ -1749,7 +1742,7 @@ class AppViewModel @Inject constructor(
             if (androidReleaseInfo.buildNumber <= currentBuildNumber) return@withContext
 
             if (androidReleaseInfo.isCritical) {
-                mainScreenEffect(MainScreenEffect.NavigateAndClearBackstack(Routes.CriticalUpdate))
+                navigator.navigateAndClearBackstack(Routes.CriticalUpdate)
             }
         }.onFailure { e ->
             Logger.warn("Failure fetching new releases", e = e, context = TAG)
@@ -1807,24 +1800,7 @@ sealed class SendFee(open val value: Long) {
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
 
-sealed class SendEffect {
-    data class PopBack(val route: Routes) : SendEffect()
-    data object NavigateToAddress : SendEffect()
-    data object NavigateToAmount : SendEffect()
-    data object NavigateToScan : SendEffect()
-    data object NavigateToConfirm : SendEffect()
-    data object NavigateToWithdrawConfirm : SendEffect()
-    data object NavigateToWithdrawError : SendEffect()
-    data object NavigateToCoinSelection : SendEffect()
-    data object NavigateToQuickPay : SendEffect()
-    data object NavigateToFee : SendEffect()
-    data object NavigateToFeeCustom : SendEffect()
-    data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
-}
-
 sealed class MainScreenEffect {
-    data class Navigate(val route: Routes) : MainScreenEffect()
-    data class NavigateAndClearBackstack(val route: Routes) : MainScreenEffect()
     data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }

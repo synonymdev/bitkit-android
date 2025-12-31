@@ -27,13 +27,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
-import kotlinx.coroutines.delay
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.TabBar
-import to.bitkit.ui.nav.MS_NAV_DELAY
 import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.nav.SheetSceneStrategy
@@ -54,9 +51,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
-import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
@@ -64,6 +59,7 @@ import to.bitkit.viewmodels.WalletViewModel
 @Suppress("CyclomaticComplexMethod", "LongMethod")
 @Composable
 fun ContentView(
+    navigator: Navigator,
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
     blocktankViewModel: BlocktankViewModel,
@@ -74,8 +70,6 @@ fun ContentView(
     backupsViewModel: BackupsViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val backStack = rememberNavBackStack(Routes.Home)
-    val navigator = remember(backStack) { Navigator(backStack) }
     val lightningConnectionsViewModel = hiltViewModel<LightningConnectionsViewModel>()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -123,48 +117,6 @@ fun ContentView(
     }
 
     LaunchedEffect(Unit) { walletViewModel.handleHideBalanceOnOpen() }
-
-    LaunchedEffect(appViewModel) {
-        appViewModel.mainScreenEffect.collect {
-            when (it) {
-                is MainScreenEffect.Navigate -> navigator.navigate(it.route)
-                is MainScreenEffect.NavigateAndClearBackstack -> navigator.navigateAndClearBackstack(it.route)
-                is MainScreenEffect.ProcessClipboardAutoRead -> {
-                    if (!navigator.isAtHome()) {
-                        navigator.navigateToHome()
-                        delay(MS_NAV_DELAY)
-                    }
-                    appViewModel.onScanResult(it.data)
-                }
-
-                else -> Unit
-            }
-        }
-    }
-
-    // Handle Send flow navigation effects
-    LaunchedEffect(appViewModel, navigator) {
-        appViewModel.sendEffect.collect { effect ->
-            when (effect) {
-                is SendEffect.NavigateToAddress -> navigator.navigate(Routes.Send.Address)
-                is SendEffect.NavigateToAmount -> navigator.navigate(Routes.Send.Amount())
-                is SendEffect.NavigateToScan -> navigator.navigate(Routes.Send.QrScanner)
-                is SendEffect.NavigateToCoinSelection -> navigator.navigate(Routes.Send.CoinSelection)
-                is SendEffect.NavigateToConfirm -> navigator.navigate(Routes.Send.Confirm)
-                is SendEffect.NavigateToQuickPay -> navigator.navigate(Routes.Send.QuickPay)
-                is SendEffect.NavigateToWithdrawConfirm -> navigator.navigate(Routes.Send.WithdrawConfirm)
-                is SendEffect.NavigateToWithdrawError -> navigator.navigate(Routes.Send.WithdrawError)
-                is SendEffect.NavigateToFee -> navigator.navigate(Routes.Send.FeeRate)
-                is SendEffect.NavigateToFeeCustom -> navigator.navigate(Routes.Send.FeeCustom)
-                is SendEffect.PaymentSuccess -> {
-                    appViewModel.clearClipboardForAutoRead()
-                    navigator.navigate(Routes.Send.Success)
-                }
-
-                is SendEffect.PopBack -> navigator.popBackTo(effect.route)
-            }
-        }
-    }
 
     var walletIsInitializing by remember { mutableStateOf(nodeLifecycleState == NodeLifecycleState.Initializing) }
     var walletInitShouldFinish by remember { mutableStateOf(false) }
@@ -257,7 +209,7 @@ fun ContentView(
         Box(modifier = modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 NavDisplay(
-                    backStack = backStack,
+                    backStack = navigator.navBackStack,
                     modifier = Modifier.fillMaxSize(),
                     sceneStrategy = SheetSceneStrategy<NavKey>(),
                     transitionSpec = Transitions.screenDefault,
@@ -305,7 +257,6 @@ fun ContentView(
                     }
                 )
 
-                // Use derivedStateOf to ensure reactive observation of backStack changes
                 val showTabBar by remember {
                     derivedStateOf { navigator.shouldShowTabBar() }
                 }

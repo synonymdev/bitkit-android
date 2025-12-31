@@ -39,7 +39,7 @@ core-ktx = { module = "androidx.core:core-ktx", version = "1.17.0" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version = "1.2.0" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.2.0" }
 detekt-formatting = { module = "io.gitlab.arturbosch.detekt:detekt-formatting", version.ref = "detekt" }
-detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version = "0.5.2" }
+detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version = "0.5.3" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version = "34.7.0" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
@@ -50,6 +50,7 @@ hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", ve
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltAndroidx" }
 jna = { module = "net.java.dev.jna:jna", version = "5.18.1" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
+kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version = "0.4.0" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version = "0.7.1" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }

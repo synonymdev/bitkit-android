@@ -192,6 +192,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.biometric)
     implementation(libs.zxing)
     implementation(libs.barcode.scanning)
