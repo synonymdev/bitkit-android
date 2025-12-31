@@ -39,13 +39,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
@@ -87,7 +85,6 @@ import java.time.Instant
 
 @Composable
 fun SendConfirmScreen(
-    savedStateHandle: SavedStateHandle,
     uiState: SendUiState,
     isNodeRunning: Boolean,
     canGoBack: Boolean,
@@ -107,16 +104,6 @@ fun SendConfirmScreen(
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
-
-    // Handle result from PinCheckScreen
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow<Boolean?>(PIN_CHECK_RESULT_KEY, null)
-            .filterNotNull()
-            .collect { isSuccess ->
-                isLoading = isSuccess
-                savedStateHandle.remove<Boolean>(PIN_CHECK_RESULT_KEY)
-            }
-    }
 
     // Confirm with pin or bio if required
     LaunchedEffect(uiState.shouldConfirmPay) {

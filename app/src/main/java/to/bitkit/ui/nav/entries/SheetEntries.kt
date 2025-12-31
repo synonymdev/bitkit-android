@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -392,7 +391,6 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
 
         SendConfirmScreen(
-            savedStateHandle = remember { androidx.lifecycle.SavedStateHandle() },
             uiState = uiState,
             isNodeRunning = walletUiState.nodeLifecycleState.isRunning(),
             canGoBack = true,
