@@ -177,6 +177,9 @@ class AppViewModel @Inject constructor(
     private val _showForgotPinSheet = MutableStateFlow(false)
     val showForgotPinSheet = _showForgotPinSheet.asStateFlow()
 
+    private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
+    val currentSheet = _currentSheet.asStateFlow()
+
     private val processedPayments = mutableSetOf<String>()
 
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
@@ -237,7 +240,12 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
                 if (sheetType != null) {
-                    _currentSheet.update { Sheet.TimedSheet(sheetType) }
+                    showSheet(Sheet.TimedSheet(sheetType))
+                } else {
+                    // Clear the timed sheet when manager sets it to null
+                    _currentSheet.update { current ->
+                        if (current is Sheet.TimedSheet) null else current
+                    }
                 }
             }
         }
@@ -1583,9 +1591,6 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Sheets
-    private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
-    val currentSheet = _currentSheet.asStateFlow()
-
     fun showSheet(sheetType: Sheet) {
         viewModelScope.launch {
             _currentSheet.value?.let {
@@ -1597,10 +1602,17 @@ class AppViewModel @Inject constructor(
     }
 
     fun hideSheet() {
-        if (currentSheet.value is Sheet.TimedSheet && timedSheetManager.currentSheet.value != null) {
-            dismissTimedSheet()
-        } else {
-            _currentSheet.update { null }
+        when {
+            currentSheet.value is Sheet.TimedSheet -> {
+                // Only dismiss if manager still has a sheet (user initiated)
+                // If manager already cleared it, just update our state
+                if (timedSheetManager.currentSheet.value != null) {
+                    dismissTimedSheet()
+                } else {
+                    _currentSheet.update { null }
+                }
+            }
+            else -> _currentSheet.update { null }
         }
     }
 
