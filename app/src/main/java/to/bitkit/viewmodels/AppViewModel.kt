@@ -100,6 +100,7 @@ import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.nav.removeLightningSchemes
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.utils.isBiometricAuthSupported
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
@@ -480,15 +481,26 @@ class AppViewModel @Inject constructor(
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
                     SendEvent.SpeedAndFee -> navigator.navigate(Routes.Send.FeeRate)
+                    SendEvent.SwipeStarted -> _sendUiState.update { s -> s.copy(isLoading = true) }
                     SendEvent.SwipeToPay -> onSwipeToPay()
+                    SendEvent.BiometricsSuccess -> {
+                        _sendUiState.update { s -> s.copy(isLoading = true, showBiometrics = false) }
+                        onConfirmPay()
+                    }
+                    SendEvent.BiometricsFailure -> {
+                        _sendUiState.update { s -> s.copy(showBiometrics = false) }
+                        navigator.navigate(Routes.Send.PinCheck)
+                    }
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
                     SendEvent.EstimateMaxRoutingFee -> viewModelScope.launch {
                         estimateMaxAmountRoutingFee()
                     }
 
-                    SendEvent.PayConfirmed -> onConfirmPay()
-                    SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
+                    SendEvent.PayConfirmed -> {
+                        _sendUiState.update { s -> s.copy(isLoading = true) }
+                        onConfirmPay()
+                    }
                     SendEvent.BackToAmount -> navigator.popBackTo(Routes.Send.Amount())
                     SendEvent.NavToAddress -> navigator.navigate(Routes.Send.Address)
                 }
@@ -1007,7 +1019,16 @@ class AppViewModel @Inject constructor(
             handleSanityChecks(amount)
             if (_sendUiState.value.showSanityWarningDialog != null) return@launch // await for dialog UI interaction
 
-            _sendUiState.update { it.copy(shouldConfirmPay = true) }
+            val settings = settingsStore.data.first()
+            if (settings.isPinEnabled && settings.isPinForPaymentsEnabled) {
+                if (settings.isBiometricEnabled && isBiometricAuthSupported(context)) {
+                    _sendUiState.update { it.copy(showBiometrics = true) }
+                } else {
+                    navigator.navigate(Routes.Send.PinCheck)
+                }
+            } else {
+                onConfirmPay()
+            }
         }
     }
 
@@ -1777,6 +1798,7 @@ data class SendUiState(
     val selectedUtxos: List<SpendableUtxo>? = null,
     val lnurl: LnurlParams? = null,
     val isLoading: Boolean = false,
+    val showBiometrics: Boolean = false,
     val speed: TransactionSpeed = TransactionSpeed.default(),
     val comment: String = "",
     val feeRates: FeeRates? = null,
@@ -1822,14 +1844,16 @@ sealed interface SendEvent {
 
     data class CommentChange(val value: String) : SendEvent
 
+    data object SwipeStarted : SendEvent
     data object SwipeToPay : SendEvent
+    data object BiometricsSuccess : SendEvent
+    data object BiometricsFailure : SendEvent
     data object SpeedAndFee : SendEvent
     data object PaymentMethodSwitch : SendEvent
     data class ConfirmAmountWarning(val warning: SanityWarning) : SendEvent
     data object EstimateMaxRoutingFee : SendEvent
     data object DismissAmountWarning : SendEvent
     data object PayConfirmed : SendEvent
-    data object ClearPayConfirmation : SendEvent
     data object BackToAmount : SendEvent
     data object NavToAddress : SendEvent
 }

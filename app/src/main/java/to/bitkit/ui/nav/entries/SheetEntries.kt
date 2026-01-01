@@ -398,7 +398,6 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
             onEvent = { e -> appViewModel.setSendEvent(e) },
             onClickAddTag = { navigator.navigate(Routes.Send.AddTag) },
             onClickTag = { tag -> appViewModel.removeTag(tag) },
-            onNavigateToPin = { navigator.navigate(Routes.Send.PinCheck) },
         )
     }
 

@@ -20,13 +20,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
@@ -67,13 +63,11 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.LnurlParams
 import to.bitkit.viewmodels.SanityWarning
@@ -92,39 +86,14 @@ fun SendConfirmScreen(
     onEvent: (SendEvent) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
-    onNavigateToPin: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var isLoading by rememberSaveable { mutableStateOf(false) }
-    var showBiometrics by remember { mutableStateOf(false) }
-    val currentOnEvent by rememberUpdatedState(onEvent)
-
-    val settings = settingsViewModel ?: return
-    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
-    val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
-    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
-    val isBiometrySupported = rememberBiometricAuthSupported()
-
-    // Confirm with pin or bio if required
-    LaunchedEffect(uiState.shouldConfirmPay) {
-        if (!uiState.shouldConfirmPay) return@LaunchedEffect
-        if (isPinEnabled && pinForPayments) {
-            currentOnEvent(SendEvent.ClearPayConfirmation)
-            if (isBiometricEnabled && isBiometrySupported) {
-                showBiometrics = true
-            } else {
-                onNavigateToPin()
-            }
-        } else {
-            currentOnEvent(SendEvent.PayConfirmed)
-        }
-    }
 
     Content(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
-        isLoading = isLoading,
-        showBiometrics = showBiometrics,
+        isLoading = uiState.isLoading,
+        showBiometrics = uiState.showBiometrics,
         canGoBack = canGoBack,
         onBack = onBack,
         onEvent = onEvent,
@@ -132,21 +101,13 @@ fun SendConfirmScreen(
         onClickTag = onClickTag,
         onSwipeToConfirm = {
             scope.launch {
-                isLoading = true
+                onEvent(SendEvent.SwipeStarted)
                 delay(300)
                 onEvent(SendEvent.SwipeToPay)
             }
         },
-        onBiometricsSuccess = {
-            isLoading = true
-            showBiometrics = false
-            onEvent(SendEvent.PayConfirmed)
-        },
-        onBiometricsFailure = {
-            isLoading = false
-            showBiometrics = false
-            onNavigateToPin()
-        },
+        onBiometricsSuccess = { onEvent(SendEvent.BiometricsSuccess) },
+        onBiometricsFailure = { onEvent(SendEvent.BiometricsFailure) },
     )
 }
 
