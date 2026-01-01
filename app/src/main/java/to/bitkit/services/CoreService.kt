@@ -1151,7 +1151,7 @@ class ActivityService(
             for (boostTxId in boostTxIds) {
                 val boostActivity = getOnchainActivityByTxId(boostTxId)
                 if (boostActivity != null) {
-                    doesExistMap[boostTxId] = boostActivity.doesExist
+                    doesExistMap[boostTxId] = boostActivity.doesExist && !boostActivity.isBoosted
                 }
             }
             return@background doesExistMap

@@ -78,6 +78,7 @@ private data class RNRemoteActivityItem(
     val status: String? = null,
     val message: String? = null,
     val preimage: String? = null,
+    val boostedParents: List<String>? = null,
 )
 
 @Serializable
@@ -90,7 +91,11 @@ private data class RNRemoteWalletBackup(
 private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
 
 @Serializable
-private data class RNRemoteBoostedTx(val oldTxId: String? = null, val newTxId: String? = null)
+private data class RNRemoteBoostedTx(
+    val oldTxId: String? = null,
+    val newTxId: String? = null,
+    val childTransaction: String? = null,
+)
 
 @Serializable
 private data class RNRemoteBlocktankBackup(
@@ -556,6 +561,99 @@ class MigrationService @Inject constructor(
             null
         }
     }
+
+    private fun extractTransfers(transfers: Map<String, List<RNRemoteTransfer>>?): Map<String, String> {
+        val transferMap = mutableMapOf<String, String>()
+        transfers?.values?.flatten()?.forEach { transfer ->
+            transfer.txId?.let { txId ->
+                transfer.type?.let { type ->
+                    transferMap[txId] = type
+                }
+            }
+        }
+        return transferMap
+    }
+
+    private fun extractBoosts(boostedTxs: Map<String, Map<String, RNRemoteBoostedTx>>?): Map<String, String> {
+        val boostMap = mutableMapOf<String, String>()
+        boostedTxs?.values?.forEach { networkBoosts ->
+            networkBoosts.forEach { (parentTxId, boost) ->
+                val childTxId = boost.childTransaction ?: boost.newTxId
+                childTxId?.let {
+                    boostMap[parentTxId] = it
+                }
+            }
+        }
+        return boostMap
+    }
+
+    private fun extractFromWalletState(walletState: RNWalletState): Pair<Map<String, String>, Map<String, String>>? {
+        val transferMap = mutableMapOf<String, String>()
+        val boostMap = mutableMapOf<String, String>()
+
+        walletState.wallets?.values?.forEach { walletDataItem ->
+            walletDataItem.transfers?.let { transferMap.putAll(extractTransfers(it)) }
+            walletDataItem.boostedTransactions?.let { boostMap.putAll(extractBoosts(it)) }
+        }
+
+        return if (transferMap.isNotEmpty() || boostMap.isNotEmpty()) {
+            Pair(transferMap, boostMap)
+        } else {
+            null
+        }
+    }
+
+    private fun extractFromWalletBackup(
+        walletBackup: RNRemoteWalletBackup,
+    ): Pair<Map<String, String>, Map<String, String>>? {
+        val transferMap = extractTransfers(walletBackup.transfers)
+        val boostMap = extractBoosts(walletBackup.boostedTransactions)
+
+        return if (transferMap.isNotEmpty() || boostMap.isNotEmpty()) {
+            Pair(transferMap, boostMap)
+        } else {
+            null
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun extractRNWalletBackup(
+        mmkvData: Map<String, String>
+    ): Pair<Map<String, String>, Map<String, String>>? {
+        val rootJson = mmkvData["persist:root"] ?: return null
+
+        return try {
+            val jsonStart = rootJson.indexOf("{")
+            val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
+
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val walletJsonString = root["wallet"]?.jsonPrimitive?.content ?: return null
+            val walletData = json.parseToJsonElement(walletJsonString).jsonObject
+
+            val walletState = runCatching {
+                json.decodeFromJsonElement<RNWalletState>(walletData)
+            }.getOrNull()
+
+            walletState?.let { extractFromWalletState(it) } ?: run {
+                val walletBackup = runCatching {
+                    json.decodeFromJsonElement<RNRemoteWalletBackup>(walletData)
+                }.getOrNull()
+                walletBackup?.let { extractFromWalletBackup(it) }
+            }
+        } catch (e: Exception) {
+            Logger.error("Failed to decode RN wallet backup: $e", e, context = TAG)
+            null
+        }
+    }
+
+    @Serializable
+    private data class RNWalletState(val wallets: Map<String, RNWalletData>? = null)
+
+    @Serializable
+    private data class RNWalletData(
+        val transfers: Map<String, List<RNRemoteTransfer>>? = null,
+        val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+    )
 
     @Suppress("NestedBlockDepth", "TooGenericExceptionCaught")
     private suspend fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
@@ -1052,6 +1150,7 @@ class MigrationService @Inject constructor(
                     status = item.status,
                     message = item.message,
                     preimage = item.preimage,
+                    boostedParents = item.boostedParents,
                 )
             }
 
@@ -1092,13 +1191,17 @@ class MigrationService @Inject constructor(
                 val boostMap = mutableMapOf<String, String>()
                 boostedTxs.values.forEach { networkBoosts ->
                     networkBoosts.forEach { (oldTxId, boost) ->
-                        boost.newTxId?.let { newTxId ->
-                            boostMap[oldTxId] = newTxId
+                        val childTxId = boost.childTransaction ?: boost.newTxId
+                        childTxId?.let {
+                            boostMap[oldTxId] = it
                         }
                     }
                 }
                 if (boostMap.isNotEmpty()) {
+                    Logger.info("Found ${boostMap.size} boosted transactions in remote backup", context = TAG)
                     pendingRemoteBoosts = boostMap
+                } else {
+                    Logger.debug("No boosted transactions found in RN remote wallet backup", context = TAG)
                 }
             }
         }.onFailure { e ->
@@ -1149,6 +1252,17 @@ class MigrationService @Inject constructor(
             extractRNActivities(mmkvData)?.let { activities ->
                 applyOnchainMetadata(activities)
             }
+
+            extractRNWalletBackup(mmkvData)?.let { (transfers, boosts) ->
+                if (transfers.isNotEmpty()) {
+                    Logger.info("Applying ${transfers.size} local transfer markers", context = TAG)
+                    applyRemoteTransfers(transfers)
+                }
+                if (boosts.isNotEmpty()) {
+                    Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
+                    applyBoostTransactions(boosts)
+                }
+            }
         }
 
         pendingRemoteActivityData?.let { remoteActivities ->
@@ -1162,7 +1276,7 @@ class MigrationService @Inject constructor(
         }
 
         pendingRemoteBoosts?.let { boosts ->
-            applyRemoteBoosts(boosts)
+            applyBoostTransactions(boosts)
             pendingRemoteBoosts = null
         }
 
@@ -1180,17 +1294,136 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRemoteBoosts(boosts: Map<String, String>) {
+    private suspend fun applyBoostTransactions(boosts: Map<String, String>) {
+        var applied = 0
+
         boosts.forEach { (oldTxId, newTxId) ->
-            val onchain = activityRepo.getOnchainActivityByTxId(newTxId) ?: return@forEach
-            val updatedBoostTxIds = if (oldTxId !in onchain.boostTxIds) {
-                onchain.boostTxIds + oldTxId
-            } else {
-                onchain.boostTxIds
+            val oldOnchain = activityRepo.getOnchainActivityByTxId(oldTxId)
+            val newOnchain = activityRepo.getOnchainActivityByTxId(newTxId)
+
+            if (oldOnchain != null && newOnchain != null) {
+                var parentOnchain = oldOnchain
+                val updatedParentBoostTxIds = if (newTxId !in parentOnchain.boostTxIds) {
+                    parentOnchain.boostTxIds + newTxId
+                } else {
+                    parentOnchain.boostTxIds
+                }
+                parentOnchain = parentOnchain.copy(
+                    isBoosted = true,
+                    boostTxIds = updatedParentBoostTxIds,
+                )
+
+                var updatedNewOnchain = newOnchain.copy(
+                    isBoosted = false,
+                    boostTxIds = newOnchain.boostTxIds.filter { it != oldTxId },
+                )
+
+                runCatching {
+                    activityRepo.updateActivity(parentOnchain.id, Activity.Onchain(parentOnchain))
+                    activityRepo.updateActivity(updatedNewOnchain.id, Activity.Onchain(updatedNewOnchain))
+                    applied++
+                }.onFailure { e ->
+                    Logger.error(
+                        "Failed to apply CPFP boost for parent $oldTxId / child $newTxId: $e",
+                        e,
+                        context = TAG
+                    )
+                }
+            } else if (newOnchain != null) {
+                val updatedBoostTxIds = if (oldTxId !in newOnchain.boostTxIds) {
+                    newOnchain.boostTxIds + oldTxId
+                } else {
+                    newOnchain.boostTxIds
+                }
+                val updated = newOnchain.copy(
+                    isBoosted = true,
+                    boostTxIds = updatedBoostTxIds,
+                )
+
+                runCatching {
+                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
+                    applied++
+                }.onFailure { e ->
+                    Logger.error("Failed to apply RBF boost for tx $newTxId: $e", e, context = TAG)
+                }
             }
-            val updated = onchain.copy(isBoosted = true, boostTxIds = updatedBoostTxIds)
-            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated))
         }
+
+        Logger.info("Applied $applied/${boosts.size} boost markers", context = TAG)
+    }
+
+    private suspend fun applyBoostedParents(boostedParents: List<String>, txId: String) {
+        boostedParents.forEach { parentTxId ->
+            val parentOnchain = activityRepo.getOnchainActivityByTxId(parentTxId)
+            if (parentOnchain != null) {
+                val updatedParentBoostTxIds = if (txId !in parentOnchain.boostTxIds) {
+                    parentOnchain.boostTxIds + txId
+                } else {
+                    parentOnchain.boostTxIds
+                }
+                val updatedParent = parentOnchain.copy(
+                    isBoosted = true,
+                    boostTxIds = updatedParentBoostTxIds,
+                )
+
+                runCatching {
+                    activityRepo.updateActivity(updatedParent.id, Activity.Onchain(updatedParent))
+                }.onFailure { e ->
+                    Logger.error("Failed to mark parent $parentTxId as boosted for CPFP: $e", e, context = TAG)
+                }
+            }
+        }
+    }
+
+    private suspend fun updateOnchainActivityMetadata(
+        item: RNActivityItem,
+        onchain: OnchainActivity,
+    ): OnchainActivity? {
+        var updated: OnchainActivity = onchain
+        var wasUpdated = false
+
+        if (item.timestamp > 0) {
+            val migratedTimestamp = (item.timestamp / MILLISECONDS_TO_SECONDS).toULong()
+            if (updated.timestamp != migratedTimestamp) {
+                updated = updated.copy(timestamp = migratedTimestamp)
+                wasUpdated = true
+            }
+        }
+        item.confirmTimestamp?.let { confirmTimestamp ->
+            if (confirmTimestamp > 0) {
+                val migratedConfirmTimestamp = (confirmTimestamp / MILLISECONDS_TO_SECONDS).toULong()
+                if (updated.confirmTimestamp != migratedConfirmTimestamp) {
+                    updated = updated.copy(confirmTimestamp = migratedConfirmTimestamp)
+                    wasUpdated = true
+                }
+            }
+        }
+        if (item.isTransfer == true) {
+            if (!updated.isTransfer || updated.channelId != item.channelId ||
+                updated.transferTxId != item.transferTxId
+            ) {
+                updated = updated.copy(
+                    isTransfer = true,
+                    channelId = item.channelId,
+                    transferTxId = item.transferTxId,
+                )
+                wasUpdated = true
+            }
+        }
+
+        if (item.boostedParents?.isNotEmpty() == true) {
+            applyBoostedParents(item.boostedParents, item.txId ?: item.id)
+            updated = updated.copy(
+                isBoosted = false,
+                boostTxIds = updated.boostTxIds.filter { it !in item.boostedParents },
+            )
+            wasUpdated = true
+        } else if (item.isBoosted == true) {
+            updated = updated.copy(isBoosted = true)
+            wasUpdated = true
+        }
+
+        return if (wasUpdated) updated else null
     }
 
     @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
@@ -1205,43 +1438,8 @@ class MigrationService @Inject constructor(
                 Logger.warn("Onchain activity not found for txId: $txId", context = TAG)
                 return@forEach
             }
-            var updated: OnchainActivity = onchain
-            var wasUpdated = false
 
-            if (item.timestamp > 0) {
-                val migratedTimestamp = (item.timestamp / MILLISECONDS_TO_SECONDS).toULong()
-                if (updated.timestamp != migratedTimestamp) {
-                    updated = updated.copy(
-                        timestamp = migratedTimestamp
-                    )
-                    wasUpdated = true
-                }
-            }
-            item.confirmTimestamp?.let { confirmTimestamp ->
-                if (confirmTimestamp > 0) {
-                    val migratedConfirmTimestamp = (confirmTimestamp / MILLISECONDS_TO_SECONDS).toULong()
-                    if (updated.confirmTimestamp != migratedConfirmTimestamp) {
-                        updated = updated.copy(
-                            confirmTimestamp = migratedConfirmTimestamp
-                        )
-                        wasUpdated = true
-                    }
-                }
-            }
-            if (item.isTransfer == true) {
-                if (!updated.isTransfer || updated.channelId != item.channelId ||
-                    updated.transferTxId != item.transferTxId
-                ) {
-                    updated = updated.copy(
-                        isTransfer = true,
-                        channelId = item.channelId,
-                        transferTxId = item.transferTxId,
-                    )
-                    wasUpdated = true
-                }
-            }
-
-            if (wasUpdated) {
+            updateOnchainActivityMetadata(item, onchain)?.let { updated ->
                 activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
                     .onFailure { e ->
                         Logger.error(
@@ -1430,6 +1628,7 @@ data class RNActivityItem(
     val status: String? = null,
     val message: String? = null,
     val preimage: String? = null,
+    val boostedParents: List<String>? = null,
 )
 
 @Serializable
