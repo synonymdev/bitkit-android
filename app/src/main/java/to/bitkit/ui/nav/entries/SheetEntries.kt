@@ -308,10 +308,6 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
     entry<Routes.Send.Recipient>(
         metadata = SheetSceneStrategy.sheet()
     ) {
-        LaunchedEffect(Unit) {
-            appViewModel.resetSendState()
-            appViewModel.resetQuickPayData()
-        }
         SendRecipientScreen(
             onEvent = { appViewModel.setSendEvent(it) },
         )
@@ -330,18 +326,13 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
         val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
 
-        LaunchedEffect(route.prefill) {
-            route.prefill?.let { prefill ->
-                appViewModel.setSendEvent(SendEvent.AddressContinue(prefill))
-            }
-        }
-
         SendAmountScreen(
             uiState = uiState,
             walletUiState = walletUiState,
             canGoBack = true,
             onBack = { navigator.goBack() },
             onEvent = { appViewModel.setSendEvent(it) },
+            address = route.address,
         )
     }
 
@@ -503,13 +494,10 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         val cjitInvoice by walletViewModel.pendingCjitInvoice.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
 
-        LaunchedEffect(Unit) {
-            walletViewModel.refreshReceiveState()
-        }
-
         ReceiveQrScreen(
             cjitInvoice = cjitInvoice,
             walletState = walletUiState,
+            onMount = { walletViewModel.refreshReceiveState() },
             onClickEditInvoice = { navigator.navigate(Routes.Receive.EditInvoice) },
             onClickReceiveCjit = {
                 if (lightningState.isGeoBlocked) {

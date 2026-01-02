@@ -209,7 +209,7 @@ fun ContentView(
         Box(modifier = modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 NavDisplay(
-                    backStack = navigator.navBackStack,
+                    backStack = navigator.backStack,
                     modifier = Modifier.fillMaxSize(),
                     sceneStrategy = SheetSceneStrategy<NavKey>(),
                     transitionSpec = Transitions.screenDefault,

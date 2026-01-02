@@ -178,7 +178,6 @@ class WidgetsRepo @Inject constructor(
 
     suspend fun fetchAllPeriods() = withContext(bgDispatcher) { priceService.fetchAllPeriods() }
 
-
     private suspend fun <T> updateWidget(
         service: WidgetService<T>,
         updateStore: suspend (T) -> Unit,

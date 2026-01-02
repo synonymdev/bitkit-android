@@ -8,10 +8,8 @@ import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -19,16 +17,10 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.rememberNavBackStack
-import androidx.navigation3.ui.NavDisplay
 import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import kotlinx.coroutines.CoroutineScope
-import javax.inject.Inject
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
@@ -37,9 +29,7 @@ import to.bitkit.ui.components.InactivityTracker
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.nav.Navigator
-import to.bitkit.ui.nav.Routes
-import to.bitkit.ui.nav.Transitions
-import to.bitkit.ui.nav.entries.onboardingEntries
+import to.bitkit.ui.onboarding.OnboardingContent
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
@@ -55,6 +45,7 @@ import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -110,6 +101,7 @@ class MainActivity : FragmentActivity() {
 
                 if (!walletViewModel.walletExists && !isRecoveryMode) {
                     OnboardingContent(
+                        navigator = navigator,
                         scope = scope,
                         appViewModel = appViewModel,
                         walletViewModel = walletViewModel,
@@ -213,46 +205,4 @@ class MainActivity : FragmentActivity() {
             Logger.error("Failed to start LightningNodeService", error, context = "MainActivity")
         }
     }
-}
-
-@Composable
-private fun OnboardingContent(
-    scope: CoroutineScope,
-    appViewModel: AppViewModel,
-    walletViewModel: WalletViewModel,
-) {
-    val backStack = rememberNavBackStack(Routes.Onboarding.Terms)
-    val navigator = remember(backStack) { Navigator(backStack) }
-    val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
-
-    NavDisplay(
-        backStack = backStack,
-        onBack = { navigator.goBack() },
-        transitionSpec = Transitions.screenDefault,
-        popTransitionSpec = Transitions.screenDefaultPop,
-        predictivePopTransitionSpec = Transitions.screenDefaultPredictivePop,
-        entryProvider = entryProvider {
-            onboardingEntries(
-                navigator = navigator,
-                isGeoBlocked = isGeoBlocked,
-                onCreateWallet = { passphrase ->
-                    scope.launch {
-                        runCatching {
-                            appViewModel.resetIsAuthenticatedState()
-                            walletViewModel.setInitNodeLifecycleState()
-                            walletViewModel.createWallet(bip39Passphrase = passphrase)
-                        }.onFailure { appViewModel.toast(it) }
-                    }
-                },
-                onRestoreWallet = { mnemonic, passphrase ->
-                    scope.launch {
-                        runCatching {
-                            appViewModel.resetIsAuthenticatedState()
-                            walletViewModel.restoreWallet(mnemonic, passphrase)
-                        }.onFailure { appViewModel.toast(it) }
-                    }
-                },
-            )
-        }
-    )
 }

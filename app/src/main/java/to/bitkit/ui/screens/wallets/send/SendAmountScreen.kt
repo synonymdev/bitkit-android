@@ -74,6 +74,7 @@ fun SendAmountScreen(
     canGoBack: Boolean,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
+    address: String? = null,
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
@@ -81,6 +82,10 @@ fun SendAmountScreen(
     val context = LocalContext.current
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
+
+    LaunchedEffect(address) {
+        address?.let { onEvent(SendEvent.AddressContinue(it)) }
+    }
 
     LaunchedEffect(Unit) {
         if (uiState.amount > 0u) {

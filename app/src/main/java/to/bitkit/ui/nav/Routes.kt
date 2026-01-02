@@ -263,7 +263,7 @@ sealed interface Routes : NavKey {
         data object Address : Send
 
         @Serializable
-        data class Amount(val prefill: String? = null) : Send
+        data class Amount(val address: String? = null) : Send
 
         @Serializable
         data object QrScanner : Send

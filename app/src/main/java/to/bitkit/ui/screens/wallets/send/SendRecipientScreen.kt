@@ -90,6 +90,11 @@ fun SendRecipientScreen(
 ) {
     val app = appViewModel
 
+    LaunchedEffect(Unit) {
+        app?.resetSendState()
+        app?.resetQuickPayData()
+    }
+
     // Context & lifecycle
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current

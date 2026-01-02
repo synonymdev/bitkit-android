@@ -83,11 +83,14 @@ import to.bitkit.viewmodels.MainUiState
 fun ReceiveQrScreen(
     cjitInvoice: String?,
     walletState: MainUiState,
+    onMount: () -> Unit,
     onClickEditInvoice: () -> Unit,
     onClickReceiveCjit: () -> Unit,
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
 ) {
+    LaunchedEffect(Unit) { onMount() }
+
     val haptic = LocalHapticFeedback.current
     val hasUsableChannels = walletState.channels.any { it.isChannelReady }
 
@@ -641,9 +644,10 @@ private fun PreviewSavingsMode() {
                     channels = emptyList()
                 ),
                 onClickEditInvoice = {},
+                onClickReceiveCjit = {},
+                onMount = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.SAVINGS,
-                onClickReceiveCjit = {},
             )
         }
     }
@@ -710,9 +714,10 @@ private fun PreviewAutoMode() {
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq",
                 ),
                 onClickEditInvoice = {},
+                onClickReceiveCjit = {},
+                onMount = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.AUTO,
-                onClickReceiveCjit = {},
             )
         }
     }
@@ -774,9 +779,10 @@ private fun PreviewSpendingMode() {
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 onClickEditInvoice = {},
+                onClickReceiveCjit = {},
+                onMount = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.SPENDING,
-                onClickReceiveCjit = {},
             )
         }
     }
@@ -792,8 +798,9 @@ private fun PreviewNodeNotReady() {
                 walletState = MainUiState(
                     nodeLifecycleState = NodeLifecycleState.Starting,
                 ),
-                onClickReceiveCjit = {},
                 onClickEditInvoice = {},
+                onClickReceiveCjit = {},
+                onMount = {},
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -811,8 +818,9 @@ private fun PreviewSmall() {
                     nodeLifecycleState = NodeLifecycleState.Running,
                 ),
                 onClickEditInvoice = {},
-                modifier = Modifier.sheetHeight(),
                 onClickReceiveCjit = {},
+                onMount = {},
+                modifier = Modifier.sheetHeight(),
             )
         }
     }

@@ -65,7 +65,6 @@ import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.minWithdrawableSat
-import to.bitkit.ext.nowMillis
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
