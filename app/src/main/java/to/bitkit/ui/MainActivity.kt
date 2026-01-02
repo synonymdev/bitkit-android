@@ -29,6 +29,7 @@ import to.bitkit.ui.components.InactivityTracker
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.onboarding.OnboardingContent
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
@@ -63,6 +64,14 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Reset navigation to prevent sheets from previous session showing on startup.
+        // Navigator is a singleton that survives activity recreation, so we need to clear it.
+        if (walletViewModel.walletExists) {
+            navigator.navigateAndClearBackstack(Routes.Home)
+        } else {
+            navigator.navigateAndClearBackstack(Routes.Onboarding.Terms)
+        }
+
         initNotificationChannel()
         initNotificationChannel(
             // TODO Transifex
@@ -96,6 +105,14 @@ class MainActivity : FragmentActivity() {
                 ) {
                     if (walletExists && !isRecoveryMode && notificationsGranted) {
                         tryStartForegroundService()
+                    }
+                }
+
+                LaunchedEffect(walletExists) {
+                    if (walletExists) {
+                        navigator.navigateAndClearBackstack(Routes.Home)
+                    } else {
+                        navigator.navigateAndClearBackstack(Routes.Onboarding.Terms)
                     }
                 }
 

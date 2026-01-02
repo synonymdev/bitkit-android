@@ -16,48 +16,46 @@ class SheetSceneStrategy<T : Any> : SceneStrategy<T> {
         val lastEntry = entries.lastOrNull() ?: return null
 
         // Find the sheet root (first entry with sheet metadata)
-        val sheetRootIndex = entries.indexOfFirst {
-            it.metadata?.get(KEY_SHEET) != null
-        }
+        val rootIndex = entries.indexOfFirst { it.metadata[KEY_SHEET] != null }
 
         // No sheet root found - not a sheet flow
-        if (sheetRootIndex < 0) return null
+        if (rootIndex < 0) return null
 
-        val sheetRootEntry = entries[sheetRootIndex]
-        val sheetProps = sheetRootEntry.metadata?.get(KEY_SHEET) as? SheetProperties ?: return null
+        val rootEntry = entries[rootIndex]
+        val props = rootEntry.metadata[KEY_SHEET] as? SheetProps ?: return null
 
         // Entries before the sheet root (to be overlaid)
-        val entriesBeforeSheet = entries.take(sheetRootIndex)
+        val entriesBeforeSheet = entries.take(rootIndex)
 
         // Number of entries in the sheet flow (for dismiss behavior)
-        val sheetEntryCount = entries.size - sheetRootIndex
+        val entryCount = entries.size - rootIndex
 
         // Current entry's index within the sheet flow (for animation direction)
-        val currentEntryIndex = entries.size - 1
+        val entryIndex = entries.size - 1
 
         @Suppress("UNCHECKED_CAST")
         return SheetScene(
             key = lastEntry.contentKey as T,
             previousEntries = entriesBeforeSheet,
             overlaidEntries = entriesBeforeSheet,
+            size = props.size,
             entry = lastEntry,
-            sheetSize = sheetProps.size,
+            entryCount = entryCount,
+            entryIndex = entryIndex,
             onBack = onBack,
-            sheetEntryCount = sheetEntryCount,
-            entryIndex = currentEntryIndex,
         )
     }
 
     companion object {
         fun sheet(size: SheetSize = SheetSize.LARGE): Map<String, Any> = mapOf(
-            KEY_SHEET to SheetProperties(size),
+            KEY_SHEET to SheetProps(size),
         )
 
         internal const val KEY_SHEET = "bitkit_sheet"
     }
 }
 
-data class SheetProperties(
+data class SheetProps(
     val size: SheetSize = SheetSize.LARGE,
 )
 
@@ -71,21 +69,21 @@ internal class SheetScene<T : Any>(
     override val key: T,
     override val previousEntries: List<NavEntry<T>>,
     override val overlaidEntries: List<NavEntry<T>>,
+    private val size: SheetSize,
     private val entry: NavEntry<T>,
-    private val sheetSize: SheetSize,
-    private val onBack: () -> Unit,
-    private val sheetEntryCount: Int,
+    private val entryCount: Int,
     private val entryIndex: Int,
+    private val onBack: () -> Unit,
 ) : OverlayScene<T> {
 
     override val entries: List<NavEntry<T>> = listOf(entry)
 
     override val content: @Composable (() -> Unit) = {
         SheetHost(
-            sheetSize = sheetSize,
+            sheetSize = size,
             onDismiss = {
                 // Pop all entries in the sheet flow to dismiss entire sheet
-                repeat(sheetEntryCount) { onBack() }
+                repeat(entryCount) { onBack() }
             },
         ) {
             AnimatedContent(
@@ -99,8 +97,8 @@ internal class SheetScene<T : Any>(
                     }
                 },
                 label = "SheetContentTransition",
-            ) { indexedEntry ->
-                indexedEntry.entry.Content()
+            ) {
+                it.entry.Content()
             }
         }
     }

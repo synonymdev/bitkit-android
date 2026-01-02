@@ -1,7 +1,6 @@
 package to.bitkit.ui.onboarding
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.entryProvider
@@ -9,7 +8,6 @@ import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.ui.nav.Navigator
-import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.nav.Transitions
 import to.bitkit.ui.nav.entries.onboardingEntries
 import to.bitkit.viewmodels.AppViewModel
@@ -23,10 +21,6 @@ fun OnboardingContent(
     walletViewModel: WalletViewModel,
 ) {
     val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) {
-        navigator.navigateAndClearBackstack(Routes.Onboarding.Terms)
-    }
 
     NavDisplay(
         backStack = navigator.backStack,
