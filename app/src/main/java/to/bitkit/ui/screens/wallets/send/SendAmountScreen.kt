@@ -90,6 +90,8 @@ fun SendAmountScreen(
     LaunchedEffect(Unit) {
         if (uiState.amount > 0u) {
             amountInputViewModel.setSats(uiState.amount.toLong(), currencies)
+        } else {
+            amountInputViewModel.clearInput()
         }
     }
 
