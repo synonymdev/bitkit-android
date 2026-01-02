@@ -52,7 +52,6 @@ import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
-import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
@@ -97,7 +96,7 @@ fun ActivityDetailScreen(
         activityId = activityId,
         listViewModel = listViewModel,
         detailViewModel = detailViewModel,
-        onExploreClick = { id -> navigator.navigate(Routes.Activity.Explore(id)) },
+        onExploreClick = { navigator.navigate(Routes.Activity.Explore(it)) },
         onBackClick = { navigator.goBack() },
         onCloseClick = { navigator.navigateToHome() },
         onChannelClick = { navigator.navigate(Routes.Settings.ChannelDetail) },
@@ -110,7 +109,7 @@ private fun ActivityDetailScreenContent(
     activityId: String,
     listViewModel: ActivityListViewModel,
     detailViewModel: ActivityDetailViewModel,
-    onExploreClick: (String) -> Unit,
+    onExploreClick: (Activity) -> Unit,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
     onChannelClick: ((String) -> Unit)? = null,
@@ -198,6 +197,7 @@ private fun ActivityDetailScreenContent(
                         } else {
                             emptyMap()
                         }
+                        detailViewModel.fetchTransactionDetails(item.v1.txId)
                     } else {
                         isCpfpChild = false
                         boostTxDoesExist = emptyMap()
@@ -314,7 +314,7 @@ private fun ActivityDetailContent(
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
     onClickBoost: () -> Unit,
-    onExploreClick: (String) -> Unit,
+    onExploreClick: (Activity) -> Unit,
     onChannelClick: ((String) -> Unit)?,
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
@@ -692,7 +692,7 @@ private fun ActivityDetailContent(
                     PrimaryButton(
                         text = stringResource(R.string.wallet__activity_explore),
                         size = ButtonSize.Small,
-                        onClick = { onExploreClick(item.rawId()) },
+                        onClick = { onExploreClick(item) },
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_git_branch),

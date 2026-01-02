@@ -48,7 +48,7 @@ sealed interface Routes : NavKey {
         data class Detail(val activity: BitkitCoreActivity) : Activity
 
         @Serializable
-        data class Explore(val id: String) : Activity
+        data class Explore(val activity: BitkitCoreActivity) : Activity
 
         @Serializable
         data object DateRangeSelectorSheet : Activity

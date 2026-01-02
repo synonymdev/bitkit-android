@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.wallets.activity
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -68,11 +67,11 @@ import to.bitkit.viewmodels.ActivityDetailViewModel
 @Composable
 fun ActivityExploreScreen(
     navigator: Navigator,
-    activityId: String,
+    activity: Activity,
     detailViewModel: ActivityDetailViewModel = hiltViewModel(),
 ) {
     ActivityExploreScreenContent(
-        activityId = activityId,
+        activity = activity,
         detailViewModel = detailViewModel,
         onBackClick = { navigator.goBack() },
     )
@@ -80,119 +79,56 @@ fun ActivityExploreScreen(
 
 @Composable
 private fun ActivityExploreScreenContent(
-    activityId: String,
+    activity: Activity,
     detailViewModel: ActivityDetailViewModel,
     onBackClick: () -> Unit,
 ) {
-    val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
+    val app = appViewModel ?: return
+    val context = LocalContext.current
 
-    // Load activity on composition
-    LaunchedEffect(activityId) {
-        detailViewModel.loadActivity(activityId)
+    val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
+    var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+    LaunchedEffect(activity) {
+        if (activity is Activity.Onchain) {
+            detailViewModel.fetchTransactionDetails(activity.v1.txId)
+            if (activity.v1.boostTxIds.isNotEmpty()) {
+                boostTxDoesExist = detailViewModel.getBoostTxDoesExist(activity.v1.boostTxIds)
+            }
+        }
     }
 
-    // Clear state on disposal
     DisposableEffect(Unit) {
         onDispose {
-            detailViewModel.clearActivityState()
+            detailViewModel.clearTransactionDetails()
         }
     }
 
     ScreenColumn {
-        when (val loadState = uiState.activityLoadState) {
-            is ActivityDetailViewModel.ActivityLoadState.Initial,
-            is ActivityDetailViewModel.ActivityLoadState.Loading,
-            -> {
-                AppTopBar(
-                    titleText = stringResource(R.string.wallet__activity),
-                    onBackClick = onBackClick,
-                    actions = { DrawerNavIcon() },
+        AppTopBar(
+            titleText = stringResource(activity.getScreenTitleRes()),
+            onBackClick = onBackClick,
+            actions = { DrawerNavIcon() },
+        )
+
+        val toastMessage = stringResource(R.string.common__copied)
+        ActivityExploreContent(
+            item = activity,
+            txDetails = txDetails,
+            boostTxDoesExist = boostTxDoesExist,
+            onCopy = { text ->
+                app.toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = toastMessage,
+                    description = text.ellipsisMiddle(40),
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            is ActivityDetailViewModel.ActivityLoadState.Error -> {
-                AppTopBar(
-                    titleText = stringResource(R.string.wallet__activity),
-                    onBackClick = onBackClick,
-                    actions = { DrawerNavIcon() },
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    BodySSB(
-                        text = loadState.message,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    PrimaryButton(
-                        text = stringResource(R.string.common__back),
-                        onClick = onBackClick
-                    )
-                }
-            }
-
-            is ActivityDetailViewModel.ActivityLoadState.Success -> {
-                val item = loadState.activity
-                val app = appViewModel ?: return@ScreenColumn
-                val context = LocalContext.current
-
-                val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
-                var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-
-                LaunchedEffect(item) {
-                    if (item is Activity.Onchain) {
-                        detailViewModel.fetchTransactionDetails(item.v1.txId)
-                        if (item.v1.boostTxIds.isNotEmpty()) {
-                            boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
-                        }
-                    } else {
-                        detailViewModel.clearTransactionDetails()
-                    }
-                }
-
-                DisposableEffect(Unit) {
-                    onDispose {
-                        detailViewModel.clearTransactionDetails()
-                    }
-                }
-
-                AppTopBar(
-                    titleText = stringResource(item.getScreenTitleRes()),
-                    onBackClick = onBackClick,
-                    actions = { DrawerNavIcon() },
-                )
-
-                val toastMessage = stringResource(R.string.common__copied)
-                ActivityExploreContent(
-                    item = item,
-                    txDetails = txDetails,
-                    boostTxDoesExist = boostTxDoesExist,
-                    onCopy = { text ->
-                        app.toast(
-                            type = Toast.ToastType.SUCCESS,
-                            title = toastMessage,
-                            description = text.ellipsisMiddle(40),
-                        )
-                    },
-                    onClickExplore = { txid ->
-                        val url = getBlockExplorerUrl(txid)
-                        val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                        context.startActivity(intent)
-                    },
-                )
-            }
-        }
+            },
+            onClickExplore = { txid ->
+                val url = getBlockExplorerUrl(txid)
+                val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                context.startActivity(intent)
+            },
+        )
     }
 }
 

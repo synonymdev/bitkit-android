@@ -99,7 +99,7 @@ fun EntryProviderScope<NavKey>.homeEntries(
     entry<Routes.Activity.Explore> { route ->
         ActivityExploreScreen(
             navigator = navigator,
-            activityId = route.id,
+            activity = route.activity,
         )
     }
 
