@@ -719,6 +719,21 @@ class AppViewModel @Inject constructor(
                 ?.let { it as? Scanner.Lightning }
                 ?.invoice
                 ?.takeIf { invoice ->
+                    if (invoice.isExpired) {
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.other__scan_err_decoding),
+                            description = context.getString(R.string.other__scan__error__expired),
+                        )
+
+                        Logger.debug(
+                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
+                            context = TAG
+                        )
+                        return@takeIf false
+                    }
+
+                    // Then check sending capacity
                     val canSend = lightningRepo.canSend(invoice.amountSatoshis.coerceAtLeast(1u))
                     if (!canSend) {
                         Logger.debug("Cannot pay unified invoice using LN, defaulting to onchain-only", context = TAG)
