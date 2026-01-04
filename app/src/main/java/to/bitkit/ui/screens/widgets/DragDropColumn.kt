@@ -1,6 +1,6 @@
 package to.bitkit.ui.screens.widgets
 
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -24,10 +25,10 @@ fun DragDropColumn(
     items: List<WidgetWithPosition>,
     onMove: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
-    itemContent: @Composable (WidgetWithPosition, Boolean) -> Unit
+    itemContent: @Composable (WidgetWithPosition, Boolean) -> Unit,
 ) {
     var draggedItem by remember { mutableStateOf<Int?>(null) }
-    var draggedItemOffset by remember { mutableStateOf(0f) }
+    var draggedItemOffset by remember { mutableFloatStateOf(0f) }
 
     Column(
         modifier = modifier
@@ -50,7 +51,7 @@ fun DragDropColumn(
                         }
                     )
                     .pointerInput(Unit) {
-                        detectDragGesturesAfterLongPress(
+                        detectVerticalDragGestures(
                             onDragStart = {
                                 draggedItem = index
                             },
@@ -58,8 +59,8 @@ fun DragDropColumn(
                                 draggedItem = null
                                 draggedItemOffset = 0f
                             },
-                            onDrag = { _, dragAmount ->
-                                draggedItemOffset += dragAmount.y
+                            onVerticalDrag = { _, dragAmount ->
+                                draggedItemOffset += dragAmount
 
                                 val itemHeight = 96.dp.toPx() // Item height + spacing (80dp + 16dp)
                                 val draggedIndex = draggedItem ?: index
