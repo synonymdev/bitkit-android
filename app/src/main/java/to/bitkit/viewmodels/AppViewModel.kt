@@ -895,7 +895,10 @@ class AppViewModel @Inject constructor(
         }
 
         if (minWithdrawable == maxWithdrawable) {
-            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            viewModelScope.launch {
+                delay(TRANSITION_SCREEN_MS)
+                setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            }
             return
         }
 
