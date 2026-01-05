@@ -135,7 +135,6 @@ private fun TermsText(
     }
 }
 
-
 @Preview(showSystemUi = true)
 @Composable
 private fun TermsPreview() {
