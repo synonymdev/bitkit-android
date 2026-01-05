@@ -122,7 +122,8 @@ class WalletViewModel @Inject constructor(
                 walletExists = walletRepo.walletExists()
                 loadCacheIfWalletExists()
                 if (walletExists) {
-                    startNode(0, channelMigration = null)
+                    val channelMigration = buildChannelMigrationIfAvailable()
+                    startNode(0, channelMigration)
                 } else {
                     migrationService.setShowingMigrationLoading(false)
                 }

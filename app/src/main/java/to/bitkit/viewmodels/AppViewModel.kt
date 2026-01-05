@@ -46,7 +46,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -359,14 +358,6 @@ class AppViewModel @Inject constructor(
         migrationService.setShowingMigrationLoading(false)
     }
 
-    private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
-        val migration = migrationService.peekPendingChannelMigration() ?: return null
-        return ChannelDataMigration(
-            channelManager = migration.channelManager.map { it.toUByte() },
-            channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
-        )
-    }
-
     private suspend fun completeMigration() {
         if (isCompletingMigration) return
         isCompletingMigration = true
@@ -379,26 +370,13 @@ class AppViewModel @Inject constructor(
             }
             activityRepo.markAllUnseenActivitiesAsSeen()
 
-            val channelMigration = buildChannelMigrationIfAvailable()
-            lightningRepo.stop().onFailure {
-                Logger.error("Failed to stop node during migration restart", it, context = TAG)
-            }
-            delay(MIGRATION_NODE_RESTART_DELAY_MS)
-            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
-                .onSuccess {
-                    migrationService.consumePendingChannelMigration()
-                    walletRepo.syncNodeAndWallet()
-                        .onSuccess {
-                            finishMigrationSuccessfully()
-                        }
-                        .onFailure { e ->
-                            Logger.warn("Sync failed after restart during migration: $e", e, context = TAG)
-                            finishMigrationWithFallbackSync()
-                        }
-                }
+            migrationService.consumePendingChannelMigration()
+
+            walletRepo.syncNodeAndWallet()
+                .onSuccess { finishMigrationSuccessfully() }
                 .onFailure { e ->
-                    Logger.error("Failed to restart node after migration: $e", e, context = TAG)
-                    finishMigrationWithError()
+                    Logger.warn("Sync failed during migration: $e", e, context = TAG)
+                    finishMigrationWithFallbackSync()
                 }
         } catch (e: Exception) {
             Logger.error("Migration completion error: $e", e, context = TAG)
@@ -1992,7 +1970,6 @@ class AppViewModel @Inject constructor(
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val SCREEN_TRANSITION_DELAY_MS = 300L
         private const val MIGRATION_LOADING_TIMEOUT_MS = 300_000L
-        private const val MIGRATION_NODE_RESTART_DELAY_MS = 500L
         private const val MIGRATION_AUTH_RESET_DELAY_MS = 500L
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
