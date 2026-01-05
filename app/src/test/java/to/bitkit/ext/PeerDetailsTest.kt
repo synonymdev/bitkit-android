@@ -53,7 +53,7 @@ class PeerDetailsTest : BaseUnitTest() {
     fun `parse correctly parses full connection string`() {
         val uri = "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400"
 
-        val peer = PeerDetails.parse(uri)
+        val peer = PeerDetails.of(uri)
 
         assertEquals("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc", peer.nodeId)
         assertEquals("34.65.86.104:9400", peer.address)
@@ -66,7 +66,7 @@ class PeerDetailsTest : BaseUnitTest() {
         val invalidUri = "node123example.com:9735"
 
         val exception = assertFailsWith<IllegalArgumentException> {
-            PeerDetails.parse(invalidUri)
+            PeerDetails.of(invalidUri)
         }
 
         assertTrue(exception.message!!.contains("Invalid uri format"))
@@ -77,7 +77,7 @@ class PeerDetailsTest : BaseUnitTest() {
         val invalidUri = "node123@example.com"
 
         val exception = assertFailsWith<IllegalArgumentException> {
-            PeerDetails.parse(invalidUri)
+            PeerDetails.of(invalidUri)
         }
 
         assertTrue(exception.message!!.contains("Invalid uri format"))
@@ -85,7 +85,7 @@ class PeerDetailsTest : BaseUnitTest() {
 
     @Test
     fun `from creates PeerDetails with correct values`() {
-        val peer = PeerDetails.from(
+        val peer = PeerDetails.of(
             nodeId = "node123",
             host = "example.com",
             port = "9735",

@@ -14,7 +14,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
-import to.bitkit.env.Env.DERIVATION_NAME
+import to.bitkit.env.Env.derivationName
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
 import to.bitkit.models.BlocktankNotificationType
@@ -105,7 +105,7 @@ class FcmService : FirebaseMessagingService() {
             return
         }
         val password =
-            runCatching { crypto.generateSharedSecret(privateKey, response.publicKey, DERIVATION_NAME) }.getOrElse {
+            runCatching { crypto.generateSharedSecret(privateKey, response.publicKey, derivationName) }.getOrElse {
                 Logger.error("Failed to generate shared secret", it, context = TAG)
                 return
             }

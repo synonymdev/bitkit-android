@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.TransactionDefaults
+import to.bitkit.env.Defaults
 import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
@@ -133,8 +133,8 @@ class SendCoinSelectionViewModel @Inject constructor(
     }
 
     private fun validateCoinSelection(totalSelectedSat: ULong, totalRequiredSat: ULong): Boolean {
-        return totalSelectedSat > TransactionDefaults.dustLimit &&
-            totalRequiredSat > TransactionDefaults.dustLimit &&
+        return totalSelectedSat > Defaults.dustLimit &&
+            totalRequiredSat > Defaults.dustLimit &&
             totalSelectedSat >= totalRequiredSat
     }
 

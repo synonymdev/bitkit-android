@@ -6,18 +6,18 @@ import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
 import to.bitkit.ext.ensureDir
-import to.bitkit.ext.parse
+import to.bitkit.ext.of
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
 
-@Suppress("ConstPropertyName", "KotlinConstantConditions")
+@Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
-    private val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
+    val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     val walletSyncIntervalSecs = 10_uL // TODO review
@@ -28,25 +28,18 @@ internal object Env {
 
     val trustedLnPeers
         get() = when (network) {
-            Network.BITCOIN -> listOf(Peers.mainnetLnd1, Peers.mainnetLnd3, Peers.mainnetLnd4)
-            Network.REGTEST -> listOf(Peers.staging)
-            Network.TESTNET -> listOf(Peers.staging)
-            else -> emptyList()
+            Network.BITCOIN -> listOf(Peers.lnd1, Peers.lnd3, Peers.lnd4)
+            Network.REGTEST -> listOf(Peers.stag)
+            Network.TESTNET -> listOf(Peers.stag)
+            else -> listOf()
         }
 
-    const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
-    const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
+    const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
+    const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
+    const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
 
-    const val blocktankOrderRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
-
-    val pushNotificationFeatures = listOf(
-        BlocktankNotificationType.incomingHtlc,
-        BlocktankNotificationType.mutualClose,
-        BlocktankNotificationType.orderPaymentConfirmed,
-        BlocktankNotificationType.cjitPaymentArrived,
-        BlocktankNotificationType.wakeToTimeout,
-    )
-    const val DERIVATION_NAME = "bitkit-notifications"
+    val pushNotificationFeatures = BlocktankNotificationType.entries
+    const val derivationName = "bitkit-notifications"
 
     const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
     const val SUPPORT_EMAIL = "support@synonym.to"
@@ -54,56 +47,15 @@ internal object Env {
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8
 
-    // region File Paths
-
-    private lateinit var appStoragePath: String
-
-    fun initAppStoragePath(path: String) {
-        require(path.isNotBlank()) { "App storage path cannot be empty." }
-        appStoragePath = path
-        Logger.info("App storage path: $path")
-    }
-
-    val logDir: File
-        get() {
-            require(::appStoragePath.isInitialized)
-            return File(appStoragePath).resolve("logs").ensureDir()
-        }
-
-    fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
-
-    fun bitkitCoreStoragePath(walletIndex: Int): String {
-        return storagePathOf(walletIndex, network.name.lowercase(), "core")
-    }
-
-    /**
-     * Generates the storage path for a specified wallet index, network, and directory.
-     *
-     * Output format:
-     *
-     * `appStoragePath/network/walletN/dir`
-     */
-    private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
-        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
-        val path = Path(appStoragePath, network, "wallet$walletIndex", dir)
-            .toFile()
-            .ensureDir()
-            .path
-        Logger.debug("Using ${dir.uppercase()} storage path: $path")
-        return path
-    }
-
-    // endregion
-
-    // region Server URLs
+    // region urls
 
     val electrumServerUrl: String
         get() {
-            if (isE2eTest && e2eBackend == "local") return ElectrumServers.E2E
+            if (isE2eTest && e2eBackend == "local") return ElectrumServers.REGTEST.LOCAL
             return when (network) {
-                Network.REGTEST -> ElectrumServers.REGTEST
+                Network.REGTEST -> ElectrumServers.REGTEST.STAGING
                 Network.TESTNET -> ElectrumServers.TESTNET
-                Network.BITCOIN -> ElectrumServers.BITCOIN
+                Network.BITCOIN -> ElectrumServers.MAINNET.FULCRUM
                 else -> TODO("${network.name} network not implemented")
             }
         }
@@ -201,11 +153,52 @@ internal object Env {
         }
 
     // endregion
+
+    // region paths
+
+    private lateinit var appStoragePath: String
+
+    fun initAppStoragePath(path: String) {
+        require(path.isNotBlank()) { "App storage path cannot be empty." }
+        appStoragePath = path
+        Logger.info("App storage path: $path")
+    }
+
+    val logDir: File
+        get() {
+            require(::appStoragePath.isInitialized)
+            return File(appStoragePath).resolve("logs").ensureDir()
+        }
+
+    fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+
+    fun bitkitCoreStoragePath(walletIndex: Int): String {
+        return storagePathOf(walletIndex, network.name.lowercase(), "core")
+    }
+
+    /**
+     * Generates the storage path for a specified wallet index, network, and directory.
+     *
+     * Output format:
+     *
+     * `appStoragePath/network/walletN/dir`
+     */
+    private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val path = Path(appStoragePath, network, "wallet$walletIndex", dir)
+            .toFile()
+            .ensureDir()
+            .path
+        Logger.debug("Using ${dir.uppercase()} storage path: $path")
+        return path
+    }
+
+    // endregion
 }
 
 @Suppress("ConstPropertyName")
-object TransactionDefaults {
-    /** Total recommended tx base fee in sats */
+object Defaults {
+    /** Recommended transaction base fee in sats */
     const val recommendedBaseFee = 256u
 
     /**
@@ -213,22 +206,27 @@ object TransactionDefaults {
      * required to include them in a block would be greater than the value of the transaction itself.
      * */
     const val dustLimit = 546u
+
+
 }
 
 object Peers {
-    val staging =
-        PeerDetails.parse("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400")
-    val mainnetLnd1 =
-        PeerDetails.parse("039b8b4dd1d88c2c5db374290cda397a8f5d79f312d6ea5d5bfdfc7c6ff363eae3@34.65.111.104:9735")
-    val mainnetLnd3 =
-        PeerDetails.parse("03816141f1dce7782ec32b66a300783b1d436b19777e7c686ed00115bd4b88ff4b@34.65.191.64:9735")
-    val mainnetLnd4 =
-        PeerDetails.parse("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.186.40:9735")
+    val stag = PeerDetails.of("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400")
+    val lnd1 = PeerDetails.of("039b8b4dd1d88c2c5db374290cda397a8f5d79f312d6ea5d5bfdfc7c6ff363eae3@34.65.111.104:9735")
+    val lnd3 = PeerDetails.of("03816141f1dce7782ec32b66a300783b1d436b19777e7c686ed00115bd4b88ff4b@34.65.191.64:9735")
+    val lnd4 = PeerDetails.of("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.186.40:9735")
 }
 
 private object ElectrumServers {
-    const val BITCOIN = "ssl://fulcrum.bitkit.blocktank.to:8900"
+    object MAINNET {
+        const val FULCRUM = "ssl://fulcrum.bitkit.blocktank.to:8900"
+        const val ESPLORA = "ssl://34.65.252.32:18484"
+    }
+
+    object REGTEST {
+        const val STAGING = "tcp://34.65.252.32:18483"
+        const val LOCAL = "tcp://127.0.0.1:60001"
+    }
+
     const val TESTNET = "ssl://electrum.blockstream.info:60002"
-    const val REGTEST = "tcp://34.65.252.32:18483"
-    const val E2E = "tcp://127.0.0.1:60001"
 }

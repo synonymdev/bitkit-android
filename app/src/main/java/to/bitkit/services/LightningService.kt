@@ -73,7 +73,7 @@ class LightningService @Inject constructor(
     private val _syncStatusChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val syncStatusChanged: SharedFlow<Unit> = _syncStatusChanged.asSharedFlow()
 
-    private var trustedPeers: List<PeerDetails> = Env.trustedLnPeers
+    private lateinit var trustedPeers: List<PeerDetails>
 
     suspend fun setup(
         walletIndex: Int,
@@ -82,7 +82,7 @@ class LightningService @Inject constructor(
         trustedPeers: List<PeerDetails>? = null,
         channelMigration: ChannelDataMigration? = null,
     ) {
-        Logger.debug("Building node…")
+        Logger.debug("Building node…", context = TAG)
 
         val config = config(walletIndex, trustedPeers)
         node = build(
@@ -93,7 +93,7 @@ class LightningService @Inject constructor(
             channelMigration,
         )
 
-        Logger.info("LDK node setup")
+        Logger.info("LDK node setup", context = TAG)
     }
 
     private fun config(
@@ -102,11 +102,10 @@ class LightningService @Inject constructor(
     ): Config {
         val dirPath = Env.ldkStoragePath(walletIndex)
 
-        trustedPeers?.takeIf { it.isNotEmpty() }?.let {
-            this.trustedPeers = it
-        } ?: run {
-            Logger.info("Using fallback trusted peers from Env (${Env.trustedLnPeers.size})", context = TAG)
+        this.trustedPeers = trustedPeers?.takeIf { it.isNotEmpty() } ?: Env.trustedLnPeers.also {
+            Logger.warn("Missing trusted peers from LSP, falling back to preconfigured env peers", context = TAG)
         }
+
         val trustedPeerNodeIds = this.trustedPeers.map { it.nodeId }
 
         return defaultConfig().copy(
@@ -152,7 +151,8 @@ class LightningService @Inject constructor(
             val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
             val fixedHeaders = emptyMap<String, String>()
             Logger.verbose(
-                "Building ldk-node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'"
+                "Building node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'",
+                context = TAG,
             )
             if (lnurlAuthServerUrl.isNotEmpty()) {
                 builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
@@ -169,17 +169,17 @@ class LightningService @Inject constructor(
     private suspend fun Builder.configureGossipSource(customRgsServerUrl: String?) {
         val rgsServerUrl = customRgsServerUrl ?: settingsStore.data.first().rgsServerUrl
         if (rgsServerUrl != null) {
-            Logger.info("Using gossip source: RGS server '$rgsServerUrl'")
+            Logger.info("Using gossip source: RGS server '$rgsServerUrl'", context = TAG)
             setGossipSourceRgs(rgsServerUrl)
         } else {
-            Logger.info("Using gossip source: P2P")
+            Logger.info("Using gossip source: P2P", context = TAG)
             setGossipSourceP2p()
         }
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
         val serverUrl = customServerUrl ?: settingsStore.data.first().electrumServer
-        Logger.info("Using onchain source Electrum Sever url: $serverUrl")
+        Logger.info("Using onchain source Electrum Sever url: $serverUrl", context = TAG)
         setChainSourceElectrum(
             serverUrl = serverUrl,
             config = ElectrumSyncConfig(
@@ -195,7 +195,7 @@ class LightningService @Inject constructor(
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.debug("Starting node…")
+        Logger.debug("Starting node…", context = TAG)
 
         ServiceQueue.LDK.background {
             try {
@@ -210,26 +210,26 @@ class LightningService @Inject constructor(
             shouldListenForEvents = true
             launch {
                 try {
-                    Logger.debug("LDK event listener started")
+                    Logger.debug("LDK event listener started", context = TAG)
                     if (timeout != null) {
                         withTimeout(timeout) { listenForEvents(eventHandler) }
                     } else {
                         listenForEvents(eventHandler)
                     }
                 } catch (e: Exception) {
-                    Logger.error("LDK event listener error", e)
+                    Logger.error("LDK event listener error", e, context = TAG)
                 }
             }
         }
 
-        Logger.info("Node started")
+        Logger.info("Node started", context = TAG)
     }
 
     suspend fun stop() {
         shouldListenForEvents = false
         val node = this.node ?: throw ServiceError.NodeNotStarted
 
-        Logger.debug("Stopping node…")
+        Logger.debug("Stopping node…", context = TAG)
         ServiceQueue.LDK.background {
             try {
                 node.stop()
@@ -239,47 +239,28 @@ class LightningService @Inject constructor(
                 this@LightningService.node = null
             }
         }
-        Logger.info("Node stopped")
+        Logger.info("Node stopped", context = TAG)
     }
 
     fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning
-        Logger.warn("Wiping lightning storage…")
+        Logger.warn("Wiping LDK storage…", context = TAG)
         Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
-        Logger.info("Lightning wallet wiped")
+        Logger.info("LDK storage wiped", context = TAG)
     }
 
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.verbose("Syncing LDK…")
+        Logger.verbose("Syncing LDK…", context = TAG)
         ServiceQueue.LDK.background {
             node.syncWallets()
-            // launch { setMaxDustHtlcExposureForCurrentChannels() }
         }
 
         _syncStatusChanged.tryEmit(Unit)
 
-        Logger.debug("LDK synced")
+        Logger.debug("LDK synced", context = TAG)
     }
-
-    // private fun setMaxDustHtlcExposureForCurrentChannels() {
-    //     if (Env.network != Network.REGTEST) {
-    //         Logger.debug("Not updating channel config for non-regtest network")
-    //         return
-    //     }
-    //     val node = this.node ?: throw ServiceError.NodeNotStarted
-    //     runCatching {
-    //         for (channel in node.listChannels()) {
-    //             val config = channel.config
-    //             config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL * 1000u)
-    //             node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
-    //             Logger.info("Updated channel config for: ${channel.userChannelId}")
-    //         }
-    //     }.onFailure {
-    //         Logger.error("Failed to update channel config", it)
-    //     }
-    // }
 
     suspend fun sign(message: String): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup
@@ -306,9 +287,9 @@ class LightningService @Inject constructor(
             for (peer in trustedPeers) {
                 try {
                     node.connect(peer.nodeId, peer.address, persist = true)
-                    Logger.info("Connected to trusted peer: $peer")
+                    Logger.info("Connected to trusted peer: $peer", context = TAG)
                 } catch (e: NodeException) {
-                    Logger.error("Peer connect error: $peer", LdkError(e))
+                    Logger.error("Peer connect error: $peer", LdkError(e), context = TAG)
                 }
             }
 
@@ -321,13 +302,13 @@ class LightningService @Inject constructor(
         val trustedConnected = trustedPeers.count { it.nodeId in connectedPeerIds }
 
         if (trustedConnected == 0 && trustedPeers.isNotEmpty()) {
-            Logger.warn("No trusted peers connected, falling back to Env peers", context = TAG)
+            Logger.warn("No trusted peers connected, falling back to preconfigured env peers", context = TAG)
             for (peer in Env.trustedLnPeers) {
                 try {
                     node.connect(peer.nodeId, peer.address, persist = true)
-                    Logger.info("Connected to fallback peer: $peer")
+                    Logger.info("Connected to fallback peer: $peer", context = TAG)
                 } catch (e: NodeException) {
-                    Logger.error("Fallback peer connect error: $peer", LdkError(e))
+                    Logger.error("Fallback peer connect error: $peer", LdkError(e), context = TAG)
                 }
             }
         } else {
@@ -340,16 +321,16 @@ class LightningService @Inject constructor(
         val uri = peer.uri
         return ServiceQueue.LDK.background {
             try {
-                Logger.debug("Connecting peer: $uri")
+                Logger.debug("Connecting peer: $uri", context = TAG)
 
                 node.connect(peer.nodeId, peer.address, persist = true)
 
-                Logger.info("Peer connected: $uri")
+                Logger.info("Peer connected: $uri", context = TAG)
 
                 Result.success(Unit)
             } catch (e: NodeException) {
                 val error = LdkError(e)
-                Logger.error("Peer connect error: $uri", error)
+                Logger.error("Peer connect error: $uri", error, context = TAG)
                 Result.failure(error)
             }
         }
@@ -358,14 +339,14 @@ class LightningService @Inject constructor(
     suspend fun disconnectPeer(peer: PeerDetails) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
         val uri = peer.uri
-        Logger.debug("Disconnecting peer: $uri")
+        Logger.debug("Disconnecting peer: $uri", context = TAG)
         try {
             ServiceQueue.LDK.background {
                 node.disconnect(peer.nodeId)
             }
-            Logger.info("Peer disconnected: $uri")
+            Logger.info("Peer disconnected: $uri", context = TAG)
         } catch (e: NodeException) {
-            Logger.warn("Peer disconnect error: $uri", LdkError(e))
+            Logger.warn("Peer disconnect error: $uri", LdkError(e), context = TAG)
         }
     }
 
@@ -389,7 +370,7 @@ class LightningService @Inject constructor(
         return ServiceQueue.LDK.background {
             try {
                 val pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u }
-                Logger.debug("Initiating channel open (sats: $channelAmountSats) with peer: ${peer.uri}")
+                Logger.debug("Initiating channel open (sats: '$channelAmountSats') with: '${peer.uri}'", context = TAG)
 
                 val userChannelId = node.openChannel(
                     peer.nodeId,
@@ -407,12 +388,12 @@ class LightningService @Inject constructor(
                     channelConfig,
                 )
 
-                Logger.info("Channel open initiated, result: $result")
+                Logger.info("Channel open initiated, result: $result", context = TAG)
 
                 Result.success(result)
             } catch (e: NodeException) {
                 val error = LdkError(e)
-                Logger.error("Error initiating channel open", error)
+                Logger.error("Error initiating channel open", error, context = TAG)
                 Result.failure(error)
             }
         }
@@ -449,12 +430,12 @@ class LightningService @Inject constructor(
     fun canReceive(): Boolean {
         val channels = this.channels
         if (channels == null) {
-            Logger.warn("canReceive = false: Channels not available")
+            Logger.warn("canReceive = false: Channels not available", context = TAG)
             return false
         }
 
         if (channels.none { it.isChannelReady }) {
-            Logger.warn("canReceive = false: Found no LN channel ready to enable receive: $channels")
+            Logger.warn("canReceive = false: Found no LN channel ready to enable receive: '$channels'", context = TAG)
             return false
         }
 
@@ -489,14 +470,14 @@ class LightningService @Inject constructor(
     fun canSend(amountSats: ULong): Boolean {
         val channels = this.channels
         if (channels == null) {
-            Logger.warn("Channels not available")
+            Logger.warn("Channels not available", context = TAG)
             return false
         }
 
         val totalNextOutboundHtlcLimitSats = channels.totalNextOutboundHtlcLimitSats()
 
         if (totalNextOutboundHtlcLimitSats < amountSats) {
-            Logger.warn("Insufficient outbound capacity: $totalNextOutboundHtlcLimitSats < $amountSats")
+            Logger.warn("Insufficient outbound capacity: $totalNextOutboundHtlcLimitSats < $amountSats", context = TAG)
             return false
         }
 
@@ -506,26 +487,29 @@ class LightningService @Inject constructor(
     suspend fun send(
         address: Address,
         sats: ULong,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
         utxosToSpend: List<SpendableUtxo>? = null,
         isMaxAmount: Boolean = false,
     ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.info("Sending $sats sats to $address, satsPerVByte=$satsPerVByte, isMaxAmount = $isMaxAmount")
+        Logger.info(
+            "Sending $sats sats to $address, satsPerVByte=$satsPerVByte, isMaxAmount = $isMaxAmount",
+            context = TAG,
+        )
 
         return ServiceQueue.LDK.background {
             if (isMaxAmount) {
                 node.onchainPayment().sendAllToAddress(
                     address = address,
                     retainReserve = true,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte.toULong()),
+                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                 )
             } else {
                 node.onchainPayment().sendToAddress(
                     address = address,
                     amountSats = sats,
-                    feeRate = convertVByteToKwu(satsPerVByte),
+                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                     utxosToSpend = utxosToSpend,
                 )
             }
@@ -535,7 +519,7 @@ class LightningService @Inject constructor(
     suspend fun send(bolt11: String, sats: ULong? = null): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.debug("Paying bolt11: $bolt11")
+        Logger.debug("Paying bolt11: $bolt11", context = TAG)
 
         val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
             .getOrElse { e -> throw LdkError(e as NodeException) }
@@ -606,7 +590,7 @@ class LightningService @Inject constructor(
 
     suspend fun selectUtxosWithAlgorithm(
         targetAmountSats: ULong,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
         algorithm: CoinSelectionAlgorithm,
         utxos: List<SpendableUtxo>?,
     ): Result<List<SpendableUtxo>> {
@@ -616,7 +600,7 @@ class LightningService @Inject constructor(
             return@background try {
                 val result = node.onchainPayment().selectUtxosWithAlgorithm(
                     targetAmountSats = targetAmountSats,
-                    feeRate = convertVByteToKwu(satsPerVByte),
+                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                     algorithm = algorithm,
                     utxos = utxos,
                 )
@@ -631,16 +615,16 @@ class LightningService @Inject constructor(
     // endregion
 
     // region boost
-    suspend fun bumpFeeByRbf(txid: Txid, satsPerVByte: UInt): Txid {
+    suspend fun bumpFeeByRbf(txid: Txid, satsPerVByte: ULong): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.info("Bumping fee for tx $txid with satsPerVByte=$satsPerVByte")
+        Logger.info("RBF for txid='$txid' using satsPerVByte='$satsPerVByte'", context = TAG)
 
         return ServiceQueue.LDK.background {
             return@background try {
                 node.onchainPayment().bumpFeeByRbf(
                     txid = txid,
-                    feeRate = convertVByteToKwu(satsPerVByte),
+                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                 )
             } catch (e: NodeException) {
                 throw LdkError(e)
@@ -650,19 +634,19 @@ class LightningService @Inject constructor(
 
     suspend fun accelerateByCpfp(
         txid: Txid,
-        satsPerVByte: UInt,
-        destinationAddress: Address,
+        satsPerVByte: ULong,
+        toAddress: Address,
     ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.info("Accelerating tx $txid by CPFP, satsPerVByte=$satsPerVByte, destinationAddress=$destinationAddress")
+        Logger.info("CPFP for txid='$txid' using satsPerVByte='$satsPerVByte', to address='$toAddress'", context = TAG)
 
         return ServiceQueue.LDK.background {
             return@background try {
                 node.onchainPayment().accelerateByCpfp(
                     txid = txid,
-                    feeRate = convertVByteToKwu(satsPerVByte),
-                    destinationAddress = destinationAddress,
+                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+                    destinationAddress = toAddress,
                 )
             } catch (e: NodeException) {
                 throw LdkError(e)
@@ -675,7 +659,7 @@ class LightningService @Inject constructor(
     suspend fun calculateCpfpFeeRate(parentTxid: Txid): FeeRate {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.info("Calculating CPFP fee for parentTxid $parentTxid")
+        Logger.debug("Calculating CPFP fee for parentTxid $parentTxid", context = TAG)
 
         return ServiceQueue.LDK.background {
             return@background try {
@@ -692,13 +676,14 @@ class LightningService @Inject constructor(
     suspend fun calculateTotalFee(
         address: Address,
         amountSats: ULong,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
         utxosToSpend: List<SpendableUtxo>? = null,
     ): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Logger.verbose(
-            "Calculating fee for $amountSats sats to $address, UTXOs=${utxosToSpend?.size}, satsPerVByte=$satsPerVByte"
+            "Calculating fee for $amountSats sats to $address, ${utxosToSpend?.size} UTXOs, satsPerVByte=$satsPerVByte",
+            context = TAG,
         )
 
         return ServiceQueue.LDK.background {
@@ -706,10 +691,13 @@ class LightningService @Inject constructor(
                 val fee = node.onchainPayment().calculateTotalFee(
                     address = address,
                     amountSats = amountSats,
-                    feeRate = convertVByteToKwu(satsPerVByte),
+                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                     utxosToSpend = utxosToSpend,
                 )
-                Logger.verbose("Calculated fee=$fee for $amountSats sats to $address, satsPerVByte=$satsPerVByte")
+                Logger.debug(
+                    "Calculated fee='$fee' for $amountSats sats to $address, satsPerVByte=$satsPerVByte",
+                    context = TAG,
+                )
                 fee
             } catch (e: NodeException) {
                 throw LdkError(e)
@@ -724,16 +712,16 @@ class LightningService @Inject constructor(
     suspend fun listenForEvents(onEvent: NodeEventHandler? = null) = withContext(bgDispatcher) {
         while (shouldListenForEvents) {
             val node = this@LightningService.node ?: let {
-                Logger.error(ServiceError.NodeNotStarted.message.orEmpty())
+                Logger.error(ServiceError.NodeNotStarted.message.orEmpty(), context = TAG)
                 return@withContext
             }
             val event = node.nextEventAsync()
-            Logger.debug("LDK-node event fired: ${jsonLogOf(event)}")
+            Logger.debug("LDK event fired: ${jsonLogOf(event)}", context = TAG)
             try {
                 node.eventHandled()
-                Logger.verbose("LDK-node eventHandled: $event")
+                Logger.verbose("LDK eventHandled: '$event'", context = TAG)
             } catch (e: NodeException) {
-                Logger.verbose("LDK eventHandled error: $event", LdkError(e))
+                Logger.verbose("LDK eventHandled error: '$event'", LdkError(e), context = TAG)
             }
             onEvent?.invoke(event)
         }
@@ -771,6 +759,7 @@ class LightningService @Inject constructor(
             Logger.error("Node not available for network graph dump", context = TAG)
             return
         }
+        val nodeIdPreviewLength = 20
 
         val sb = StringBuilder()
         sb.appendLine("\n\n=== ROUTE NOT FOUND - NETWORK GRAPH DUMP ===\n")
@@ -830,7 +819,7 @@ class LightningService @Inject constructor(
         sb.appendLine("  Total peers: ${peers.size}")
 
         peers.forEachIndexed { index, peer ->
-            sb.appendLine("  Peer ${index + 1}: ${peer.nodeId.take(NODE_ID_PREVIEW_LENGTH)}... @ ${peer.address}")
+            sb.appendLine("  Peer ${index + 1}: ${peer.nodeId.take(nodeIdPreviewLength)}... @ ${peer.address}")
             sb.appendLine("    - Connected: ${peer.isConnected}, Persisted: ${peer.isPersisted}")
         }
 
@@ -873,15 +862,15 @@ class LightningService @Inject constructor(
             val nodeId = peer.nodeId
             if (allNodes.any { it == nodeId }) {
                 foundTrustedNodes++
-                sb.appendLine("    OK: ${nodeId.take(NODE_ID_PREVIEW_LENGTH)}... found in graph")
+                sb.appendLine("    OK: ${nodeId.take(nodeIdPreviewLength)}... found in graph")
             } else {
-                sb.appendLine("    MISSING: ${nodeId.take(NODE_ID_PREVIEW_LENGTH)}... NOT in graph")
+                sb.appendLine("    MISSING: ${nodeId.take(nodeIdPreviewLength)}... NOT in graph")
             }
         }
         sb.appendLine("  Summary: $foundTrustedNodes/${trustedPeers.size} trusted peers found in graph")
 
         // Show first 10 nodes
-        val nodesToShow = minOf(NETWORK_GRAPH_PREVIEW_LIMIT, allNodes.size)
+        val nodesToShow = minOf(10, allNodes.size)
         sb.appendLine("\n  First $nodesToShow nodes:")
         allNodes.take(nodesToShow).forEachIndexed { index, nodeId ->
             sb.appendLine("    ${index + 1}. $nodeId")
@@ -940,8 +929,6 @@ class LightningService @Inject constructor(
 
     companion object {
         private const val TAG = "LightningService"
-        private const val NODE_ID_PREVIEW_LENGTH = 20
-        private const val NETWORK_GRAPH_PREVIEW_LIMIT = 10
     }
 }
 
@@ -951,16 +938,3 @@ data class NetworkGraphInfo(
     val channelCount: Int,
     val latestRgsSyncTimestamp: ULong?,
 )
-
-// region helpers
-/**
- * TODO remove, replace all usages with [FeeRate.fromSatPerVbUnchecked]
- * */
-@Deprecated("replace all usages with [FeeRate.fromSatPerVbUnchecked]")
-private fun convertVByteToKwu(satsPerVByte: UInt): FeeRate {
-    // 1 vbyte = 4 weight units, so 1 sats/vbyte = 250 sats/kwu
-    val satPerKwu = satsPerVByte.toULong() * 250u
-    // Ensure we're above the minimum relay fee
-    return FeeRate.fromSatPerKwu(maxOf(satPerKwu, 253u)) // FEERATE_FLOOR_SATS_PER_KW is 253 in LDK
-}
-// endregion

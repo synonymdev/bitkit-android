@@ -9,7 +9,8 @@ val PeerDetails.port get() = address.substringAfter(":")
 
 val PeerDetails.uri get() = "$nodeId@$address"
 
-fun PeerDetails.Companion.parse(uri: String): PeerDetails {
+/*** Creates a [PeerDetails] object from a URI string.*/
+fun PeerDetails.Companion.of(uri: String): PeerDetails {
     val parts = uri.split("@")
     require(parts.size == 2) { "Invalid uri format, expected: '<nodeId>@<host>:<port>', got: '$uri'" }
 
@@ -30,7 +31,8 @@ fun PeerDetails.Companion.parse(uri: String): PeerDetails {
     )
 }
 
-fun PeerDetails.Companion.from(nodeId: String, host: String, port: String) = PeerDetails(
+/*** Creates a [PeerDetails] object from a node ID, host, and port.*/
+fun PeerDetails.Companion.of(nodeId: String, host: String, port: String) = PeerDetails(
     nodeId = nodeId,
     address = "$host:$port",
     isConnected = false,

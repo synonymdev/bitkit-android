@@ -2,7 +2,7 @@ package to.bitkit.utils
 
 import org.junit.Before
 import org.junit.Test
-import to.bitkit.env.Env.DERIVATION_NAME
+import to.bitkit.env.Env.derivationName
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toBase64
@@ -28,13 +28,13 @@ class CryptoTest {
         val sharedSecret = sut.generateSharedSecret(privateKey, publicKey.toHex())
         assertEquals(33, sharedSecret.size)
 
-        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.toHex(), DERIVATION_NAME)
+        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.toHex(), derivationName)
         assertEquals(32, sharedSecretHash.size)
     }
 
     @Test
     fun `it should decrypt payload it encrypted`() {
-        val derivationName = DERIVATION_NAME
+        val derivationName = derivationName
 
         // Step 1: Client generates a key pair
         val clientKeys = sut.generateKeyPair()

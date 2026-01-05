@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.di.BgDispatcher
-import to.bitkit.ext.parse
+import to.bitkit.ext.of
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.NetworkGraphInfo
@@ -77,7 +77,7 @@ class LdkDebugViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
             runCatching {
-                val peer = PeerDetails.parse(uri)
+                val peer = PeerDetails.of(uri)
                 lightningRepo.connectPeer(peer)
             }.onSuccess { result ->
                 result.onSuccess {

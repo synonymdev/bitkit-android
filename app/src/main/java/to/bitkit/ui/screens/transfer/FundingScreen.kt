@@ -22,7 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.env.TransactionDefaults
+import to.bitkit.env.Defaults
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMB
@@ -45,7 +45,7 @@ fun FundingScreen(
 ) {
     val balances = LocalBalances.current
     val canTransfer = remember(balances.totalOnchainSats) {
-        balances.totalOnchainSats >= TransactionDefaults.recommendedBaseFee
+        balances.totalOnchainSats >= Defaults.recommendedBaseFee
     }
     var showNoFundsAlert by remember { mutableStateOf(false) }
 

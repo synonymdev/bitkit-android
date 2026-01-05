@@ -180,7 +180,7 @@ class BoostTransactionViewModel @Inject constructor(
 
     private suspend fun handleRbfBoost(activity: Activity.Onchain) {
         lightningRepo.bumpFeeByRbf(
-            satsPerVByte = _uiState.value.feeRate.toUInt(),
+            satsPerVByte = _uiState.value.feeRate,
             originalTxId = activity.v1.txId
         ).fold(
             onSuccess = { newTxId ->
@@ -194,7 +194,7 @@ class BoostTransactionViewModel @Inject constructor(
 
     private suspend fun handleCpfpBoost(activity: Activity.Onchain) {
         lightningRepo.accelerateByCpfp(
-            satsPerVByte = _uiState.value.feeRate.toUInt(),
+            satsPerVByte = _uiState.value.feeRate,
             originalTxId = activity.v1.txId,
             destinationAddress = walletRepo.getOnchainAddress(),
         ).fold(

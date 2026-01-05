@@ -88,7 +88,7 @@ class BlocktankRepo @Inject constructor(
         flow {
             while (currentCoroutineContext().isActive) {
                 emit(Unit)
-                delay(Env.blocktankOrderRefreshInterval)
+                delay(Env.lspOrdersRefreshInterval)
             }
         }.flowOn(bgDispatcher)
             .onEach { refreshOrders() }
