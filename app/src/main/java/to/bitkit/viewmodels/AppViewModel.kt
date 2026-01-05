@@ -853,7 +853,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleScan(result: String) = withContext(bgDispatcher) {
         // always reset state on new scan
         resetSendState()
-        resetQuickPayData()
+        resetQuickPay()
 
         @Suppress("ForbiddenComment") // TODO: wrap `decode` from bindings in a `CoreService` method and call that one
         val scan = runCatching { decode(result) }
@@ -1566,7 +1566,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun resetQuickPayData() = _quickPayData.update { null }
+    fun resetQuickPay() = _quickPayData.update { null }
 
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded() {
@@ -1590,9 +1590,7 @@ class AppViewModel @Inject constructor(
                         )
                     }
                     .onSuccess { utxos ->
-                        _sendUiState.update {
-                            it.copy(selectedUtxos = utxos)
-                        }
+                        _sendUiState.update { it.copy(selectedUtxos = utxos) }
                     }
             }
             refreshFeeEstimates()
