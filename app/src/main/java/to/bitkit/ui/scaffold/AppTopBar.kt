@@ -1,5 +1,6 @@
 package to.bitkit.ui.scaffold
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -16,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -31,12 +31,11 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 fun AppTopBar(
     titleText: String?,
     onBackClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    icon: Painter? = null,
+    @DrawableRes icon: Int? = null,
     actions: @Composable (RowScope.() -> Unit) = {},
 ) {
     CenterAlignedTopAppBar(
@@ -51,7 +50,7 @@ fun AppTopBar(
                 ) {
                     icon?.let {
                         Icon(
-                            painter = painter,
+                            painter = painterResource(icon),
                             contentDescription = null,
                             tint = Color.Unspecified,
                             modifier = Modifier
@@ -64,7 +63,7 @@ fun AppTopBar(
             }
         },
         actions = actions,
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+        colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,
             scrolledContainerColor = Color.Transparent,
         ),
@@ -146,7 +145,7 @@ private fun Preview2() {
         AppTopBar(
             titleText = "Title And Icon",
             onBackClick = {},
-            icon = painterResource(R.drawable.ic_ln_circle),
+            icon = R.drawable.ic_ln_circle,
         )
     }
 }

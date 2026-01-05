@@ -82,7 +82,7 @@ fun SavingsWalletScreen(
         ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__savings__title),
-                icon = painterResource(R.drawable.ic_btc_circle),
+                icon = R.drawable.ic_btc_circle,
                 onBackClick = onBackClick,
                 actions = {
                     DrawerNavIcon()

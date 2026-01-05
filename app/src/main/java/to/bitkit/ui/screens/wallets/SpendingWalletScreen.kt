@@ -84,7 +84,7 @@ fun SpendingWalletScreen(
         ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__spending__title),
-                icon = painterResource(R.drawable.ic_ln_circle),
+                icon = R.drawable.ic_ln_circle,
                 onBackClick = onBackClick,
                 actions = {
                     DrawerNavIcon()
