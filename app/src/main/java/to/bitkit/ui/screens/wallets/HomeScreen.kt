@@ -679,7 +679,7 @@ private fun TopBar(
                     )
                 }
             },
-            colors = TopAppBarDefaults.largeTopAppBarColors(Color.Transparent),
+            colors = TopAppBarDefaults.topAppBarColors(Color.Transparent),
             modifier = Modifier.fillMaxWidth()
         )
     }
