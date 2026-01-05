@@ -92,11 +92,11 @@ fun DrawerMenu(
         ) {
             MenuContent(
                 onWalletClick = {
-                    if (!navigator.isAtHome()) navigator.navigateToHome()
+                    if (!navigator.isHome()) navigator.navigateHome()
                     scope.launch { drawerState.close() }
                 },
                 onActivityClick = {
-                    navigator.navigate(Routes.Activity.All)
+                    navigator.navigate(Routes.Activities.All)
                     scope.launch { drawerState.close() }
                 },
                 onContactsClick = null, // TODO IMPLEMENT CONTACTS

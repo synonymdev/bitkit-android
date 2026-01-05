@@ -12,7 +12,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -257,9 +256,7 @@ fun ContentView(
                     }
                 )
 
-                val showTabBar by remember {
-                    derivedStateOf { navigator.shouldShowTabBar() }
-                }
+                val showTabBar by navigator.shouldShowTabBar.collectAsStateWithLifecycle()
 
                 AnimatedVisibility(
                     visible = showTabBar,
@@ -268,12 +265,12 @@ fun ContentView(
                     modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
                     TabBar(
-                        onSendClick = { navigator.navigate(Routes.Send.Recipient) },
+                        onSendClick = { navigator.navigate(Routes.Send.Main) },
                         onReceiveClick = {
                             walletViewModel.resetReceiveState()
-                            navigator.navigate(Routes.Receive.Qr)
+                            navigator.navigate(Routes.Receive.Main)
                         },
-                        onScanClick = { navigator.navigate(Routes.QrScanner) },
+                        onScanClick = { navigator.navigate(Routes.Scanner) },
                     )
                 }
             }

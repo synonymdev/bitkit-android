@@ -89,7 +89,7 @@ fun ElectrumConfigScreen(
     Content(
         uiState = uiState,
         onBack = { navigator.goBack() },
-        onScan = { navigator.navigate(Routes.QrScanner) },
+        onScan = { navigator.navigate(Routes.Scanner) },
         onChangeHost = viewModel::setHost,
         onChangePort = viewModel::setPort,
         onChangeProtocol = viewModel::setProtocol,

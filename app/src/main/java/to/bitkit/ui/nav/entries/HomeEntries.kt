@@ -71,24 +71,24 @@ fun EntryProviderScope<NavKey>.homeEntries(
         )
     }
 
-    entry<Routes.Activity.All> {
+    entry<Routes.Activities.All> {
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = {
                 activityListViewModel.clearFilters()
-                navigator.navigateToHome()
+                navigator.navigateHome()
             },
-            onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
-            onTagClick = { navigator.navigate(Routes.Activity.TagSelectorSheet) },
-            onDateRangeClick = { navigator.navigate(Routes.Activity.DateRangeSelectorSheet) },
+            onActivityItemClick = { navigator.navigate(Routes.Activities.Detail(it)) },
+            onTagClick = { navigator.navigate(Routes.Activities.TagSelectorSheet) },
+            onDateRangeClick = { navigator.navigate(Routes.Activities.DateRangeSelectorSheet) },
             onEmptyActivityRowClick = {
                 walletViewModel.resetReceiveState()
-                navigator.navigate(Routes.Receive.Qr)
+                navigator.navigate(Routes.Receive.Main)
             },
         )
     }
 
-    entry<Routes.Activity.Detail> { route ->
+    entry<Routes.Activities.Detail> { route ->
         ActivityDetailScreen(
             navigator = navigator,
             activityId = route.activity.rawId(),
@@ -96,14 +96,14 @@ fun EntryProviderScope<NavKey>.homeEntries(
         )
     }
 
-    entry<Routes.Activity.Explore> { route ->
+    entry<Routes.Activities.Explore> { route ->
         ActivityExploreScreen(
             navigator = navigator,
             activity = route.activity,
         )
     }
 
-    entry<Routes.QrScanner>(
+    entry<Routes.Scanner>(
         metadata = Transitions.verticalSlideMetadata
     ) {
         QrScanningScreen(
@@ -146,11 +146,11 @@ private fun SavingsEntry(
     SavingsWalletScreen(
         isGeoBlocked = isGeoBlocked,
         onchainActivities = onchainActivities.orEmpty(),
-        onAllActivityButtonClick = { navigator.navigate(Routes.Activity.All) },
-        onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
+        onAllActivityButtonClick = { navigator.navigate(Routes.Activities.All) },
+        onActivityItemClick = { navigator.navigate(Routes.Activities.Detail(it)) },
         onEmptyActivityRowClick = {
             walletViewModel.resetReceiveState()
-            navigator.navigate(Routes.Receive.Qr)
+            navigator.navigate(Routes.Receive.Main)
         },
         onTransferToSpendingClick = {
             if (!hasSeenSpendingIntro) {
@@ -177,11 +177,11 @@ private fun SpendingEntry(
     SpendingWalletScreen(
         uiState = uiState,
         lightningActivities = lightningActivities.orEmpty(),
-        onAllActivityButtonClick = { navigator.navigate(Routes.Activity.All) },
-        onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
+        onAllActivityButtonClick = { navigator.navigate(Routes.Activities.All) },
+        onActivityItemClick = { navigator.navigate(Routes.Activities.Detail(it)) },
         onEmptyActivityRowClick = {
             walletViewModel.resetReceiveState()
-            navigator.navigate(Routes.Receive.Qr)
+            navigator.navigate(Routes.Receive.Main)
         },
         onTransferToSavingsClick = {
             if (!hasSeenSavingsIntro) {
@@ -273,7 +273,7 @@ private fun EntryProviderScope<NavKey>.shopEntries(
         ShopWebViewScreen(
             page = route.page,
             title = route.title,
-            onClose = { navigator.navigateToHome() },
+            onClose = { navigator.navigateHome() },
             onBack = { navigator.goBack() },
             onPaymentIntent = { data ->
                 appViewModel.onScanResult(data)

@@ -488,7 +488,7 @@ class AppViewModel @Inject constructor(
                     }
                     SendEvent.BiometricsFailure -> {
                         _sendUiState.update { s -> s.copy(showBiometrics = false) }
-                        navigator.navigate(Routes.Send.PinCheck)
+                        navigator.navigate(Routes.Send.Pin)
                     }
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
@@ -691,7 +691,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onScanClick() {
-        navigator.navigate(Routes.Send.QrScanner)
+        navigator.navigate(Routes.Send.Scanner)
     }
 
     fun onScanResult(data: String, delayMs: Long = 0) {
@@ -1023,7 +1023,7 @@ class AppViewModel @Inject constructor(
                 if (settings.isBiometricEnabled && isBiometricAuthSupported(context)) {
                     _sendUiState.update { it.copy(showBiometrics = true) }
                 } else {
-                    navigator.navigate(Routes.Send.PinCheck)
+                    navigator.navigate(Routes.Send.Pin)
                 }
             } else {
                 onConfirmPay()
@@ -1273,7 +1273,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideNewTransactionSheet()
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
-                navigator.navigate(Routes.Activity.Detail(activity))
+                navigator.navigate(Routes.Activities.Detail(activity))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)
@@ -1296,7 +1296,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideSheet()
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
-                navigator.navigate(Routes.Activity.Detail(activity))
+                navigator.navigate(Routes.Activities.Detail(activity))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
                 toast(e)

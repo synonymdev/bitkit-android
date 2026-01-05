@@ -257,12 +257,12 @@ fun HomeScreen(
         onDismissEmptyState = homeViewModel::dismissEmptyState,
         onClickEmptyActivityRow = {
             walletViewModel.resetReceiveState()
-            navigator.navigate(Routes.Receive.Qr)
+            navigator.navigate(Routes.Receive.Main)
         },
         onClickSavings = { navigator.navigate(Routes.Savings) },
         onClickSpending = { navigator.navigate(Routes.Spending) },
-        onAllActivityClick = { navigator.navigate(Routes.Activity.All) },
-        onActivityItemClick = { navigator.navigate(Routes.Activity.Detail(it)) },
+        onAllActivityClick = { navigator.navigate(Routes.Activities.All) },
+        onActivityItemClick = { navigator.navigate(Routes.Activities.Detail(it)) },
         onClickSettingUp = { navigator.navigate(Routes.Transfer.SettingUp) },
         onClickAppStatus = { navigator.navigate(Routes.AppStatus) },
         onOpenDrawer = { scope.launch { drawerState.open() } },

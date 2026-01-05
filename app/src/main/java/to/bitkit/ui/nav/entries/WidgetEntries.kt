@@ -102,7 +102,7 @@ private fun HeadlinesPreviewEntry(
 ) {
     HeadlinesPreviewScreen(
         headlinesViewModel = viewModel,
-        onClose = { navigator.navigateToHome() },
+        onClose = { navigator.navigateHome() },
         onBack = { navigator.goBack() },
         navigateEditWidget = { navigator.navigate(Routes.Widgets.Headlines.Edit) },
     )
@@ -141,7 +141,7 @@ private fun FactsPreviewEntry(
 ) {
     FactsPreviewScreen(
         factsViewModel = viewModel,
-        onClose = { navigator.navigateToHome() },
+        onClose = { navigator.navigateHome() },
         onBack = { navigator.goBack() },
         navigateEditWidget = { navigator.navigate(Routes.Widgets.Facts.Edit) },
     )
@@ -180,7 +180,7 @@ private fun BlocksPreviewEntry(
 ) {
     BlocksPreviewScreen(
         blocksViewModel = viewModel,
-        onClose = { navigator.navigateToHome() },
+        onClose = { navigator.navigateHome() },
         onBack = { navigator.goBack() },
         navigateEditWidget = { navigator.navigate(Routes.Widgets.Blocks.Edit) },
     )
@@ -219,7 +219,7 @@ private fun WeatherPreviewEntry(
 ) {
     WeatherPreviewScreen(
         weatherViewModel = viewModel,
-        onClose = { navigator.navigateToHome() },
+        onClose = { navigator.navigateHome() },
         onBack = { navigator.goBack() },
         navigateEditWidget = { navigator.navigate(Routes.Widgets.Weather.Edit) },
     )
@@ -258,7 +258,7 @@ private fun PricePreviewEntry(
 ) {
     PricePreviewScreen(
         priceViewModel = viewModel,
-        onClose = { navigator.navigateToHome() },
+        onClose = { navigator.navigateHome() },
         onBack = { navigator.goBack() },
         navigateEditWidget = { navigator.navigate(Routes.Widgets.Price.Edit) },
     )
@@ -285,7 +285,7 @@ private fun CalculatorEntry(
     CalculatorPreviewScreen(
         viewModel = viewModel,
         currencyViewModel = currencyViewModel,
-        onClose = { navigator.navigateToHome() },
+        onClose = { navigator.navigateHome() },
         onBack = { navigator.goBack() },
     )
 }

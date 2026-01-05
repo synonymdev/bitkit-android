@@ -3,7 +3,7 @@ package to.bitkit.ui.nav
 import androidx.compose.runtime.Stable
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
-import com.synonym.bitkitcore.Activity as BitkitCoreActivity
+import com.synonym.bitkitcore.Activity
 
 @Stable
 sealed interface Routes : NavKey {
@@ -18,7 +18,7 @@ sealed interface Routes : NavKey {
     data object Spending : Routes
 
     @Serializable
-    data object QrScanner : Routes
+    data object Scanner : Routes
 
     @Serializable
     data object AppStatus : Routes
@@ -40,23 +40,6 @@ sealed interface Routes : NavKey {
         val onSuccessActionId: String,
     ) : Routes
 
-    sealed interface Activity : Routes {
-        @Serializable
-        data object All : Activity
-
-        @Serializable
-        data class Detail(val activity: BitkitCoreActivity) : Activity
-
-        @Serializable
-        data class Explore(val activity: BitkitCoreActivity) : Activity
-
-        @Serializable
-        data object DateRangeSelectorSheet : Activity
-
-        @Serializable
-        data object TagSelectorSheet : Activity
-    }
-
     sealed interface Onboarding : Routes {
         @Serializable
         data object Terms : Onboarding
@@ -75,6 +58,23 @@ sealed interface Routes : NavKey {
 
         @Serializable
         data object WarningMultipleDevices : Onboarding
+    }
+
+    sealed interface Activities : Routes {
+        @Serializable
+        data object All : Activities
+
+        @Serializable
+        data class Detail(val activity: Activity) : Activities
+
+        @Serializable
+        data class Explore(val activity: Activity) : Activities
+
+        @Serializable
+        data object DateRangeSelectorSheet : Activities
+
+        @Serializable
+        data object TagSelectorSheet : Activities
     }
 
     sealed interface Settings : Routes {
@@ -257,7 +257,7 @@ sealed interface Routes : NavKey {
 
     sealed interface Send : Routes {
         @Serializable
-        data object Recipient : Send
+        data object Main : Send
 
         @Serializable
         data object Address : Send
@@ -266,7 +266,7 @@ sealed interface Routes : NavKey {
         data class Amount(val address: String? = null) : Send
 
         @Serializable
-        data object QrScanner : Send
+        data object Scanner : Send
 
         @Serializable
         data object CoinSelection : Send
@@ -296,10 +296,10 @@ sealed interface Routes : NavKey {
         data object Support : Send
 
         @Serializable
-        data object AddTag : Send
+        data object Tag : Send
 
         @Serializable
-        data object PinCheck : Send
+        data object Pin : Send
 
         @Serializable
         data object QuickPay : Send
@@ -307,7 +307,7 @@ sealed interface Routes : NavKey {
 
     sealed interface Receive : Routes {
         @Serializable
-        data object Qr : Receive
+        data object Main : Receive
 
         @Serializable
         data object Amount : Receive
@@ -325,10 +325,10 @@ sealed interface Routes : NavKey {
         data object LiquidityAdditional : Receive
 
         @Serializable
-        data object EditInvoice : Receive
+        data object Edit : Receive
 
         @Serializable
-        data object AddTag : Receive
+        data object Tag : Receive
 
         @Serializable
         data object GeoBlock : Receive
@@ -345,7 +345,7 @@ sealed interface Routes : NavKey {
         data class Confirm(val pin: String) : Pin
 
         @Serializable
-        data object Biometrics : Pin
+        data object Bio : Pin
 
         @Serializable
         data class Result(val isBioOn: Boolean) : Pin
@@ -370,10 +370,10 @@ sealed interface Routes : NavKey {
         data object Intro : Backup
 
         @Serializable
-        data object ShowMnemonic : Backup
+        data object Mnemonic : Backup
 
         @Serializable
-        data object ShowPassphrase : Backup
+        data object Passphrase : Backup
 
         @Serializable
         data object ConfirmMnemonic : Backup

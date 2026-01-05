@@ -60,7 +60,7 @@ fun AdvancedSettingsScreen(
         onResetSuggestionsDialogConfirm = {
             viewModel.resetSuggestions()
             showResetSuggestionsDialog = false
-            navigator.navigateToHome()
+            navigator.navigateHome()
         },
         onResetSuggestionsDialogCancel = { showResetSuggestionsDialog = false },
     )

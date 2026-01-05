@@ -105,7 +105,7 @@ private fun EntryProviderScope<NavKey>.simpleSheetEntries(
     activityListViewModel: ActivityListViewModel,
     transferViewModel: TransferViewModel,
 ) {
-    entry<Routes.Activity.DateRangeSelectorSheet>(
+    entry<Routes.Activities.DateRangeSelectorSheet>(
         metadata = SheetSceneStrategy.sheet()
     ) {
         val startDate by activityListViewModel.startDate.collectAsStateWithLifecycle()
@@ -122,7 +122,7 @@ private fun EntryProviderScope<NavKey>.simpleSheetEntries(
         )
     }
 
-    entry<Routes.Activity.TagSelectorSheet>(
+    entry<Routes.Activities.TagSelectorSheet>(
         metadata = SheetSceneStrategy.sheet()
     ) {
         val availableTags by activityListViewModel.availableTags.collectAsStateWithLifecycle()
@@ -192,12 +192,12 @@ private fun EntryProviderScope<NavKey>.pinFlowEntries(navigator: Navigator) {
     entry<Routes.Pin.Confirm> { route ->
         PinConfirmScreen(
             originalPin = route.pin,
-            onPinConfirmed = { navigator.navigate(Routes.Pin.Biometrics) },
+            onPinConfirmed = { navigator.navigate(Routes.Pin.Bio) },
             onBack = { navigator.goBack() },
         )
     }
 
-    entry<Routes.Pin.Biometrics> {
+    entry<Routes.Pin.Bio> {
         PinBiometricsScreen(
             onContinue = { isBioOn -> navigator.navigate(Routes.Pin.Result(isBioOn)) },
             onSkip = { navigator.navigate(Routes.Pin.Result(isBioOn = false)) },
@@ -208,8 +208,8 @@ private fun EntryProviderScope<NavKey>.pinFlowEntries(navigator: Navigator) {
     entry<Routes.Pin.Result> { route ->
         PinResultScreen(
             isBioOn = route.isBioOn,
-            onDismiss = { navigator.navigateToHome() },
-            onBack = { navigator.navigateToHome() },
+            onDismiss = { navigator.navigateHome() },
+            onBack = { navigator.navigateHome() },
         )
     }
 }
@@ -222,21 +222,21 @@ private fun EntryProviderScope<NavKey>.backupFlowEntries(navigator: Navigator) {
         BackupIntroScreen(
             hasFunds = LocalBalances.current.totalSats > 0u,
             onClose = { navigator.goBack() },
-            onConfirm = { navigator.navigate(Routes.Backup.ShowMnemonic) },
+            onConfirm = { navigator.navigate(Routes.Backup.Mnemonic) },
         )
     }
 
-    entry<Routes.Backup.ShowMnemonic> {
+    entry<Routes.Backup.Mnemonic> {
         val viewModel = hiltViewModel<BackupNavSheetViewModel>()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         ShowMnemonicScreen(
             uiState = uiState,
             onRevealClick = viewModel::onRevealMnemonic,
-            onContinueClick = { navigator.navigate(Routes.Backup.ShowPassphrase) },
+            onContinueClick = { navigator.navigate(Routes.Backup.Passphrase) },
         )
     }
 
-    entry<Routes.Backup.ShowPassphrase> {
+    entry<Routes.Backup.Passphrase> {
         val viewModel = hiltViewModel<BackupNavSheetViewModel>()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         ShowPassphraseScreen(
@@ -293,7 +293,7 @@ private fun EntryProviderScope<NavKey>.backupFlowEntries(navigator: Navigator) {
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         MetadataScreen(
             uiState = uiState,
-            onDismiss = { navigator.navigateToHome() },
+            onDismiss = { navigator.navigateHome() },
             onBack = { navigator.goBack() },
         )
     }
@@ -305,7 +305,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
 ) {
-    entry<Routes.Send.Recipient>(
+    entry<Routes.Send.Main>(
         metadata = SheetSceneStrategy.sheet()
     ) {
         SendRecipientScreen(
@@ -336,7 +336,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.QrScanner> {
+    entry<Routes.Send.Scanner> {
         QrScanningScreen(
             navigator = navigator,
             onScanSuccess = { qrCode ->
@@ -387,7 +387,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
             canGoBack = true,
             onBack = { navigator.goBack() },
             onEvent = { e -> appViewModel.setSendEvent(e) },
-            onClickAddTag = { navigator.navigate(Routes.Send.AddTag) },
+            onClickAddTag = { navigator.navigate(Routes.Send.Tag) },
             onClickTag = { tag -> appViewModel.removeTag(tag) },
         )
     }
@@ -396,7 +396,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         val sendDetail by appViewModel.successSendUiState.collectAsStateWithLifecycle()
         NewTransactionSheetView(
             details = sendDetail,
-            onCloseClick = { navigator.navigateToHome() },
+            onCloseClick = { navigator.navigateHome() },
             onDetailClick = { appViewModel.onClickSendDetail() },
             modifier = Modifier
                 .fillMaxSize()
@@ -409,8 +409,8 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
     entry<Routes.Send.Error> { route ->
         SendErrorScreen(
             errorMessage = route.message,
-            onRetry = { navigator.navigate(Routes.Send.Recipient) },
-            onClose = { navigator.navigateToHome() },
+            onRetry = { navigator.navigate(Routes.Send.Main) },
+            onClose = { navigator.navigateHome() },
         )
     }
 
@@ -428,7 +428,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         WithdrawErrorScreen(
             uiState = uiState,
             onBack = { navigator.goBack() },
-            onClickScan = { navigator.navigate(Routes.Send.QrScanner) },
+            onClickScan = { navigator.navigate(Routes.Send.Scanner) },
             onClickSupport = { navigator.navigate(Routes.Send.Support) },
         )
     }
@@ -437,7 +437,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         SupportScreen(navigator)
     }
 
-    entry<Routes.Send.AddTag> {
+    entry<Routes.Send.Tag> {
         AddTagScreen(
             onBack = { navigator.goBack() },
             onTagSelected = { tag ->
@@ -449,7 +449,7 @@ private fun EntryProviderScope<NavKey>.sendFlowEntries(
         )
     }
 
-    entry<Routes.Send.PinCheck> {
+    entry<Routes.Send.Pin> {
         SendPinCheckScreen(
             onBack = { navigator.goBack() },
             onSuccess = {
@@ -487,7 +487,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
     navigator: Navigator,
     walletViewModel: WalletViewModel,
 ) {
-    entry<Routes.Receive.Qr>(
+    entry<Routes.Receive.Main>(
         metadata = SheetSceneStrategy.sheet()
     ) {
         val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
@@ -498,7 +498,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
             cjitInvoice = cjitInvoice,
             walletState = walletUiState,
             onMount = { walletViewModel.refreshReceiveState() },
-            onClickEditInvoice = { navigator.navigate(Routes.Receive.EditInvoice) },
+            onClickEditInvoice = { navigator.navigate(Routes.Receive.Edit) },
             onClickReceiveCjit = {
                 if (lightningState.isGeoBlocked) {
                     navigator.navigate(Routes.Receive.GeoBlock)
@@ -534,7 +534,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
                 onLearnMore = { navigator.navigate(Routes.Receive.Liquidity) },
                 onContinue = { invoice ->
                     walletViewModel.setPendingCjitInvoice(invoice)
-                    navigator.popBackTo(Routes.Receive.Qr)
+                    navigator.popBackTo(Routes.Receive.Main)
                 },
                 onBack = { navigator.goBack() },
             )
@@ -550,7 +550,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
                 onLearnMore = { navigator.navigate(Routes.Receive.LiquidityAdditional) },
                 onContinue = { invoice ->
                     walletViewModel.setPendingCjitInvoice(invoice)
-                    navigator.popBackTo(Routes.Receive.Qr)
+                    navigator.popBackTo(Routes.Receive.Main)
                 },
                 onBack = { navigator.goBack() },
             )
@@ -592,13 +592,13 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         }
     }
 
-    entry<Routes.Receive.EditInvoice> {
+    entry<Routes.Receive.Edit> {
         val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
         EditInvoiceScreen(
             walletUiState = walletState,
             onBack = { navigator.goBack() },
             updateInvoice = walletViewModel::updateBip21Invoice,
-            onClickAddTag = { navigator.navigate(Routes.Receive.AddTag) },
+            onClickAddTag = { navigator.navigate(Routes.Receive.Tag) },
             onClickTag = walletViewModel::removeTag,
             onDescriptionUpdate = walletViewModel::updateBip21Description,
             navigateReceiveConfirm = { entry ->
@@ -608,7 +608,7 @@ private fun EntryProviderScope<NavKey>.receiveFlowEntries(
         )
     }
 
-    entry<Routes.Receive.AddTag> {
+    entry<Routes.Receive.Tag> {
         AddTagScreen(
             onBack = { navigator.goBack() },
             onTagSelected = { tag ->
@@ -637,7 +637,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
 
         LaunchedEffect(viewModel) {
             viewModel.successEvent.collect { details ->
-                navigator.navigateToHome()
+                navigator.navigateHome()
                 appViewModel.showTransactionSheet(details)
             }
         }
@@ -648,7 +648,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
                     is Routes.Gift.Used -> navigator.navigate(Routes.Gift.Used)
                     is Routes.Gift.UsedUp -> navigator.navigate(Routes.Gift.UsedUp)
                     is Routes.Gift.Error -> navigator.navigate(Routes.Gift.Error)
-                    is Routes.Gift.Success -> navigator.navigateToHome()
+                    is Routes.Gift.Success -> navigator.navigateHome()
                     is Routes.Gift.Loading -> Unit
                 }
             }
@@ -662,7 +662,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
             titleRes = R.string.other__gift__used__title,
             textRes = R.string.other__gift__used__text,
             testTag = "GiftUsed",
-            onDismiss = { navigator.navigateToHome() },
+            onDismiss = { navigator.navigateHome() },
         )
     }
 
@@ -671,7 +671,7 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
             titleRes = R.string.other__gift__used_up__title,
             textRes = R.string.other__gift__used_up__text,
             testTag = "GiftUsedUp",
-            onDismiss = { navigator.navigateToHome() },
+            onDismiss = { navigator.navigateHome() },
         )
     }
 
@@ -680,14 +680,14 @@ private fun EntryProviderScope<NavKey>.giftFlowEntries(
             titleRes = R.string.other__gift__error__title,
             textRes = R.string.other__gift__error__text,
             testTag = "GiftError",
-            onDismiss = { navigator.navigateToHome() },
+            onDismiss = { navigator.navigateHome() },
         )
     }
 
     entry<Routes.Gift.Success> {
         // This route is not navigated directly, success triggers navigation to home and shows transaction sheet.
         LaunchedEffect(Unit) {
-            navigator.navigateToHome()
+            navigator.navigateHome()
         }
     }
 }
@@ -717,7 +717,7 @@ private fun EntryProviderScope<NavKey>.sheetFlowEntries(
         BackupIntroScreen(
             hasFunds = LocalBalances.current.totalSats > 0u,
             onClose = { navigator.goBack() },
-            onConfirm = { navigator.navigate(Routes.Backup.ShowMnemonic) },
+            onConfirm = { navigator.navigate(Routes.Backup.Mnemonic) },
         )
     }
 

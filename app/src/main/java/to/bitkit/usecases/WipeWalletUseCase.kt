@@ -11,6 +11,8 @@ import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,6 +31,7 @@ class WipeWalletUseCase @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val lightningRepo: LightningRepo,
     private val firebaseMessaging: FirebaseMessaging,
+    private val navigator: Navigator,
 ) {
     @Suppress("TooGenericExceptionCaught")
     suspend operator fun invoke(
@@ -52,6 +55,7 @@ class WipeWalletUseCase @Inject constructor(
 
             blocktankRepo.resetState()
             activityRepo.resetState()
+            navigator.navigateAndClearBackstack(Routes.Onboarding.Terms)
             resetWalletState()
 
             return lightningRepo.wipeStorage(walletIndex)

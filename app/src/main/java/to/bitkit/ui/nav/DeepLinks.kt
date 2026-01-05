@@ -129,7 +129,7 @@ object DeepLinkPatterns {
     )
 
     val LNURL_WITHDRAW = DeepLinkPattern(
-        routeClass = Routes.Receive.Qr::class,
+        routeClass = Routes.Receive.Main::class,
         uriPattern = "${UriScheme.LNURL_WITHDRAW.withSlashes}{data}".toUri()
     )
 

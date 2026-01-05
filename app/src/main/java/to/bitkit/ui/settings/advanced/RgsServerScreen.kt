@@ -80,7 +80,7 @@ fun RgsServerScreen(
     Content(
         uiState = uiState,
         onBack = { navigator.goBack() },
-        onScan = { navigator.navigate(Routes.QrScanner) },
+        onScan = { navigator.navigate(Routes.Scanner) },
         onChangeUrl = viewModel::setRgsUrl,
         onClickReset = viewModel::resetToDefault,
         onClickConnect = viewModel::onClickConnect,

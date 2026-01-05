@@ -67,7 +67,7 @@ fun EntryProviderScope<NavKey>.transferEntries(
     entry<Routes.Transfer.ToSavings.Availability> {
         SavingsAvailabilityScreen(
             onBackClick = { navigator.goBack() },
-            onCancelClick = { navigator.navigateToHome() },
+            onCancelClick = { navigator.navigateHome() },
             onContinueClick = { navigator.navigate(Routes.Transfer.ToSavings.Confirm) },
         )
     }
@@ -91,7 +91,7 @@ fun EntryProviderScope<NavKey>.transferEntries(
         SavingsProgressScreen(
             wallet = walletViewModel,
             transfer = transferViewModel,
-            onContinueClick = { navigator.navigateToHome() },
+            onContinueClick = { navigator.navigateHome() },
             onForceTransfer = { navigator.navigate(Routes.Sheet.ForceTransfer) },
         )
     }
@@ -126,7 +126,7 @@ fun EntryProviderScope<NavKey>.transferEntries(
         SpendingConfirmScreen(
             viewModel = transferViewModel,
             onBackClick = { navigator.goBack() },
-            onCloseClick = { navigator.navigateToHome() },
+            onCloseClick = { navigator.navigateHome() },
             onLearnMoreClick = { navigator.navigate(Routes.Transfer.Liquidity) },
             onAdvancedClick = { navigator.navigate(Routes.Transfer.ToSpending.Advanced) },
             onConfirm = { navigator.navigate(Routes.Transfer.SettingUp) },
@@ -151,7 +151,7 @@ fun EntryProviderScope<NavKey>.transferEntries(
     entry<Routes.Transfer.SettingUp> {
         SettingUpScreen(
             viewModel = transferViewModel,
-            onContinueClick = { navigator.navigateToHome() },
+            onContinueClick = { navigator.navigateHome() },
         )
     }
 
@@ -166,7 +166,7 @@ fun EntryProviderScope<NavKey>.transferEntries(
 
     entry<Routes.Transfer.FundingAdvanced> {
         FundingAdvancedScreen(
-            onLnurl = { navigator.navigate(Routes.QrScanner) },
+            onLnurl = { navigator.navigate(Routes.Scanner) },
             onManual = { navigator.navigate(Routes.External.Connection()) },
             onBackClick = { navigator.goBack() },
         )
@@ -198,7 +198,7 @@ private fun FundingEntry(
         },
         onFund = {
             walletViewModel.resetReceiveState()
-            navigator.navigate(Routes.Receive.Qr)
+            navigator.navigate(Routes.Receive.Main)
         },
         onAdvanced = { navigator.navigate(Routes.Transfer.FundingAdvanced) },
         onBackClick = { navigator.goBack() },
@@ -238,7 +238,7 @@ private fun EntryProviderScope<NavKey>.externalNodeEntries(
 
     entry<Routes.External.Success> {
         ExternalSuccessScreen(
-            onContinue = { navigator.navigateToHome() },
+            onContinue = { navigator.navigateHome() },
         )
     }
 
@@ -249,7 +249,7 @@ private fun EntryProviderScope<NavKey>.externalNodeEntries(
             k1 = route.k1,
             onConnected = { navigator.navigate(Routes.External.Success) },
             onBack = { navigator.goBack() },
-            onClose = { navigator.navigateToHome() },
+            onClose = { navigator.navigateHome() },
         )
     }
 
