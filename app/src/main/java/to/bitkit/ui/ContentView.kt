@@ -414,7 +414,7 @@ fun ContentView(
                                 TimedSheetType.NOTIFICATIONS -> {
                                     BackgroundPaymentsIntroSheet(
                                         onContinue = {
-                                            appViewModel.dismissTimedSheet(skipQueue = true)
+                                            appViewModel.dismissTimedSheet()
                                             navController.navigate(Routes.BackgroundPaymentsSettings)
                                             settingsViewModel.setBgPaymentsIntroSeen(true)
                                         },
@@ -424,7 +424,7 @@ fun ContentView(
                                 TimedSheetType.QUICK_PAY -> {
                                     QuickPayIntroSheet(
                                         onContinue = {
-                                            appViewModel.dismissTimedSheet(skipQueue = true)
+                                            appViewModel.dismissTimedSheet()
                                             navController.navigate(Routes.QuickPaySettings)
                                         },
                                     )
@@ -437,7 +437,7 @@ fun ContentView(
                                             val intent =
                                                 Intent(Intent.ACTION_VIEW, Env.STORING_BITCOINS_URL.toUri())
                                             context.startActivity(intent)
-                                            appViewModel.dismissTimedSheet(skipQueue = true)
+                                            appViewModel.dismissTimedSheet()
                                         }
                                     )
                                 }
