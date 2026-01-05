@@ -919,7 +919,11 @@ class AppViewModel @Inject constructor(
         if (minWithdrawable == maxWithdrawable) {
             viewModelScope.launch {
                 delay(TRANSITION_SCREEN_MS)
-                setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+                if (isMainScanner) {
+                    showSheet(Sheet.Send(SendRoute.WithdrawConfirm))
+                } else {
+                    setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+                }
             }
             return
         }
