@@ -29,6 +29,7 @@ import to.bitkit.ui.LocalDrawerState
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.theme.AppThemeSurface
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun AppTopBar(
@@ -40,17 +41,15 @@ fun AppTopBar(
 ) {
     CenterAlignedTopAppBar(
         navigationIcon = {
-            if (onBackClick != null) {
-                BackNavIcon(onBackClick)
-            }
+            onBackClick?.let { BackNavIcon(it) }
         },
         title = {
-            if (titleText != null) {
+            titleText?.let { text ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    icon?.let { painter ->
+                    icon?.let {
                         Icon(
                             painter = painter,
                             contentDescription = null,
@@ -60,7 +59,7 @@ fun AppTopBar(
                                 .size(32.dp)
                         )
                     }
-                    Title(text = titleText, maxLines = 1)
+                    Title(text = text, maxLines = 1)
                 }
             }
         },

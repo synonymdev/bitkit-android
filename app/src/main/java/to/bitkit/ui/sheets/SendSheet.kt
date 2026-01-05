@@ -56,7 +56,7 @@ fun SendSheet(
         // always reset state on new user-initiated send
         if (startDestination == SendRoute.Recipient) {
             appViewModel.resetSendState()
-            appViewModel.resetQuickPayData()
+            appViewModel.resetQuickPay()
         }
     }
     Column(

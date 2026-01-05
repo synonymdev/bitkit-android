@@ -54,7 +54,7 @@ fun SendQuickPayScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            app.resetQuickPayData()
+            app.resetQuickPay()
         }
     }
 
