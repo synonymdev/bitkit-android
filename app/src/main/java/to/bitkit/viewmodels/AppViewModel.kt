@@ -61,7 +61,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.env.Env
-import to.bitkit.env.TransactionDefaults
+import to.bitkit.env.Defaults
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.getClipboardText
@@ -820,7 +820,7 @@ class AppViewModel @Inject constructor(
                 }
             }
 
-            SendMethod.ONCHAIN -> amount > TransactionDefaults.dustLimit.toULong()
+            SendMethod.ONCHAIN -> amount > Defaults.dustLimit.toULong()
         }
     }
 
@@ -1586,7 +1586,7 @@ class AppViewModel @Inject constructor(
                     .mapCatching { satsPerVByte ->
                         lightningRepo.determineUtxosToSpend(
                             sats = currentState.amount,
-                            satsPerVByte = satsPerVByte.toUInt(),
+                            satsPerVByte = satsPerVByte,
                         )
                     }
                     .onSuccess { utxos ->

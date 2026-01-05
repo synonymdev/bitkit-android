@@ -490,7 +490,7 @@ private fun PreviewDevMode() {
                     latestPathfindingScoresSyncTimestamp = null,
                 ),
                 nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                peers = listOf(Peers.staging),
+                peers = listOf(Peers.stag),
                 channels = listOf(
                     createChannelDetails().copy(
                         channelId = "abc123def456789012345678901234567890123456789012345678901234567890",

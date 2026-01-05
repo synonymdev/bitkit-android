@@ -16,7 +16,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsStore
-import to.bitkit.ext.from
+import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -97,7 +97,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `disconnectPeer should call lightningRepo disconnectPeer`() = test {
-        val testPeer = PeerDetails.from("nodeId", "host", "9735")
+        val testPeer = PeerDetails.of("nodeId", "host", "9735")
         val testError = Exception("Test error")
         whenever(lightningRepo.disconnectPeer(testPeer)).thenReturn(Result.failure(testError))
 

@@ -671,9 +671,9 @@ class LightningRepo @Inject constructor(
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
         val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
-        val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow().toUInt()
+        val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
 
-        // if utxos are manually specified, use them, otherwise run auto coin select if enabled
+        // use passed utxos if specified, otherwise run auto coin select if enabled
         val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
             sats = sats,
             satsPerVByte = satsPerVByte,
@@ -697,7 +697,7 @@ class LightningRepo @Inject constructor(
             txId = txId,
             address = address,
             isReceive = false,
-            feeRate = satsPerVByte.toULong(),
+            feeRate = satsPerVByte,
             isTransfer = isTransfer,
             channelId = channelId ?: "",
         )
@@ -709,7 +709,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun determineUtxosToSpend(
         sats: ULong,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
     ): List<SpendableUtxo>? = withContext(bgDispatcher) {
         return@withContext runCatching {
             val settings = settingsStore.data.first()
@@ -767,7 +767,7 @@ class LightningRepo @Inject constructor(
     ): Result<ULong> = withContext(bgDispatcher) {
         return@withContext try {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
-            val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow().toUInt()
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
 
             val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
 
@@ -909,22 +909,18 @@ class LightningRepo @Inject constructor(
 
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
     ): Result<Txid> = executeWhenNodeRunning("bumpFeeByRbf") {
         try {
             if (originalTxId.isBlank()) {
                 return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException(
-                        "originalTxId is null or empty: $originalTxId"
-                    )
+                    IllegalArgumentException("originalTxId is null or empty: $originalTxId")
                 )
             }
 
             if (satsPerVByte <= 0u) {
                 return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException(
-                        "satsPerVByte invalid: $satsPerVByte"
-                    )
+                    IllegalArgumentException("satsPerVByte invalid: $satsPerVByte")
                 )
             }
 
@@ -948,7 +944,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun accelerateByCpfp(
         originalTxId: Txid,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
         destinationAddress: Address,
     ): Result<Txid> = executeWhenNodeRunning("accelerateByCpfp") {
         try {
@@ -973,7 +969,7 @@ class LightningRepo @Inject constructor(
             val newDestinationTxId = lightningService.accelerateByCpfp(
                 txid = originalTxId,
                 satsPerVByte = satsPerVByte,
-                destinationAddress = destinationAddress,
+                toAddress = destinationAddress,
             )
             Logger.debug(
                 "accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"
