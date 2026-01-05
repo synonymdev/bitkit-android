@@ -45,15 +45,22 @@ See also:
 
 ### References
 
-- For LNURL dev testing see [bitkit-docker](https://github.com/ovitrif/bitkit-docker)
+- For LNURL dev testing see [bitkit-docker](https://github.com/synonymdev/bitkit-docker)
 
 ### Lint
 
 This project uses detekt with default ktlint and compose-rules for android code linting.
 
-Recommended Android Studio plugins:
-- EditorConfig
-- Detekt
+### IDE Plugins
+The following IDE plugins are recommended for development with Android Studio or IntelliJ IDEA:
+- [Compose Color Preview](https://plugins.jetbrains.com/plugin/21298-compose-color-preview)
+- [Compose Stability Analyzer](https://plugins.jetbrains.com/plugin/28767-compose-stability-analyzer)
+- [detekt](https://plugins.jetbrains.com/plugin/10761-detekt)
+  <details>
+  <summary>See screenshot on how to setup the Detekt plugin after installation.</summary>
+  
+  ![Detekt plugin setup][img_detekt]
+  </details>
 
 **Commands** 
 ```sh
@@ -217,3 +224,5 @@ Destructive operations like `rm -rf`, `git commit`, and `git push` still require
 
 This project is licensed under the MIT License.
 See the [LICENSE](./LICENSE) file for more details.
+
+[img_detekt]: .github/img/detekt.png
