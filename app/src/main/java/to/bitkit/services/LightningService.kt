@@ -99,19 +99,18 @@ class LightningService @Inject constructor(
     ): Config {
         val dirPath = Env.ldkStoragePath(walletIndex)
 
-        trustedPeers?.takeIf { it.isNotEmpty() }?.let {
-            this.trustedPeers = it
-        } ?: run {
-            Logger.info("Using fallback trusted peers from Env (${Env.trustedLnPeers.size})", context = TAG)
-        }
-        val trustedPeerNodeIds = this.trustedPeers.map { it.nodeId }
+        trustedPeers?.takeIf { it.isNotEmpty() }
+            ?.let { this.trustedPeers = it }
+            ?: Logger.warn("Using fallback trusted peers from Env", context = TAG)
+
+        val trustedPeers0conf = this.trustedPeers.map { it.nodeId }
 
         return defaultConfig().copy(
             storageDirPath = dirPath,
             network = Env.network,
-            trustedPeers0conf = trustedPeerNodeIds,
+            trustedPeers0conf = trustedPeers0conf,
             anchorChannelsConfig = AnchorChannelsConfig(
-                trustedPeersNoReserve = trustedPeerNodeIds,
+                trustedPeersNoReserve = trustedPeers0conf,
                 perChannelReserveSats = 1u,
             ),
             includeUntrustedPendingInSpendable = true,

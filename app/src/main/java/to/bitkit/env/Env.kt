@@ -5,6 +5,7 @@ import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
+import to.bitkit.env.Env.network
 import to.bitkit.ext.ensureDir
 import to.bitkit.ext.parse
 import to.bitkit.models.BlocktankNotificationType
@@ -17,7 +18,7 @@ internal object Env {
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
-    private val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
+    val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     val walletSyncIntervalSecs = 10_uL // TODO review
@@ -26,26 +27,18 @@ internal object Env {
 
     val ldkLogLevel = LogLevel.TRACE
 
-    val trustedLnPeers
-        get() = when (network) {
-            Network.BITCOIN -> listOf(Peers.mainnetLnd1, Peers.mainnetLnd3, Peers.mainnetLnd4)
-            Network.REGTEST -> listOf(Peers.staging)
-            Network.TESTNET -> listOf(Peers.staging)
-            else -> emptyList()
-        }
+    val trustedLnPeers = when (network) {
+        Network.BITCOIN -> listOf(Peers.mainnetLnd1, Peers.mainnetLnd3, Peers.mainnetLnd4)
+        Network.REGTEST -> listOf(Peers.staging)
+        Network.TESTNET -> listOf(Peers.staging)
+        else -> emptyList()
+    }
 
     const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
     const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
+    const val lspOrderRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
 
-    const val blocktankOrderRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
-
-    val pushNotificationFeatures = listOf(
-        BlocktankNotificationType.incomingHtlc,
-        BlocktankNotificationType.mutualClose,
-        BlocktankNotificationType.orderPaymentConfirmed,
-        BlocktankNotificationType.cjitPaymentArrived,
-        BlocktankNotificationType.wakeToTimeout,
-    )
+    val pushNotificationFeatures = BlocktankNotificationType.entries
     const val DERIVATION_NAME = "bitkit-notifications"
 
     const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
@@ -54,51 +47,11 @@ internal object Env {
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8
 
-    // region File Paths
-
-    private lateinit var appStoragePath: String
-
-    fun initAppStoragePath(path: String) {
-        require(path.isNotBlank()) { "App storage path cannot be empty." }
-        appStoragePath = path
-        Logger.info("App storage path: $path")
-    }
-
-    val logDir: File
-        get() {
-            require(::appStoragePath.isInitialized)
-            return File(appStoragePath).resolve("logs").ensureDir()
-        }
-
-    fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
-
-    fun bitkitCoreStoragePath(walletIndex: Int): String {
-        return storagePathOf(walletIndex, network.name.lowercase(), "core")
-    }
-
-    /**
-     * Generates the storage path for a specified wallet index, network, and directory.
-     *
-     * Output format:
-     *
-     * `appStoragePath/network/walletN/dir`
-     */
-    private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
-        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
-        val path = Path(appStoragePath, network, "wallet$walletIndex", dir)
-            .toFile()
-            .ensureDir()
-            .path
-        Logger.debug("Using ${dir.uppercase()} storage path: $path")
-        return path
-    }
-
-    // endregion
-
-    // region Server URLs
+    // region urls
 
     val electrumServerUrl: String
         get() {
+            @Suppress("SimplifyBooleanWithConstants")
             if (isE2eTest && e2eBackend == "local") return ElectrumServers.E2E
             return when (network) {
                 Network.REGTEST -> ElectrumServers.REGTEST
@@ -187,6 +140,47 @@ internal object Env {
     const val BITREFILL_URL = "https://embed.bitrefill.com"
     const val BITREFILL_APP = "Bitkit"
     const val BITREFILL_REF = "AL6dyZYt"
+
+    // endregion
+
+    // region paths
+
+    private lateinit var appStoragePath: String
+
+    fun initAppStoragePath(path: String) {
+        require(path.isNotBlank()) { "App storage path cannot be empty." }
+        appStoragePath = path
+        Logger.info("App storage path: $path")
+    }
+
+    val logDir: File
+        get() {
+            require(::appStoragePath.isInitialized)
+            return File(appStoragePath).resolve("logs").ensureDir()
+        }
+
+    fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+
+    fun bitkitCoreStoragePath(walletIndex: Int): String {
+        return storagePathOf(walletIndex, network.name.lowercase(), "core")
+    }
+
+    /**
+     * Generates the storage path for a specified wallet index, network, and directory.
+     *
+     * Output format:
+     *
+     * `appStoragePath/network/walletN/dir`
+     */
+    private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val path = Path(appStoragePath, network, "wallet$walletIndex", dir)
+            .toFile()
+            .ensureDir()
+            .path
+        Logger.debug("Using ${dir.uppercase()} storage path: $path")
+        return path
+    }
 
     // endregion
 }
