@@ -275,6 +275,9 @@ class WalletViewModel @Inject constructor(
     ) {
         lightningRepo.start(walletIndex, channelMigration = channelMigration)
             .onSuccess {
+                if (channelMigration != null) {
+                    migrationService.consumePendingChannelMigration()
+                }
                 walletRepo.setWalletExistsState()
                 walletRepo.syncBalances()
                 if (_restoreState.value.isIdle()) {

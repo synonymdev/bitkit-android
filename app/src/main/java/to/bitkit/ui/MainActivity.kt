@@ -100,14 +100,17 @@ class MainActivity : FragmentActivity() {
                     .map { it.walletExists }
                     .collectAsStateWithLifecycle(initialValue = walletViewModel.walletExists)
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
+                val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
 
                 LaunchedEffect(
                     walletExists,
                     isRecoveryMode,
-                    notificationsGranted
+                    notificationsGranted,
+                    restoreState,
                 ) {
-                    if (walletExists && !isRecoveryMode && notificationsGranted) {
+                    val canStartService = walletExists && notificationsGranted && restoreState.isIdle()
+                    if (canStartService && !isRecoveryMode) {
                         tryStartForegroundService()
                     }
                 }

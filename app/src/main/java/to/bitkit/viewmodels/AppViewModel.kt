@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -351,11 +352,38 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun completeRNRemoteBackupRestore() {
+        val channelMigration = buildChannelMigrationIfAvailable()
+
+        if (channelMigration != null) {
+            lightningRepo.stop().onFailure {
+                Logger.error("Failed to stop node during remote restore restart", it, context = TAG)
+            }
+            delay(REMOTE_RESTORE_NODE_RESTART_DELAY_MS)
+            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
+                .onSuccess {
+                    migrationService.consumePendingChannelMigration()
+                    walletRepo.syncNodeAndWallet()
+                    walletRepo.syncBalances()
+                }
+                .onFailure { e ->
+                    Logger.error("Failed to restart node after remote restore: $e", e, context = TAG)
+                }
+        }
+
         lightningRepo.getPayments().onSuccess { activityRepo.syncLdkNodePayments(it) }
         migrationService.reapplyMetadataAfterSync()
         activityRepo.syncActivities()
+        walletRepo.syncBalances()
         migrationService.setRestoringFromRNRemoteBackup(false)
         migrationService.setShowingMigrationLoading(false)
+    }
+
+    private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
+        val migration = migrationService.peekPendingChannelMigration() ?: return null
+        return ChannelDataMigration(
+            channelManager = migration.channelManager.map { it.toUByte() },
+            channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
+        )
     }
 
     private suspend fun completeMigration() {
@@ -1986,6 +2014,7 @@ class AppViewModel @Inject constructor(
         private const val SCREEN_TRANSITION_DELAY_MS = 300L
         private const val MIGRATION_LOADING_TIMEOUT_MS = 300_000L
         private const val MIGRATION_AUTH_RESET_DELAY_MS = 500L
+        private const val REMOTE_RESTORE_NODE_RESTART_DELAY_MS = 500L
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
     }
