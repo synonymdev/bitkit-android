@@ -1054,7 +1054,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onScanLnurlWithdraw(data: LnurlWithdrawData) {
+    private suspend fun onScanLnurlWithdraw(data: LnurlWithdrawData) {
         Logger.debug("LNURL: $data", context = TAG)
 
         val minWithdrawable = data.minWithdrawableSat()
@@ -1078,7 +1078,12 @@ class AppViewModel @Inject constructor(
         }
 
         if (minWithdrawable == maxWithdrawable) {
-            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            delay(TRANSITION_SCREEN_MS)
+            if (isMainScanner) {
+                showSheet(Sheet.Send(SendRoute.WithdrawConfirm))
+            } else {
+                setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            }
             return
         }
 
@@ -1773,6 +1778,7 @@ class AppViewModel @Inject constructor(
                     _currentSheet.update { null }
                 }
             }
+
             else -> _currentSheet.update { null }
         }
     }
