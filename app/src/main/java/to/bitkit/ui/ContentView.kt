@@ -381,9 +381,9 @@ fun ContentView(
                         }
 
                         is Sheet.Receive -> {
-                            val walletUiState by walletViewModel.uiState.collectAsState()
+                            val walletState by walletViewModel.walletState.collectAsState()
                             ReceiveSheet(
-                                walletState = walletUiState,
+                                walletState = walletState,
                                 navigateToExternalConnection = {
                                     navController.navigate(ExternalConnection())
                                     appViewModel.hideSheet()
@@ -760,7 +760,7 @@ private fun NavGraphBuilder.home(
     drawerState: DrawerState,
 ) {
     composable<Routes.Home> {
-        val uiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+        val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
         val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
         val hazeState = rememberHazeState()
 
@@ -776,7 +776,7 @@ private fun NavGraphBuilder.home(
                 .hazeSource(hazeState)
         ) {
             HomeScreen(
-                mainUiState = uiState,
+                isRefreshing = isRefreshing,
                 drawerState = drawerState,
                 rootNavController = navController,
                 walletNavController = navController,
@@ -816,11 +816,11 @@ private fun NavGraphBuilder.home(
         exitTransition = { Transitions.slideOutHorizontally },
     ) {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
-        val uiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+        val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
-            uiState = uiState,
+            channels = lightningState.channels,
             lightningActivities = lightningActivities.orEmpty(),
             onAllActivityButtonClick = { navController.navigateToAllActivity() },
             onActivityItemClick = { navController.navigateToActivityItem(it) },

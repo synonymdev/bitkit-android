@@ -50,7 +50,7 @@ fun BlocktankRegtestScreen(
     val coroutineScope = rememberCoroutineScope()
     val wallet = walletViewModel ?: return
     val app = appViewModel ?: return
-    val uiState by wallet.uiState.collectAsStateWithLifecycle()
+    val walletState by wallet.walletState.collectAsStateWithLifecycle()
 
     ScreenColumn {
         AppTopBar(
@@ -65,7 +65,7 @@ fun BlocktankRegtestScreen(
                 .verticalScroll(rememberScrollState())
                 .imePadding()
         ) {
-            var depositAddress by remember { mutableStateOf(uiState.onchainAddress) }
+            var depositAddress by remember { mutableStateOf(walletState.onchainAddress) }
             var depositAmount by remember { mutableStateOf("100000") }
             var mineBlockCount by remember { mutableStateOf("1") }
             var paymentInvoice by remember { mutableStateOf("") }

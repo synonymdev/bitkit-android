@@ -65,7 +65,7 @@ fun ReceiveAmountScreen(
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
     val blocktank = blocktankViewModel ?: return
-    val walletState by wallet.uiState.collectAsStateWithLifecycle()
+    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
 
     var isCreatingInvoice by remember { mutableStateOf(false) }
@@ -90,7 +90,7 @@ fun ReceiveAmountScreen(
             scope.launch {
                 isCreatingInvoice = true
                 runCatching {
-                    require(walletState.nodeLifecycleState == NodeLifecycleState.Running) {
+                    require(lightningState.nodeLifecycleState == NodeLifecycleState.Running) {
                         "Should not be able to land on this screen if the node is not running."
                     }
 

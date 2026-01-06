@@ -60,7 +60,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.LnurlParams
-import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -70,7 +69,7 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 @Composable
 fun SendAmountScreen(
     uiState: SendUiState,
-    walletUiState: MainUiState,
+    nodeLifecycleState: NodeLifecycleState,
     canGoBack: Boolean,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
@@ -99,7 +98,7 @@ fun SendAmountScreen(
     }
 
     SendAmountContent(
-        walletUiState = walletUiState,
+        nodeLifecycleState = nodeLifecycleState,
         uiState = uiState,
         amountInputViewModel = amountInputViewModel,
         currencies = currencies,
@@ -125,7 +124,7 @@ fun SendAmountScreen(
 @Suppress("ViewModelForwarding")
 @Composable
 fun SendAmountContent(
-    walletUiState: MainUiState,
+    nodeLifecycleState: NodeLifecycleState,
     uiState: SendUiState,
     amountInputViewModel: AmountInputViewModel,
     modifier: Modifier = Modifier,
@@ -154,7 +153,7 @@ fun SendAmountContent(
             onBack = onBack,
         )
 
-        when (walletUiState.nodeLifecycleState) {
+        when (nodeLifecycleState) {
             is NodeLifecycleState.Running -> {
                 SendAmountNodeRunning(
                     amountInputViewModel = amountInputViewModel,
@@ -328,7 +327,7 @@ private fun PreviewLightningNoAmount() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
-                walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
+                nodeLifecycleState = NodeLifecycleState.Running,
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
                 ),
@@ -351,7 +350,7 @@ private fun PreviewUnified() {
                 )
             }
             SendAmountContent(
-                walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
+                nodeLifecycleState = NodeLifecycleState.Running,
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
                     isUnified = true,
@@ -371,7 +370,7 @@ private fun PreviewOnchain() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
-                walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
+                nodeLifecycleState = NodeLifecycleState.Running,
                 uiState = SendUiState(
                     payMethod = SendMethod.ONCHAIN,
                 ),
@@ -389,7 +388,7 @@ private fun PreviewInitializing() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
-                walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Initializing),
+                nodeLifecycleState = NodeLifecycleState.Initializing,
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
                 ),
@@ -406,7 +405,7 @@ private fun PreviewWithdraw() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
-                walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
+                nodeLifecycleState = NodeLifecycleState.Running,
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlWithdraw(
@@ -435,7 +434,7 @@ private fun PreviewLnurlPay() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
-                walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
+                nodeLifecycleState = NodeLifecycleState.Running,
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlPay(
@@ -465,7 +464,7 @@ private fun PreviewSmallScreen() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
-                walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
+                nodeLifecycleState = NodeLifecycleState.Running,
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
                 ),

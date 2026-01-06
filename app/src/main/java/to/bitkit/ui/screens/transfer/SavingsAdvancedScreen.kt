@@ -53,8 +53,8 @@ fun SavingsAdvancedScreen(
     val wallet = walletViewModel ?: return
     val transfer = transferViewModel ?: return
 
-    val walletState by wallet.uiState.collectAsStateWithLifecycle()
-    val openChannels = walletState.channels.filterOpen()
+    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val openChannels = lightningState.channels.filterOpen()
 
     var selectedChannelIds by remember { mutableStateOf(setOf<String>()) }
 

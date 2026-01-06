@@ -115,13 +115,12 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
-import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun HomeScreen(
-    mainUiState: MainUiState,
+    isRefreshing: Boolean,
     drawerState: DrawerState,
     rootNavController: NavController,
     walletNavController: NavHostController,
@@ -157,7 +156,7 @@ fun HomeScreen(
     }
 
     Content(
-        mainUiState = mainUiState,
+        isRefreshing = isRefreshing,
         homeUiState = homeUiState,
         rootNavController = rootNavController,
         walletNavController = walletNavController,
@@ -279,7 +278,7 @@ fun HomeScreen(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun Content(
-    mainUiState: MainUiState,
+    isRefreshing: Boolean,
     homeUiState: HomeUiState,
     rootNavController: NavController,
     walletNavController: NavController,
@@ -313,11 +312,11 @@ private fun Content(
         val pullToRefreshState = rememberPullToRefreshState()
         PullToRefreshBox(
             state = pullToRefreshState,
-            isRefreshing = mainUiState.isRefreshing,
+            isRefreshing = isRefreshing,
             onRefresh = onRefresh,
             indicator = {
                 Indicator(
-                    isRefreshing = mainUiState.isRefreshing,
+                    isRefreshing = isRefreshing,
                     state = pullToRefreshState,
                     modifier = Modifier
                         .padding(top = heightStatusBar)
@@ -709,7 +708,7 @@ private fun Preview() {
     AppThemeSurface {
         Box {
             Content(
-                mainUiState = MainUiState(),
+                isRefreshing = false,
                 homeUiState = HomeUiState(
                     showWidgets = true,
                 ),
@@ -733,7 +732,7 @@ private fun PreviewEmpty() {
     AppThemeSurface {
         Box {
             Content(
-                mainUiState = MainUiState(),
+                isRefreshing = false,
                 homeUiState = HomeUiState(
                     showEmptyState = true,
                 ),

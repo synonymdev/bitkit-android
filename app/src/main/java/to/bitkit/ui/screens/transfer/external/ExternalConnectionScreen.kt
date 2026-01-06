@@ -35,9 +35,9 @@ import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.flow.filterNotNull
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
-import to.bitkit.ext.of
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.host
+import to.bitkit.ext.of
 import to.bitkit.ext.port
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
