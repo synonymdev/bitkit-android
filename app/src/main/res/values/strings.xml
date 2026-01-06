@@ -403,6 +403,12 @@
     <string name="other__lnurl_withdr_error_minmax">Incorrect LNURL withdraw params, min/max not set correctly.</string>
     <string name="other__lnurl_withdr_success_title">Withdraw Requested</string>
     <string name="other__lnurl_withdr_success_msg">Your withdraw was successfully requested. Waiting for payment.</string>
+    <string name="other__node_error_starting">Error starting: %1$s</string>
+    <string name="other__node_initializing">Setting up wallet…</string>
+    <string name="other__node_running">Running</string>
+    <string name="other__node_starting">Starting</string>
+    <string name="other__node_stopped">Stopped</string>
+    <string name="other__node_stopping">Stopping</string>
     <string name="other__phone_settings">Open Phone Settings</string>
     <string name="other__bt_error_retrieve">Transfer Failed</string>
     <string name="other__bt_error_connect">Unable to add LSP node as a peer at this time.</string>

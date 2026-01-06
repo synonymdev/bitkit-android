@@ -191,11 +191,12 @@ private fun NodeStateSection(
     nodeLifecycleState: NodeLifecycleState,
     nodeStatus: NodeStatus?,
 ) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader("Node State")
         SettingsTextButtonRow(
             title = stringResource(R.string.lightning__status),
-            value = nodeLifecycleState.uiText,
+            value = nodeLifecycleState.uiText(context),
         )
 
         nodeStatus?.let { status ->
