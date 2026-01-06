@@ -1,10 +1,16 @@
 package to.bitkit.ui.sheets
 
+import android.content.Context
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtInfoOnchain
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -15,55 +21,79 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
+import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.sheets.BoostTransactionViewModel.Companion.MAX_FEE_RATE
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class BoostTransactionViewModelTest : BaseUnitTest() {
-
     private lateinit var sut: BoostTransactionViewModel
-    private val lightningRepo: LightningRepo = mock()
-    private val walletRepo: WalletRepo = mock()
 
-    private val activityRepo: ActivityRepo = mock()
+    private val context = mock<Context>()
+    private val lightningRepo = mock<LightningRepo>()
+    private val walletRepo = mock<WalletRepo>()
+    private val activityRepo = mock<ActivityRepo>()
+    private val blocktankRepo = mock<BlocktankRepo>()
+
+    private val onchain = mock<IBtInfoOnchain>()
+    private val mockBtInfo = mock<IBtInfo>()
+    private val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+    private val blocktankState = MutableStateFlow(BlocktankState(info = mockBtInfo))
 
     // Test data
     private val mockTxId = "test_txid_123"
-    private val mockNewTxId = "new_txid_456"
-    private val mockAddress = "bc1rt1test123"
-    private val testFeeRate = 10UL
-    private val testTotalFee = 1000UL
+    private val newTxId = "new_txid_456"
+    private val address = "bc1rt1test123"
+    private val feeRate = 10UL
+    private val totalFee = 1000UL
     private val testValue = 50000UL
 
-    private val mockOnchainActivity = OnchainActivity.create(
+    private val onchainActivity = OnchainActivity.create(
         id = "test_id",
         txType = PaymentType.SENT,
         txId = mockTxId,
         value = testValue,
         fee = 500UL,
-        address = mockAddress,
+        address = address,
         timestamp = 1234567890UL,
         feeRate = 10UL,
     )
 
-    private val mockActivitySent = Activity.Onchain(v1 = mockOnchainActivity)
+    private val activitySent = Activity.Onchain(onchainActivity)
+
+    private val fastFeeTime = "±10m"
+    private val normalFeeTime = "±20m"
+    private val flowFeeTime = "±1h"
+    private val minFeeTime = "+2h"
 
     @Before
-    fun setUp() {
+    fun setUp() = runBlocking {
+        whenever(context.getString(R.string.fee__fast__shortDescription)).thenReturn(fastFeeTime)
+        whenever(context.getString(R.string.fee__normal__shortDescription)).thenReturn(normalFeeTime)
+        whenever(context.getString(R.string.fee__slow__shortDescription)).thenReturn(flowFeeTime)
+        whenever(context.getString(R.string.fee__minimum__shortDescription)).thenReturn(minFeeTime)
+        whenever(onchain.feeRates).thenReturn(feeRates)
+        whenever(mockBtInfo.onchain).thenReturn(onchain)
+        whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
+        whenever(lightningRepo.syncAsync()).thenReturn(Job())
+
         sut = BoostTransactionViewModel(
+            context = context,
             lightningRepo = lightningRepo,
             walletRepo = walletRepo,
-            activityRepo = activityRepo
+            activityRepo = activityRepo,
+            blocktankRepo = blocktankRepo,
         )
-        wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
-        whenever(lightningRepo.syncAsync()).thenReturn(Job())
     }
 
     @Test
@@ -82,14 +112,13 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     @Test
     fun `setupActivity should set loading state initially`() = runTest {
-        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
-            .thenReturn(Result.success(testFeeRate))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(feeRate))
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(testTotalFee))
+            .thenReturn(Result.success(totalFee))
 
         sut.uiState.test {
             awaitItem() // initial state
-            sut.setupActivity(mockActivitySent)
+            sut.setupActivity(activitySent)
 
             val loadingState = awaitItem()
             assertTrue(loadingState.loading)
@@ -99,12 +128,11 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     @Test
     fun `setupActivity should call correct repository methods for sent transaction`() = runTest {
-        whenever(lightningRepo.getFeeRateForSpeed(eq(TransactionSpeed.Fast), anyOrNull()))
-            .thenReturn(Result.success(testFeeRate))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(feeRate))
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(testTotalFee))
+            .thenReturn(Result.success(totalFee))
 
-        sut.setupActivity(mockActivitySent)
+        sut.setupActivity(activitySent)
 
         verify(lightningRepo).getFeeRateForSpeed(eq(TransactionSpeed.Fast), anyOrNull())
         verify(lightningRepo).calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
@@ -112,12 +140,10 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     @Test
     fun `setupActivity should call CPFP method for received transaction`() = runTest {
-        val receivedActivity = Activity.Onchain(
-            v1 = mockOnchainActivity.copy(txType = PaymentType.RECEIVED)
-        )
+        val receivedActivity = Activity.Onchain(onchainActivity.copy(txType = PaymentType.RECEIVED))
 
         whenever(lightningRepo.calculateCpfpFeeRate(eq(mockTxId)))
-            .thenReturn(Result.success(testFeeRate))
+            .thenReturn(Result.success(feeRate))
 
         sut.setupActivity(receivedActivity)
 
@@ -146,12 +172,11 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onChangeAmount should emit OnMaxFee when at maximum rate`() = runTest {
-        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
-            .thenReturn(Result.success(100UL)) // MAX_FEE_RATE
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(MAX_FEE_RATE))
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(testTotalFee))
+            .thenReturn(Result.success(totalFee))
 
-        sut.setupActivity(mockActivitySent)
+        sut.setupActivity(activitySent)
 
         sut.boostTransactionEffect.test {
             sut.onChangeAmount(increase = true)
@@ -161,12 +186,11 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onChangeAmount should emit OnMinFee when at minimum rate`() = runTest {
-        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
-            .thenReturn(Result.success(1UL)) // MIN_FEE_RATE
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(1UL)) // MIN_FEE_RATE
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(testTotalFee))
+            .thenReturn(Result.success(totalFee))
 
-        sut.setupActivity(mockActivitySent)
+        sut.setupActivity(activitySent)
 
         sut.boostTransactionEffect.test {
             sut.onChangeAmount(increase = false)
@@ -176,47 +200,30 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
     @Test
     fun `setupActivity failure should emit OnBoostFailed`() = runTest {
-        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
-            .thenReturn(Result.failure(Exception("Fee estimation failed")))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.failure(Exception("error")))
 
         sut.boostTransactionEffect.test {
-            sut.setupActivity(mockActivitySent)
+            sut.setupActivity(activitySent)
             assertEquals(BoostTransactionEffects.OnBoostFailed, awaitItem())
         }
     }
 
     @Test
     fun `successful CPFP boost should call correct repository methods`() = runTest {
-        val receivedActivity = Activity.Onchain(
-            v1 = mockOnchainActivity.copy(txType = PaymentType.RECEIVED)
-        )
+        val receivedActivity = Activity.Onchain(onchainActivity.copy(txType = PaymentType.RECEIVED))
 
-        whenever(lightningRepo.calculateCpfpFeeRate(any()))
-            .thenReturn(Result.success(testFeeRate))
+        whenever(lightningRepo.calculateCpfpFeeRate(any())).thenReturn(Result.success(feeRate))
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(testTotalFee))
-        whenever(walletRepo.getOnchainAddress())
-            .thenReturn(mockAddress)
-        whenever(lightningRepo.accelerateByCpfp(any(), any(), any()))
-            .thenReturn(Result.success(mockNewTxId))
+            .thenReturn(Result.success(totalFee))
+        whenever(walletRepo.getOnchainAddress()).thenReturn(address)
+        whenever(lightningRepo.accelerateByCpfp(any(), any(), any())).thenReturn(Result.success(newTxId))
 
-        val newActivity = mockOnchainActivity.copy(
-            txType = PaymentType.SENT,
-            txId = mockNewTxId,
-            isBoosted = true
-        )
+        val newActivity = onchainActivity.copy(txType = PaymentType.SENT, txId = newTxId, isBoosted = true)
 
-        whenever(
-            activityRepo.findActivityByPaymentId(
-                paymentHashOrTxId = any(),
-                type = any(),
-                txType = any(),
-                retry = any(),
-            )
-        ).thenReturn(Result.success(Activity.Onchain(v1 = newActivity)))
+        whenever(activityRepo.findActivityByPaymentId(any(), any(), any(), any()))
+            .thenReturn(Result.success(Activity.Onchain(newActivity)))
 
-        whenever(activityRepo.updateActivity(any(), any(), any()))
-            .thenReturn(Result.success(Unit))
+        whenever(activityRepo.updateActivity(any(), any(), any())).thenReturn(Result.success(Unit))
 
         sut.setupActivity(receivedActivity)
 
@@ -230,4 +237,70 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         verify(activityRepo).updateActivity(any(), any(), any())
         verify(activityRepo, never()).deleteActivity(any())
     }
+
+    // region estimateTime dynamic tier tests
+
+    @Test
+    fun `estimateTime shows fast description when fee rate at or above fast threshold`() = runTest {
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(25UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+
+        sut.uiState.test {
+            awaitItem()
+            sut.setupActivity(activitySent)
+            awaitItem()
+            val state = awaitItem()
+            assertEquals(fastFeeTime, state.estimateTime)
+        }
+    }
+
+    @Test
+    fun `estimateTime shows normal description when fee rate between mid and fast`() = runTest {
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(15UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+
+        sut.uiState.test {
+            awaitItem()
+            sut.setupActivity(activitySent)
+            awaitItem()
+            val state = awaitItem()
+            assertEquals(normalFeeTime, state.estimateTime)
+        }
+    }
+
+    @Test
+    fun `estimateTime shows slow description when fee rate between slow and mid`() = runTest {
+        val lowFeeActivity = Activity.Onchain(onchainActivity.copy(feeRate = 1UL))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(7UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+
+        sut.uiState.test {
+            awaitItem() // initial state
+            sut.setupActivity(lowFeeActivity)
+            awaitItem() // loading state
+            val state = awaitItem()
+            assertEquals(flowFeeTime, state.estimateTime)
+        }
+    }
+
+    @Test
+    fun `estimateTime shows minimum description when fee rate below slow threshold`() = runTest {
+        val lowFeeActivity = Activity.Onchain(onchainActivity.copy(feeRate = 1UL))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(3UL))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(totalFee))
+
+        sut.uiState.test {
+            awaitItem() // initial state
+            sut.setupActivity(lowFeeActivity)
+            awaitItem() // loading state
+            val state = awaitItem()
+            assertEquals(minFeeTime, state.estimateTime)
+        }
+    }
+
+    // endregion
 }

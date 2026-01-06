@@ -1,10 +1,9 @@
 package to.bitkit.models
 
+import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import com.synonym.bitkitcore.FeeRates
 import to.bitkit.R
 import to.bitkit.ui.theme.Colors
@@ -81,16 +80,12 @@ enum class FeeRate(
             }
         }
 
-        @Composable
-        fun getFeeDescription(
+        fun Context.getFeeShortDescription(
             feeRate: ULong,
-            feeEstimates: FeeRates?,
+            feeRates: FeeRates?,
         ): String {
-            val feeRateEnum = feeEstimates?.let {
-                fromSatsPerVByte(feeRate, it)
-            } ?: NORMAL
-
-            return stringResource(feeRateEnum.shortDescription)
+            val feeRateEnum = feeRates?.let { fromSatsPerVByte(feeRate, it) } ?: NORMAL
+            return getString(feeRateEnum.shortDescription)
         }
     }
 }
