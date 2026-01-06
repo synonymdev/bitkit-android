@@ -36,7 +36,7 @@ fun BackgroundPaymentsIntroScreen(
         modifier = modifier.screen()
     ) {
         AppTopBar(
-            titleText = "Background Payments", // Todo Transifex
+            titleText = stringResource(R.string.settings__bg__title),
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
@@ -66,11 +66,11 @@ fun BackgroundPaymentsIntroContent(
         )
 
         Display(
-            text = "GET PAID\n<accent>PASSIVELY</accent>".withAccent(accentColor = Colors.Blue),
-            color = Colors.White
+            text = stringResource(R.string.settings__bg__intro_title).withAccent(accentColor = Colors.Blue),
+            color = Colors.White,
         )
         VerticalSpacer(8.dp)
-        BodyM(text = "Turn on notifications to get paid, even when your Bitkit app is closed.", color = Colors.White64)
+        BodyM(text = stringResource(R.string.settings__bg__intro_desc), color = Colors.White64)
         VerticalSpacer(32.dp)
         PrimaryButton(
             text = stringResource(R.string.common__continue),

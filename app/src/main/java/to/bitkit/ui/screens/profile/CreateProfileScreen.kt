@@ -33,7 +33,7 @@ fun CreateProfileScreen(
             Spacer(Modifier.weight(1f))
 
             Display(
-                text = "Comming soon",
+                text = stringResource(R.string.other__coming_soon),
                 color = Colors.White
             )
             Spacer(Modifier.weight(1f))

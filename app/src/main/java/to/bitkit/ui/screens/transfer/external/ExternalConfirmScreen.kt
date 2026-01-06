@@ -66,7 +66,7 @@ fun ExternalConfirmScreen(
 
     Content(
         uiState = uiState,
-        onConfirm = { viewModel.onConfirm() },
+        onConfirm = viewModel::onConfirm,
         onNetworkFeeClick = onNetworkFeeClick,
         onBackClick = onBackClick,
     )
@@ -96,9 +96,7 @@ private fun Content(
             val totalFee = uiState.amount.sats + networkFee
 
             Spacer(modifier = Modifier.height(16.dp))
-            Display(
-                text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple)
-            )
+            Display(stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(

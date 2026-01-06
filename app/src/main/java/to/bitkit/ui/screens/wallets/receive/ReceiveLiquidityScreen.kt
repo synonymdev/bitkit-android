@@ -131,14 +131,14 @@ private fun Content(
             FillHeight()
 
             BodyM(
-                text = "Enable background setup to safely exit Bitkit while your balance is being configured.",
+                text = stringResource(R.string.wallet__receive_liquidity__bg_setup_desc),
                 color = Colors.White64
             )
 
             VerticalSpacer(15.dp)
 
             SettingsSwitchRow(
-                title = "Set up in background",
+                title = stringResource(R.string.wallet__receive_liquidity__bg_setup_switch),
                 isChecked = hasNotificationPermission,
                 colors = AppSwitchDefaults.colorsPurple,
                 onClick = onSwitchClick,

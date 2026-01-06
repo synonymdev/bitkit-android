@@ -130,7 +130,7 @@ fun ActivityRow(
                         } else {
                             val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_transfer_spending_pending)
-                                .replace("{duration}", duration.removeEstimationSymbol())
+                                .replace("{duration}", duration)
                         }
 
                         isTransfer && !isSent -> if (item.v1.confirmed) {
@@ -138,17 +138,15 @@ fun ActivityRow(
                         } else {
                             val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_transfer_savings_pending)
-                                .replace("{duration}", duration.removeEstimationSymbol())
+                                .replace("{duration}", duration)
                         }
 
                         confirmed == true -> formattedTime(timestamp)
 
                         else -> {
                             val feeDescription = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
-                            stringResource(R.string.wallet__activity_confirms_in).replace(
-                                "{feeRateDescription}",
-                                feeDescription
-                            )
+                            stringResource(R.string.wallet__activity_confirms_in)
+                                .replace("{feeRateDescription}", feeDescription)
                         }
                     }
                 }
@@ -322,9 +320,6 @@ private fun formattedTime(timestamp: ULong): String {
         else -> instant.formatted(DatePattern.ACTIVITY_ROW_DATE_YEAR)
     }
 }
-
-// TODO remove this method after transifex update
-private fun String.removeEstimationSymbol() = this.replace("±", "")
 
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {
     override val values: Sequence<Activity> get() = previewActivityItems.asSequence()

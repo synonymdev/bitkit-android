@@ -56,8 +56,7 @@ fun WithdrawErrorScreen(
             VerticalSpacer(46.dp)
 
             BodyM(
-                // TODO add missing localized text
-                text = "Your withdrawal was unsuccessful. Please scan the QR code again or contact support.",
+                text = stringResource(R.string.wallet__withdraw_error),
                 color = Colors.White64,
             )
 

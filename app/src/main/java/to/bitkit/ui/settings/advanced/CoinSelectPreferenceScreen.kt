@@ -143,8 +143,8 @@ private fun Content(
                 // )
 
                 SettingsButtonRow(
-                    title = "Branch and Bound", // TODO add missing localized text
-                    description = "Finds exact amount matches to minimize change", // TODO add missing localized text
+                    title = stringResource(R.string.settings__cs__bnb_title),
+                    description = stringResource(R.string.settings__cs__bnb_desc),
                     value = SettingsButtonValue.BooleanValue(
                         uiState.coinSelectionPreference == CoinSelectionPreference.BranchAndBound
                     ),
@@ -153,8 +153,8 @@ private fun Content(
                 )
 
                 SettingsButtonRow(
-                    title = "Single Random Draw", // TODO add missing localized text
-                    description = "Random selection for privacy", // TODO add missing localized text
+                    title = stringResource(R.string.settings__cs__srd_title),
+                    description = stringResource(R.string.settings__cs__srd_desc),
                     value = SettingsButtonValue.BooleanValue(
                         uiState.coinSelectionPreference == CoinSelectionPreference.SingleRandomDraw
                     ),
