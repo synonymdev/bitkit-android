@@ -1,11 +1,13 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -23,6 +25,7 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PeerDetails
+import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.NodeLifecycleState
@@ -45,6 +48,7 @@ import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class WalletViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
@@ -334,15 +338,15 @@ class WalletViewModel @Inject constructor(
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
-                        title = "Success",
-                        description = "Peer disconnected."
+                        title = context.getString(R.string.common__success),
+                        description = "Peer disconnected.,"
                     )
                 }
                 .onFailure { error ->
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
-                        title = "Error",
-                        description = error.message ?: "Unknown error"
+                        title = context.getString(R.string.common__error),
+                        description = error.message ?: context.getString(R.string.common__error_desc)
                     )
                 }
         }
@@ -355,8 +359,8 @@ class WalletViewModel @Inject constructor(
             walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
-                    title = "Error updating invoice",
-                    description = error.message ?: "Unknown error"
+                    title = context.getString(R.string.wallet__error_invoice_update),
+                    description = error.message ?: context.getString(R.string.common__error_desc)
                 )
             }
         }

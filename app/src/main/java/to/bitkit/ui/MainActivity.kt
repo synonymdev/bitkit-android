@@ -30,6 +30,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
@@ -76,10 +77,9 @@ class MainActivity : FragmentActivity() {
 
         initNotificationChannel()
         initNotificationChannel(
-            // TODO Transifex
             id = CHANNEL_ID_NODE,
-            name = "Lightning node notification",
-            desc = "Channel for LightningNodeService",
+            name = getString(R.string.notification_channel_node_name),
+            desc = getString(R.string.notification_channel_node_desc),
             importance = NotificationManager.IMPORTANCE_LOW
         )
         appViewModel.handleDeeplinkIntent(intent)

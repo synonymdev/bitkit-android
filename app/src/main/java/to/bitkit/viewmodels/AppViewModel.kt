@@ -971,8 +971,8 @@ class AppViewModel @Inject constructor(
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
             toast(
                 type = Toast.ToastType.ERROR,
-                title = "Insufficient Funds",
-                description = "You do not have enough funds to send this payment."
+                title = context.getString(R.string.wallet__error_insufficient_funds_title),
+                description = context.getString(R.string.wallet__error_insufficient_funds_msg)
             )
             return
         }
@@ -1317,7 +1317,7 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                toast(Exception("Error fetching lnurl invoice"))
+                toast(Exception(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
                 hideSheet()
                 return
             }
@@ -1330,7 +1330,7 @@ class AppViewModel @Inject constructor(
                 val validatedAddress = runCatching { validateBitcoinAddress(address) }
                     .getOrElse { e ->
                         Logger.error("Invalid bitcoin send address: '$address'", e, context = TAG)
-                        toast(Exception("Invalid bitcoin send address"))
+                        toast(Exception(context.getString(R.string.wallet__error_invalid_bitcoin_address)))
                         hideSheet()
                         return
                     }
@@ -1354,8 +1354,8 @@ class AppViewModel @Inject constructor(
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
                         toast(
                             type = Toast.ToastType.ERROR,
-                            title = "Error Sending",
-                            description = e.message ?: "Unknown error"
+                            title = context.getString(R.string.wallet__error_sending_title),
+                            description = e.message ?: context.getString(R.string.common__error_desc)
                         )
                         hideSheet()
                     }
@@ -1810,7 +1810,11 @@ class AppViewModel @Inject constructor(
     }
 
     fun toast(error: Throwable) {
-        toast(type = Toast.ToastType.ERROR, title = "Error", description = error.message ?: "Unknown error")
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.common__error),
+            description = error.message ?: context.getString(R.string.common__error_desc)
+        )
     }
 
     fun toast(toast: Toast) {

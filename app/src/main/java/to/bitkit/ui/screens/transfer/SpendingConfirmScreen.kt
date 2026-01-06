@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,14 +100,12 @@ fun SpendingConfirmScreen(
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
         onConfirm = onConfirm,
-        onUseDefaultLspBalanceClick = { viewModel.onUseDefaultLspBalanceClick() },
-        onTransferToSpendingConfirm = { order -> viewModel.onTransferToSpendingConfirm(order) },
+        onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
+        onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
         order = order,
         hasNotificationPermission = notificationsGranted,
-        onSwitchClick = {
-            NotificationUtils.openNotificationSettings(context)
-        },
-        isAdvanced = isAdvanced
+        onSwitchClick = { NotificationUtils.openNotificationSettings(context) },
+        isAdvanced = isAdvanced,
     )
 }
 
@@ -140,7 +139,7 @@ private fun Content(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 60.dp)
-                        .align(alignment = Alignment.BottomCenter)
+                        .align(Alignment.BottomCenter)
                         .padding(bottom = 76.dp)
                 )
             }
@@ -158,10 +157,7 @@ private fun Content(
                 val lspBalance = order.lspBalanceSat
 
                 VerticalSpacer(32.dp)
-                Display(
-                    text = stringResource(R.string.lightning__transfer__confirm)
-                        .withAccent(accentColor = Colors.Purple)
-                )
+                Display(stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
                 VerticalSpacer(8.dp)
 
                 Row(

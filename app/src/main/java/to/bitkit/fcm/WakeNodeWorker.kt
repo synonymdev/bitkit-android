@@ -96,7 +96,7 @@ class WakeNodeWorker @AssistedInject constructor(
                             Logger.error("Failed to open channel", e, context = TAG)
                             bestAttemptContent = NotificationDetails(
                                 title = appContext.getString(R.string.notification_channel_open_failed_title),
-                                body = e.message ?: appContext.getString(R.string.notification_unknown_error),
+                                body = e.message ?: appContext.getString(R.string.common__error_desc),
                             )
                             deliver()
                         }
@@ -106,7 +106,7 @@ class WakeNodeWorker @AssistedInject constructor(
             withTimeout(timeout) { deliverSignal.await() } // Stops node on timeout & avoids notification replay by OS
             return Result.success()
         } catch (e: Exception) {
-            val reason = e.message ?: appContext.getString(R.string.notification_unknown_error)
+            val reason = e.message ?: appContext.getString(R.string.common__error_desc)
 
             bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification_lightning_error_title),

@@ -436,7 +436,7 @@ private fun ActivityDetailContent(
                         text = when {
                             isTransferToSpending -> stringResource(R.string.wallet__activity_transfer_to_spending)
                             isTransferFromSpending -> stringResource(R.string.wallet__activity_transfer_to_savings)
-                            isSelfSend -> "Sent to myself" // TODO add missing localized text
+                            isSelfSend -> stringResource(R.string.wallet__activity_sent_self)
                             else -> stringResource(R.string.wallet__activity_payment)
                         },
                         color = Colors.White64,
@@ -740,7 +740,6 @@ private fun StatusSection(
 
                     if (item.v1.isTransfer) {
                         val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
-                            .removeEstimationSymbol()
                         statusText = stringResource(R.string.wallet__activity_transfer_pending)
                             .replace("{duration}", duration)
                         statusTestTag = "StatusTransfer"
@@ -953,6 +952,3 @@ private fun isBoostCompleted(
         return activity.boostTxIds.any { boostTxDoesExist[it] == true }
     }
 }
-
-// TODO remove this method after transifex update
-private fun String.removeEstimationSymbol() = this.replace("±", "")

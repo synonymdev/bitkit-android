@@ -124,7 +124,7 @@ private fun BackupSettingsScreenContent(
                 if (Env.isE2eTest && allSynced) {
                     Icon(
                         painter = painterResource(R.drawable.ic_check_circle),
-                        contentDescription = "All Synced",
+                        contentDescription = null,
                         tint = Colors.Green,
                         modifier = Modifier
                             .padding(end = 4.dp)
