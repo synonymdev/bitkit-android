@@ -28,9 +28,9 @@ import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.shared.util.screen
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.viewmodels.SettingsViewModel
 
@@ -52,7 +52,7 @@ fun BackgroundPaymentsSettings(
         hasPermission = notificationsGranted,
         showDetails = showNotificationDetails,
         onBack = onBack,
-        onSystemSettingsClick = { NotificationUtils.openNotificationSettings(context) },
+        onSystemSettingsClick = context::openNotificationSettings,
         toggleNotificationDetails = settingsViewModel::toggleNotificationDetails,
     )
 }
