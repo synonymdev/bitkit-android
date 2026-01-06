@@ -19,4 +19,4 @@ google-services.json
 *.keystore
 !debug.keystore
 keystore.*
-!*.template
+!keystore.properties.template
