@@ -110,11 +110,14 @@ class ActivityRepo @Inject constructor(
     /**
      * Syncs `ldk-node` [PaymentDetails] list to `bitkit-core` [Activity] items.
      */
-    private suspend fun syncLdkNodePayments(payments: List<PaymentDetails>): Result<Unit> = runCatching {
-        val channelIdsByTxId = findChannelsForPayments(payments)
-        coreService.activity.syncLdkNodePaymentsToActivities(payments, channelIdsByTxId = channelIdsByTxId)
-    }.onFailure { e ->
-        Logger.error("Error syncing LDK payments:", e, context = TAG)
+    suspend fun syncLdkNodePayments(payments: List<PaymentDetails>): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            val channelIdsByTxId = findChannelsForPayments(payments)
+            coreService.activity.syncLdkNodePaymentsToActivities(payments, channelIdsByTxId = channelIdsByTxId)
+            notifyActivitiesChanged()
+        }.onFailure { e ->
+            Logger.error("Error syncing LDK payments:", e, context = TAG)
+        }
     }
 
     private suspend fun findChannelsForPayments(
@@ -663,6 +666,15 @@ class ActivityRepo @Inject constructor(
                 context = TAG,
             )
             notifyActivitiesChanged()
+        }
+    }
+
+    suspend fun markAllUnseenActivitiesAsSeen(): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.markAllUnseenActivitiesAsSeen()
+            notifyActivitiesChanged()
+        }.onFailure { e ->
+            Logger.error("Failed to mark all activities as seen: $e", e, context = TAG)
         }
     }
 

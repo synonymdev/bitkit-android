@@ -29,6 +29,7 @@ import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
 import org.lightningdevkit.ldknode.ChannelConfig
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
@@ -167,10 +168,11 @@ class LightningRepo @Inject constructor(
         walletIndex: Int,
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
+        channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         return@withContext try {
             val trustedPeers = getTrustedPeersFromBlocktank()
-            lightningService.setup(walletIndex, customServerUrl, customRgsServerUrl, trustedPeers)
+            lightningService.setup(walletIndex, customServerUrl, customRgsServerUrl, trustedPeers, channelMigration)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node setup error", e, context = TAG)
@@ -196,6 +198,7 @@ class LightningRepo @Inject constructor(
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
         eventHandler: NodeEventHandler? = null,
+        channelMigration: ChannelDataMigration? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeException())
@@ -214,7 +217,7 @@ class LightningRepo @Inject constructor(
 
             // Setup if needed
             if (lightningService.node == null) {
-                val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl)
+                val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
                 if (setupResult.isFailure) {
                     _lightningState.update {
                         it.copy(
@@ -264,6 +267,7 @@ class LightningRepo @Inject constructor(
                     shouldRetry = false,
                     customServerUrl = customServerUrl,
                     customRgsServerUrl = customRgsServerUrl,
+                    channelMigration = channelMigration,
                 )
             } else {
                 Logger.error("Node start error", e, context = TAG)
@@ -309,6 +313,19 @@ class LightningRepo @Inject constructor(
             Logger.error("Node stop error", e, context = TAG)
             Result.failure(e)
         }
+    }
+
+    suspend fun restart(): Result<Unit> = withContext(bgDispatcher) {
+        stop().onFailure {
+            Logger.error("Failed to stop node during restart", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+        delay(500)
+        start(shouldRetry = false).onFailure {
+            Logger.error("Failed to start node during restart", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+        Result.success(Unit)
     }
 
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("sync") {

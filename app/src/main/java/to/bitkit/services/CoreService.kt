@@ -586,19 +586,15 @@ class ActivityService(
         timestamp: ULong,
     ): ConfirmationData {
         var isConfirmed = false
-        var confirmedTimestamp: ULong? = null
+        var blockTimestamp: ULong? = null
 
         val status = kind.status
         if (status is ConfirmationStatus.Confirmed) {
             isConfirmed = true
-            confirmedTimestamp = status.timestamp
+            blockTimestamp = status.timestamp
         }
 
-        if (isConfirmed && confirmedTimestamp != null && confirmedTimestamp < timestamp) {
-            confirmedTimestamp = timestamp
-        }
-
-        return ConfirmationData(isConfirmed, confirmedTimestamp, timestamp)
+        return ConfirmationData(isConfirmed, blockTimestamp, timestamp)
     }
 
     private fun buildUpdatedOnchainActivity(
@@ -636,6 +632,14 @@ class ActivityService(
         channelId: String? = null,
     ): OnchainActivity {
         val isTransfer = channelId != null
+        val paymentTimestamp = confirmationData.timestamp
+        val blockTimestamp = confirmationData.confirmedTimestamp
+
+        val activityTimestamp = if (blockTimestamp != null && blockTimestamp < paymentTimestamp) {
+            blockTimestamp
+        } else {
+            paymentTimestamp
+        }
 
         return OnchainActivity.create(
             id = payment.id,
@@ -644,10 +648,10 @@ class ActivityService(
             value = payment.amountSats ?: 0u,
             fee = (payment.feePaidMsat ?: 0u) / 1000u,
             address = resolvedAddress ?: "Loading...",
-            timestamp = confirmationData.timestamp,
+            timestamp = activityTimestamp,
             confirmed = confirmationData.isConfirmed,
             isTransfer = isTransfer,
-            confirmTimestamp = confirmationData.confirmedTimestamp,
+            confirmTimestamp = blockTimestamp,
             channelId = channelId,
             seenAt = null,
         )
@@ -1112,13 +1116,42 @@ class ActivityService(
         markActivityAsSeen(activity.id, seenAt)
     }
 
+    suspend fun markAllUnseenActivitiesAsSeen() = ServiceQueue.CORE.background {
+        val timestamp = (System.currentTimeMillis() / 1000).toULong()
+        val activities = getActivities(
+            filter = ActivityFilter.ALL,
+            txType = null,
+            tags = null,
+            search = null,
+            minDate = null,
+            maxDate = null,
+            limit = null,
+            sortDirection = null,
+        )
+
+        for (activity in activities) {
+            val isSeen = when (activity) {
+                is Activity.Onchain -> activity.v1.seenAt != null
+                is Activity.Lightning -> activity.v1.seenAt != null
+            }
+
+            if (!isSeen) {
+                val activityId = when (activity) {
+                    is Activity.Onchain -> activity.v1.id
+                    is Activity.Lightning -> activity.v1.id
+                }
+                markActivityAsSeen(activityId, timestamp)
+            }
+        }
+    }
+
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
         return ServiceQueue.CORE.background {
             val doesExistMap = mutableMapOf<String, Boolean>()
             for (boostTxId in boostTxIds) {
                 val boostActivity = getOnchainActivityByTxId(boostTxId)
                 if (boostActivity != null) {
-                    doesExistMap[boostTxId] = boostActivity.doesExist
+                    doesExistMap[boostTxId] = boostActivity.doesExist && !boostActivity.isBoosted
                 }
             }
             return@background doesExistMap

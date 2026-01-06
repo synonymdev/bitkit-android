@@ -2,6 +2,7 @@ package to.bitkit.ui
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -23,6 +24,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
+import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
@@ -36,6 +38,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val backupRepo = mock<BackupRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
+    private val migrationService = mock<MigrationService>()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -43,9 +46,10 @@ class WalletViewModelTest : BaseUnitTest() {
     private val isRecoveryMode = MutableStateFlow(false)
 
     @Before
-    fun setUp() {
+    fun setUp() = runBlocking {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
+        whenever(migrationService.isMigrationChecked()).thenReturn(true)
 
         sut = WalletViewModel(
             bgDispatcher = testDispatcher,
@@ -54,6 +58,7 @@ class WalletViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
+            migrationService = migrationService,
         )
     }
 
@@ -164,7 +169,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `backup restore should not be triggered when wallet exists while not restoring`() = test {
-        assertEquals(RestoreState.Initial, sut.restoreState)
+        assertEquals(RestoreState.Initial, sut.restoreState.value)
 
         walletState.value = walletState.value.copy(walletExists = true)
 
@@ -176,11 +181,11 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
         walletState.value = walletState.value.copy(walletExists = true)
         sut.restoreWallet("mnemonic", "passphrase")
-        assertEquals(RestoreState.InProgress.Wallet, sut.restoreState)
+        assertEquals(RestoreState.InProgress.Wallet, sut.restoreState.value)
 
         sut.onRestoreContinue()
 
-        assertEquals(RestoreState.Settled, sut.restoreState)
+        assertEquals(RestoreState.Settled, sut.restoreState.value)
     }
 
     @Test
@@ -189,26 +194,26 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
-        assertEquals(RestoreState.Completed, sut.restoreState)
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
 
         sut.proceedWithoutRestore(onDone = {})
         advanceUntilIdle()
-        assertEquals(RestoreState.Settled, sut.restoreState)
+        assertEquals(RestoreState.Settled, sut.restoreState.value)
     }
 
     @Test
     fun `restore state should transition as expected`() = test {
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
-        assertEquals(RestoreState.Initial, sut.restoreState)
+        assertEquals(RestoreState.Initial, sut.restoreState.value)
 
         sut.restoreWallet("mnemonic", "passphrase")
-        assertEquals(RestoreState.InProgress.Wallet, sut.restoreState)
+        assertEquals(RestoreState.InProgress.Wallet, sut.restoreState.value)
 
         walletState.value = walletState.value.copy(walletExists = true)
-        assertEquals(RestoreState.Completed, sut.restoreState)
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
 
         sut.onRestoreContinue()
-        assertEquals(RestoreState.Settled, sut.restoreState)
+        assertEquals(RestoreState.Settled, sut.restoreState.value)
     }
 
     @Test
@@ -226,7 +231,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.walletExists()).thenReturn(true)
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
-        whenever(testLightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(testLightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(Unit))
 
         val testSut = WalletViewModel(
@@ -236,15 +241,16 @@ class WalletViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
+            migrationService = migrationService,
         )
 
-        assertEquals(RestoreState.Initial, testSut.restoreState)
+        assertEquals(RestoreState.Initial, testSut.restoreState.value)
         assertEquals(true, testSut.walletExists)
 
         testSut.start()
         advanceUntilIdle()
 
-        verify(testLightningRepo).start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(testLightningRepo).start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
         verify(testWalletRepo).refreshBip21()
     }
 
@@ -264,7 +270,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
-        whenever(testLightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(testLightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(Unit))
 
         val testSut = WalletViewModel(
@@ -274,11 +280,12 @@ class WalletViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
+            migrationService = migrationService,
         )
 
         // Trigger restore to put state in non-idle
         testSut.restoreWallet("mnemonic", null)
-        assertEquals(RestoreState.InProgress.Wallet, testSut.restoreState)
+        assertEquals(RestoreState.InProgress.Wallet, testSut.restoreState.value)
 
         testSut.start()
         advanceUntilIdle()

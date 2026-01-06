@@ -335,8 +335,7 @@ private fun ColumnScope.OnchainDetails(
     val boostTxIds = onchain.v1.boostTxIds
     if (boostTxIds.isNotEmpty()) {
         boostTxIds.forEachIndexed { index, boostedTxId ->
-            val boostTxDoesExistValue = boostTxDoesExist[boostedTxId] ?: true
-            val isRbf = !boostTxDoesExistValue
+            val isRbf = onchain.v1.txType == PaymentType.SENT || !(boostTxDoesExist[boostedTxId] ?: true)
             Section(
                 title = stringResource(
                     if (isRbf) R.string.wallet__activity_boosted_rbf else R.string.wallet__activity_boosted_cpfp

@@ -609,13 +609,10 @@ private fun ActivityDetailContent(
                     is Activity.Onchain -> {
                         val activity = item.v1
                         if (activity.isBoosted && activity.boostTxIds.isNotEmpty()) {
-                            val hasCPFP = activity.boostTxIds.any { boostTxDoesExist[it] == true }
-                            if (hasCPFP) {
+                            if (activity.txType == PaymentType.SENT) {
                                 true
-                            } else if (activity.txType == PaymentType.SENT) {
-                                activity.boostTxIds.any { boostTxDoesExist[it] == false }
                             } else {
-                                false
+                                activity.boostTxIds.any { boostTxDoesExist[it] == true }
                             }
                         } else {
                             false
@@ -948,20 +945,13 @@ private fun isBoostCompleted(
     activity: OnchainActivity,
     boostTxDoesExist: Map<String, Boolean>,
 ): Boolean {
-    // If boostTxIds is empty, boost is in progress (RBF case)
     if (activity.boostTxIds.isEmpty()) return true
 
-    // Check if CPFP boost is completed
-    val hasCPFP = activity.boostTxIds.any { boostTxDoesExist[it] == true }
-    if (hasCPFP) return true
-
-    // For sent transactions, check if RBF boost is completed
     if (activity.txType == PaymentType.SENT) {
-        val hasRBF = activity.boostTxIds.any { boostTxDoesExist[it] == false }
-        if (hasRBF) return true
+        return true
+    } else {
+        return activity.boostTxIds.any { boostTxDoesExist[it] == true }
     }
-
-    return false
 }
 
 // TODO remove this method after transifex update

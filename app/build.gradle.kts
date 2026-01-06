@@ -46,7 +46,7 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 17
+        versionCode = 162
         versionName = "0.0.17"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {

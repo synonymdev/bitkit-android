@@ -7,6 +7,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +23,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
@@ -49,6 +53,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 /**
@@ -536,6 +541,37 @@ class BackupRepo @Inject constructor(
         }
     }
 
+    suspend fun getLatestBackupTime(): ULong? = withContext(ioDispatcher) {
+        runCatching {
+            withTimeout(VSS_TIMESTAMP_TIMEOUT) {
+                vssBackupClient.setup()
+                coroutineScope {
+                    BackupCategory.entries
+                        .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
+                        .map { category -> async { getRemoteBackupTimestamp(category) } }
+                        .mapNotNull { it.await() }
+                        .filter { it > 0uL }
+                        .maxOrNull()
+                }
+            }
+        }.onFailure { e ->
+            Logger.warn("Failed to get VSS backup timestamp: $e", context = TAG)
+        }.getOrNull()
+    }
+
+    private suspend fun getRemoteBackupTimestamp(category: BackupCategory): ULong? {
+        val item = vssBackupClient.getObject(category.name).getOrNull() ?: return null
+        val data = item.value ?: return null
+
+        @Serializable
+        data class BackupWithCreatedAt(val createdAt: Long? = null)
+
+        return runCatching {
+            val millis = json.decodeFromString<BackupWithCreatedAt>(String(data)).createdAt ?: return@runCatching null
+            (millis / 1000).toULong()
+        }.getOrNull()
+    }
+
     fun scheduleFullBackup() {
         Logger.debug("Scheduling backups for all categories", context = TAG)
         BackupCategory.entries
@@ -578,5 +614,6 @@ class BackupRepo @Inject constructor(
         private const val FAILED_BACKUP_CHECK_TIME = 30 * 60 * 1000L // 30 minutes
         private const val FAILED_BACKUP_NOTIFICATION_INTERVAL = 10 * 60 * 1000L // 10 minutes
         private const val SYNC_STATUS_DEBOUNCE = 500L // 500ms debounce for sync status updates
+        private val VSS_TIMESTAMP_TIMEOUT = 60.seconds
     }
 }

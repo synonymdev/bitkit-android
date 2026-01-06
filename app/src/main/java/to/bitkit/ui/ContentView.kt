@@ -271,15 +271,23 @@ fun ContentView(
     var walletIsInitializing by remember { mutableStateOf(nodeLifecycleState == NodeLifecycleState.Initializing) }
     var walletInitShouldFinish by remember { mutableStateOf(false) }
 
+    val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
+    val isRestoringFromRNRemoteBackup by walletViewModel.isRestoringFromRNRemoteBackup.collectAsStateWithLifecycle()
+    var restoreRetryCount by remember { mutableIntStateOf(0) }
+
     // React to nodeLifecycleState changes
-    LaunchedEffect(nodeLifecycleState) {
+    LaunchedEffect(nodeLifecycleState, restoreState, isRestoringFromRNRemoteBackup) {
         when (nodeLifecycleState) {
             NodeLifecycleState.Initializing -> {
                 walletIsInitializing = true
             }
 
             NodeLifecycleState.Running -> {
-                walletInitShouldFinish = true
+                val restoreComplete = restoreState !is RestoreState.InProgress
+                val metadataComplete = !isRestoringFromRNRemoteBackup
+                if (restoreComplete && metadataComplete) {
+                    walletInitShouldFinish = true
+                }
             }
 
             is NodeLifecycleState.ErrorStarting -> {
@@ -289,9 +297,6 @@ fun ContentView(
             else -> Unit
         }
     }
-
-    val restoreState = walletViewModel.restoreState
-    var restoreRetryCount by remember { mutableIntStateOf(0) }
 
     if (walletIsInitializing) {
         // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService

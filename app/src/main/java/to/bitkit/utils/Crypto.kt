@@ -1,5 +1,11 @@
 package to.bitkit.utils
 
+import org.bouncycastle.asn1.sec.SECNamedCurves
+import org.bouncycastle.asn1.x9.X9ECParameters
+import org.bouncycastle.crypto.params.ECDomainParameters
+import org.bouncycastle.crypto.params.ECPrivateKeyParameters
+import org.bouncycastle.crypto.params.ParametersWithRandom
+import org.bouncycastle.crypto.signers.ECDSASigner
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
 import org.bouncycastle.jce.ECNamedCurveTable
@@ -10,10 +16,12 @@ import org.bouncycastle.jce.spec.ECPrivateKeySpec
 import org.bouncycastle.jce.spec.ECPublicKeySpec
 import org.bouncycastle.util.BigIntegers
 import to.bitkit.ext.fromHex
+import to.bitkit.ext.toHex
 import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.security.Security
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
@@ -135,6 +143,88 @@ class Crypto @Inject constructor() {
         }
     }
 
+    fun sign(message: String, privateKey: ByteArray): String = runCatching {
+        val lightningPrefix = "Lightning Signed Message:"
+        val prefixedMessage = lightningPrefix + message
+        val hash1 = MessageDigest.getInstance("SHA-256").digest(prefixedMessage.toByteArray())
+        val messageHash = MessageDigest.getInstance("SHA-256").digest(hash1)
+
+        val curve: X9ECParameters = SECNamedCurves.getByName("secp256k1")
+        val privateKeyBigInt = BigInteger(1, privateKey)
+        val domainParams = ECDomainParameters(curve.curve, curve.g, curve.n, curve.h)
+        val privateKeyParams = ECPrivateKeyParameters(privateKeyBigInt, domainParams)
+
+        val signer = ECDSASigner()
+        signer.init(true, ParametersWithRandom(privateKeyParams, SecureRandom()))
+
+        val components = signer.generateSignature(messageHash)
+        val r = components[0]
+        val s = components[1]
+
+        val n = curve.n
+        val halfOrder = n.shiftRight(1)
+        if (s > halfOrder) {
+            val s2 = n.subtract(s)
+            val recId = calculateRecoveryId(r, s2, messageHash, privateKeyBigInt, curve)
+            formatSignature(recId, r, s2)
+        } else {
+            val recId = calculateRecoveryId(r, s, messageHash, privateKeyBigInt, curve)
+            formatSignature(recId, r, s)
+        }
+    }.getOrElse { throw CryptoError.SigningFailed }
+
+    fun getPublicKey(privateKey: ByteArray): ByteArray = runCatching {
+        val keyFactory = KeyFactory.getInstance("EC", "BC")
+        val privateKeySpec = ECPrivateKeySpec(BigInteger(1, privateKey), params)
+        val privateKeyObj = keyFactory.generatePrivate(privateKeySpec)
+
+        val publicKeyPoint = params.g.multiply((privateKeyObj as ECPrivateKey).d)
+        publicKeyPoint.getEncoded(true)
+    }.getOrElse { throw CryptoError.PublicKeyCreationFailed }
+
+    private fun calculateRecoveryId(
+        r: BigInteger,
+        s: BigInteger,
+        messageHash: ByteArray,
+        privateKey: BigInteger,
+        curve: X9ECParameters,
+    ): Int {
+        val expectedPublicKey = curve.g.multiply(privateKey)
+        val n = curve.n
+        val e = BigInteger(1, messageHash)
+        val rInv = r.modInverse(n)
+
+        for (recId in 0..3) {
+            try {
+                val x = if (recId >= 2) r.add(n) else r
+                val xBytes = BigIntegers.asUnsignedByteArray(32, x)
+
+                val yEven = curve.curve.decodePoint(byteArrayOf(0x02) + xBytes)
+                val yOdd = curve.curve.decodePoint(byteArrayOf(0x03) + xBytes)
+
+                val recoveryPoint = if (recId % 2 == 0) yEven else yOdd
+
+                val candidatePublicKey = recoveryPoint.multiply(s.multiply(rInv).mod(n))
+                    .subtract(curve.g.multiply(e.multiply(rInv).mod(n)))
+
+                if (candidatePublicKey.equals(expectedPublicKey)) {
+                    return recId
+                }
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        throw CryptoError.SigningFailed
+    }
+
+    private fun formatSignature(recId: Int, r: BigInteger, s: BigInteger): String {
+        val recIdByte = (recId + 31).toByte()
+        val rBytes = BigIntegers.asUnsignedByteArray(32, r)
+        val sBytes = BigIntegers.asUnsignedByteArray(32, s)
+        val signature = byteArrayOf(recIdByte) + rBytes + sBytes
+        return signature.toHex()
+    }
+
     private fun sha256d(input: ByteArray): ByteArray {
         return MessageDigest.getInstance("SHA-256").run { digest(digest(input)) }
     }
@@ -145,4 +235,6 @@ sealed class CryptoError(message: String) : AppError(message) {
     data object SecurityProviderSetupFailed : CryptoError("Security provider setup failed")
     data object KeypairGenerationFailed : CryptoError("Keypair generation failed")
     data object DecryptionFailed : CryptoError("Decryption failed")
+    data object SigningFailed : CryptoError("Signing failed")
+    data object PublicKeyCreationFailed : CryptoError("Public key creation failed")
 }

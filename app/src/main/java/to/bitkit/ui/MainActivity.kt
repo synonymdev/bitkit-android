@@ -43,6 +43,7 @@ import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.RestoreWalletScreen
 import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
+import to.bitkit.ui.screens.MigrationLoadingScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
@@ -98,19 +99,25 @@ class MainActivity : FragmentActivity() {
                 val walletExists by walletViewModel.walletState
                     .map { it.walletExists }
                     .collectAsStateWithLifecycle(initialValue = walletViewModel.walletExists)
+                val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
+                val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
 
                 LaunchedEffect(
                     walletExists,
                     isRecoveryMode,
-                    notificationsGranted
+                    notificationsGranted,
+                    restoreState,
                 ) {
-                    if (walletExists && !isRecoveryMode && notificationsGranted) {
+                    val canStartService = walletExists && notificationsGranted && restoreState.isIdle()
+                    if (canStartService && !isRecoveryMode) {
                         tryStartForegroundService()
                     }
                 }
 
-                if (!walletViewModel.walletExists && !isRecoveryMode) {
+                if (isShowingMigrationLoading && !isRecoveryMode) {
+                    MigrationLoadingScreen(isVisible = true)
+                } else if (!walletViewModel.walletExists && !isRecoveryMode) {
                     OnboardingNav(
                         startupNavController = rememberNavController(),
                         scope = scope,
