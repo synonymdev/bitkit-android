@@ -56,10 +56,10 @@ import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
@@ -103,7 +103,7 @@ fun SpendingConfirmScreen(
         onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
         order = order,
         hasNotificationPermission = notificationsGranted,
-        onSwitchClick = { NotificationUtils.openNotificationSettings(context) },
+        onSwitchClick = { context.openNotificationSettings() },
         isAdvanced = isAdvanced,
     )
 }

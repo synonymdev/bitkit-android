@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import to.bitkit.ui.areNotificationsEnabled
 
 @Composable
 fun RequestNotificationPermissions(
@@ -30,7 +31,7 @@ fun RequestNotificationPermissions(
     val requiresPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
     var isGranted by remember {
-        mutableStateOf(NotificationUtils.areNotificationsEnabled(context))
+        mutableStateOf(context.areNotificationsEnabled())
     }
 
     // Permission request launcher
@@ -43,7 +44,7 @@ fun RequestNotificationPermissions(
 
     // Request permission on first composition if needed
     LaunchedEffect(Unit) {
-        val currentPermissionState = NotificationUtils.areNotificationsEnabled(context)
+        val currentPermissionState = context.areNotificationsEnabled()
         isGranted = currentPermissionState
         currentOnPermissionChange(currentPermissionState)
 
@@ -56,7 +57,7 @@ fun RequestNotificationPermissions(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                val currentPermissionState = NotificationUtils.areNotificationsEnabled(context)
+                val currentPermissionState = context.areNotificationsEnabled()
                 if (currentPermissionState != isGranted) {
                     isGranted = currentPermissionState
                     currentOnPermissionChange(currentPermissionState)
