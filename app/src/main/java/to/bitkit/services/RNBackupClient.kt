@@ -24,12 +24,12 @@ import org.ldk.structs.KeysManager
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
-import to.bitkit.di.json
 import to.bitkit.env.Env
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
 import javax.crypto.Cipher
+import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
@@ -59,7 +59,7 @@ class RNBackupClient @Inject constructor(
     suspend fun listFiles(fileGroup: String? = "ldk"): RNBackupListResponse? = withContext(ioDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup
+                ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -81,7 +81,7 @@ class RNBackupClient @Inject constructor(
     suspend fun retrieve(label: String, fileGroup: String? = null): ByteArray? = withContext(ioDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup
+                ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -108,8 +108,7 @@ class RNBackupClient @Inject constructor(
 
     suspend fun retrieveChannelMonitor(channelId: String): ByteArray? = withContext(ioDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -236,7 +235,7 @@ class RNBackupClient @Inject constructor(
             }
 
             if (!challengeResponse.status.isSuccess()) {
-                throw RNBackupError.AuthFailed
+                throw RNBackupError.AuthFailed()
             }
 
             val challengeResult = challengeResponse.body<AuthChallengeResponse>()
@@ -254,7 +253,7 @@ class RNBackupClient @Inject constructor(
             }
 
             if (!authResponse.status.isSuccess()) {
-                throw RNBackupError.AuthFailed
+                throw RNBackupError.AuthFailed()
             }
 
             authResponse.body<AuthBearerResponse>().also { cachedBearer = it }
@@ -283,12 +282,7 @@ class RNBackupClient @Inject constructor(
 
         return runCatching {
             val keysManager = KeysManager.of(bip32Seed, seconds, nanoSeconds)
-            val method = keysManager.javaClass.getMethod("get_node_secret_key")
-            when (val nodeSecretKey = method.invoke(keysManager)) {
-                is ByteArray -> nodeSecretKey
-                is List<*> -> nodeSecretKey.map { (it as UByte).toByte() }.toByteArray()
-                else -> throw ClassCastException("Unexpected type: ${nodeSecretKey?.javaClass?.name}")
-            }
+            keysManager._node_secret_key
         }.getOrElse { bip32Seed }
     }
 
@@ -306,9 +300,12 @@ class RNBackupClient @Inject constructor(
         return (generator.generateDerivedParameters(512) as KeyParameter).key
     }
 
+    @Suppress("SpellCheckingInspection")
     private fun deriveMasterKey(seed: ByteArray): ByteArray {
-        val hmac = javax.crypto.Mac.getInstance("HmacSHA512")
-        val keySpec = javax.crypto.spec.SecretKeySpec("Bitcoin seed".toByteArray(), "HmacSHA512")
+        @Suppress("SpellCheckingInspection")
+        val algorithm = "HmacSHA512"
+        val hmac = Mac.getInstance(algorithm)
+        val keySpec = SecretKeySpec("Bitcoin seed".toByteArray(), algorithm)
         hmac.init(keySpec)
         val i = hmac.doFinal(seed)
         return i.sliceArray(0 until 32)
@@ -332,9 +329,7 @@ class RNBackupClient @Inject constructor(
         return cipher.doFinal(ciphertext + tag)
     }
 
-    private fun ByteArray.toHex(): String {
-        return this.joinToString("") { "%02x".format(it) }
-    }
+    private fun ByteArray.toHex(): String = this.joinToString("") { "%02x".format(it) }
 }
 
 @Serializable
@@ -355,8 +350,8 @@ data class RNBackupListResponse(
 )
 
 sealed class RNBackupError(message: String) : AppError(message) {
-    data object NotSetup : RNBackupError("RN backup client not setup")
-    data object AuthFailed : RNBackupError("Authentication failed")
-    data class RequestFailed(override val message: String) : RNBackupError(message)
-    data class DecryptFailed(override val message: String) : RNBackupError(message)
+    class NotSetup : RNBackupError("RN backup client not setup")
+    class AuthFailed : RNBackupError("Authentication failed")
+    class RequestFailed(override val message: String) : RNBackupError(message)
+    class DecryptFailed(override val message: String) : RNBackupError(message)
 }
