@@ -17,9 +17,9 @@ This repository contains a **new native Android app** which is **not ready for p
 
 #### 1. Firebase Configuration
 
-Download `google-services.json` from the Firebase Console for each build flavor:
-- **Dev/Testnet**: Place in `app/` (default location)
-- **Mainnet**: Place in `app/src/mainnet/google-services.json`
+Download `google-services.json` from the Firebase Console for each of the following build flavor groups,:
+- dev/tnet/mainnetDebug: Place in `app/google-services.json`
+- mainnetRelease: Place in `app/src/mainnetRelease/google-services.json`
 
 > **Note**: Each flavor requires its own Firebase project configuration. The mainnet flavor will fail to build without its dedicated `google-services.json` file.
 
@@ -113,16 +113,31 @@ The build config supports building 3 different apps for the 3 bitcoin networks (
 - `mainnet` flavour = mainnet
 - `tnet` flavour = testnet
 
-### Build for Mainnet
+### Build for Internal Testing
 
-To build the mainnet flavor:
+**Prerequisites**  
+Setup the signing config:
+- Add the keystore file to root dir (i.e. `internal.keystore`)
+- Setup `keystore.properties` file in root dir (`cp keystore.properties.template keystore.properties`)
 
+**Routine**
+
+Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
-./gradlew assembleMainnetDebug   # debug build
-./gradlew assembleMainnetRelease # release build (requires signing config)
+./gradlew assembleDevRelease
+# ./gradlew assembleRelease # for all flavors
 ```
 
-> **Important**: Ensure `app/src/mainnet/google-services.json` exists before building. See [Firebase Configuration](#1-firebase-configuration).
+APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet').
+Example for dev: `app/build/outputs/apk/dev/release`
+
+### Build for Release
+
+To build the mainnet flavor for release run:
+
+```sh
+./gradlew assembleMainnetRelease
+```
 
 ### Build for E2E Testing
 
@@ -152,24 +167,6 @@ By default, geoblocking checks via API are enabled. To disable at build time, us
 ```sh
 GEO=false E2E=true ./gradlew assembleDevRelease
 ```
-
-### Build for Release
-
-**Prerequisites**  
-Setup the signing config:
-- Add the keystore file to root dir (i.e. `release.keystore`)
-- Setup `keystore.properties` file in root dir (`cp keystore.properties.template keystore.properties`)
-
-**Routine**
-
-Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
-```sh
-./gradlew assembleDevRelease
-# ./gradlew assembleRelease # for all flavors
-```
-
-APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet').
-Example for dev: `app/build/outputs/apk/dev/release`
 
 ## Contributing
 
