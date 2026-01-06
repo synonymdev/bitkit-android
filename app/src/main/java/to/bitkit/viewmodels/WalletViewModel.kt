@@ -18,17 +18,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import org.lightningdevkit.ldknode.ChannelDataMigration
-import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
-import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -84,10 +78,8 @@ class WalletViewModel @Inject constructor(
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Initial)
     val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
 
-    private val _uiState = MutableStateFlow(MainUiState())
-
-    @Deprecated("Prioritize get the wallet and lightning states from LightningRepo or WalletRepo")
-    val uiState = _uiState.asStateFlow()
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
 
     private var syncJob: Job? = null
 
@@ -155,32 +147,8 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             walletState.collect { state ->
                 walletExists = state.walletExists
-                _uiState.update {
-                    it.copy(
-                        onchainAddress = state.onchainAddress,
-                        bolt11 = state.bolt11,
-                        bip21 = state.bip21,
-                        bip21AmountSats = state.bip21AmountSats,
-                        bip21Description = state.bip21Description,
-                        selectedTags = state.selectedTags,
-                    )
-                }
                 if (state.walletExists && _restoreState.value == RestoreState.InProgress.Wallet) {
                     restoreFromBackup()
-                }
-            }
-        }
-
-        viewModelScope.launch {
-            lightningState.collect { state ->
-                _uiState.update {
-                    it.copy(
-                        nodeId = state.nodeId,
-                        nodeStatus = state.nodeStatus,
-                        nodeLifecycleState = state.nodeLifecycleState,
-                        peers = state.peers,
-                        channels = state.channels,
-                    )
                 }
             }
         }
@@ -324,11 +292,11 @@ class WalletViewModel @Inject constructor(
         lightningRepo.clearPendingSync()
 
         syncJob = viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
+            _isRefreshing.value = true
             try {
                 walletRepo.syncNodeAndWallet(source = SyncSource.MANUAL)
             } finally {
-                _uiState.update { it.copy(isRefreshing = false) }
+                _isRefreshing.value = false
             }
         }
     }
@@ -436,22 +404,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 }
-
-// TODO rename to walletUiState
-data class MainUiState(
-    val nodeId: String = "",
-    val onchainAddress: String = "",
-    val bolt11: String = "",
-    val bip21: String = "",
-    val nodeStatus: NodeStatus? = null,
-    val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
-    val peers: List<PeerDetails> = emptyList(),
-    val channels: List<ChannelDetails> = emptyList(),
-    val isRefreshing: Boolean = false,
-    val bip21AmountSats: ULong? = null,
-    val bip21Description: String = "",
-    val selectedTags: List<String> = listOf(),
-)
 
 sealed interface RestoreState {
     data object Initial : RestoreState
