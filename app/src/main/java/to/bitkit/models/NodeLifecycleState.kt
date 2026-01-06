@@ -1,5 +1,8 @@
 package to.bitkit.models
 
+import android.content.Context
+import to.bitkit.R
+
 sealed class NodeLifecycleState {
     data object Stopped : NodeLifecycleState()
     data object Starting : NodeLifecycleState()
@@ -14,16 +17,14 @@ sealed class NodeLifecycleState {
     fun isRunning() = this is Running
     fun canRun() = this.isRunningOrStarting() || this is Initializing
 
-    // TODO add missing localized texts
-    val uiText: String
-        get() = when (this) {
-            is Stopped -> "Stopped"
-            is Starting -> "Starting"
-            is Running -> "Running"
-            is Stopping -> "Stopping"
-            is ErrorStarting -> "Error starting: ${cause.message}"
-            is Initializing -> "Setting up wallet..."
-        }
+    fun uiText(context: Context): String = when (this) {
+        is Stopped -> context.getString(R.string.other__node_stopped)
+        is Starting -> context.getString(R.string.other__node_starting)
+        is Running -> context.getString(R.string.other__node_running)
+        is Stopping -> context.getString(R.string.other__node_stopping)
+        is ErrorStarting -> context.getString(R.string.other__node_error_starting, cause.message ?: "")
+        is Initializing -> context.getString(R.string.other__node_initializing)
+    }
 
     fun asHealth() = when (this) {
         Running -> HealthState.READY

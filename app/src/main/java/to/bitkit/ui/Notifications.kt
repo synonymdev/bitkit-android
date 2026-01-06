@@ -1,7 +1,6 @@
 package to.bitkit.ui
 
-import android.Manifest
-import android.Manifest.*
+import android.Manifest.permission
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
