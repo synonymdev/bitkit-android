@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -37,7 +38,7 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
-import to.bitkit.models.FeeRate
+import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
@@ -117,6 +118,7 @@ fun ActivityRow(
                 isTransfer = isTransfer,
                 isCpfpChild = isCpfpChild
             )
+            val context = LocalContext.current
             val subtitleText = when (item) {
                 is Activity.Lightning -> item.v1.message.ifEmpty { formattedTime(timestamp) }
                 is Activity.Onchain -> {
@@ -128,7 +130,7 @@ fun ActivityRow(
                         isTransfer && isSent -> if (item.v1.confirmed) {
                             stringResource(R.string.wallet__activity_transfer_spending_done)
                         } else {
-                            val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
+                            val duration = context.getFeeShortDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_transfer_spending_pending)
                                 .replace("{duration}", duration)
                         }
@@ -136,7 +138,7 @@ fun ActivityRow(
                         isTransfer && !isSent -> if (item.v1.confirmed) {
                             stringResource(R.string.wallet__activity_transfer_savings_done)
                         } else {
-                            val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
+                            val duration = context.getFeeShortDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_transfer_savings_pending)
                                 .replace("{duration}", duration)
                         }
@@ -144,7 +146,7 @@ fun ActivityRow(
                         confirmed == true -> formattedTime(timestamp)
 
                         else -> {
-                            val feeDescription = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
+                            val feeDescription = context.getFeeShortDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_confirms_in)
                                 .replace("{feeRateDescription}", feeDescription)
                         }
