@@ -390,7 +390,7 @@ class AppViewModel @Inject constructor(
         if (isCompletingMigration) return
         isCompletingMigration = true
 
-        try {
+        runCatching {
             lightningRepo.getPayments().onSuccess { payments ->
                 activityRepo.syncLdkNodePayments(payments)
             }.onFailure { e ->
@@ -406,10 +406,10 @@ class AppViewModel @Inject constructor(
                     Logger.warn("Sync failed during migration: $e", e, context = TAG)
                     finishMigrationWithFallbackSync()
                 }
-        } catch (e: Exception) {
+        }.onFailure { e ->
             Logger.error("Migration completion error: $e", e, context = TAG)
             finishMigrationWithError()
-        } finally {
+        }.also {
             isCompletingMigration = false
         }
     }

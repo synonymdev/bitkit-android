@@ -1035,12 +1035,12 @@ class MigrationService @Inject constructor(
     suspend fun restoreFromRNRemoteBackup() {
         setRestoringFromRNRemoteBackup(true)
 
-        try {
+        runCatching {
             fetchRNRemoteLdkData()
             val bitkitFiles = rnBackupClient.listFiles(fileGroup = "bitkit")?.list ?: emptyList()
             retrieveAndApplyBitkitBackups(bitkitFiles)
             markMigrationCompleted()
-        } catch (e: Exception) {
+        }.onFailure { e ->
             Logger.error("RN remote backup restore failed", e, context = TAG)
             throw e
         }

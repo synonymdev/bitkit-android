@@ -116,7 +116,7 @@ class WalletViewModel @Inject constructor(
 
             migrationService.setShowingMigrationLoading(true)
 
-            try {
+            runCatching {
                 migrationService.migrateFromReactNative()
                 walletRepo.setWalletExistsState()
                 walletExists = walletRepo.walletExists()
@@ -127,7 +127,7 @@ class WalletViewModel @Inject constructor(
                 } else {
                     migrationService.setShowingMigrationLoading(false)
                 }
-            } catch (e: Exception) {
+            }.onFailure { e ->
                 Logger.error("RN migration failed: $e", e, context = "WalletViewModel")
                 migrationService.markMigrationChecked()
                 migrationService.setShowingMigrationLoading(false)
@@ -183,13 +183,12 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun restoreFromBackup() {
         _restoreState.update { RestoreState.InProgress.Metadata }
-        try {
+        runCatching {
             restoreFromMostRecentBackup()
-        } catch (e: Exception) {
+        }.onFailure { e ->
             Logger.error("Restore from backup failed", e, context = TAG)
-        } finally {
-            _restoreState.update { RestoreState.Completed }
         }
+        _restoreState.update { RestoreState.Completed }
     }
 
     private suspend fun restoreFromMostRecentBackup() {
