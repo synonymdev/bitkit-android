@@ -60,6 +60,7 @@ class WidgetsRepo @Inject constructor(
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
     )
+
     val refreshStates: StateFlow<Map<WidgetType, Boolean>> = _refreshStates.asStateFlow()
 
     init {
