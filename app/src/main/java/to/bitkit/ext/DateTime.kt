@@ -36,6 +36,9 @@ import kotlin.time.Instant as KInstant
 @OptIn(ExperimentalTime::class)
 fun nowMillis(clock: Clock = Clock.System): Long = clock.now().toEpochMilliseconds()
 
+@OptIn(ExperimentalTime::class)
+fun Clock.nowMs(): Long = now().toEpochMilliseconds()
+
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
 fun Instant.formatted(pattern: String = DatePattern.DATE_TIME): String {
