@@ -375,6 +375,19 @@ class LightningService @Inject constructor(
         return ourPeers.any { p -> p !in lspPeers }
     }
 
+    fun getLspPeerNodeIds(): Set<String> = trustedPeers.map { it.nodeId }.toSet()
+
+    fun separateTrustedChannels(
+        channels: List<ChannelDetails>,
+    ): Pair<List<ChannelDetails>, List<ChannelDetails>> {
+        val trustedPeerIds = getLspPeerNodeIds()
+        val trusted = channels.filter { it.counterpartyNodeId in trustedPeerIds }
+        val nonTrusted = channels.filter { it.counterpartyNodeId !in trustedPeerIds }
+        return trusted to nonTrusted
+    }
+
+    fun isTrustedPeer(nodeId: String): Boolean = nodeId in getLspPeerNodeIds()
+
     // endregion
 
     // region channels
@@ -418,6 +431,7 @@ class LightningService @Inject constructor(
         }
     }
 
+    @Suppress("ThrowsCount")
     suspend fun closeChannel(
         channel: ChannelDetails,
         force: Boolean = false,
@@ -427,6 +441,12 @@ class LightningService @Inject constructor(
         val channelId = channel.channelId
         val userChannelId = channel.userChannelId
         val counterpartyNodeId = channel.counterpartyNodeId
+
+        // Prevent force closing channels with trusted peers (LSP nodes)
+        if (force && isTrustedPeer(counterpartyNodeId)) {
+            throw TrustedPeerForceCloseException()
+        }
+
         try {
             ServiceQueue.LDK.background {
                 Logger.debug("Initiating channel close (force=$force): '$channelId'", context = TAG)
@@ -950,6 +970,10 @@ data class NetworkGraphInfo(
     val nodeCount: Int,
     val channelCount: Int,
     val latestRgsSyncTimestamp: ULong?,
+)
+
+class TrustedPeerForceCloseException : Exception(
+    "Cannot force close channel with trusted peer. Force close is disabled for Blocktank LSP channels."
 )
 
 // region helpers
