@@ -405,7 +405,7 @@ class WalletRepo @Inject constructor(
             bitcoinAddress = bitcoinAddress,
             amountSats = amountSats,
             message = message,
-            lightningInvoice = lightningInvoice
+            lightningInvoice = lightningInvoice,
         )
     }
 
@@ -443,7 +443,7 @@ class WalletRepo @Inject constructor(
         val hash = paymentHash()
         if (hash != null) return@withContext hash
         val address = getOnchainAddress()
-        return@withContext if (address.isEmpty()) null else address
+        return@withContext address.ifEmpty { null }
     }
 
     // Pre-activity metadata tag management

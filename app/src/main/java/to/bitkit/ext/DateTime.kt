@@ -113,7 +113,6 @@ fun Long.toRelativeTimeString(
 
 fun getDaysInMonth(month: LocalDate): List<LocalDate?> {
     val firstDayOfMonth = LocalDate(month.year, month.month, Constants.FIRST_DAY_OF_MONTH)
-    // FIXME fix month.number
     val daysInMonth = month.month.toJavaMonth().length(isLeapYear(month.year))
 
     // Get the day of week for the first day (1 = Monday, 7 = Sunday)
