@@ -38,6 +38,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
@@ -521,6 +522,24 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
+    private suspend fun extractRNTodos(mmkvData: Map<String, String>): RNTodos? {
+        val rootJson = mmkvData["persist:root"] ?: return null
+
+        return try {
+            val jsonStart = rootJson.indexOf("{")
+            val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
+
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val todosJsonString = root["todos"]?.jsonPrimitive?.content ?: return null
+
+            json.decodeFromString<RNTodos>(todosJsonString)
+        } catch (e: Exception) {
+            Logger.error("Failed to decode RN todos: $e", e, context = TAG)
+            null
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun extractRNWidgets(mmkvData: Map<String, String>): RNWidgetsWithOptions? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
@@ -756,6 +775,26 @@ class MigrationService @Inject constructor(
 
         metadata.lastUsedTags?.forEach {
             settingsStore.addLastUsedTag(it)
+        }
+    }
+
+    private suspend fun applyRNTodos(todos: RNTodos) {
+        val mapping = mapOf(
+            "backupSeedPhrase" to Suggestion.BACK_UP,
+            "buyBitcoin" to Suggestion.BUY,
+            "lightning" to Suggestion.LIGHTNING,
+            "quickpay" to Suggestion.QUICK_PAY,
+            "shop" to Suggestion.SHOP,
+            "slashtagsProfile" to Suggestion.PROFILE,
+            "support" to Suggestion.SUPPORT,
+            "invite" to Suggestion.INVITE,
+            "pin" to Suggestion.SECURE,
+        )
+
+        todos.hide?.keys?.forEach { rnTodoType ->
+            mapping[rnTodoType]?.let { suggestion ->
+                settingsStore.addDismissedSuggestion(suggestion)
+            }
         }
     }
 
@@ -1019,6 +1058,10 @@ class MigrationService @Inject constructor(
 
         extractRNWidgets(mmkvData)?.let { widgets ->
             applyRNWidgets(widgets)
+        }
+
+        extractRNTodos(mmkvData)?.let { todos ->
+            applyRNTodos(todos)
         }
     }
 
@@ -1600,6 +1643,11 @@ data class RNSettings(
 data class RNMetadata(
     val tags: Map<String, List<String>>? = null,
     val lastUsedTags: List<String>? = null,
+)
+
+@Serializable
+data class RNTodos(
+    val hide: Map<String, Long>? = null,
 )
 
 @Serializable
