@@ -1,22 +1,42 @@
 ---
 description: Create a PR on GitHub for the current branch
-argument_hint: "[branch=master]"
-allowed_tools: Bash, Read, Glob, Grep, Write, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents
+argument_hint: "[branch] [--dry] [--draft]"
+allowed_tools: Bash, Read, Glob, Grep, Write, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents
 ---
 
-Create a PR on GitHub using the `gh` CLI for the currently checked-out branch by diffing it vs. the reference branch named `$1` (default: `master` if not provided).
+Create a PR on GitHub using the `gh` CLI for the currently checked-out branch.
+
+**Examples:**
+- `/pr` - Interactive mode, prompts for PR type
+- `/pr master` - Interactive with explicit base branch
+- `/pr --dry` - Generate description only, save to `.ai/`
+- `/pr --draft` - Create as draft PR
+- `/pr develop --draft` - Draft PR against develop branch
 
 ## Steps
 
-### 1. Gather Context
+### 1. Check for Existing PR
+Run `gh pr view --json number,url 2>/dev/null` to check if a PR already exists for this branch.
+- If PR exists: Output `PR already exists: [URL]` and stop
+- If no PR: Continue
+
+### 2. Parse Arguments
+- `--dry`: Skip PR creation, only generate and save description
+- `--draft`: Create PR as draft
+- First non-flag argument: base branch (default: `master`)
+- **If no flags provided**: Use `AskUserQuestion` to prompt user:
+  - Open PR (create and publish)
+  - Draft PR (create as draft)
+  - Dry run (save locally only)
+
+### 3. Gather Context
 - Get current branch name: `git branch --show-current`
-- Use base branch from argument or default to `master`
 - Read PR template from `.github/pull_request_template.md`
 - Fetch 10 most recent PRs (open or closed) from `synonymdev/bitkit-android` for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
 
-### 2. Generate PR Description
+### 4. Generate PR Description
 Starting from the template in `.github/pull_request_template.md`:
 
 **Title Rules:**
@@ -28,7 +48,7 @@ Starting from the template in `.github/pull_request_template.md`:
 **Opening Format:**
 - Single change: Start with "This PR [verb]s..." as a complete sentence
   - Example: `This PR adds a Claude Code /pr command for generating PRs.`
-- Multiple changes: Start with "This PR:" followed by a  numbered list
+- Multiple changes: Start with "This PR:" followed by a numbered list
   - Example:
     ```
     This PR:
@@ -58,29 +78,42 @@ Starting from the template in `.github/pull_request_template.md`:
 - Add code comment under each placeholder describing what it should show
 - Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
 
-### 3. Create the PR
-Use `gh pr create` with the generated title and body:
-```bash
-gh pr create --base $base --title "..." --body "..."
-```
-
-### 4. Save PR Description
-After creating the PR:
+### 5. Save PR Description
+Before creating the PR:
+- Get next PR number: `gh api "repos/synonymdev/bitkit-android/issues?per_page=1&state=all&sort=created&direction=desc" --jq '.[0].number'` then add 1
 - Create `.ai/` directory if it doesn't exist
-- Save the generated description to `.ai/pr_NN.md` where `NN` is the PR number from GitHub
+- Save to `.ai/pr_NN.md` where `NN` is the predicted PR number
 
-### 5. Output Summary
+### 6. Create the PR (unless --dry)
+If not dry run:
+```bash
+gh pr create --base $base --title "..." --body "..." [--draft]
+```
+- Add `--draft` flag if draft mode selected
+- If actual PR number differs from predicted, rename the saved file
 
-**Format:**
+### 7. Output Summary
+
+**If PR created:**
 ```
 PR Created: [PR URL]
-
-Generated file: /absolute/path/to/.ai/pr_NN.md
+Saved: .ai/pr_NN.md
 
 ## TODOs
-- [ ] IMAGE_1: [description of what to capture]
-- [ ] VIDEO_2: [description of what to record]
-...
+- [ ] IMAGE_1: [description]
+- [ ] VIDEO_2: [description]
 ```
 
-List all media placeholders as TODOs with their descriptions so the user knows exactly what screenshots/recordings to add.
+**If dry run:**
+```
+Dry run complete
+Saved: .ai/pr_NN.md
+
+To create PR: /pr [--draft]
+
+## TODOs
+- [ ] IMAGE_1: [description]
+- [ ] VIDEO_2: [description]
+```
+
+List all media placeholders as TODOs with their descriptions.
