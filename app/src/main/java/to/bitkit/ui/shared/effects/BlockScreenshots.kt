@@ -23,7 +23,7 @@ fun BlockScreenshots() {
         // Set FLAG_SECURE to block screenshots and screen recording
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
-        // For Android 13+ (API 33+), also disable recents screenshots
+        // For Android 13+ (API 33+), also disable recent screenshots
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             activity.setRecentsScreenshotEnabled(false)
         }
@@ -31,7 +31,7 @@ fun BlockScreenshots() {
         onDispose {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
-            // Re-enable recents screenshots when leaving the screen
+            // Re-enable recent screenshots when leaving the screen
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 activity.setRecentsScreenshotEnabled(true)
             }
