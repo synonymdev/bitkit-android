@@ -1,7 +1,7 @@
 ---
 description: Create a PR on GitHub for the current branch
-argument-hint: [branch=master]
-allowed-tools: Bash, Read, Glob, Grep, Write, mcp__github__list_pull_requests, mcp__github__create_pull_request
+argument_hint: "[branch=master]"
+allowed_tools: Bash, Read, Glob, Grep, Write, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents
 ---
 
 Create a PR on GitHub using the `gh` CLI for the currently checked-out branch by diffing it vs. the reference branch named `$1` (default: `master` if not provided).
@@ -21,9 +21,23 @@ Starting from the template in `.github/pull_request_template.md`:
 
 **Title Rules:**
 - Format: `prefix: title` (e.g., `feat: add user settings screen`)
-- Keep under 45 characters
+- Keep under 50 characters
 - Use branch name as concept inspiration
-- Prefixes: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `style`
+- Prefixes: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`
+
+**Opening Format:**
+- Single change: Start with "This PR [verb]s..." as a complete sentence
+  - Example: `This PR adds a Claude Code /pr command for generating PRs.`
+- Multiple changes: Start with "This PR:" followed by a  numbered list
+  - Example:
+    ```
+    This PR:
+
+    1. Adds a Claude Code /pr command for generating PRs
+    2. Fixes issue preventing Claude Code reviews to be added as PR comments
+    3. Updates reviews workflow to minimize older review comments
+    ```
+- Each list item should start with a verb (Adds, Fixes, Updates, Removes, Refactors, etc.)
 
 **Description Rules:**
 - Base content around all commit messages in the branch
@@ -32,7 +46,7 @@ Starting from the template in `.github/pull_request_template.md`:
 - Focus on functionality over technical details
 - Avoid excessive bold formatting like `**this:** that`
 - Minimize code references like `TheClassName` or `someFunctionName`
-- Exception: for refactoring PRs (1:10 ratio of functionality to code changes), more technical detail is acceptable
+- Exception: for refactoring PRs (1:10 ratio of functionality to code changes), more technical detail is ok
 
 **QA Notes / Testing Scenarios:**
 - Structure with numbered headings and steps
@@ -63,7 +77,7 @@ PR Created: [PR URL]
 
 Generated file: /absolute/path/to/.ai/pr_NN.md
 
-## TODOs for you:
+## TODOs
 - [ ] IMAGE_1: [description of what to capture]
 - [ ] VIDEO_2: [description of what to record]
 ...
