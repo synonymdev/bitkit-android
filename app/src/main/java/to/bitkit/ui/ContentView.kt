@@ -134,6 +134,11 @@ import to.bitkit.ui.settings.advanced.AddressViewerScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
 import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
 import to.bitkit.ui.settings.advanced.RgsServerScreen
+import to.bitkit.ui.settings.advanced.sweep.SweepConfirmScreen
+import to.bitkit.ui.settings.advanced.sweep.SweepFeeCustomScreen
+import to.bitkit.ui.settings.advanced.sweep.SweepFeeRateScreen
+import to.bitkit.ui.settings.advanced.sweep.SweepSettingsScreen
+import to.bitkit.ui.settings.advanced.sweep.SweepSuccessScreen
 import to.bitkit.ui.settings.appStatus.AppStatusScreen
 import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsIntroScreen
 import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsSettings
@@ -169,6 +174,7 @@ import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendSheet
+import to.bitkit.ui.sheets.SweepPromptSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.theme.TRANSITION_SHEET_MS
 import to.bitkit.ui.utils.AutoReadClipboardHandler
@@ -185,6 +191,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
+import to.bitkit.viewmodels.SweepViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -397,6 +404,13 @@ fun ContentView(
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
                         is Sheet.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
                         Sheet.ForceTransfer -> ForceTransferSheet(appViewModel, transferViewModel)
+                        Sheet.SweepPrompt -> SweepPromptSheet(
+                            onSweep = {
+                                appViewModel.hideSheet()
+                                navController.navigate(Routes.SweepNav)
+                            },
+                            onCancel = { appViewModel.hideSheet() },
+                        )
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
@@ -995,6 +1009,34 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     }
     composableWithDefaultTransitions<Routes.AddressViewer> {
         AddressViewerScreen(navController)
+    }
+    navigationWithDefaultTransitions<Routes.SweepNav>(
+        startDestination = Routes.Sweep,
+    ) {
+        composableWithDefaultTransitions<Routes.Sweep> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SweepNav) }
+            val viewModel = hiltViewModel<SweepViewModel>(parentEntry)
+            SweepSettingsScreen(navController, viewModel)
+        }
+        composableWithDefaultTransitions<Routes.SweepConfirm> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SweepNav) }
+            val viewModel = hiltViewModel<SweepViewModel>(parentEntry)
+            SweepConfirmScreen(navController, viewModel)
+        }
+        composableWithDefaultTransitions<Routes.SweepFeeRate> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SweepNav) }
+            val viewModel = hiltViewModel<SweepViewModel>(parentEntry)
+            SweepFeeRateScreen(navController, viewModel)
+        }
+        composableWithDefaultTransitions<Routes.SweepFeeCustom> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SweepNav) }
+            val viewModel = hiltViewModel<SweepViewModel>(parentEntry)
+            SweepFeeCustomScreen(navController, viewModel)
+        }
+        composableWithDefaultTransitions<Routes.SweepSuccess> {
+            val route = it.toRoute<Routes.SweepSuccess>()
+            SweepSuccessScreen(navController, amountSats = route.amountSats)
+        }
     }
     composableWithDefaultTransitions<Routes.NodeInfo> {
         NodeInfoScreen(navController)
@@ -1688,6 +1730,24 @@ sealed interface Routes {
 
     @Serializable
     data object AddressViewer : Routes
+
+    @Serializable
+    data object SweepNav : Routes
+
+    @Serializable
+    data object Sweep : Routes
+
+    @Serializable
+    data object SweepConfirm : Routes
+
+    @Serializable
+    data object SweepFeeRate : Routes
+
+    @Serializable
+    data object SweepFeeCustom : Routes
+
+    @Serializable
+    data class SweepSuccess(val amountSats: Long) : Routes
 
     @Serializable
     data object AboutSettings : Routes

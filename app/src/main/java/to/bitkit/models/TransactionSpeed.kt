@@ -2,6 +2,7 @@ package to.bitkit.models
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import com.synonym.bitkitcore.FeeRates
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -23,6 +24,13 @@ sealed class TransactionSpeed {
         is Medium -> "medium"
         is Slow -> "slow"
         is Custom -> "custom_$satsPerVByte"
+    }
+
+    fun getFeeRate(feeRates: FeeRates): UInt = when (this) {
+        is Fast -> feeRates.fast
+        is Medium -> feeRates.mid
+        is Slow -> feeRates.slow
+        is Custom -> satsPerVByte
     }
 
     companion object {

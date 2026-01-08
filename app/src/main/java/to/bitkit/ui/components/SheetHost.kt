@@ -45,6 +45,7 @@ sealed interface Sheet {
     data class LnurlAuth(val domain: String, val lnurl: String, val k1: String) : Sheet
     data object ForceTransfer : Sheet
     data class Gift(val code: String, val amount: ULong) : Sheet
+    data object SweepPrompt : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet
 }
