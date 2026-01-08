@@ -41,6 +41,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
+import to.bitkit.models.Toast
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
@@ -49,6 +50,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -62,12 +64,20 @@ fun ShowMnemonicScreen(
     onContinueClick: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     ShowMnemonicContent(
         mnemonic = uiState.bip39Mnemonic,
         showMnemonic = uiState.showMnemonic,
         onRevealClick = onRevealClick,
         onCopyClick = {
             context.setClipboardText(uiState.bip39Mnemonic)
+            scope.launch {
+                ToastEventBus.send(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.common__copied),
+                    description = context.getString(R.string.security__mnemonic_copied),
+                )
+            }
         },
         onContinueClick = onContinueClick,
     )
