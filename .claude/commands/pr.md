@@ -80,7 +80,6 @@ This PR adds support for...
   - Example:
     ```
     This PR:
-
     1. Adds a Claude Code /pr command for generating PRs
     2. Fixes issue preventing Claude Code reviews to be added as PR comments
     3. Updates reviews workflow to minimize older review comments
@@ -93,7 +92,7 @@ This PR adds support for...
 - Match writing style of recent PRs
 - Focus on functionality over technical details
 - Avoid excessive bold formatting like `**this:** that`
-- Minimize code references like `TheClassName` or `someFunctionName`
+- Minimize code and file references like `TheClassName` or `someFunctionName`, `thisFileName.ext`
 - Exception: for refactoring PRs (1:10 ratio of functionality to code changes), more technical detail is ok
 
 **QA Notes / Testing Scenarios:**
