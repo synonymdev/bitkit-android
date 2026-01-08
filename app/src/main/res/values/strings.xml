@@ -254,6 +254,7 @@
     <string name="lightning__force_button">Force Transfer</string>
     <string name="lightning__force_init_title">Force Transfer Initiated</string>
     <string name="lightning__force_init_msg">Your funds will be accessible in ±14 days.</string>
+    <string name="lightning__force_channels_skipped">Some connections could not be closed.</string>
     <string name="lightning__force_failed_title">Force Transfer Failed</string>
     <string name="lightning__force_failed_msg">Unable to transfer your funds back to savings. Please try again.</string>
     <string name="lightning__channel_opened_title">Spending Balance Ready</string>
