@@ -466,6 +466,7 @@
     <string name="security__mnemonic_never_share">&lt;accent&gt;Never share&lt;/accent&gt; your recovery phrase with anyone as this may result in the loss of funds.</string>
     <string name="security__mnemonic_confirm">Confirm Recovery Phrase</string>
     <string name="security__mnemonic_confirm_tap">Tap the 12 words in the correct order.</string>
+    <string name="security__mnemonic_copied">Mnemonic copied to clipboard</string>
     <string name="security__mnemonic_result_header">Successful</string>
     <string name="security__mnemonic_result_text">Make sure you store your recovery phrase in a &lt;accent&gt;secure place&lt;/accent&gt;, as this is the &lt;accent&gt;only way to recover&lt;/accent&gt; your money!</string>
     <string name="security__mnemonic_keep_header">Keep It Safe</string>
