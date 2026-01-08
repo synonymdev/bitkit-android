@@ -551,9 +551,10 @@ class MigrationService @Inject constructor(
             val widgetsJsonString = root["widgets"]?.jsonPrimitive?.content ?: return null
 
             val widgets = json.decodeFromString<RNWidgets>(widgetsJsonString)
-
             val widgetsData = json.parseToJsonElement(widgetsJsonString).jsonObject
-            val widgetOptions = convertRNWidgetPreferences(widgetsData["widgets"]?.jsonObject ?: widgetsData)
+            val widgetOptions = convertRNWidgetPreferences(
+                widgetsData["widgets"]?.jsonObject ?: widgetsData
+            )
 
             RNWidgetsWithOptions(widgets = widgets, widgetOptions = widgetOptions)
         } catch (e: Exception) {
@@ -884,6 +885,7 @@ class MigrationService @Inject constructor(
                 "blocks" to WidgetType.BLOCK,
                 "weather" to WidgetType.WEATHER,
                 "facts" to WidgetType.FACTS,
+                "calculator" to WidgetType.CALCULATOR,
             )
 
             val savedWidgets = sortOrder.mapNotNull { widgetName ->
@@ -1502,10 +1504,15 @@ class MigrationService @Inject constructor(
         val result = mutableMapOf<String, ByteArray>()
         if (widgetsDict == null) return result
 
-        fun getBool(key: String, fallbackKey: String? = null, defaultValue: Boolean = false): Boolean {
+        fun getBool(
+            source: kotlinx.serialization.json.JsonObject,
+            key: String,
+            fallbackKey: String? = null,
+            defaultValue: Boolean = false,
+        ): Boolean {
             val keys = if (fallbackKey != null) listOf(key, fallbackKey) else listOf(key)
             for (k in keys) {
-                widgetsDict[k]?.let { element ->
+                source[k]?.let { element ->
                     when {
                         element is kotlinx.serialization.json.JsonPrimitive && element.isString -> {
                             val str = element.content.lowercase()
@@ -1541,7 +1548,7 @@ class MigrationService @Inject constructor(
             )
             val period = periodMap[rnPeriod] ?: rnPeriod
 
-            val showSource = getBool("showSource", defaultValue = false)
+            val showSource = getBool(prefs, "showSource", defaultValue = false)
             val pairsJson = selectedPairs.joinToString(",", "[", "]") { "\"$it\"" }
             val priceOptionsJson =
                 """{"selectedPairs":$pairsJson,"selectedPeriod":"$period","showSource":$showSource}"""
@@ -1550,12 +1557,12 @@ class MigrationService @Inject constructor(
 
         val weatherPrefs = widgetsDict["weatherPreferences"]?.jsonObject
             ?: widgetsDict["weather"]?.jsonObject
-        weatherPrefs?.let {
+        weatherPrefs?.let { prefs ->
             val weatherOptions = buildJsonObject {
-                put("showStatus", getBool("showTitle", "showStatus", defaultValue = true))
-                put("showText", getBool("showDescription", "showText", defaultValue = false))
-                put("showMedian", getBool("showCurrentFee", "showMedian", defaultValue = false))
-                put("showNextBlockFee", getBool("showNextBlockFee", defaultValue = false))
+                put("showStatus", getBool(prefs, "showTitle", "showStatus", defaultValue = true))
+                put("showText", getBool(prefs, "showDescription", "showText", defaultValue = false))
+                put("showMedian", getBool(prefs, "showCurrentFee", "showMedian", defaultValue = false))
+                put("showNextBlockFee", getBool(prefs, "showNextBlockFee", defaultValue = false))
             }
             result["weather"] = weatherOptions.toString().encodeToByteArray()
         }
@@ -1563,34 +1570,34 @@ class MigrationService @Inject constructor(
         val newsPrefs = widgetsDict["headlinePreferences"]?.jsonObject
             ?: widgetsDict["headline"]?.jsonObject
             ?: widgetsDict["news"]?.jsonObject
-        newsPrefs?.let {
+        newsPrefs?.let { prefs ->
             val newsOptions = buildJsonObject {
-                put("showDate", getBool("showDate", "showTime", defaultValue = true))
-                put("showTitle", getBool("showTitle", defaultValue = true))
-                put("showSource", getBool("showSource", defaultValue = true))
+                put("showDate", getBool(prefs, "showDate", "showTime", defaultValue = true))
+                put("showTitle", getBool(prefs, "showTitle", defaultValue = true))
+                put("showSource", getBool(prefs, "showSource", defaultValue = true))
             }
             result["news"] = newsOptions.toString().encodeToByteArray()
         }
 
         val blocksPrefs = widgetsDict["blocksPreferences"]?.jsonObject
             ?: widgetsDict["blocks"]?.jsonObject
-        blocksPrefs?.let {
+        blocksPrefs?.let { prefs ->
             val blocksOptions = buildJsonObject {
-                put("height", getBool("height", "showBlock", defaultValue = true))
-                put("time", getBool("time", "showTime", defaultValue = true))
-                put("date", getBool("date", "showDate", defaultValue = true))
-                put("transactionCount", getBool("transactionCount", "showTransactions", defaultValue = false))
-                put("size", getBool("size", "showSize", defaultValue = false))
-                put("showSource", getBool("showSource", defaultValue = false))
+                put("height", getBool(prefs, "height", "showBlock", defaultValue = true))
+                put("time", getBool(prefs, "time", "showTime", defaultValue = true))
+                put("date", getBool(prefs, "date", "showDate", defaultValue = true))
+                put("transactionCount", getBool(prefs, "transactionCount", "showTransactions", defaultValue = false))
+                put("size", getBool(prefs, "size", "showSize", defaultValue = false))
+                put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["blocks"] = blocksOptions.toString().encodeToByteArray()
         }
 
         val factsPrefs = widgetsDict["factsPreferences"]?.jsonObject
             ?: widgetsDict["facts"]?.jsonObject
-        factsPrefs?.let {
+        factsPrefs?.let { prefs ->
             val factsOptions = buildJsonObject {
-                put("showSource", getBool("showSource", defaultValue = false))
+                put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["facts"] = factsOptions.toString().encodeToByteArray()
         }

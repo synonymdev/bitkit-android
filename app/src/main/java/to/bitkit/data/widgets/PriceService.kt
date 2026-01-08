@@ -41,9 +41,12 @@ class PriceService @Inject constructor(
     override suspend fun fetchData(): Result<PriceDTO> = runCatching {
         val period = widgetsStore.data.first().pricePreferences.period ?: GraphPeriod.ONE_DAY
 
-        val widgets = TradingPair.entries.map { pair ->
-            fetchPairData(pair = pair, period = period)
+        val widgets = TradingPair.entries.mapNotNull { pair ->
+            runCatching { fetchPairData(pair = pair, period = period) }
+                .onFailure { Logger.warn(e = it, msg = "Failed to fetch ${pair.ticker}", context = TAG) }
+                .getOrNull()
         }
+        if (widgets.isEmpty()) throw PriceError.InvalidResponse("No price data available")
         PriceDTO(widgets = widgets, source = sourceLabel)
     }.onFailure {
         Logger.warn(e = it, msg = "Failed to fetch price data", context = TAG)
@@ -53,14 +56,12 @@ class PriceService @Inject constructor(
         coroutineScope {
             GraphPeriod.entries.map { period ->
                 async {
-                    PriceDTO(
-                        widgets = TradingPair.entries.map { pair ->
-                            fetchPairData(pair = pair, period = period)
-                        },
-                        source = sourceLabel
-                    )
+                    val widgets = TradingPair.entries.mapNotNull { pair ->
+                        runCatching { fetchPairData(pair = pair, period = period) }.getOrNull()
+                    }
+                    PriceDTO(widgets = widgets, source = sourceLabel)
                 }
-            }.awaitAll()
+            }.awaitAll().filter { it.widgets.isNotEmpty() }
         }
     }.onFailure {
         Logger.warn(e = it, msg = "fetchAllPeriods: Failed to fetch price data", context = TAG)
