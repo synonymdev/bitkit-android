@@ -1,7 +1,7 @@
 ---
 description: Create a PR on GitHub for the current branch
 argument_hint: "[branch] [--dry] [--draft]"
-allowed_tools: Bash, Read, Glob, Grep, Write, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents
+allowed_tools: Bash, Read, Glob, Grep, Write, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents, mcp__github__issue_read
 ---
 
 Create a PR on GitHub using the `gh` CLI for the currently checked-out branch.
@@ -36,7 +36,20 @@ Run `gh pr view --json number,url 2>/dev/null` to check if a PR already exists f
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
 
-### 4. Generate PR Description
+### 4. Extract Linked Issues
+Scan commits for issue references:
+- Pattern to match: `#123` (just the issue number reference)
+- Extract unique issue numbers: `git log $base..HEAD --oneline | grep -oE "#[0-9]+" | sort -u`
+- Fetch each issue title: `gh api "repos/synonymdev/bitkit-android/issues/NUMBER" --jq '.title'`
+- These will be used to start the PR description with linking keywords (see Step 6)
+
+### 5. Identify Suggested Reviewers
+Find potential reviewers based on:
+- `.github/CODEOWNERS` file patterns (if exists)
+- Recent contributors to changed files: `git log --format='%an' -- $(git diff $base..HEAD --name-only) | sort | uniq -c | sort -rn | head -3`
+- Exclude the current user from suggestions
+
+### 6. Generate PR Description
 Starting from the template in `.github/pull_request_template.md`:
 
 **Title Rules:**
@@ -44,6 +57,21 @@ Starting from the template in `.github/pull_request_template.md`:
 - Keep under 50 characters
 - Use branch name as concept inspiration
 - Prefixes: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`
+
+**Issue Linking (at the very start):**
+If linked issues were found in commit messages, begin the PR description with linking keywords:
+- Use `Fixes #123` for bug fixes
+- Use `Closes #123` for features/enhancements
+- One per line, before the "This PR..." opening separated by one empty line
+- Reference: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/using-keywords-in-issues-and-pull-requests
+
+Example:
+```
+Fixes #528
+Closes #418
+
+This PR adds support for...
+```
 
 **Opening Format:**
 - Single change: Start with "This PR [verb]s..." as a complete sentence
@@ -78,13 +106,13 @@ Starting from the template in `.github/pull_request_template.md`:
 - Add code comment under each placeholder describing what it should show
 - Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
 
-### 5. Save PR Description
+### 7. Save PR Description
 Before creating the PR:
 - Get next PR number: `gh api "repos/synonymdev/bitkit-android/issues?per_page=1&state=all&sort=created&direction=desc" --jq '.[0].number'` then add 1
 - Create `.ai/` directory if it doesn't exist
 - Save to `.ai/pr_NN.md` where `NN` is the predicted PR number
 
-### 6. Create the PR (unless --dry)
+### 8. Create the PR (unless --dry)
 If not dry run:
 ```bash
 gh pr create --base $base --title "..." --body "..." [--draft]
@@ -92,12 +120,16 @@ gh pr create --base $base --title "..." --body "..." [--draft]
 - Add `--draft` flag if draft mode selected
 - If actual PR number differs from predicted, rename the saved file
 
-### 7. Output Summary
+### 9. Output Summary
 
 **If PR created:**
 ```
 PR Created: [PR URL]
 Saved: .ai/pr_NN.md
+
+Suggested reviewers:
+- @username1 (X files modified recently)
+- @username2 (CODEOWNER)
 
 ## TODOs
 - [ ] IMAGE_1: [description]
@@ -110,6 +142,10 @@ Dry run complete
 Saved: .ai/pr_NN.md
 
 To create PR: /pr [--draft]
+
+Suggested reviewers:
+- @username1 (X files modified recently)
+- @username2 (CODEOWNER)
 
 ## TODOs
 - [ ] IMAGE_1: [description]
