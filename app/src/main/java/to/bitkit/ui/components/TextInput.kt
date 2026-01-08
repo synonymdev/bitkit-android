@@ -47,7 +47,6 @@ fun TextInput(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     textStyle: TextStyle = AppTextStyles.BodySSB,
 ) {
-
     var textFieldValue by remember { mutableStateOf(TextFieldValue(value)) }
 
     // Sync external changes
