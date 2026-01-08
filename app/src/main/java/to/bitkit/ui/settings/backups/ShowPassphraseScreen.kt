@@ -23,6 +23,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -34,6 +35,8 @@ fun ShowPassphraseScreen(
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
+    BlockScreenshots()
+
     ShowPassphraseContent(
         bip39Passphrase = uiState.bip39Passphrase,
         onContinue = onContinue,

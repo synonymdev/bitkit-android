@@ -25,6 +25,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -36,6 +37,8 @@ fun ConfirmPassphraseScreen(
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
+    BlockScreenshots()
+
     val keyboardController = LocalSoftwareKeyboardController.current
 
     ConfirmPassphraseContent(

@@ -28,6 +28,7 @@ import to.bitkit.ui.components.MnemonicWordsGrid
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -38,6 +39,8 @@ fun RecoveryMnemonicScreen(
     onNavigateBack: () -> Unit,
     recoveryMnemonicViewModel: RecoveryMnemonicViewModel = hiltViewModel(),
 ) {
+    BlockScreenshots()
+
     val uiState by recoveryMnemonicViewModel.uiState.collectAsState()
 
     Content(
