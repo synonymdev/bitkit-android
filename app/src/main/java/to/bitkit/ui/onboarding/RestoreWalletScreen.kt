@@ -65,6 +65,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
@@ -80,6 +81,8 @@ fun RestoreWalletScreen(
     modifier: Modifier = Modifier,
     viewModel: RestoreWalletViewModel = hiltViewModel(),
 ) {
+    BlockScreenshots()
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Content(

@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -71,7 +73,7 @@ fun ReportIssueContent(
     onConfirm: () -> Unit,
     onUpdateEmail: (String) -> Unit,
     onUpdateMessage: (String) -> Unit,
-    uiState: ReportIssueUiState
+    uiState: ReportIssueUiState,
 ) {
     ScreenColumn {
         AppTopBar(
@@ -109,7 +111,12 @@ fun ReportIssueContent(
                 onValueChange = onUpdateEmail,
                 isError = uiState.errorEmail,
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    imeAction = ImeAction.Next,
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(ReportIssueTestTags.EMAIL_INPUT)
@@ -129,7 +136,7 @@ fun ReportIssueContent(
                 placeholder = stringResource(R.string.settings__support__placeholder_message),
                 value = uiState.messageInput,
                 onValueChange = onUpdateMessage,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Unspecified),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
