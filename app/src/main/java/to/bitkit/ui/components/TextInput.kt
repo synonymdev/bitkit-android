@@ -55,7 +55,7 @@ fun TextInput(
         if (textFieldValue.text != value) {
             textFieldValue = TextFieldValue(
                 text = value,
-                selection = TextRange(minOf(textFieldValue.selection.start, value.length))
+                selection = TextRange(value.length)
             )
         }
     }
