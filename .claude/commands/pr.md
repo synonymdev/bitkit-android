@@ -11,7 +11,7 @@ Create a PR on GitHub using the `gh` CLI for the currently checked-out branch.
 - `/pr master` - Interactive with explicit base branch
 - `/pr --dry` - Generate description only, save to `.ai/`
 - `/pr --draft` - Create as draft PR
-- `/pr develop --draft` - Draft PR against develop branch
+- `/pr develop --draft` - Draft PR against non-default branch
 
 ## Steps
 
@@ -23,11 +23,17 @@ Run `gh pr view --json number,url 2>/dev/null` to check if a PR already exists f
 ### 2. Parse Arguments
 - `--dry`: Skip PR creation, only generate and save description
 - `--draft`: Create PR as draft
-- First non-flag argument: base branch (default: `master`)
+- First non-flag argument: base branch (default: auto-detected, see Step 2.5)
 - **If no flags provided**: Use `AskUserQuestion` to prompt user:
   - Open PR (create and publish)
   - Draft PR (create as draft)
   - Dry run (save locally only)
+
+### 2.5. Determine Base Branch
+If no base branch argument provided, detect the repo's default branch:
+- Run: `git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'`
+- Use result as default (typically `main` or `master`)
+- If command fails, fall back to `master`
 
 ### 3. Gather Context
 - Get current branch name: `git branch --show-current`
