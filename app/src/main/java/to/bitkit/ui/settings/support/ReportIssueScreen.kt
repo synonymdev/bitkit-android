@@ -71,7 +71,7 @@ fun ReportIssueContent(
     onConfirm: () -> Unit,
     onUpdateEmail: (String) -> Unit,
     onUpdateMessage: (String) -> Unit,
-    uiState: ReportIssueUiState
+    uiState: ReportIssueUiState,
 ) {
     ScreenColumn {
         AppTopBar(
@@ -129,7 +129,7 @@ fun ReportIssueContent(
                 placeholder = stringResource(R.string.settings__support__placeholder_message),
                 value = uiState.messageInput,
                 onValueChange = onUpdateMessage,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Unspecified),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
