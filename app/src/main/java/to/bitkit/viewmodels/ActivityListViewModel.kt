@@ -120,6 +120,7 @@ class ActivityListViewModel @Inject constructor(
 
         val filteredByTab = when (filters.tab) {
             ActivityTab.OTHER -> activities.filter { it.isTransfer() }
+            ActivityTab.SENT, ActivityTab.RECEIVED -> activities.filterNot { it.isTransfer() }
             else -> activities
         }
 
