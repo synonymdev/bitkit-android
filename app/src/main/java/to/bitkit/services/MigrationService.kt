@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
@@ -32,6 +33,8 @@ import kotlinx.serialization.json.put
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.dto.price.GraphPeriod
+import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
@@ -43,8 +46,14 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.FactsPreferences
+import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.PricePreferences
+import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.services.core.Bip39Service
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
 import java.security.KeyStore
@@ -322,7 +331,7 @@ class MigrationService @Inject constructor(
             } else {
                 markMigrationChecked()
                 setShowingMigrationLoading(false)
-                throw to.bitkit.utils.AppError(
+                throw AppError(
                     "Migration data unavailable. Please restore your wallet using your recovery phrase."
                 )
             }
@@ -338,13 +347,13 @@ class MigrationService @Inject constructor(
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
 
         if (mnemonic.isNullOrEmpty()) {
-            throw to.bitkit.utils.AppError(
+            throw AppError(
                 "Migration data unavailable. Please restore your wallet using your recovery phrase."
             )
         }
 
         bip39Service.validateMnemonic(mnemonic).onFailure {
-            throw to.bitkit.utils.AppError(
+            throw AppError(
                 "Recovery phrase is invalid. Please use your 12 or 24 word recovery phrase to restore manually."
             )
         }
@@ -849,34 +858,34 @@ class MigrationService @Inject constructor(
     private suspend fun applyRNWidgetPreferences(widgetOptions: Map<String, ByteArray>) {
         widgetOptions["price"]?.let { priceData ->
             try {
-                val priceJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+                val priceJson = json.decodeFromString<JsonObject>(
                     priceData.decodeToString()
                 )
                 val selectedPairs = priceJson["selectedPairs"]?.jsonArray?.mapNotNull { pairElement ->
                     val pairStr = pairElement.jsonPrimitive.content.replace("_", "/")
                     when (pairStr) {
-                        "BTC/USD" -> to.bitkit.data.dto.price.TradingPair.BTC_USD
-                        "BTC/EUR" -> to.bitkit.data.dto.price.TradingPair.BTC_EUR
-                        "BTC/GBP" -> to.bitkit.data.dto.price.TradingPair.BTC_GBP
-                        "BTC/JPY" -> to.bitkit.data.dto.price.TradingPair.BTC_JPY
+                        "BTC/USD" -> TradingPair.BTC_USD
+                        "BTC/EUR" -> TradingPair.BTC_EUR
+                        "BTC/GBP" -> TradingPair.BTC_GBP
+                        "BTC/JPY" -> TradingPair.BTC_JPY
                         else -> null
                     }
-                } ?: listOf(to.bitkit.data.dto.price.TradingPair.BTC_USD)
+                } ?: listOf(TradingPair.BTC_USD)
 
                 val periodStr = priceJson["selectedPeriod"]?.jsonPrimitive?.content ?: "1D"
                 val period = when (periodStr) {
-                    "1D" -> to.bitkit.data.dto.price.GraphPeriod.ONE_DAY
-                    "1W" -> to.bitkit.data.dto.price.GraphPeriod.ONE_WEEK
-                    "1M" -> to.bitkit.data.dto.price.GraphPeriod.ONE_MONTH
-                    "1Y" -> to.bitkit.data.dto.price.GraphPeriod.ONE_YEAR
-                    else -> to.bitkit.data.dto.price.GraphPeriod.ONE_DAY
+                    "1D" -> GraphPeriod.ONE_DAY
+                    "1W" -> GraphPeriod.ONE_WEEK
+                    "1M" -> GraphPeriod.ONE_MONTH
+                    "1Y" -> GraphPeriod.ONE_YEAR
+                    else -> GraphPeriod.ONE_DAY
                 }
 
                 val showSource = priceJson["showSource"]?.jsonPrimitive?.content
                     ?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updatePricePreferences(
-                    to.bitkit.models.widget.PricePreferences(
+                    PricePreferences(
                         enabledPairs = selectedPairs,
                         period = period,
                         showSource = showSource
@@ -889,7 +898,7 @@ class MigrationService @Inject constructor(
 
         widgetOptions["weather"]?.let { weatherData ->
             try {
-                val weatherJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+                val weatherJson = json.decodeFromString<JsonObject>(
                     weatherData.decodeToString()
                 )
                 val showTitle = weatherJson["showStatus"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
@@ -899,7 +908,7 @@ class MigrationService @Inject constructor(
                     ?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateWeatherPreferences(
-                    to.bitkit.models.widget.WeatherPreferences(
+                    WeatherPreferences(
                         showTitle = showTitle,
                         showDescription = showDescription,
                         showCurrentFee = showCurrentFee,
@@ -913,7 +922,7 @@ class MigrationService @Inject constructor(
 
         widgetOptions["news"]?.let { newsData ->
             try {
-                val newsJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+                val newsJson = json.decodeFromString<JsonObject>(
                     newsData.decodeToString()
                 )
                 val showTime = newsJson["showDate"]?.jsonPrimitive?.content
@@ -922,7 +931,7 @@ class MigrationService @Inject constructor(
                     ?.toBooleanStrictOrNull() ?: true
 
                 widgetsStore.updateHeadlinePreferences(
-                    to.bitkit.models.widget.HeadlinePreferences(
+                    HeadlinePreferences(
                         showTime = showTime,
                         showSource = showSource
                     )
@@ -934,7 +943,7 @@ class MigrationService @Inject constructor(
 
         widgetOptions["blocks"]?.let { blocksData ->
             try {
-                val blocksJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+                val blocksJson = json.decodeFromString<JsonObject>(
                     blocksData.decodeToString()
                 )
                 val showBlock = blocksJson["height"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
@@ -946,7 +955,7 @@ class MigrationService @Inject constructor(
                 val showSource = blocksJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateBlocksPreferences(
-                    to.bitkit.models.widget.BlocksPreferences(
+                    BlocksPreferences(
                         showBlock = showBlock,
                         showTime = showTime,
                         showDate = showDate,
@@ -962,13 +971,13 @@ class MigrationService @Inject constructor(
 
         widgetOptions["facts"]?.let { factsData ->
             try {
-                val factsJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+                val factsJson = json.decodeFromString<JsonObject>(
                     factsData.decodeToString()
                 )
                 val showSource = factsJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateFactsPreferences(
-                    to.bitkit.models.widget.FactsPreferences(
+                    FactsPreferences(
                         showSource = showSource
                     )
                 )
@@ -1300,7 +1309,7 @@ class MigrationService @Inject constructor(
                     boostTxIds = updatedParentBoostTxIds,
                 )
 
-                var updatedNewOnchain = newOnchain.copy(
+                val updatedNewOnchain = newOnchain.copy(
                     isBoosted = false,
                     boostTxIds = newOnchain.boostTxIds.filter { it != oldTxId },
                 )
@@ -1456,13 +1465,13 @@ class MigrationService @Inject constructor(
 
     @Suppress("LongMethod", "CyclomaticComplexMethod")
     private fun convertRNWidgetPreferences(
-        widgetsDict: kotlinx.serialization.json.JsonObject?
+        widgetsDict: JsonObject?
     ): Map<String, ByteArray> {
         val result = mutableMapOf<String, ByteArray>()
         if (widgetsDict == null) return result
 
         fun getBool(
-            source: kotlinx.serialization.json.JsonObject,
+            source: JsonObject,
             key: String,
             fallbackKey: String? = null,
             defaultValue: Boolean = false,
