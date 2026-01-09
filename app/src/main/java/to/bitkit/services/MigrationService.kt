@@ -51,69 +51,6 @@ import java.security.KeyStore
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "rn_migration"
-)
-
-private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "RN_KEYCHAIN"
-)
-
-@Serializable
-private data class RNRemoteActivityItem(
-    val id: String,
-    val activityType: String,
-    val txType: String,
-    val txId: String? = null,
-    val value: Long,
-    val fee: Long? = null,
-    val feeRate: Long? = null,
-    val address: String? = null,
-    val confirmed: Boolean? = null,
-    val timestamp: Long,
-    val isBoosted: Boolean? = null,
-    val isTransfer: Boolean? = null,
-    val exists: Boolean? = null,
-    val confirmTimestamp: Long? = null,
-    val channelId: String? = null,
-    val transferTxId: String? = null,
-    val status: String? = null,
-    val message: String? = null,
-    val preimage: String? = null,
-    val boostedParents: List<String>? = null,
-)
-
-@Serializable
-private data class RNRemoteWalletBackup(
-    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
-    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
-)
-
-@Serializable
-private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
-
-@Serializable
-private data class RNRemoteBoostedTx(
-    val oldTxId: String? = null,
-    val newTxId: String? = null,
-    val childTransaction: String? = null,
-)
-
-@Serializable
-private data class RNRemoteBlocktankBackup(
-    val orders: List<RNRemoteBlocktankOrder>? = null,
-    val paidOrders: Map<String, String>? = null,
-)
-
-@Serializable
-private data class RNRemoteBlocktankOrder(
-    val id: String,
-    val state: String? = null,
-    val lspBalanceSat: ULong? = null,
-    val clientBalanceSat: ULong? = null,
-    val channelExpiryWeeks: Int? = null,
-    val createdAt: String? = null,
-)
 
 @Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
@@ -1626,10 +1563,87 @@ class MigrationService @Inject constructor(
     }
 }
 
+private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore("rn_migration")
+private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore("RN_KEYCHAIN")
+
+@Serializable
+private data class RNRemoteActivityItem(
+    val id: String,
+    val activityType: String,
+    val txType: String,
+    val txId: String? = null,
+    val value: Long,
+    val fee: Long? = null,
+    val feeRate: Long? = null,
+    val address: String? = null,
+    val confirmed: Boolean? = null,
+    val timestamp: Long,
+    val isBoosted: Boolean? = null,
+    val isTransfer: Boolean? = null,
+    val exists: Boolean? = null,
+    val confirmTimestamp: Long? = null,
+    val channelId: String? = null,
+    val transferTxId: String? = null,
+    val status: String? = null,
+    val message: String? = null,
+    val preimage: String? = null,
+    val boostedParents: List<String>? = null,
+)
+
+@Serializable
+private data class RNRemoteWalletBackup(
+    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
+    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+)
+
+@Serializable
+private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
+
+@Serializable
+private data class RNRemoteBoostedTx(
+    val oldTxId: String? = null,
+    val newTxId: String? = null,
+    val childTransaction: String? = null,
+)
+
+@Serializable
+private data class RNRemoteBlocktankBackup(
+    val orders: List<RNRemoteBlocktankOrder>? = null,
+    val paidOrders: Map<String, String>? = null,
+)
+
+@Serializable
+private data class RNRemoteBlocktankOrder(
+    val id: String,
+    val state: String? = null,
+    val lspBalanceSat: ULong? = null,
+    val clientBalanceSat: ULong? = null,
+    val channelExpiryWeeks: Int? = null,
+    val createdAt: String? = null,
+)
+
 data class PendingChannelMigration(
     val channelManager: ByteArray,
     val channelMonitors: List<ByteArray>,
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as PendingChannelMigration
+
+        if (!channelManager.contentEquals(other.channelManager)) return false
+        if (channelMonitors != other.channelMonitors) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = channelManager.contentHashCode()
+        result = 31 * result + channelMonitors.hashCode()
+        return result
+    }
+}
 
 @Serializable
 data class RNSettings(
