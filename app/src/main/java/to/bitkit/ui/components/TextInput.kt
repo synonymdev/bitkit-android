@@ -9,6 +9,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +47,18 @@ fun TextInput(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     textStyle: TextStyle = AppTextStyles.BodySSB,
 ) {
+    var textFieldValue by remember { mutableStateOf(TextFieldValue(value)) }
+
+    // Sync external changes
+    LaunchedEffect(value) {
+        if (textFieldValue.text != value) {
+            textFieldValue = TextFieldValue(
+                text = value,
+                selection = TextRange(value.length)
+            )
+        }
+    }
+
     TextField(
         placeholder = {
             placeholder?.let {
@@ -50,8 +67,11 @@ fun TextInput(
         },
         isError = isError,
         textStyle = textStyle,
-        value = TextFieldValue(value, TextRange(value.length)),
-        onValueChange = { textFieldValue -> onValueChange(textFieldValue.text) },
+        value = textFieldValue,
+        onValueChange = {
+            textFieldValue = it
+            onValueChange(it.text)
+        },
         maxLines = maxLines,
         minLines = minLines,
         singleLine = singleLine,

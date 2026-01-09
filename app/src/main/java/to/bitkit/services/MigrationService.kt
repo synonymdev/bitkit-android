@@ -1420,6 +1420,7 @@ class MigrationService @Inject constructor(
         }
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private suspend fun updateOnchainActivityMetadata(
         item: RNActivityItem,
         onchain: OnchainActivity,
@@ -1466,6 +1467,20 @@ class MigrationService @Inject constructor(
         } else if (item.isBoosted == true) {
             updated = updated.copy(isBoosted = true)
             wasUpdated = true
+        }
+
+        item.feeRate?.let { feeRate ->
+            if (feeRate > 0 && updated.feeRate != feeRate.toULong()) {
+                updated = updated.copy(feeRate = feeRate.toULong())
+                wasUpdated = true
+            }
+        }
+
+        item.address?.let { address ->
+            if (address.isNotEmpty() && updated.address != address) {
+                updated = updated.copy(address = address)
+                wasUpdated = true
+            }
         }
 
         return if (wasUpdated) updated else null
