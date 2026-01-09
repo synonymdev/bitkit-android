@@ -51,6 +51,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.safe
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
@@ -1215,7 +1216,7 @@ class MigrationService @Inject constructor(
                 else -> TransferEntity(
                     id = txId,
                     type = TransferType.TO_SPENDING,
-                    amountSats = (order.clientBalanceSat + order.feeSat).toLong(),
+                    amountSats = (order.clientBalanceSat.safe() + order.feeSat.safe()).toLong(),
                     channelId = null,
                     fundingTxId = null,
                     lspOrderId = orderId,
