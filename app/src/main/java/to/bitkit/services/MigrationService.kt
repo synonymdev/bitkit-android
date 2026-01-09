@@ -35,8 +35,10 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
@@ -46,6 +48,7 @@ import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
@@ -74,6 +77,7 @@ class MigrationService @Inject constructor(
     private val coreService: CoreService,
     private val rnBackupClient: RNBackupClient,
     private val bip39Service: Bip39Service,
+    private val transferDao: TransferDao,
 ) {
     companion object {
         private const val TAG = "Migration"
@@ -127,6 +131,9 @@ class MigrationService @Inject constructor(
 
     @Volatile
     private var pendingRemoteMetadata: RNMetadata? = null
+
+    @Volatile
+    private var pendingRemotePaidOrders: Map<String, String>? = null
 
     private fun buildRnLdkAccountPath(): File = run {
         val rnNetworkString = when (Env.network) {
@@ -534,6 +541,48 @@ class MigrationService @Inject constructor(
         }.getOrNull()
     }
 
+    private fun extractRNBlocktank(mmkvData: Map<String, String>): Pair<List<String>, Map<String, String>>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
+
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
+            val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
+
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val blocktankJsonString = root["blocktank"]?.jsonPrimitive?.content ?: return@runCatching null
+
+            val blocktankData = json.parseToJsonElement(blocktankJsonString).jsonObject
+            val orderIds = mutableListOf<String>()
+            val paidOrdersMap = mutableMapOf<String, String>()
+
+            blocktankData["orders"]?.jsonArray?.forEach { orderElement ->
+                orderElement.jsonObject["id"]?.jsonPrimitive?.content?.let { id ->
+                    orderIds.add(id)
+                }
+            }
+
+            blocktankData["paidOrders"]?.jsonObject?.forEach { (orderId, txIdElement) ->
+                val txId = txIdElement.jsonPrimitive.content
+                paidOrdersMap[orderId] = txId
+                if (orderId !in orderIds) {
+                    orderIds.add(orderId)
+                }
+            }
+
+            if (orderIds.isEmpty() && paidOrdersMap.isEmpty()) {
+                return@runCatching null
+            }
+
+            Logger.info(
+                "Extracted ${orderIds.size} order IDs and ${paidOrdersMap.size} paid orders from local blocktank",
+                context = TAG,
+            )
+            Pair(orderIds, paidOrdersMap)
+        }.onFailure {
+            Logger.error("Failed to decode RN blocktank: $it", it, context = TAG)
+        }.getOrNull()
+    }
+
     @Suppress("NestedBlockDepth")
     private fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
         val rootJson = mmkvData[MMKV_ROOT] ?: return null
@@ -922,6 +971,34 @@ class MigrationService @Inject constructor(
         extractRNTodos(mmkvData)?.let { todos ->
             applyRNTodos(todos)
         }
+
+        extractRNBlocktank(mmkvData)?.let { (orderIds, paidOrders) ->
+            applyRNBlocktank(orderIds, paidOrders)
+        }
+    }
+
+    private suspend fun applyRNBlocktank(orderIds: List<String>, paidOrders: Map<String, String>) {
+        if (orderIds.isEmpty()) return
+
+        paidOrders.forEach { (orderId, txId) ->
+            cacheStore.addPaidOrder(orderId, txId)
+        }
+
+        runCatching {
+            val fetchedOrders = coreService.blocktank.orders(
+                orderIds = orderIds,
+                filter = null,
+                refresh = true,
+            )
+            if (fetchedOrders.isNotEmpty()) {
+                coreService.blocktank.upsertOrderList(fetchedOrders)
+                if (paidOrders.isNotEmpty()) {
+                    createTransfersForPaidOrders(paidOrders, fetchedOrders)
+                }
+            }
+        }.onFailure { e ->
+            Logger.warn("Failed to fetch and upsert local Blocktank orders: $e", context = TAG)
+        }
     }
 
     suspend fun getRNRemoteBackupTimestamp(): ULong? = runCatching {
@@ -1108,35 +1185,54 @@ class MigrationService @Inject constructor(
     private suspend fun applyRNRemoteBlocktank(data: ByteArray) {
         runCatching {
             val backup = decodeBackupData<RNRemoteBlocktankBackup>(data)
-            val orderIds = mutableListOf<String>()
 
-            backup.orders?.let { orders ->
-                orderIds.addAll(orders.map { it.id })
-            }
-
-            backup.paidOrders?.let { paidOrdersMap ->
-                orderIds.addAll(paidOrdersMap.keys)
-                paidOrdersMap.forEach { (orderId, txId) ->
+            backup.paidOrders?.let { paidOrders ->
+                paidOrders.forEach { (orderId, txId) ->
                     cacheStore.addPaidOrder(orderId, txId)
                 }
-            }
-
-            if (orderIds.isNotEmpty()) {
-                runCatching {
-                    val fetchedOrders = coreService.blocktank.orders(
-                        orderIds = orderIds,
-                        filter = null,
-                        refresh = true,
-                    )
-                    if (fetchedOrders.isNotEmpty()) {
-                        coreService.blocktank.upsertOrderList(fetchedOrders)
-                    }
-                }.onFailure { e ->
-                    Logger.warn("Failed to fetch and upsert Blocktank orders: $e", context = TAG)
+                if (paidOrders.isNotEmpty()) {
+                    pendingRemotePaidOrders = paidOrders
                 }
             }
         }.onFailure { e ->
             Logger.warn("Failed to decode RN remote blocktank backup: $e", context = TAG)
+        }
+    }
+
+    private suspend fun createTransfersForPaidOrders(
+        paidOrdersMap: Map<String, String>,
+        orders: List<com.synonym.bitkitcore.IBtOrder>,
+    ) {
+        val now = System.currentTimeMillis() / 1000
+        val transfers = paidOrdersMap.mapNotNull { (orderId, txId) ->
+            val order = orders.find { it.id == orderId }
+            when {
+                order == null -> {
+                    Logger.warn("Paid order $orderId not found in fetched orders", context = TAG)
+                    null
+                }
+                order.state2 == com.synonym.bitkitcore.BtOrderState2.EXECUTED -> null
+                else -> TransferEntity(
+                    id = txId,
+                    type = TransferType.TO_SPENDING,
+                    amountSats = (order.clientBalanceSat + order.feeSat).toLong(),
+                    channelId = null,
+                    fundingTxId = null,
+                    lspOrderId = orderId,
+                    isSettled = false,
+                    createdAt = now,
+                    settledAt = null,
+                )
+            }
+        }
+
+        if (transfers.isNotEmpty()) {
+            runCatching {
+                transferDao.upsert(transfers)
+                Logger.info("Created ${transfers.size} transfers for paid Blocktank orders", context = TAG)
+            }.onFailure { e ->
+                Logger.error("Failed to create transfers for paid orders: $e", context = TAG)
+            }
         }
     }
 
@@ -1182,6 +1278,31 @@ class MigrationService @Inject constructor(
         pendingRemoteMetadata?.let { metadata ->
             applyRNMetadata(metadata)
             pendingRemoteMetadata = null
+        }
+
+        pendingRemotePaidOrders?.let { paidOrders ->
+            applyRemotePaidOrders(paidOrders)
+            pendingRemotePaidOrders = null
+        }
+    }
+
+    private suspend fun applyRemotePaidOrders(paidOrders: Map<String, String>) {
+        if (paidOrders.isEmpty()) return
+
+        val orderIds = paidOrders.keys.toList()
+
+        runCatching {
+            val fetchedOrders = coreService.blocktank.orders(
+                orderIds = orderIds,
+                filter = null,
+                refresh = true,
+            )
+            if (fetchedOrders.isNotEmpty()) {
+                coreService.blocktank.upsertOrderList(fetchedOrders)
+                createTransfersForPaidOrders(paidOrders, fetchedOrders)
+            }
+        }.onFailure { e ->
+            Logger.warn("Failed to fetch and process remote paid orders: $e", context = TAG)
         }
     }
 
