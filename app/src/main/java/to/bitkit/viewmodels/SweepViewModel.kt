@@ -40,7 +40,7 @@ class SweepViewModel @Inject constructor(
                 }
             },
             onFailure = { error ->
-                Logger.error("Failed to check sweepable balance", error, TAG)
+                Logger.error("Failed to check sweepable balance", error, context = TAG)
                 _uiState.update { it.copy(checkState = CheckState.Error(error.message ?: "Unknown error")) }
             }
         )
@@ -65,7 +65,7 @@ class SweepViewModel @Inject constructor(
                     _uiState.update { it.copy(destinationAddress = address) }
                 },
                 onFailure = { error ->
-                    Logger.error("Failed to get destination address", error, TAG)
+                    Logger.error("Failed to get destination address", error, context = TAG)
                     val errorMsg = "Failed to get destination address"
                     _uiState.update {
                         it.copy(sweepState = SweepState.Error(errorMsg), errorMessage = errorMsg)
@@ -90,7 +90,7 @@ class SweepViewModel @Inject constructor(
                 }
             },
             onFailure = { error ->
-                Logger.error("Failed to prepare sweep", error, TAG)
+                Logger.error("Failed to prepare sweep", error, context = TAG)
                 _uiState.update {
                     it.copy(
                         sweepState = SweepState.Error(error.message ?: "Unknown error"),
@@ -120,7 +120,7 @@ class SweepViewModel @Inject constructor(
                 }
             },
             onFailure = { error ->
-                Logger.error("Failed to broadcast sweep", error, TAG)
+                Logger.error("Failed to broadcast sweep", error, context = TAG)
                 _uiState.update {
                     it.copy(
                         sweepState = SweepState.Error(error.message ?: "Unknown error"),
@@ -153,7 +153,7 @@ class SweepViewModel @Inject constructor(
                 }
             },
             onFailure = { error ->
-                Logger.error("Failed to load fee estimates", error, TAG)
+                Logger.error("Failed to load fee estimates", error, context = TAG)
                 _uiState.update { it.copy(errorMessage = error.message) }
             }
         )
@@ -165,24 +165,6 @@ class SweepViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "SweepViewModel"
-
-        suspend fun checkForSweepableFundsAfterMigration(sweepRepo: SweepRepo): Boolean {
-            return sweepRepo.checkSweepableBalances().fold(
-                onSuccess = { balances ->
-                    if (balances.totalBalance > 0u) {
-                        Logger.info("Found ${balances.totalBalance} sats to sweep after migration", context = TAG)
-                        true
-                    } else {
-                        Logger.debug("No sweepable funds found after migration", context = TAG)
-                        false
-                    }
-                },
-                onFailure = { error ->
-                    Logger.error("Failed to check sweepable funds after migration", error, TAG)
-                    false
-                }
-            )
-        }
     }
 }
 

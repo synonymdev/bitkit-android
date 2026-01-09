@@ -457,10 +457,8 @@ class AppViewModel @Inject constructor(
 
     fun checkForSweepableFunds() {
         viewModelScope.launch(bgDispatcher) {
-            val hasSweepableFunds = SweepViewModel.checkForSweepableFundsAfterMigration(sweepRepo)
-            if (hasSweepableFunds) {
-                showSheet(Sheet.SweepPrompt)
-            }
+            sweepRepo.hasSweepableFunds()
+                .onSuccess { hasFunds -> if (hasFunds) showSheet(Sheet.SweepPrompt) }
         }
     }
 

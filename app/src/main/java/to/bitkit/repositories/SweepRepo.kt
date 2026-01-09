@@ -100,6 +100,16 @@ class SweepRepo @Inject constructor(
 
     suspend fun getFeeRates(): Result<FeeRates> = coreService.blocktank.getFees()
 
+    suspend fun hasSweepableFunds(): Result<Boolean> = checkSweepableBalances().map { balances ->
+        val hasFunds = balances.totalBalance > 0u
+        if (hasFunds) {
+            Logger.info("Found ${balances.totalBalance} sats to sweep", context = TAG)
+        } else {
+            Logger.debug("No sweepable funds found", context = TAG)
+        }
+        hasFunds
+    }
+
     companion object {
         private const val TAG = "SweepRepo"
     }
