@@ -29,6 +29,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
@@ -101,7 +102,7 @@ private data class RNRemoteBoostedTx(
 @Serializable
 private data class RNRemoteBlocktankBackup(
     val orders: List<RNRemoteBlocktankOrder>? = null,
-    val paidOrders: List<String>? = null,
+    val paidOrders: Map<String, String>? = null,
 )
 
 @Serializable
@@ -114,13 +115,14 @@ private data class RNRemoteBlocktankOrder(
     val createdAt: String? = null,
 )
 
-@Suppress("LargeClass", "TooManyFunctions")
+@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
 class MigrationService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
+    private val cacheStore: CacheStore,
     private val activityRepo: ActivityRepo,
     private val coreService: CoreService,
     private val rnBackupClient: RNBackupClient,
@@ -1263,8 +1265,11 @@ class MigrationService @Inject constructor(
                 orderIds.addAll(orders.map { it.id })
             }
 
-            backup.paidOrders?.let { paidOrderIds ->
-                orderIds.addAll(paidOrderIds)
+            backup.paidOrders?.let { paidOrdersMap ->
+                orderIds.addAll(paidOrdersMap.keys)
+                paidOrdersMap.forEach { (orderId, txId) ->
+                    cacheStore.addPaidOrder(orderId, txId)
+                }
             }
 
             if (orderIds.isNotEmpty()) {
