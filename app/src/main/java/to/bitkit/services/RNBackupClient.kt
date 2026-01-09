@@ -43,12 +43,15 @@ class RNBackupClient @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val json: Json,
 ) {
+    @Suppress("SpellCheckingInspection")
     companion object {
         private const val TAG = "RNBackup"
         private const val VERSION = "v1"
         private const val SIGNED_MESSAGE_PREFIX = "react-native-ldk backup server auth:"
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 16
+        private const val PBKDF2_ITERATIONS = 2048
+        private const val PBKDF2_KEY_LENGTH_BITS = 512
     }
 
     @Volatile
@@ -58,8 +61,7 @@ class RNBackupClient @Inject constructor(
 
     suspend fun listFiles(fileGroup: String? = "ldk"): RNBackupListResponse? = withContext(ioDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup()
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -68,9 +70,7 @@ class RNBackupClient @Inject constructor(
                 header("Authorization", bearer.bearer)
             }
 
-            if (!response.status.isSuccess()) {
-                throw RNBackupError.RequestFailed("Status: ${response.status.value}")
-            }
+            if (!response.status.isSuccess()) throw RNBackupError.RequestFailed("Status: ${response.status.value}")
 
             response.body<RNBackupListResponse>()
         }.onFailure { e ->
@@ -80,8 +80,7 @@ class RNBackupClient @Inject constructor(
 
     suspend fun retrieve(label: String, fileGroup: String? = null): ByteArray? = withContext(ioDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup()
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -90,14 +89,13 @@ class RNBackupClient @Inject constructor(
                 header("Authorization", bearer.bearer)
             }
 
-            if (!response.status.isSuccess()) {
-                throw RNBackupError.RequestFailed("Status: ${response.status.value}")
-            }
+            if (!response.status.isSuccess()) throw RNBackupError.RequestFailed("Status: ${response.status.value}")
 
             val encryptedData = response.body<ByteArray>()
             if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
 
             val encryptionKey = deriveEncryptionKey(mnemonic, passphrase)
+
             decrypt(encryptedData, encryptionKey).also {
                 if (it.isEmpty()) throw RNBackupError.DecryptFailed("Decrypted data is empty")
             }
@@ -123,9 +121,7 @@ class RNBackupClient @Inject constructor(
                 header("Authorization", bearer.bearer)
             }
 
-            if (!response.status.isSuccess()) {
-                throw RNBackupError.RequestFailed("Status: ${response.status.value}")
-            }
+            if (!response.status.isSuccess()) throw RNBackupError.RequestFailed("Status: ${response.status.value}")
 
             val encryptedData = response.body<ByteArray>()
             if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
@@ -137,18 +133,6 @@ class RNBackupClient @Inject constructor(
         }.onFailure { e ->
             Logger.error("Failed to retrieve channel monitor $channelId", e, context = TAG)
         }.getOrNull()
-    }
-
-    suspend fun hasBackup(): Boolean = withContext(ioDispatcher) {
-        runCatching {
-            val ldkFiles = listFiles(fileGroup = "ldk")
-            val bitkitFiles = listFiles(fileGroup = "bitkit")
-            val hasLdkFiles = !ldkFiles?.list.isNullOrEmpty() || !ldkFiles?.channelMonitors.isNullOrEmpty()
-            val hasBitkitFiles = !bitkitFiles?.list.isNullOrEmpty()
-            hasLdkFiles || hasBitkitFiles
-        }.onFailure { e ->
-            Logger.error("Failed to check if backup exists", e, context = TAG)
-        }.getOrDefault(false)
     }
 
     suspend fun getLatestBackupTimestamp(): ULong? = withContext(ioDispatcher) {
@@ -173,15 +157,16 @@ class RNBackupClient @Inject constructor(
 
             var latestTimestamp: ULong? = null
             for (label in labels) {
-                if ("$label.bin" !in bitkitFiles) continue
-
-                val data = retrieve(label, fileGroup = "bitkit") ?: continue
-                val timestamp = runCatching {
-                    json.decodeFromString<BackupWithMetadata>(String(data)).metadata?.timestamp
-                }.getOrNull() ?: continue
-
-                val ts = (timestamp / 1000).toULong()
-                latestTimestamp = maxOf(latestTimestamp ?: 0uL, ts)
+                if ("$label.bin" in bitkitFiles) {
+                    retrieve(label, fileGroup = "bitkit")?.let { data ->
+                        runCatching {
+                            json.decodeFromString<BackupWithMetadata>(String(data)).metadata?.timestamp
+                        }.getOrNull()?.let { timestamp ->
+                            val ts = (timestamp / 1000).toULong()
+                            latestTimestamp = maxOf(latestTimestamp ?: 0uL, ts)
+                        }
+                    }
+                }
             }
             latestTimestamp
         }.onFailure { e ->
@@ -234,9 +219,7 @@ class RNBackupClient @Inject constructor(
                 setBody(challengeBody)
             }
 
-            if (!challengeResponse.status.isSuccess()) {
-                throw RNBackupError.AuthFailed()
-            }
+            if (!challengeResponse.status.isSuccess()) throw RNBackupError.AuthFailed()
 
             val challengeResult = challengeResponse.body<AuthChallengeResponse>()
             val authBody = json.encodeToString(
@@ -252,9 +235,7 @@ class RNBackupClient @Inject constructor(
                 setBody(authBody)
             }
 
-            if (!authResponse.status.isSuccess()) {
-                throw RNBackupError.AuthFailed()
-            }
+            if (!authResponse.status.isSuccess()) throw RNBackupError.AuthFailed()
 
             authResponse.body<AuthBearerResponse>().also { cachedBearer = it }
         }
@@ -296,13 +277,12 @@ class RNBackupClient @Inject constructor(
         val mnemonicBytes = mnemonic.toByteArray(Charsets.UTF_8)
         val salt = ("mnemonic" + (passphrase ?: "")).toByteArray(Charsets.UTF_8)
         val generator = PKCS5S2ParametersGenerator(SHA512Digest())
-        generator.init(mnemonicBytes, salt, 2048)
-        return (generator.generateDerivedParameters(512) as KeyParameter).key
+        generator.init(mnemonicBytes, salt, PBKDF2_ITERATIONS)
+
+        return (generator.generateDerivedParameters(PBKDF2_KEY_LENGTH_BITS) as KeyParameter).key
     }
 
-    @Suppress("SpellCheckingInspection")
     private fun deriveMasterKey(seed: ByteArray): ByteArray {
-        @Suppress("SpellCheckingInspection")
         val algorithm = "HmacSHA512"
         val hmac = Mac.getInstance(algorithm)
         val keySpec = SecretKeySpec("Bitcoin seed".toByteArray(), algorithm)
@@ -312,9 +292,7 @@ class RNBackupClient @Inject constructor(
     }
 
     private fun decrypt(blob: ByteArray, encryptionKey: ByteArray): ByteArray {
-        if (blob.size < GCM_IV_LENGTH + GCM_TAG_LENGTH) {
-            throw RNBackupError.DecryptFailed("Data too short")
-        }
+        if (blob.size < GCM_IV_LENGTH + GCM_TAG_LENGTH) throw RNBackupError.DecryptFailed("Data too short")
 
         val nonce = blob.sliceArray(0 until GCM_IV_LENGTH)
         val tag = blob.sliceArray(blob.size - GCM_TAG_LENGTH until blob.size)
