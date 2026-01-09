@@ -740,8 +740,6 @@ class MigrationService @Inject constructor(
                     else -> CoinSelectionPreference.SmallestFirst
                 },
                 isPinEnabled = settings.pin ?: current.isPinEnabled,
-                isPinOnLaunchEnabled = settings.pinOnLaunch ?: current.isPinOnLaunchEnabled,
-                isPinOnIdleEnabled = settings.pinOnIdle ?: current.isPinOnIdleEnabled,
                 isPinForPaymentsEnabled = settings.pinForPayments ?: current.isPinForPaymentsEnabled,
                 isBiometricEnabled = settings.biometrics ?: current.isBiometricEnabled,
                 quickPayIntroSeen = settings.quickpayIntroSeen ?: current.quickPayIntroSeen,
@@ -1632,8 +1630,6 @@ data class RNSettings(
     val enableSendAmountWarning: Boolean? = null,
     val enableSwipeToHideBalance: Boolean? = null,
     val pin: Boolean? = null,
-    val pinOnLaunch: Boolean? = null,
-    val pinOnIdle: Boolean? = null,
     val pinForPayments: Boolean? = null,
     val biometrics: Boolean? = null,
     val rbf: Boolean? = null,
