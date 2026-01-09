@@ -455,5 +455,5 @@ Transfers are serialized to JSON and included in backup. Restore deserializes an
 
 [^1]: Currently we can't display the channel closure transactions as 'transfer' yet in the activity list, due to an api missing in ldk-node. See comment in [ldk-node/wallet/mod.rs#L728-L738][ldk-node-comment]
 
-[external-node-channel]: https://github.com/ovitrif/bitkit-docker#external-node-channel
+[external-node-channel]: https://github.com/synonymdev/bitkit-docker#external-node-channel
 [ldk-node-comment]: https://github.com/lightningdevkit/ldk-node/blob/22a5d7742cf4e9265173ae51106db4bd9668ec8a/src/wallet/mod.rs#L728-L738

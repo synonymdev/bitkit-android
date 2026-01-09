@@ -51,7 +51,7 @@ See also:
 - [vss-server](https://github.com/synonymdev/vss-server) - Versioned Storage Service backend
 - [vss-rust-client-ffi](https://github.com/synonymdev/vss-rust-client-ffi) - FFI bindings for vss-rust-client 
 - [bitkit-e2e-tests](https://github.com/synonymdev/bitkit-e2e-tests) - End-to-end tests (WebdriverIO + Appium)
-- [bitkit-docker](https://github.com/ovitrif/bitkit-docker) - Docker setup for LNURL dev testing and local backend for integrations development
+- [bitkit-docker](https://github.com/synonymdev/bitkit-docker) - Docker setup for LNURL dev testing and local backend for integrations development
 
 ### Lint
 
