@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens
 
-import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,16 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ext.findActivity
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.VerticalSpacer
@@ -33,20 +30,11 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun MigrationLoadingScreen(isVisible: Boolean = true) {
-    val context = LocalContext.current
-
-    DisposableEffect(Unit) {
-        val window = context.findActivity()?.window
-        window?.addFlags(FLAG_KEEP_SCREEN_ON)
-        onDispose {
-            window?.clearFlags(FLAG_KEEP_SCREEN_ON)
-        }
-    }
-
     AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn(),
         exit = fadeOut(),
+        modifier = Modifier.keepScreenOn(),
     ) {
         Content()
     }

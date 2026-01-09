@@ -3,7 +3,7 @@ package to.bitkit.ui.settings.advanced.sweep
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import to.bitkit.ui.components.FillHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -217,7 +217,7 @@ private fun Content(
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             BottomActions(
                 uiState = uiState,
