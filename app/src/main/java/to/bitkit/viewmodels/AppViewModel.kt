@@ -378,7 +378,7 @@ class AppViewModel @Inject constructor(
         walletRepo.syncBalances()
         migrationService.setRestoringFromRNRemoteBackup(false)
         migrationService.setShowingMigrationLoading(false)
-        checkForSweepableFundsAfterMigration()
+        checkForSweepableFunds()
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
@@ -427,7 +427,7 @@ class AppViewModel @Inject constructor(
         migrationService.setShowingMigrationLoading(false)
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
-        checkForSweepableFundsAfterMigration()
+        checkForSweepableFunds()
     }
 
     private suspend fun finishMigrationWithFallbackSync() {
@@ -441,7 +441,7 @@ class AppViewModel @Inject constructor(
         migrationService.setShowingMigrationLoading(false)
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
-        checkForSweepableFundsAfterMigration()
+        checkForSweepableFunds()
     }
 
     private suspend fun finishMigrationWithError() {
@@ -455,10 +455,12 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private suspend fun checkForSweepableFundsAfterMigration() {
-        val hasSweepableFunds = SweepViewModel.checkForSweepableFundsAfterMigration(sweepRepo)
-        if (hasSweepableFunds) {
-            showSheet(Sheet.SweepPrompt)
+    fun checkForSweepableFunds() {
+        viewModelScope.launch(bgDispatcher) {
+            val hasSweepableFunds = SweepViewModel.checkForSweepableFundsAfterMigration(sweepRepo)
+            if (hasSweepableFunds) {
+                showSheet(Sheet.SweepPrompt)
+            }
         }
     }
 

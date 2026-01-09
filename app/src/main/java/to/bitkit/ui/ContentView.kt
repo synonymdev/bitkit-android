@@ -340,7 +340,10 @@ fun ContentView(
         return
     } else if (restoreState is RestoreState.Completed) {
         WalletRestoreSuccessView(
-            onContinue = { walletViewModel.onRestoreContinue() },
+            onContinue = {
+                walletViewModel.onRestoreContinue()
+                appViewModel.checkForSweepableFunds()
+            },
         )
         return
     }
