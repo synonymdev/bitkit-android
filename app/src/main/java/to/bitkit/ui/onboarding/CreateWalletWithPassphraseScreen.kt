@@ -39,6 +39,7 @@ import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.mainRectHeight
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -51,6 +52,8 @@ fun CreateWalletWithPassphraseScreen(
     onBackClick: () -> Unit,
     onCreateClick: (passphrase: String) -> Unit,
 ) {
+    BlockScreenshots()
+
     var bip39Passphrase by remember { mutableStateOf("") }
 
     Box(

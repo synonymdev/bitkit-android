@@ -592,6 +592,7 @@ private fun RootNavHost(
                     wallet = walletViewModel,
                     transfer = transferViewModel,
                     onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onTransferUnavailable = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingIntro> {

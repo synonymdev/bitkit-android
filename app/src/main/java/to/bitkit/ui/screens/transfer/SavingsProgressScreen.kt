@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -27,6 +28,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.models.Toast
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -52,8 +54,10 @@ fun SavingsProgressScreen(
     transfer: TransferViewModel,
     wallet: WalletViewModel,
     onContinueClick: () -> Unit = {},
+    onTransferUnavailable: () -> Unit = {},
 ) {
     val window = LocalActivity.current?.window
+    val context = LocalContext.current
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
 
     // Effect to close channels & update UI
@@ -68,11 +72,35 @@ fun SavingsProgressScreen(
             delay(5000)
             progressState = SavingsProgressState.SUCCESS
         } else {
-            transfer.startCoopCloseRetries(channelsFailedToCoopClose) {
-                app.showSheet(Sheet.ForceTransfer)
+            // Check if any channels can be retried (filter out trusted peers)
+            val (_, nonTrustedChannels) = transfer.separateTrustedChannels(channelsFailedToCoopClose)
+
+            if (nonTrustedChannels.isEmpty()) {
+                // All channels are trusted peers - show error and navigate back immediately
+                window?.clearFlags(FLAG_KEEP_SCREEN_ON)
+                app.toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.lightning__close_error),
+                    description = context.getString(R.string.lightning__close_error_msg),
+                )
+                onTransferUnavailable()
+            } else {
+                transfer.startCoopCloseRetries(
+                    channels = nonTrustedChannels,
+                    onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
+                    onTransferUnavailable = {
+                        window?.clearFlags(FLAG_KEEP_SCREEN_ON)
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.lightning__close_error),
+                            description = context.getString(R.string.lightning__close_error_msg),
+                        )
+                        onTransferUnavailable()
+                    },
+                )
+                delay(2500)
+                progressState = SavingsProgressState.INTERRUPTED
             }
-            delay(2500)
-            progressState = SavingsProgressState.INTERRUPTED
         }
     }
 

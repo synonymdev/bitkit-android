@@ -159,6 +159,7 @@ private fun Content(
                 placeholder = "127.0.0.1",
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Uri,
+                    autoCorrectEnabled = false,
                     capitalization = KeyboardCapitalization.None,
                     imeAction = ImeAction.Next,
                 ),

@@ -38,6 +38,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
@@ -521,6 +522,24 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
+    private suspend fun extractRNTodos(mmkvData: Map<String, String>): RNTodos? {
+        val rootJson = mmkvData["persist:root"] ?: return null
+
+        return try {
+            val jsonStart = rootJson.indexOf("{")
+            val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
+
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val todosJsonString = root["todos"]?.jsonPrimitive?.content ?: return null
+
+            json.decodeFromString<RNTodos>(todosJsonString)
+        } catch (e: Exception) {
+            Logger.error("Failed to decode RN todos: $e", e, context = TAG)
+            null
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun extractRNWidgets(mmkvData: Map<String, String>): RNWidgetsWithOptions? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
@@ -532,9 +551,10 @@ class MigrationService @Inject constructor(
             val widgetsJsonString = root["widgets"]?.jsonPrimitive?.content ?: return null
 
             val widgets = json.decodeFromString<RNWidgets>(widgetsJsonString)
-
             val widgetsData = json.parseToJsonElement(widgetsJsonString).jsonObject
-            val widgetOptions = convertRNWidgetPreferences(widgetsData["widgets"]?.jsonObject ?: widgetsData)
+            val widgetOptions = convertRNWidgetPreferences(
+                widgetsData["widgets"]?.jsonObject ?: widgetsData
+            )
 
             RNWidgetsWithOptions(widgets = widgets, widgetOptions = widgetOptions)
         } catch (e: Exception) {
@@ -759,6 +779,26 @@ class MigrationService @Inject constructor(
         }
     }
 
+    private suspend fun applyRNTodos(todos: RNTodos) {
+        val mapping = mapOf(
+            "backupSeedPhrase" to Suggestion.BACK_UP,
+            "buyBitcoin" to Suggestion.BUY,
+            "lightning" to Suggestion.LIGHTNING,
+            "quickpay" to Suggestion.QUICK_PAY,
+            "shop" to Suggestion.SHOP,
+            "slashtagsProfile" to Suggestion.PROFILE,
+            "support" to Suggestion.SUPPORT,
+            "invite" to Suggestion.INVITE,
+            "pin" to Suggestion.SECURE,
+        )
+
+        todos.hide?.keys?.forEach { rnTodoType ->
+            mapping[rnTodoType]?.let { suggestion ->
+                settingsStore.addDismissedSuggestion(suggestion)
+            }
+        }
+    }
+
     private suspend fun applyRNActivities(items: List<RNActivityItem>) {
         val activities = items.filter { it.activityType == "lightning" }.map { item ->
             val txType = if (item.txType == "sent") PaymentType.SENT else PaymentType.RECEIVED
@@ -845,6 +885,7 @@ class MigrationService @Inject constructor(
                 "blocks" to WidgetType.BLOCK,
                 "weather" to WidgetType.WEATHER,
                 "facts" to WidgetType.FACTS,
+                "calculator" to WidgetType.CALCULATOR,
             )
 
             val savedWidgets = sortOrder.mapNotNull { widgetName ->
@@ -1019,6 +1060,10 @@ class MigrationService @Inject constructor(
 
         extractRNWidgets(mmkvData)?.let { widgets ->
             applyRNWidgets(widgets)
+        }
+
+        extractRNTodos(mmkvData)?.let { todos ->
+            applyRNTodos(todos)
         }
     }
 
@@ -1375,6 +1420,7 @@ class MigrationService @Inject constructor(
         }
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private suspend fun updateOnchainActivityMetadata(
         item: RNActivityItem,
         onchain: OnchainActivity,
@@ -1423,6 +1469,20 @@ class MigrationService @Inject constructor(
             wasUpdated = true
         }
 
+        item.feeRate?.let { feeRate ->
+            if (feeRate > 0 && updated.feeRate != feeRate.toULong()) {
+                updated = updated.copy(feeRate = feeRate.toULong())
+                wasUpdated = true
+            }
+        }
+
+        item.address?.let { address ->
+            if (address.isNotEmpty() && updated.address != address) {
+                updated = updated.copy(address = address)
+                wasUpdated = true
+            }
+        }
+
         return if (wasUpdated) updated else null
     }
 
@@ -1459,10 +1519,15 @@ class MigrationService @Inject constructor(
         val result = mutableMapOf<String, ByteArray>()
         if (widgetsDict == null) return result
 
-        fun getBool(key: String, fallbackKey: String? = null, defaultValue: Boolean = false): Boolean {
+        fun getBool(
+            source: kotlinx.serialization.json.JsonObject,
+            key: String,
+            fallbackKey: String? = null,
+            defaultValue: Boolean = false,
+        ): Boolean {
             val keys = if (fallbackKey != null) listOf(key, fallbackKey) else listOf(key)
             for (k in keys) {
-                widgetsDict[k]?.let { element ->
+                source[k]?.let { element ->
                     when {
                         element is kotlinx.serialization.json.JsonPrimitive && element.isString -> {
                             val str = element.content.lowercase()
@@ -1498,7 +1563,7 @@ class MigrationService @Inject constructor(
             )
             val period = periodMap[rnPeriod] ?: rnPeriod
 
-            val showSource = getBool("showSource", defaultValue = false)
+            val showSource = getBool(prefs, "showSource", defaultValue = false)
             val pairsJson = selectedPairs.joinToString(",", "[", "]") { "\"$it\"" }
             val priceOptionsJson =
                 """{"selectedPairs":$pairsJson,"selectedPeriod":"$period","showSource":$showSource}"""
@@ -1507,12 +1572,12 @@ class MigrationService @Inject constructor(
 
         val weatherPrefs = widgetsDict["weatherPreferences"]?.jsonObject
             ?: widgetsDict["weather"]?.jsonObject
-        weatherPrefs?.let {
+        weatherPrefs?.let { prefs ->
             val weatherOptions = buildJsonObject {
-                put("showStatus", getBool("showTitle", "showStatus", defaultValue = true))
-                put("showText", getBool("showDescription", "showText", defaultValue = false))
-                put("showMedian", getBool("showCurrentFee", "showMedian", defaultValue = false))
-                put("showNextBlockFee", getBool("showNextBlockFee", defaultValue = false))
+                put("showStatus", getBool(prefs, "showTitle", "showStatus", defaultValue = true))
+                put("showText", getBool(prefs, "showDescription", "showText", defaultValue = false))
+                put("showMedian", getBool(prefs, "showCurrentFee", "showMedian", defaultValue = false))
+                put("showNextBlockFee", getBool(prefs, "showNextBlockFee", defaultValue = false))
             }
             result["weather"] = weatherOptions.toString().encodeToByteArray()
         }
@@ -1520,34 +1585,34 @@ class MigrationService @Inject constructor(
         val newsPrefs = widgetsDict["headlinePreferences"]?.jsonObject
             ?: widgetsDict["headline"]?.jsonObject
             ?: widgetsDict["news"]?.jsonObject
-        newsPrefs?.let {
+        newsPrefs?.let { prefs ->
             val newsOptions = buildJsonObject {
-                put("showDate", getBool("showDate", "showTime", defaultValue = true))
-                put("showTitle", getBool("showTitle", defaultValue = true))
-                put("showSource", getBool("showSource", defaultValue = true))
+                put("showDate", getBool(prefs, "showDate", "showTime", defaultValue = true))
+                put("showTitle", getBool(prefs, "showTitle", defaultValue = true))
+                put("showSource", getBool(prefs, "showSource", defaultValue = true))
             }
             result["news"] = newsOptions.toString().encodeToByteArray()
         }
 
         val blocksPrefs = widgetsDict["blocksPreferences"]?.jsonObject
             ?: widgetsDict["blocks"]?.jsonObject
-        blocksPrefs?.let {
+        blocksPrefs?.let { prefs ->
             val blocksOptions = buildJsonObject {
-                put("height", getBool("height", "showBlock", defaultValue = true))
-                put("time", getBool("time", "showTime", defaultValue = true))
-                put("date", getBool("date", "showDate", defaultValue = true))
-                put("transactionCount", getBool("transactionCount", "showTransactions", defaultValue = false))
-                put("size", getBool("size", "showSize", defaultValue = false))
-                put("showSource", getBool("showSource", defaultValue = false))
+                put("height", getBool(prefs, "height", "showBlock", defaultValue = true))
+                put("time", getBool(prefs, "time", "showTime", defaultValue = true))
+                put("date", getBool(prefs, "date", "showDate", defaultValue = true))
+                put("transactionCount", getBool(prefs, "transactionCount", "showTransactions", defaultValue = false))
+                put("size", getBool(prefs, "size", "showSize", defaultValue = false))
+                put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["blocks"] = blocksOptions.toString().encodeToByteArray()
         }
 
         val factsPrefs = widgetsDict["factsPreferences"]?.jsonObject
             ?: widgetsDict["facts"]?.jsonObject
-        factsPrefs?.let {
+        factsPrefs?.let { prefs ->
             val factsOptions = buildJsonObject {
-                put("showSource", getBool("showSource", defaultValue = false))
+                put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["facts"] = factsOptions.toString().encodeToByteArray()
         }
@@ -1600,6 +1665,11 @@ data class RNSettings(
 data class RNMetadata(
     val tags: Map<String, List<String>>? = null,
     val lastUsedTags: List<String>? = null,
+)
+
+@Serializable
+data class RNTodos(
+    val hide: Map<String, Long>? = null,
 )
 
 @Serializable
