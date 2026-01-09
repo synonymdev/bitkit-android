@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
@@ -59,7 +60,6 @@ import java.io.File
 import java.security.KeyStore
 import javax.inject.Inject
 import javax.inject.Singleton
-
 
 @Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
@@ -144,6 +144,7 @@ class MigrationService @Inject constructor(
 
     private val rnLdkAccountPath: File
         get() {
+            @Suppress("SpellCheckingInspection")
             val accountName = buildString {
                 append(RN_WALLET_NAME)
                 append(rnNetworkString)
@@ -157,11 +158,6 @@ class MigrationService @Inject constructor(
 
     suspend fun isMigrationChecked(): Boolean {
         val key = stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)
-        return rnMigrationStore.data.first()[key] == "true"
-    }
-
-    suspend fun isMigrationCompleted(): Boolean {
-        val key = stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)
         return rnMigrationStore.data.first()[key] == "true"
     }
 
@@ -180,19 +176,19 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught", "SwallowedException")
-    suspend fun hasNativeWalletData(): Boolean {
+    fun hasNativeWalletData(): Boolean {
         return try {
             keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
 
-    suspend fun hasRNLdkData(): Boolean {
+    fun hasRNLdkData(): Boolean {
         return File(rnLdkAccountPath, "channel_manager.bin").exists()
     }
 
-    suspend fun hasRNMmkvData(): Boolean {
+    fun hasRNMmkvData(): Boolean {
         return rnMmkvPath.exists()
     }
 
@@ -267,13 +263,12 @@ class MigrationService @Inject constructor(
         return try {
             val keystore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
-            val alias = service
-            if (!keystore.containsAlias(alias)) {
-                Logger.error("Keystore alias '$alias' not found", context = TAG)
+            if (!keystore.containsAlias(service)) {
+                Logger.error("Keystore alias '$service' not found", context = TAG)
                 return null
             }
 
-            val secretKey = keystore.getKey(alias, null) as javax.crypto.SecretKey
+            val secretKey = keystore.getKey(service, null) as javax.crypto.SecretKey
 
             val transformation = "AES/GCM/NoPadding"
             val spec = javax.crypto.spec.GCMParameterSpec(GCM_TAG_LENGTH, iv)
@@ -434,7 +429,7 @@ class MigrationService @Inject constructor(
     }.getOrNull()
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNSettings(mmkvData: Map<String, String>): RNSettings? {
+    private fun extractRNSettings(mmkvData: Map<String, String>): RNSettings? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
         return try {
@@ -452,7 +447,7 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNMetadata(mmkvData: Map<String, String>): RNMetadata? {
+    private fun extractRNMetadata(mmkvData: Map<String, String>): RNMetadata? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
         return try {
@@ -470,7 +465,7 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNTodos(mmkvData: Map<String, String>): RNTodos? {
+    private fun extractRNTodos(mmkvData: Map<String, String>): RNTodos? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
         return try {
@@ -488,7 +483,7 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNWidgets(mmkvData: Map<String, String>): RNWidgetsWithOptions? {
+    private fun extractRNWidgets(mmkvData: Map<String, String>): RNWidgetsWithOptions? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
         return try {
@@ -512,7 +507,7 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNActivities(mmkvData: Map<String, String>): List<RNActivityItem>? {
+    private fun extractRNActivities(mmkvData: Map<String, String>): List<RNActivityItem>? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
         return try {
@@ -585,7 +580,7 @@ class MigrationService @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNWalletBackup(
+    private fun extractRNWalletBackup(
         mmkvData: Map<String, String>
     ): Pair<Map<String, String>, Map<String, String>>? {
         val rootJson = mmkvData["persist:root"] ?: return null
@@ -624,7 +619,7 @@ class MigrationService @Inject constructor(
     )
 
     @Suppress("NestedBlockDepth", "TooGenericExceptionCaught")
-    private suspend fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
+    private fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
         val rootJson = mmkvData["persist:root"] ?: return null
 
         return try {
@@ -1015,12 +1010,6 @@ class MigrationService @Inject constructor(
         }
     }
 
-    suspend fun hasRNRemoteBackup(): Boolean = runCatching {
-        rnBackupClient.hasBackup()
-    }.onFailure { e ->
-        Logger.error("Failed to check RN remote backup", e, context = TAG)
-    }.getOrDefault(false)
-
     suspend fun getRNRemoteBackupTimestamp(): ULong? = runCatching {
         rnBackupClient.getLatestBackupTimestamp()
     }.getOrNull()
@@ -1154,7 +1143,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRNRemoteMetadata(data: ByteArray) {
+    private fun applyRNRemoteMetadata(data: ByteArray) {
         runCatching {
             pendingRemoteMetadata = decodeBackupData<RNMetadata>(data)
         }.onFailure { e ->
@@ -1162,7 +1151,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRNRemoteWallet(data: ByteArray) {
+    private fun applyRNRemoteWallet(data: ByteArray) {
         runCatching {
             val backup = decodeBackupData<RNRemoteWalletBackup>(data)
 
@@ -1463,7 +1452,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     private fun convertRNWidgetPreferences(
         widgetsDict: JsonObject?
     ): Map<String, ByteArray> {
@@ -1479,14 +1468,14 @@ class MigrationService @Inject constructor(
             val keys = if (fallbackKey != null) listOf(key, fallbackKey) else listOf(key)
             for (k in keys) {
                 source[k]?.let { element ->
-                    when {
-                        element is kotlinx.serialization.json.JsonPrimitive && element.isString -> {
-                            val str = element.content.lowercase()
-                            return str == "true" || str == "1"
-                        }
-                        element is kotlinx.serialization.json.JsonPrimitive -> {
-                            return element.content.toBooleanStrictOrNull()
-                                ?: defaultValue
+                    when (element) {
+                        is JsonPrimitive -> {
+                            return if (element.isString) {
+                                val str = element.content.lowercase()
+                                str == "true" || str == "1"
+                            } else {
+                                element.content.toBooleanStrictOrNull() ?: defaultValue
+                            }
                         }
                         else -> continue
                     }
@@ -1503,7 +1492,7 @@ class MigrationService @Inject constructor(
             val mappedPairs = pairsArray?.mapNotNull { pairElement ->
                 pairElement.jsonPrimitive.content.replace("_", "/")
             } ?: emptyList()
-            val selectedPairs = if (mappedPairs.isNotEmpty()) mappedPairs else listOf("BTC/USD")
+            val selectedPairs = mappedPairs.ifEmpty { listOf("BTC/USD") }
 
             val rnPeriod = prefs["period"]?.jsonPrimitive?.content ?: "1D"
             val periodMap = mapOf(
