@@ -37,8 +37,9 @@ If no base branch argument provided, detect the repo's default branch:
 
 ### 3. Gather Context
 - Get current branch name: `git branch --show-current`
+- Extract repo identifier: `git remote get-url origin | sed 's/\.git$//' | sed -E 's#.*[:/]([^/]+/[^/]+)$#\1#'` (e.g., `synonymdev/bitkit-android`)
 - Read PR template from `.github/pull_request_template.md`
-- Fetch 10 most recent PRs (open or closed) from `synonymdev/bitkit-android` for writing style reference
+- Fetch 10 most recent PRs (open or closed) from the extracted repo for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
 
@@ -46,7 +47,7 @@ If no base branch argument provided, detect the repo's default branch:
 Scan commits for issue references:
 - Pattern to match: `#123` (just the issue number reference)
 - Extract unique issue numbers: `git log $base..HEAD --oneline | grep -oE "#[0-9]+" | sort -u`
-- Fetch each issue title: `gh api "repos/synonymdev/bitkit-android/issues/NUMBER" --jq '.title'`
+- Fetch each issue title: `gh api "repos/$REPO/issues/NUMBER" --jq '.title'` (using repo from Step 3)
 - These will be used to start the PR description with linking keywords (see Step 6)
 
 ### 5. Identify Suggested Reviewers
@@ -106,14 +107,33 @@ This PR adds support for...
 - Make steps easily referenceable
 - Be specific about what to test and expected outcomes
 
-**Preview Section:**
+**For library repos (has `bindings/` directory or `Cargo.toml`):**
+Structure QA Notes around testing and integration:
+
+Example:
+```
+### QA Notes
+
+#### Testing
+- [ ] `cargo test` passes
+- [ ] `cargo clippy` clean
+- [ ] Android bindings: `./build_android.sh`
+- [ ] iOS bindings: `./build_ios.sh`
+
+#### Integration
+- Tested in: [bitkit-android#XXX](link)
+- Or N/A if internal refactor with no API changes
+```
+
+**Preview Section (conditional):**
+Only include if the PR template (`.github/pull_request_template.md`) contains a `### Preview` heading:
 - Create placeholders for media: `IMAGE_1`, `VIDEO_2`, etc.
 - Add code comment under each placeholder describing what it should show
 - Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
 
 ### 7. Save PR Description
 Before creating the PR:
-- Get next PR number: `gh api "repos/synonymdev/bitkit-android/issues?per_page=1&state=all&sort=created&direction=desc" --jq '.[0].number'` then add 1
+- Get next PR number: `gh api "repos/$REPO/issues?per_page=1&state=all&sort=created&direction=desc" --jq '.[0].number'` then add 1 (using repo from Step 3)
 - Create `.ai/` directory if it doesn't exist
 - Save to `.ai/pr_NN.md` where `NN` is the predicted PR number
 
@@ -135,10 +155,6 @@ Saved: .ai/pr_NN.md
 Suggested reviewers:
 - @username1 (X files modified recently)
 - @username2 (CODEOWNER)
-
-## TODOs
-- [ ] IMAGE_1: [description]
-- [ ] VIDEO_2: [description]
 ```
 
 **If dry run:**
@@ -151,10 +167,13 @@ To create PR: /pr [--draft]
 Suggested reviewers:
 - @username1 (X files modified recently)
 - @username2 (CODEOWNER)
+```
 
+**Media TODOs (only if Preview section was included):**
+If the PR description includes a Preview section with media placeholders, append:
+```
 ## TODOs
 - [ ] IMAGE_1: [description]
 - [ ] VIDEO_2: [description]
 ```
-
 List all media placeholders as TODOs with their descriptions.
