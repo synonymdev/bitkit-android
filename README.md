@@ -43,9 +43,15 @@ See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
 - [vss-rust-client-ffi android bindings](https://github.com/synonymdev/vss-rust-client-ffi/tree/master/bindings/android#installation)
 
-### References
+### Related Repositories
 
-- For LNURL dev testing see [bitkit-docker](https://github.com/ovitrif/bitkit-docker)
+- [bitkit-ios](https://github.com/synonymdev/bitkit-ios) - Native iOS Bitkit app
+- [bitkit-core](https://github.com/synonymdev/bitkit-core) - Shared Core Rust library with FFI bindings
+- [ldk-node](https://github.com/synonymdev/ldk-node) - Fork of ldk-node
+- [vss-server](https://github.com/synonymdev/vss-server) - Versioned Storage Service backend
+- [vss-rust-client-ffi](https://github.com/synonymdev/vss-rust-client-ffi) - FFI bindings for vss-rust-client 
+- [bitkit-e2e-tests](https://github.com/synonymdev/bitkit-e2e-tests) - End-to-end tests (WebdriverIO + Appium)
+- [bitkit-docker](https://github.com/synonymdev/bitkit-docker) - Docker setup for LNURL dev testing and local backend for integrations development
 
 ### Lint
 
