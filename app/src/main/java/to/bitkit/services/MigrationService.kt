@@ -31,6 +31,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
@@ -78,8 +79,10 @@ class MigrationService @Inject constructor(
         private const val TAG = "Migration"
         const val RN_MIGRATION_COMPLETED_KEY = "rnMigrationCompleted"
         const val RN_MIGRATION_CHECKED_KEY = "rnMigrationChecked"
+        private const val OPENING_CURLY_BRACE = "{"
+        private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
-        private const val MILLISECONDS_TO_SECONDS = 1000
+        private const val MS_PER_SEC = 1000
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 128
     }
@@ -95,16 +98,12 @@ class MigrationService @Inject constructor(
     private val _isShowingMigrationLoading = MutableStateFlow(false)
     val isShowingMigrationLoading: StateFlow<Boolean> = _isShowingMigrationLoading.asStateFlow()
 
-    fun setShowingMigrationLoading(value: Boolean) {
-        _isShowingMigrationLoading.update { value }
-    }
+    fun setShowingMigrationLoading(value: Boolean) = _isShowingMigrationLoading.update { value }
 
     private val _isRestoringFromRNRemoteBackup = MutableStateFlow(false)
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = _isRestoringFromRNRemoteBackup.asStateFlow()
 
-    fun setRestoringFromRNRemoteBackup(value: Boolean) {
-        _isRestoringFromRNRemoteBackup.update { value }
-    }
+    fun setRestoringFromRNRemoteBackup(value: Boolean) = _isRestoringFromRNRemoteBackup.update { value }
 
     @Volatile
     private var pendingChannelMigration: PendingChannelMigration? = null
@@ -115,9 +114,7 @@ class MigrationService @Inject constructor(
         return migration
     }
 
-    fun peekPendingChannelMigration(): PendingChannelMigration? {
-        return pendingChannelMigration
-    }
+    fun peekPendingChannelMigration(): PendingChannelMigration? = pendingChannelMigration
 
     @Volatile
     private var pendingRemoteActivityData: List<RNActivityItem>? = null
@@ -131,30 +128,26 @@ class MigrationService @Inject constructor(
     @Volatile
     private var pendingRemoteMetadata: RNMetadata? = null
 
-    private val rnNetworkString: String
-        get() = when (Env.network) {
-            org.lightningdevkit.ldknode.Network.BITCOIN -> "bitcoin"
-            org.lightningdevkit.ldknode.Network.REGTEST -> "bitcoinRegtest"
-            org.lightningdevkit.ldknode.Network.TESTNET -> "bitcoinTestnet"
-            org.lightningdevkit.ldknode.Network.SIGNET -> "signet"
+    private fun buildRnLdkAccountPath(): File = run {
+        val rnNetworkString = when (Env.network) {
+            Network.BITCOIN -> "bitcoin"
+            Network.REGTEST -> "bitcoinRegtest"
+            Network.TESTNET -> "bitcoinTestnet"
+            Network.SIGNET -> "signet"
+        }
+        val rnLdkBasePath = File(context.filesDir, "ldk")
+
+        @Suppress("SpellCheckingInspection")
+        val accountName = buildString {
+            append(RN_WALLET_NAME)
+            append(rnNetworkString)
+            append("ldkaccountv3")
         }
 
-    private val rnLdkBasePath: File
-        get() = File(context.filesDir, "ldk")
+        return File(rnLdkBasePath, accountName)
+    }
 
-    private val rnLdkAccountPath: File
-        get() {
-            @Suppress("SpellCheckingInspection")
-            val accountName = buildString {
-                append(RN_WALLET_NAME)
-                append(rnNetworkString)
-                append("ldkaccountv3")
-            }
-            return File(rnLdkBasePath, accountName)
-        }
-
-    private val rnMmkvPath: File
-        get() = File(context.filesDir, "mmkv/mmkv.default")
+    private fun getRnMmkvPath(): File = File(context.filesDir, "mmkv/mmkv.default")
 
     suspend fun isMigrationChecked(): Boolean {
         val key = stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)
@@ -168,44 +161,26 @@ class MigrationService @Inject constructor(
 
     suspend fun hasRNWalletData(): Boolean {
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
-        if (mnemonic?.isNotEmpty() == true) {
-            return true
-        }
+        if (mnemonic?.isNotEmpty() == true) return true
 
         return hasRNMmkvData() || hasRNLdkData()
     }
 
-    @Suppress("TooGenericExceptionCaught", "SwallowedException")
-    fun hasNativeWalletData(): Boolean {
-        return try {
-            keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
-        } catch (_: Exception) {
-            false
-        }
-    }
+    fun hasNativeWalletData() = runCatching { keychain.exists(Keychain.Key.BIP39_MNEMONIC.name) }.getOrDefault(false)
+    fun hasRNLdkData() = File(buildRnLdkAccountPath(), "channel_manager.bin").exists()
+    fun hasRNMmkvData() = getRnMmkvPath().exists()
 
-    fun hasRNLdkData(): Boolean {
-        return File(rnLdkAccountPath, "channel_manager.bin").exists()
-    }
-
-    fun hasRNMmkvData(): Boolean {
-        return rnMmkvPath.exists()
-    }
-
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun loadStringFromRNKeychain(key: RNKeychainKey): String? {
         val datastorePath = File(context.filesDir, "datastore/RN_KEYCHAIN.preferences_pb")
-        if (!datastorePath.exists()) {
-            return null
-        }
+        if (!datastorePath.exists()) return null
 
-        return try {
+        return runCatching {
             val preferences = context.rnKeychainDataStore.data.first()
 
             val passwordKey = stringPreferencesKey("${key.service}:p")
             val cipherKey = stringPreferencesKey("${key.service}:c")
 
-            val encryptedValue = preferences[passwordKey] ?: return null
+            val encryptedValue = preferences[passwordKey] ?: return@runCatching null
             val cipherInfo = preferences[cipherKey]
 
             val fullEncryptedValue = if (cipherInfo != null && !encryptedValue.contains(":")) {
@@ -214,22 +189,19 @@ class MigrationService @Inject constructor(
                 encryptedValue
             }
             decryptRNKeychainValue(fullEncryptedValue, key.service)
-        } catch (e: Exception) {
-            Logger.error("Error reading from RN_KEYCHAIN DataStore: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Error reading from RN_KEYCHAIN DataStore: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun decryptRNKeychainValue(encryptedValue: String, service: String): String? {
         if (!encryptedValue.contains(":")) {
-            return try {
+            return runCatching {
                 val encryptedBytes = android.util.Base64.decode(encryptedValue, android.util.Base64.DEFAULT)
                 decryptWithKeystore(encryptedBytes, service)
-            } catch (e: Exception) {
-                Logger.error("Failed to decrypt without cipher prefix: $e", e, context = TAG)
-                null
-            }
+            }.onFailure {
+                Logger.error("Failed to decrypt without cipher prefix: $it", it, context = TAG)
+            }.getOrNull()
         }
 
         val parts = encryptedValue.split(":", limit = 2)
@@ -241,16 +213,14 @@ class MigrationService @Inject constructor(
             return null
         }
 
-        return try {
+        return runCatching {
             val encryptedBytes = android.util.Base64.decode(encryptedDataBase64, android.util.Base64.DEFAULT)
             decryptWithKeystore(encryptedBytes, service)
-        } catch (e: Exception) {
-            Logger.error("Failed to decrypt RN keychain value: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decrypt RN keychain value: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun decryptWithKeystore(encryptedBytes: ByteArray, service: String): String? {
         if (encryptedBytes.size < GCM_IV_LENGTH) {
             Logger.error("Encrypted data too short: ${encryptedBytes.size} bytes", context = TAG)
@@ -260,12 +230,12 @@ class MigrationService @Inject constructor(
         val iv = encryptedBytes.sliceArray(0 until GCM_IV_LENGTH)
         val ciphertext = encryptedBytes.sliceArray(GCM_IV_LENGTH until encryptedBytes.size)
 
-        return try {
+        return runCatching {
             val keystore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
             if (!keystore.containsAlias(service)) {
                 Logger.error("Keystore alias '$service' not found", context = TAG)
-                return null
+                return@runCatching null
             }
 
             val secretKey = keystore.getKey(service, null) as javax.crypto.SecretKey
@@ -278,73 +248,52 @@ class MigrationService @Inject constructor(
 
             val decryptedBytes = cipher.doFinal(ciphertext)
             String(decryptedBytes, Charsets.UTF_8)
-        } catch (e: Exception) {
-            Logger.error("Failed to decrypt with Keystore: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decrypt with Keystore: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    suspend fun migrateFromReactNative() {
+    suspend fun migrateFromReactNative() = runCatching {
         setShowingMigrationLoading(true)
 
-        try {
-            val mnemonicMigrated = try {
-                migrateMnemonic()
-                true
-            } catch (e: Exception) {
-                Logger.warn(
-                    "Could not migrate mnemonic: $e. User will need to manually restore.",
-                    context = TAG
-                )
-                false
+        val mnemonicMigrated = runCatching { migrateMnemonic() }.map { true }.onFailure {
+            Logger.warn("Could not migrate mnemonic: $it. User will need to manually restore.", context = TAG)
+        }.getOrDefault(false)
+
+        if (mnemonicMigrated) {
+            migratePassphrase()
+            migratePin()
+
+            if (hasRNLdkData()) {
+                migrateLdkData().onFailure {
+                    Logger.warn("LDK data migration failed, continuing with other migrations: $it", it, context = TAG)
+                }
             }
 
-            if (mnemonicMigrated) {
-                migratePassphrase()
-                migratePin()
-
-                if (hasRNLdkData()) {
-                    migrateLdkData()
-                        .onFailure { e ->
-                            Logger.warn(
-                                "LDK data migration failed, continuing with other migrations: $e",
-                                e,
-                                context = TAG
-                            )
-                        }
-                }
-
-                if (hasRNMmkvData()) {
-                    migrateMMKVData()
-                }
-
-                rnMigrationStore.edit {
-                    it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
-                    it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
-                }
-            } else {
-                markMigrationChecked()
-                setShowingMigrationLoading(false)
-                throw AppError(
-                    "Migration data unavailable. Please restore your wallet using your recovery phrase."
-                )
+            if (hasRNMmkvData()) {
+                migrateMMKVData()
             }
-        } catch (e: Exception) {
-            Logger.error("RN migration failed: $e", e, context = TAG)
+
+            rnMigrationStore.edit {
+                it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
+                it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
+            }
+        } else {
             markMigrationChecked()
             setShowingMigrationLoading(false)
-            throw e
+            throw AppError("Migration data unavailable. Please restore your wallet using your recovery phrase.")
         }
-    }
+    }.onFailure {
+        Logger.error("RN migration failed: $it", it, context = TAG)
+        markMigrationChecked()
+        setShowingMigrationLoading(false)
+    }.getOrThrow()
 
     private suspend fun migrateMnemonic() {
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
 
         if (mnemonic.isNullOrEmpty()) {
-            throw AppError(
-                "Migration data unavailable. Please restore your wallet using your recovery phrase."
-            )
+            throw AppError("Migration data unavailable. Please restore your wallet using your recovery phrase.")
         }
 
         bip39Service.validateMnemonic(mnemonic).onFailure {
@@ -358,17 +307,13 @@ class MigrationService @Inject constructor(
 
     private suspend fun migratePassphrase() {
         val passphrase = loadStringFromRNKeychain(RNKeychainKey.PASSPHRASE)
-        if (passphrase.isNullOrEmpty()) {
-            return
-        }
+        if (passphrase.isNullOrEmpty()) return
         keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, passphrase)
     }
 
     private suspend fun migratePin() {
         val pin = loadStringFromRNKeychain(RNKeychainKey.PIN)
-        if (pin.isNullOrEmpty()) {
-            return
-        }
+        if (pin.isNullOrEmpty()) return
 
         if (pin.length != Env.PIN_LENGTH) {
             Logger.warn(
@@ -386,8 +331,8 @@ class MigrationService @Inject constructor(
         keychain.saveString(Keychain.Key.PIN.name, pin)
     }
 
-    private suspend fun migrateLdkData() = runCatching {
-        val accountPath = rnLdkAccountPath
+    private fun migrateLdkData() = runCatching {
+        val accountPath = buildRnLdkAccountPath()
         val managerPath = File(accountPath, "channel_manager.bin")
 
         if (!managerPath.exists()) {
@@ -412,117 +357,104 @@ class MigrationService @Inject constructor(
             channelManager = managerData,
             channelMonitors = monitors,
         )
-    }.onFailure { e ->
-        Logger.error("Failed to migrate LDK data: $e", e, context = TAG)
+    }.onFailure {
+        Logger.error("Failed to migrate LDK data: $it", it, context = TAG)
     }
 
-    suspend fun loadRNMmkvData(): Map<String, String>? = runCatching {
-        if (!hasRNMmkvData()) {
-            return@runCatching null
-        }
+    fun loadRNMmkvData(): Map<String, String>? = runCatching {
+        if (!hasRNMmkvData()) return@runCatching null
 
-        val data = rnMmkvPath.readBytes()
+        val data = getRnMmkvPath().readBytes()
         val parser = MmkvParser(data)
         parser.parse().takeIf { it.isNotEmpty() }
-    }.onFailure { e ->
-        Logger.error("Failed to read MMKV data: $e", e, context = TAG)
+    }.onFailure {
+        Logger.error("Failed to read MMKV data: $it", it, context = TAG)
     }.getOrNull()
 
-    @Suppress("TooGenericExceptionCaught")
     private fun extractRNSettings(mmkvData: Map<String, String>): RNSettings? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val settingsJsonString = root["settings"]?.jsonPrimitive?.content ?: return null
+            val settingsJsonString = root["settings"]?.jsonPrimitive?.content ?: return@runCatching null
 
             json.decodeFromString<RNSettings>(settingsJsonString)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN settings: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN settings: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun extractRNMetadata(mmkvData: Map<String, String>): RNMetadata? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val metadataJsonString = root["metadata"]?.jsonPrimitive?.content ?: return null
+            val metadataJsonString = root["metadata"]?.jsonPrimitive?.content ?: return@runCatching null
 
             json.decodeFromString<RNMetadata>(metadataJsonString)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN metadata: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN metadata: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun extractRNTodos(mmkvData: Map<String, String>): RNTodos? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val todosJsonString = root["todos"]?.jsonPrimitive?.content ?: return null
+            val todosJsonString = root["todos"]?.jsonPrimitive?.content ?: return@runCatching null
 
             json.decodeFromString<RNTodos>(todosJsonString)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN todos: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN todos: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun extractRNWidgets(mmkvData: Map<String, String>): RNWidgetsWithOptions? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val widgetsJsonString = root["widgets"]?.jsonPrimitive?.content ?: return null
+            val widgetsJsonString = root["widgets"]?.jsonPrimitive?.content
+                ?: return@runCatching null
 
             val widgets = json.decodeFromString<RNWidgets>(widgetsJsonString)
             val widgetsData = json.parseToJsonElement(widgetsJsonString).jsonObject
-            val widgetOptions = convertRNWidgetPreferences(
-                widgetsData["widgets"]?.jsonObject ?: widgetsData
-            )
+            val widgetOptions = convertRNWidgetPreferences(widgetsData["widgets"]?.jsonObject ?: widgetsData)
 
             RNWidgetsWithOptions(widgets = widgets, widgetOptions = widgetOptions)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN widgets: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN widgets: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun extractRNActivities(mmkvData: Map<String, String>): List<RNActivityItem>? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val activityJsonString = root["activity"]?.jsonPrimitive?.content ?: return null
+            val activityJsonString = root["activity"]?.jsonPrimitive?.content ?: return@runCatching null
 
             val activityState = json.decodeFromString<RNActivityState>(activityJsonString)
             activityState.items ?: emptyList()
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN activities: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN activities: $it", it, context = TAG)
+        }.getOrNull()
     }
 
     private fun extractTransfers(transfers: Map<String, List<RNRemoteTransfer>>?): Map<String, String> {
@@ -579,55 +511,40 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private fun extractRNWalletBackup(
-        mmkvData: Map<String, String>
-    ): Pair<Map<String, String>, Map<String, String>>? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+    private fun extractRNWalletBackup(mmkvData: Map<String, String>): Pair<Map<String, String>, Map<String, String>>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val walletJsonString = root["wallet"]?.jsonPrimitive?.content ?: return null
+            val walletJsonString = root["wallet"]?.jsonPrimitive?.content ?: return@runCatching null
             val walletData = json.parseToJsonElement(walletJsonString).jsonObject
 
-            val walletState = runCatching {
-                json.decodeFromJsonElement<RNWalletState>(walletData)
-            }.getOrNull()
+            val walletState = runCatching { json.decodeFromJsonElement<RNWalletState>(walletData) }.getOrNull()
 
             walletState?.let { extractFromWalletState(it) } ?: run {
-                val walletBackup = runCatching {
-                    json.decodeFromJsonElement<RNRemoteWalletBackup>(walletData)
-                }.getOrNull()
-                walletBackup?.let { extractFromWalletBackup(it) }
+                runCatching { json.decodeFromJsonElement<RNRemoteWalletBackup>(walletData) }.getOrNull()?.let {
+                    extractFromWalletBackup(it)
+                }
             }
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN wallet backup: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN wallet backup: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Serializable
-    private data class RNWalletState(val wallets: Map<String, RNWalletData>? = null)
-
-    @Serializable
-    private data class RNWalletData(
-        val transfers: Map<String, List<RNRemoteTransfer>>? = null,
-        val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
-    )
-
-    @Suppress("NestedBlockDepth", "TooGenericExceptionCaught")
+    @Suppress("NestedBlockDepth")
     private fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val lightningJsonString = root["lightning"]?.jsonPrimitive?.content ?: return null
+            val lightningJsonString = root["lightning"]?.jsonPrimitive?.content
+                ?: return@runCatching null
 
             val lightningState = json.decodeFromString<RNLightningState>(lightningJsonString)
             val closedChannels = mutableListOf<RNChannel>()
@@ -643,10 +560,9 @@ class MigrationService @Inject constructor(
             }
 
             closedChannels.takeIf { it.isNotEmpty() }
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN lightning state: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN lightning state: $it", it, context = TAG)
+        }.getOrNull()
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -704,16 +620,16 @@ class MigrationService @Inject constructor(
                     activityId = it.id
                 }
                 ActivityTags(activityId = activityId, tags = tagList)
-            }.onFailure { e ->
-                Logger.error("Failed to get activity ID for $txId: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to get activity ID for $txId: $it", it, context = TAG)
             }.getOrNull()
         } ?: emptyList()
 
         if (allTags.isNotEmpty()) {
             runCatching {
                 coreService.activity.upsertTags(allTags)
-            }.onFailure { e ->
-                Logger.error("Failed to migrate tags: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate tags: $it", it, context = TAG)
             }
         }
 
@@ -751,7 +667,7 @@ class MigrationService @Inject constructor(
                 else -> PaymentState.PENDING
             }
 
-            val timestampSecs = (item.timestamp / MILLISECONDS_TO_SECONDS).toULong()
+            val timestampSecs = (item.timestamp / MS_PER_SEC).toULong()
             val invoice = item.address?.takeIf { it.isNotEmpty() } ?: "migrated:${item.id}"
 
             Activity.Lightning(
@@ -778,14 +694,12 @@ class MigrationService @Inject constructor(
     }
 
     private suspend fun applyRNClosedChannels(channels: List<RNChannel>) {
-        val now = (System.currentTimeMillis() / MILLISECONDS_TO_SECONDS).toULong()
+        val now = (System.currentTimeMillis() / MS_PER_SEC).toULong()
 
         val closedChannels = channels.mapNotNull { channel ->
             val fundingTxid = channel.fundingTxid ?: return@mapNotNull null
 
-            val closedAtSecs = channel.createdAt?.let {
-                (it / MILLISECONDS_TO_SECONDS).toULong()
-            } ?: now
+            val closedAtSecs = channel.createdAt?.let { (it / MS_PER_SEC).toULong() } ?: now
 
             val outboundMsat = (channel.outboundCapacitySat ?: 0u) * 1000u
             val inboundMsat = (channel.inboundCapacitySat ?: 0u) * 1000u
@@ -849,10 +763,10 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "TooGenericExceptionCaught")
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun applyRNWidgetPreferences(widgetOptions: Map<String, ByteArray>) {
         widgetOptions["price"]?.let { priceData ->
-            try {
+            runCatching {
                 val priceJson = json.decodeFromString<JsonObject>(
                     priceData.decodeToString()
                 )
@@ -886,13 +800,13 @@ class MigrationService @Inject constructor(
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate price preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate price preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["weather"]?.let { weatherData ->
-            try {
+            runCatching {
                 val weatherJson = json.decodeFromString<JsonObject>(
                     weatherData.decodeToString()
                 )
@@ -910,13 +824,13 @@ class MigrationService @Inject constructor(
                         showNextBlockFee = showNextBlockFee
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate weather preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate weather preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["news"]?.let { newsData ->
-            try {
+            runCatching {
                 val newsJson = json.decodeFromString<JsonObject>(
                     newsData.decodeToString()
                 )
@@ -931,13 +845,13 @@ class MigrationService @Inject constructor(
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate news preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate news preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["blocks"]?.let { blocksData ->
-            try {
+            runCatching {
                 val blocksJson = json.decodeFromString<JsonObject>(
                     blocksData.decodeToString()
                 )
@@ -959,13 +873,13 @@ class MigrationService @Inject constructor(
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate blocks preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate blocks preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["facts"]?.let { factsData ->
-            try {
+            runCatching {
                 val factsJson = json.decodeFromString<JsonObject>(
                     factsData.decodeToString()
                 )
@@ -976,8 +890,8 @@ class MigrationService @Inject constructor(
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate facts preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate facts preferences: $it", it, context = TAG)
             }
         }
     }
@@ -985,12 +899,12 @@ class MigrationService @Inject constructor(
     private suspend fun migrateMMKVData() {
         val mmkvData = loadRNMmkvData() ?: return
 
-        extractRNActivities(mmkvData)?.let { activities ->
-            applyRNActivities(activities)
+        extractRNActivities(mmkvData)?.let {
+            applyRNActivities(it)
         }
 
-        extractRNClosedChannels(mmkvData)?.let { channels ->
-            applyRNClosedChannels(channels)
+        extractRNClosedChannels(mmkvData)?.let {
+            applyRNClosedChannels(it)
         }
 
         extractRNSettings(mmkvData)?.let { settings ->
@@ -1369,7 +1283,7 @@ class MigrationService @Inject constructor(
         var wasUpdated = false
 
         if (item.timestamp > 0) {
-            val migratedTimestamp = (item.timestamp / MILLISECONDS_TO_SECONDS).toULong()
+            val migratedTimestamp = (item.timestamp / MS_PER_SEC).toULong()
             if (updated.timestamp != migratedTimestamp) {
                 updated = updated.copy(timestamp = migratedTimestamp)
                 wasUpdated = true
@@ -1377,7 +1291,7 @@ class MigrationService @Inject constructor(
         }
         item.confirmTimestamp?.let { confirmTimestamp ->
             if (confirmTimestamp > 0) {
-                val migratedConfirmTimestamp = (confirmTimestamp / MILLISECONDS_TO_SECONDS).toULong()
+                val migratedConfirmTimestamp = (confirmTimestamp / MS_PER_SEC).toULong()
                 if (updated.confirmTimestamp != migratedConfirmTimestamp) {
                     updated = updated.copy(confirmTimestamp = migratedConfirmTimestamp)
                     wasUpdated = true
@@ -1454,7 +1368,7 @@ class MigrationService @Inject constructor(
 
     @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     private fun convertRNWidgetPreferences(
-        widgetsDict: JsonObject?
+        widgetsDict: JsonObject?,
     ): Map<String, ByteArray> {
         val result = mutableMapOf<String, ByteArray>()
         if (widgetsDict == null) return result
@@ -1477,6 +1391,7 @@ class MigrationService @Inject constructor(
                                 element.content.toBooleanStrictOrNull() ?: defaultValue
                             }
                         }
+
                         else -> continue
                     }
                 }
@@ -1560,65 +1475,6 @@ class MigrationService @Inject constructor(
         return result
     }
 }
-
-private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore("rn_migration")
-private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore("RN_KEYCHAIN")
-
-@Serializable
-private data class RNRemoteActivityItem(
-    val id: String,
-    val activityType: String,
-    val txType: String,
-    val txId: String? = null,
-    val value: Long,
-    val fee: Long? = null,
-    val feeRate: Long? = null,
-    val address: String? = null,
-    val confirmed: Boolean? = null,
-    val timestamp: Long,
-    val isBoosted: Boolean? = null,
-    val isTransfer: Boolean? = null,
-    val exists: Boolean? = null,
-    val confirmTimestamp: Long? = null,
-    val channelId: String? = null,
-    val transferTxId: String? = null,
-    val status: String? = null,
-    val message: String? = null,
-    val preimage: String? = null,
-    val boostedParents: List<String>? = null,
-)
-
-@Serializable
-private data class RNRemoteWalletBackup(
-    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
-    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
-)
-
-@Serializable
-private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
-
-@Serializable
-private data class RNRemoteBoostedTx(
-    val oldTxId: String? = null,
-    val newTxId: String? = null,
-    val childTransaction: String? = null,
-)
-
-@Serializable
-private data class RNRemoteBlocktankBackup(
-    val orders: List<RNRemoteBlocktankOrder>? = null,
-    val paidOrders: Map<String, String>? = null,
-)
-
-@Serializable
-private data class RNRemoteBlocktankOrder(
-    val id: String,
-    val state: String? = null,
-    val lspBalanceSat: ULong? = null,
-    val clientBalanceSat: ULong? = null,
-    val channelExpiryWeeks: Int? = null,
-    val createdAt: String? = null,
-)
 
 data class PendingChannelMigration(
     val channelManager: ByteArray,
@@ -1782,8 +1638,76 @@ data class RNWidgetsWithOptions(
     val widgetOptions: Map<String, ByteArray>,
 )
 
+private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore("rn_migration")
+private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore("RN_KEYCHAIN")
+
 private enum class RNKeychainKey(val service: String) {
     MNEMONIC("wallet0"),
     PASSPHRASE("wallet0passphrase"),
     PIN("pin"),
 }
+
+@Serializable
+private data class RNWalletState(val wallets: Map<String, RNWalletData>? = null)
+
+@Serializable
+private data class RNWalletData(
+    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
+    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+)
+
+@Serializable
+private data class RNRemoteActivityItem(
+    val id: String,
+    val activityType: String,
+    val txType: String,
+    val txId: String? = null,
+    val value: Long,
+    val fee: Long? = null,
+    val feeRate: Long? = null,
+    val address: String? = null,
+    val confirmed: Boolean? = null,
+    val timestamp: Long,
+    val isBoosted: Boolean? = null,
+    val isTransfer: Boolean? = null,
+    val exists: Boolean? = null,
+    val confirmTimestamp: Long? = null,
+    val channelId: String? = null,
+    val transferTxId: String? = null,
+    val status: String? = null,
+    val message: String? = null,
+    val preimage: String? = null,
+    val boostedParents: List<String>? = null,
+)
+
+@Serializable
+private data class RNRemoteWalletBackup(
+    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
+    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+)
+
+@Serializable
+private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
+
+@Serializable
+private data class RNRemoteBoostedTx(
+    val oldTxId: String? = null,
+    val newTxId: String? = null,
+    val childTransaction: String? = null,
+)
+
+@Serializable
+private data class RNRemoteBlocktankBackup(
+    val orders: List<RNRemoteBlocktankOrder>? = null,
+    val paidOrders: Map<String, String>? = null,
+)
+
+@Serializable
+private data class RNRemoteBlocktankOrder(
+    val id: String,
+    val state: String? = null,
+    val lspBalanceSat: ULong? = null,
+    val clientBalanceSat: ULong? = null,
+    val channelExpiryWeeks: Int? = null,
+    val createdAt: String? = null,
+)
