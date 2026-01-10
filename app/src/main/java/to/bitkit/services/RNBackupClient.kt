@@ -17,11 +17,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.bouncycastle.crypto.digests.SHA512Digest
-import org.bouncycastle.crypto.generators.PKCS5S2ParametersGenerator
-import org.bouncycastle.crypto.params.KeyParameter
-import org.ldk.structs.KeysManager
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.deriveNodeSecretFromMnemonic
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
@@ -275,44 +272,11 @@ class RNBackupClient @Inject constructor(
         return crypto.sign(fullMessage, privateKey)
     }
 
-    private fun deriveSigningKey(mnemonic: String, passphrase: String?): ByteArray {
-        val bip39Seed = deriveSeed(mnemonic, passphrase)
-        val bip32Seed = deriveMasterKey(bip39Seed)
-        val seconds = System.currentTimeMillis() / 1000L
-        val nanoSeconds = ((System.currentTimeMillis() % 1000) * 1_000_000).toInt()
+    private fun deriveSigningKey(mnemonic: String, passphrase: String?): ByteArray =
+        deriveNodeSecretFromMnemonic(mnemonic, passphrase).map { it.toByte() }.toByteArray()
 
-        return runCatching {
-            val keysManager = KeysManager.of(bip32Seed, seconds, nanoSeconds)
-            val method = keysManager.javaClass.getMethod("get_node_secret_key")
-            when (val nodeSecretKey = method.invoke(keysManager)) {
-                is ByteArray -> nodeSecretKey
-                is List<*> -> nodeSecretKey.map { (it as UByte).toByte() }.toByteArray()
-                else -> throw ClassCastException("Unexpected type: ${nodeSecretKey?.javaClass?.name}")
-            }
-        }.getOrElse { bip32Seed }
-    }
-
-    private fun deriveEncryptionKey(mnemonic: String, passphrase: String?): ByteArray {
-        // Match iOS: use the same node secret key as signing key for encryption
-        // iOS uses SymmetricKey(data: secretKey) where secretKey is the node secret key
-        return deriveSigningKey(mnemonic, passphrase)
-    }
-
-    private fun deriveSeed(mnemonic: String, passphrase: String?): ByteArray {
-        val mnemonicBytes = mnemonic.toByteArray(Charsets.UTF_8)
-        val salt = ("mnemonic" + (passphrase ?: "")).toByteArray(Charsets.UTF_8)
-        val generator = PKCS5S2ParametersGenerator(SHA512Digest())
-        generator.init(mnemonicBytes, salt, 2048)
-        return (generator.generateDerivedParameters(512) as KeyParameter).key
-    }
-
-    private fun deriveMasterKey(seed: ByteArray): ByteArray {
-        val hmac = javax.crypto.Mac.getInstance("HmacSHA512")
-        val keySpec = javax.crypto.spec.SecretKeySpec("Bitcoin seed".toByteArray(), "HmacSHA512")
-        hmac.init(keySpec)
-        val i = hmac.doFinal(seed)
-        return i.sliceArray(0 until 32)
-    }
+    private fun deriveEncryptionKey(mnemonic: String, passphrase: String?): ByteArray =
+        deriveSigningKey(mnemonic, passphrase)
 
     private fun decrypt(blob: ByteArray, encryptionKey: ByteArray): ByteArray {
         if (blob.size < GCM_IV_LENGTH + GCM_TAG_LENGTH) {
