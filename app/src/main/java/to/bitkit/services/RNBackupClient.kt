@@ -23,6 +23,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.toHex
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
@@ -294,10 +295,6 @@ class RNBackupClient @Inject constructor(
         }
 
         return cipher.doFinal(ciphertext + tag)
-    }
-
-    private fun ByteArray.toHex(): String {
-        return this.joinToString("") { "%02x".format(it) }
     }
 }
 
