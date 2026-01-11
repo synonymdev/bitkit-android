@@ -15,17 +15,17 @@ haze = "1.7.1"
 [libraries]
 accompanist-pager-indicators = { module = "com.google.accompanist:accompanist-pager-indicators", version = "0.36.0" }
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version = "0.37.3" }
-activity-compose = { module = "androidx.activity:activity-compose", version = "1.12.1" }
+activity-compose = { module = "androidx.activity:activity-compose", version = "1.12.2" }
 appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.1" }
 barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
-biometric = { module = "androidx.biometric:biometric", version = "1.4.0-alpha04" }
+biometric = { module = "androidx.biometric:biometric", version = "1.4.0-alpha05" }
 bitkit-core = { module = "com.synonym:bitkit-core-android", version = "0.1.33" }
 bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version = "1.83" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
 camera-view = { module = "androidx.camera:camera-view", version.ref = "camera" }
 # https://developer.android.com/develop/ui/compose/bom/bom-mapping
-compose-bom = { group = "androidx.compose", name = "compose-bom", version = "2025.12.00" }
+compose-bom = { group = "androidx.compose", name = "compose-bom", version = "2025.12.01" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
@@ -39,8 +39,8 @@ core-ktx = { module = "androidx.core:core-ktx", version = "1.17.0" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version = "1.2.0" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.2.0" }
 detekt-formatting = { module = "io.gitlab.arturbosch.detekt:detekt-formatting", version.ref = "detekt" }
-detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version = "0.5.1" }
-firebase-bom = { module = "com.google.firebase:firebase-bom", version = "34.6.0" }
+detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version = "0.5.3" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version = "34.7.0" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
