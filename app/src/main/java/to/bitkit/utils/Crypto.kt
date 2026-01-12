@@ -61,7 +61,7 @@ class Crypto @Inject constructor() {
                 }
             }
         } catch (e: Exception) {
-            throw CryptoError.SecurityProviderSetupFailed
+            throw CryptoError.SecurityProviderSetupFailed()
         }
     }
 
@@ -80,7 +80,7 @@ class Crypto @Inject constructor() {
                 publicKey = publicKey,
             )
         } catch (e: Exception) {
-            throw CryptoError.KeypairGenerationFailed
+            throw CryptoError.KeypairGenerationFailed()
         }
     }
 
@@ -111,7 +111,7 @@ class Crypto @Inject constructor() {
 
             return baseSecret
         } catch (e: Exception) {
-            throw CryptoError.SharedSecretGenerationFailed
+            throw CryptoError.SharedSecretGenerationFailed()
         }
     }
 
@@ -139,7 +139,7 @@ class Crypto @Inject constructor() {
 
             return cipher.doFinal(encryptedPayload.cipher + encryptedPayload.tag)
         } catch (e: Exception) {
-            throw CryptoError.DecryptionFailed
+            throw CryptoError.DecryptionFailed()
         }
     }
 
@@ -171,7 +171,7 @@ class Crypto @Inject constructor() {
             val recId = calculateRecoveryId(r, s, messageHash, privateKeyBigInt, curve)
             formatSignature(recId, r, s)
         }
-    }.getOrElse { throw CryptoError.SigningFailed }
+    }.getOrElse { throw CryptoError.SigningFailed() }
 
     fun getPublicKey(privateKey: ByteArray): ByteArray = runCatching {
         val keyFactory = KeyFactory.getInstance("EC", "BC")
@@ -180,7 +180,7 @@ class Crypto @Inject constructor() {
 
         val publicKeyPoint = params.g.multiply((privateKeyObj as ECPrivateKey).d)
         publicKeyPoint.getEncoded(true)
-    }.getOrElse { throw CryptoError.PublicKeyCreationFailed }
+    }.getOrElse { throw CryptoError.PublicKeyCreationFailed() }
 
     private fun calculateRecoveryId(
         r: BigInteger,
@@ -214,7 +214,7 @@ class Crypto @Inject constructor() {
                 continue
             }
         }
-        throw CryptoError.SigningFailed
+        throw CryptoError.SigningFailed()
     }
 
     private fun formatSignature(recId: Int, r: BigInteger, s: BigInteger): String {
@@ -231,10 +231,10 @@ class Crypto @Inject constructor() {
 }
 
 sealed class CryptoError(message: String) : AppError(message) {
-    data object SharedSecretGenerationFailed : CryptoError("Shared secret generation failed")
-    data object SecurityProviderSetupFailed : CryptoError("Security provider setup failed")
-    data object KeypairGenerationFailed : CryptoError("Keypair generation failed")
-    data object DecryptionFailed : CryptoError("Decryption failed")
-    data object SigningFailed : CryptoError("Signing failed")
-    data object PublicKeyCreationFailed : CryptoError("Public key creation failed")
+    class SharedSecretGenerationFailed : CryptoError("Shared secret generation failed")
+    class SecurityProviderSetupFailed : CryptoError("Security provider setup failed")
+    class KeypairGenerationFailed : CryptoError("Keypair generation failed")
+    class DecryptionFailed : CryptoError("Decryption failed")
+    class SigningFailed : CryptoError("Signing failed")
+    class PublicKeyCreationFailed : CryptoError("Public key creation failed")
 }

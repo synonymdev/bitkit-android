@@ -40,7 +40,7 @@ class VssBackupClient @Inject constructor(
                 Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'")
                 if (lnurlAuthServerUrl.isNotEmpty()) {
                     val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                        ?: throw ServiceError.MnemonicNotFound
+                        ?: throw ServiceError.MnemonicNotFound()
                     val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
                     vssNewClientWithLnurlAuth(

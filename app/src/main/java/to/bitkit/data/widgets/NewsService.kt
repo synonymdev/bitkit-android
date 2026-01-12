@@ -52,5 +52,5 @@ class NewsService @Inject constructor(
  * News-specific error types
  */
 sealed class NewsError(message: String) : AppError(message) {
-    data class InvalidResponse(override val message: String) : NewsError(message)
+    class InvalidResponse(override val message: String) : NewsError(message)
 }

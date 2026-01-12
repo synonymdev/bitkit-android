@@ -24,7 +24,7 @@ class LspNotificationsService @Inject constructor(
     private val crypto: Crypto,
 ) {
     suspend fun registerDevice(deviceToken: String) = withContext(bgDispatcher) {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
 
         Logger.debug("Registering device for notifications…")
 

@@ -201,8 +201,8 @@ class BlocktankRepo @Inject constructor(
         description: String = Env.DEFAULT_INVOICE_MESSAGE,
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
         try {
-            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked
-            val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
+            val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
             val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
             val channelSizeSat = amountSats + lspBalance
 
@@ -230,7 +230,7 @@ class BlocktankRepo @Inject constructor(
         channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
     ): Result<IBtOrder> = withContext(bgDispatcher) {
         try {
-            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked
+            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
 
             val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
@@ -323,7 +323,7 @@ class BlocktankRepo @Inject constructor(
     }
 
     private suspend fun defaultCreateOrderOptions(clientBalanceSat: ULong): CreateOrderOptions {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
         val timestamp = nowTimestamp().toString()
         val signature = lightningService.sign("channelOpen-$timestamp")
 
@@ -350,7 +350,7 @@ class BlocktankRepo @Inject constructor(
         }
 
         val satsPerEur = getSatsPerEur()
-            ?: throw ServiceError.CurrencyRateUnavailable
+            ?: throw ServiceError.CurrencyRateUnavailable()
 
         val params = DefaultLspBalanceParams(
             clientBalanceSat = clientBalance,
@@ -363,10 +363,10 @@ class BlocktankRepo @Inject constructor(
 
     fun calculateLiquidityOptions(clientBalanceSat: ULong): Result<ChannelLiquidityOptions> {
         val blocktankInfo = blocktankState.value.info
-            ?: return Result.failure(ServiceError.BlocktankInfoUnavailable)
+            ?: return Result.failure(ServiceError.BlocktankInfoUnavailable())
 
         val satsPerEur = getSatsPerEur()
-            ?: return Result.failure(ServiceError.CurrencyRateUnavailable)
+            ?: return Result.failure(ServiceError.CurrencyRateUnavailable())
 
         val existingChannelsTotalSat = totalBtChannelsValueSats(blocktankInfo)
 
@@ -466,7 +466,7 @@ class BlocktankRepo @Inject constructor(
     }
 
     private suspend fun claimGiftCodeWithoutLiquidity(code: String, amount: ULong): GiftClaimResult {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
 
         val order = ServiceQueue.CORE.background {
             giftOrder(clientNodeId = nodeId, code = "blocktank-gift-code:$code")

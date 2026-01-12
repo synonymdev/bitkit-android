@@ -1387,7 +1387,7 @@ class BlocktankService(
     }
 
     suspend fun open(orderId: String): IBtOrder {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
 
         val latestOrder = ServiceQueue.CORE.background {
             getOrders(orderIds = listOf(orderId), filter = null, refresh = true).firstOrNull()

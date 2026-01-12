@@ -59,7 +59,7 @@ class RNBackupClient @Inject constructor(
     suspend fun listFiles(fileGroup: String? = "ldk"): RNBackupListResponse? = withContext(ioDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup
+                ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -81,7 +81,7 @@ class RNBackupClient @Inject constructor(
     suspend fun retrieve(label: String, fileGroup: String? = null): ByteArray? = withContext(ioDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup
+                ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -109,7 +109,7 @@ class RNBackupClient @Inject constructor(
     suspend fun retrieveChannelMonitor(channelId: String): ByteArray? = withContext(ioDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw RNBackupError.NotSetup
+                ?: throw RNBackupError.NotSetup()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val bearer = authenticate(mnemonic, passphrase)
@@ -236,7 +236,7 @@ class RNBackupClient @Inject constructor(
             }
 
             if (!challengeResponse.status.isSuccess()) {
-                throw RNBackupError.AuthFailed
+                throw RNBackupError.AuthFailed()
             }
 
             val challengeResult = challengeResponse.body<AuthChallengeResponse>()
@@ -254,7 +254,7 @@ class RNBackupClient @Inject constructor(
             }
 
             if (!authResponse.status.isSuccess()) {
-                throw RNBackupError.AuthFailed
+                throw RNBackupError.AuthFailed()
             }
 
             authResponse.body<AuthBearerResponse>().also { cachedBearer = it }
@@ -355,8 +355,8 @@ data class RNBackupListResponse(
 )
 
 sealed class RNBackupError(message: String) : AppError(message) {
-    data object NotSetup : RNBackupError("RN backup client not setup")
-    data object AuthFailed : RNBackupError("Authentication failed")
-    data class RequestFailed(override val message: String) : RNBackupError(message)
-    data class DecryptFailed(override val message: String) : RNBackupError(message)
+    class NotSetup : RNBackupError("RN backup client not setup")
+    class AuthFailed : RNBackupError("Authentication failed")
+    class RequestFailed(override val message: String) : RNBackupError(message)
+    class DecryptFailed(override val message: String) : RNBackupError(message)
 }

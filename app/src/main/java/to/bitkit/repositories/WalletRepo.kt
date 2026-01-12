@@ -347,7 +347,8 @@ class WalletRepo @Inject constructor(
         count: Int = 20,
     ): Result<List<AddressModel>> = withContext(bgDispatcher) {
         return@withContext try {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw ServiceError.MnemonicNotFound()
 
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 

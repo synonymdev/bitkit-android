@@ -60,5 +60,5 @@ class ChatwootHttpClient @Inject constructor(
 }
 
 sealed class ChatwootHttpError(message: String) : AppError(message) {
-    data class InvalidResponse(override val message: String) : ChatwootHttpError(message)
+    class InvalidResponse(override val message: String) : ChatwootHttpError(message)
 }

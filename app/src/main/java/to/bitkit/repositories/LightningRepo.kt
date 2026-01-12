@@ -628,7 +628,7 @@ class LightningRepo @Inject constructor(
         callback: String,
         domain: String,
     ): Result<String> = runCatching {
-        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
         val result = lnurlAuth(

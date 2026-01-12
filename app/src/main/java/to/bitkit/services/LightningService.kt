@@ -140,8 +140,10 @@ class LightningService @Inject constructor(
                 )
             }
 
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw ServiceError.MnemonicNotFound()
             setEntropyBip39Mnemonic(
-                mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound,
+                mnemonic = mnemonic,
                 passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),
             )
         }
@@ -193,7 +195,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.debug("Starting node…", context = TAG)
 
@@ -227,7 +229,7 @@ class LightningService @Inject constructor(
 
     suspend fun stop() {
         shouldListenForEvents = false
-        val node = this.node ?: throw ServiceError.NodeNotStarted
+        val node = this.node ?: throw ServiceError.NodeNotStarted()
 
         Logger.debug("Stopping node…", context = TAG)
         ServiceQueue.LDK.background {
@@ -243,14 +245,14 @@ class LightningService @Inject constructor(
     }
 
     fun wipeStorage(walletIndex: Int) {
-        if (node != null) throw ServiceError.NodeStillRunning
+        if (node != null) throw ServiceError.NodeStillRunning()
         Logger.warn("Wiping LDK storage…", context = TAG)
         Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
         Logger.info("LDK storage wiped", context = TAG)
     }
 
     suspend fun sync() {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.verbose("Syncing LDK…", context = TAG)
         ServiceQueue.LDK.background {
@@ -263,8 +265,8 @@ class LightningService @Inject constructor(
     }
 
     suspend fun sign(message: String): String {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
-        val msg = runCatching { message.uByteList }.getOrNull() ?: throw ServiceError.InvalidNodeSigningMessage
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        val msg = runCatching { message.uByteList }.getOrNull() ?: throw ServiceError.InvalidNodeSigningMessage()
 
         return ServiceQueue.LDK.background {
             node.signMessage(msg)
@@ -272,7 +274,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun newAddress(): String {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
             node.onchainPayment().newAddress()
@@ -281,7 +283,7 @@ class LightningService @Inject constructor(
 
     // region peers
     suspend fun connectToTrustedPeers() {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         ServiceQueue.LDK.background {
             for (peer in trustedPeers) {
@@ -317,7 +319,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
         val uri = peer.uri
         return ServiceQueue.LDK.background {
             try {
@@ -337,7 +339,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun disconnectPeer(peer: PeerDetails) {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
         val uri = peer.uri
         Logger.debug("Disconnecting peer: $uri", context = TAG)
         try {
@@ -378,7 +380,7 @@ class LightningService @Inject constructor(
         pushToCounterpartySats: ULong? = null,
         channelConfig: ChannelConfig? = null,
     ): Result<OpenChannelResult> {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
             try {
@@ -418,7 +420,7 @@ class LightningService @Inject constructor(
         force: Boolean = false,
         forceCloseReason: String? = null,
     ) {
-        val node = this.node ?: throw ServiceError.NodeNotStarted
+        val node = this.node ?: throw ServiceError.NodeNotStarted()
         val channelId = channel.channelId
         val userChannelId = channel.userChannelId
         val counterpartyNodeId = channel.counterpartyNodeId
@@ -463,7 +465,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
 
@@ -511,7 +513,7 @@ class LightningService @Inject constructor(
         utxosToSpend: List<SpendableUtxo>? = null,
         isMaxAmount: Boolean = false,
     ): Txid {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.info(
             "Sending $sats sats to $address, satsPerVByte=$satsPerVByte, isMaxAmount = $isMaxAmount",
@@ -537,7 +539,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun send(bolt11: String, sats: ULong? = null): PaymentId {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.debug("Paying bolt11: $bolt11", context = TAG)
 
@@ -557,7 +559,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
             return@background try {
@@ -574,7 +576,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
             return@background try {
@@ -594,7 +596,7 @@ class LightningService @Inject constructor(
 
     // region utxo selection
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
             return@background try {
@@ -614,7 +616,7 @@ class LightningService @Inject constructor(
         algorithm: CoinSelectionAlgorithm,
         utxos: List<SpendableUtxo>?,
     ): Result<List<SpendableUtxo>> {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
             return@background try {
@@ -636,7 +638,7 @@ class LightningService @Inject constructor(
 
     // region boost
     suspend fun bumpFeeByRbf(txid: Txid, satsPerVByte: ULong): Txid {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.info("RBF for txid='$txid' using satsPerVByte='$satsPerVByte'", context = TAG)
 
@@ -657,7 +659,7 @@ class LightningService @Inject constructor(
         satsPerVByte: ULong,
         toAddress: Address,
     ): Txid {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.info("CPFP for txid='$txid' using satsPerVByte='$satsPerVByte', to address='$toAddress'", context = TAG)
 
@@ -677,7 +679,7 @@ class LightningService @Inject constructor(
 
     // region fee
     suspend fun calculateCpfpFeeRate(parentTxid: Txid): FeeRate {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.debug("Calculating CPFP fee for parentTxid $parentTxid", context = TAG)
 
@@ -699,7 +701,7 @@ class LightningService @Inject constructor(
         satsPerVByte: ULong,
         utxosToSpend: List<SpendableUtxo>? = null,
     ): ULong {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.verbose(
             "Calculating fee for $amountSats sats to $address, ${utxosToSpend?.size} UTXOs, satsPerVByte=$satsPerVByte",
@@ -732,7 +734,7 @@ class LightningService @Inject constructor(
     suspend fun listenForEvents(onEvent: NodeEventHandler? = null) = withContext(bgDispatcher) {
         while (shouldListenForEvents) {
             val node = this@LightningService.node ?: let {
-                Logger.error(ServiceError.NodeNotStarted.message.orEmpty(), context = TAG)
+                Logger.error(ServiceError.NodeNotStarted().message.orEmpty(), context = TAG)
                 return@withContext
             }
             val event = node.nextEventAsync()
@@ -749,7 +751,7 @@ class LightningService @Inject constructor(
     // endregion
 
     suspend fun getAddressBalance(address: String): ULong {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
         return ServiceQueue.LDK.background {
             try {
                 node.getAddressBalance(addressStr = address)
@@ -920,7 +922,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun exportNetworkGraphToFile(outputDir: String): Result<File> {
-        val node = this.node ?: return Result.failure(ServiceError.NodeNotSetup)
+        val node = this.node ?: return Result.failure(ServiceError.NodeNotSetup())
 
         return withContext(bgDispatcher) {
             runCatching {
