@@ -5,7 +5,12 @@ package to.bitkit.utils
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.NodeException
 
-open class AppError(override val message: String? = null) : Exception(message)
+open class AppError(
+    override val message: String? = null,
+    cause: Throwable? = null,
+) : Exception(message, cause) {
+    constructor(cause: Throwable) : this(cause.message, cause)
+}
 
 sealed class ServiceError(message: String) : AppError(message) {
     class NodeNotSetup : ServiceError("Node is not setup")
