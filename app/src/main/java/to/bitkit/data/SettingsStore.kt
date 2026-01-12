@@ -94,9 +94,7 @@ data class SettingsData(
     val quickPayAmount: Int = 5,
     val lightningSetupStep: Int = 0,
     val isPinEnabled: Boolean = false,
-    val isPinOnLaunchEnabled: Boolean = false,
     val isBiometricEnabled: Boolean = false,
-    val isPinOnIdleEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = Env.isDebug,
     val showWidgets: Boolean = true,
@@ -123,8 +121,6 @@ data class SettingsData(
 
 fun SettingsData.resetPin() = this.copy(
     isPinEnabled = false,
-    isPinOnLaunchEnabled = true,
-    isPinOnIdleEnabled = false,
     isPinForPaymentsEnabled = false,
     isBiometricEnabled = false,
 )

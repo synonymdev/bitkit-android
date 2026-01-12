@@ -1833,7 +1833,7 @@ class AppViewModel @Inject constructor(
     // region security
     private suspend fun resetIsAuthenticatedStateInternal() {
         val settings = settingsStore.data.first()
-        val needsAuth = settings.isPinEnabled && settings.isPinOnLaunchEnabled
+        val needsAuth = settings.isPinEnabled
         _isAuthenticated.value = !needsAuth
     }
 
@@ -1873,7 +1873,6 @@ class AppViewModel @Inject constructor(
 
     fun addPin(pin: String) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(isPinOnLaunchEnabled = true) }
             settingsStore.addDismissedSuggestion(Suggestion.SECURE)
         }
         editPin(pin)
