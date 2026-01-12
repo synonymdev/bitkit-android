@@ -47,7 +47,7 @@ android {
         minSdk = 28
         targetSdk = 36
         versionCode = 163
-        versionName = "0.0.18"
+        versionName = "2.0.0-rc.1"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -176,8 +176,7 @@ android {
 }
 
 composeCompiler {
-    featureFlags = setOf(
-    )
+    featureFlags = setOf()
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
