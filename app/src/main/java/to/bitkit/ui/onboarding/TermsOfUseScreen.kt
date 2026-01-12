@@ -86,8 +86,7 @@ fun TermsOfUseScreen(
             ) {
                 TermsText(
                     title = stringResource(R.string.onboarding__tos_checkbox),
-                    htmlText = stringResource(R.string.onboarding__tos_checkbox_value)
-                        .withAccentLink(Env.TERMS_OF_USE_URL),
+                    htmlText = AnnotatedString(stringResource(R.string.onboarding__tos_checkbox_value)),
                     modifier = Modifier
                         .padding(horizontal = horizontalPadding)
                         .testTag("Check1")
