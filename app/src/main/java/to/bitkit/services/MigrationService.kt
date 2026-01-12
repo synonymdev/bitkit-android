@@ -23,14 +23,22 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.lightningdevkit.ldknode.Network
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.dao.TransferDao
+import to.bitkit.data.dto.price.GraphPeriod
+import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
@@ -40,98 +48,46 @@ import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.safe
+import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.FactsPreferences
+import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.PricePreferences
+import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.services.core.Bip39Service
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
 import java.security.KeyStore
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "rn_migration"
-)
-
-private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "RN_KEYCHAIN"
-)
-
-@Serializable
-private data class RNRemoteActivityItem(
-    val id: String,
-    val activityType: String,
-    val txType: String,
-    val txId: String? = null,
-    val value: Long,
-    val fee: Long? = null,
-    val feeRate: Long? = null,
-    val address: String? = null,
-    val confirmed: Boolean? = null,
-    val timestamp: Long,
-    val isBoosted: Boolean? = null,
-    val isTransfer: Boolean? = null,
-    val exists: Boolean? = null,
-    val confirmTimestamp: Long? = null,
-    val channelId: String? = null,
-    val transferTxId: String? = null,
-    val status: String? = null,
-    val message: String? = null,
-    val preimage: String? = null,
-    val boostedParents: List<String>? = null,
-)
-
-@Serializable
-private data class RNRemoteWalletBackup(
-    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
-    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
-)
-
-@Serializable
-private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
-
-@Serializable
-private data class RNRemoteBoostedTx(
-    val oldTxId: String? = null,
-    val newTxId: String? = null,
-    val childTransaction: String? = null,
-)
-
-@Serializable
-private data class RNRemoteBlocktankBackup(
-    val orders: List<RNRemoteBlocktankOrder>? = null,
-    val paidOrders: List<String>? = null,
-)
-
-@Serializable
-private data class RNRemoteBlocktankOrder(
-    val id: String,
-    val state: String? = null,
-    val lspBalanceSat: ULong? = null,
-    val clientBalanceSat: ULong? = null,
-    val channelExpiryWeeks: Int? = null,
-    val createdAt: String? = null,
-)
-
-@Suppress("LargeClass", "TooManyFunctions")
+@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
 class MigrationService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
+    private val cacheStore: CacheStore,
     private val activityRepo: ActivityRepo,
     private val coreService: CoreService,
     private val rnBackupClient: RNBackupClient,
     private val bip39Service: Bip39Service,
+    private val transferDao: TransferDao,
 ) {
     companion object {
         private const val TAG = "Migration"
         const val RN_MIGRATION_COMPLETED_KEY = "rnMigrationCompleted"
         const val RN_MIGRATION_CHECKED_KEY = "rnMigrationChecked"
+        private const val OPENING_CURLY_BRACE = "{"
+        private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
-        private const val MILLISECONDS_TO_SECONDS = 1000
+        private const val MS_PER_SEC = 1000
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 128
     }
@@ -147,16 +103,12 @@ class MigrationService @Inject constructor(
     private val _isShowingMigrationLoading = MutableStateFlow(false)
     val isShowingMigrationLoading: StateFlow<Boolean> = _isShowingMigrationLoading.asStateFlow()
 
-    fun setShowingMigrationLoading(value: Boolean) {
-        _isShowingMigrationLoading.update { value }
-    }
+    fun setShowingMigrationLoading(value: Boolean) = _isShowingMigrationLoading.update { value }
 
     private val _isRestoringFromRNRemoteBackup = MutableStateFlow(false)
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = _isRestoringFromRNRemoteBackup.asStateFlow()
 
-    fun setRestoringFromRNRemoteBackup(value: Boolean) {
-        _isRestoringFromRNRemoteBackup.update { value }
-    }
+    fun setRestoringFromRNRemoteBackup(value: Boolean) = _isRestoringFromRNRemoteBackup.update { value }
 
     @Volatile
     private var pendingChannelMigration: PendingChannelMigration? = null
@@ -167,9 +119,7 @@ class MigrationService @Inject constructor(
         return migration
     }
 
-    fun peekPendingChannelMigration(): PendingChannelMigration? {
-        return pendingChannelMigration
-    }
+    fun peekPendingChannelMigration(): PendingChannelMigration? = pendingChannelMigration
 
     @Volatile
     private var pendingRemoteActivityData: List<RNActivityItem>? = null
@@ -183,37 +133,32 @@ class MigrationService @Inject constructor(
     @Volatile
     private var pendingRemoteMetadata: RNMetadata? = null
 
-    private val rnNetworkString: String
-        get() = when (Env.network) {
-            org.lightningdevkit.ldknode.Network.BITCOIN -> "bitcoin"
-            org.lightningdevkit.ldknode.Network.REGTEST -> "bitcoinRegtest"
-            org.lightningdevkit.ldknode.Network.TESTNET -> "bitcoinTestnet"
-            org.lightningdevkit.ldknode.Network.SIGNET -> "signet"
+    @Volatile
+    private var pendingRemotePaidOrders: Map<String, String>? = null
+
+    private fun buildRnLdkAccountPath(): File = run {
+        val rnNetworkString = when (Env.network) {
+            Network.BITCOIN -> "bitcoin"
+            Network.REGTEST -> "bitcoinRegtest"
+            Network.TESTNET -> "bitcoinTestnet"
+            Network.SIGNET -> "signet"
+        }
+        val rnLdkBasePath = File(context.filesDir, "ldk")
+
+        @Suppress("SpellCheckingInspection")
+        val accountName = buildString {
+            append(RN_WALLET_NAME)
+            append(rnNetworkString)
+            append("ldkaccountv3")
         }
 
-    private val rnLdkBasePath: File
-        get() = File(context.filesDir, "ldk")
+        return File(rnLdkBasePath, accountName)
+    }
 
-    private val rnLdkAccountPath: File
-        get() {
-            val accountName = buildString {
-                append(RN_WALLET_NAME)
-                append(rnNetworkString)
-                append("ldkaccountv3")
-            }
-            return File(rnLdkBasePath, accountName)
-        }
-
-    private val rnMmkvPath: File
-        get() = File(context.filesDir, "mmkv/mmkv.default")
+    private fun getRnMmkvPath(): File = File(context.filesDir, "mmkv/mmkv.default")
 
     suspend fun isMigrationChecked(): Boolean {
         val key = stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)
-        return rnMigrationStore.data.first()[key] == "true"
-    }
-
-    suspend fun isMigrationCompleted(): Boolean {
-        val key = stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)
         return rnMigrationStore.data.first()[key] == "true"
     }
 
@@ -224,44 +169,26 @@ class MigrationService @Inject constructor(
 
     suspend fun hasRNWalletData(): Boolean {
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
-        if (mnemonic?.isNotEmpty() == true) {
-            return true
-        }
+        if (mnemonic?.isNotEmpty() == true) return true
 
         return hasRNMmkvData() || hasRNLdkData()
     }
 
-    @Suppress("TooGenericExceptionCaught", "SwallowedException")
-    suspend fun hasNativeWalletData(): Boolean {
-        return try {
-            keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
-        } catch (e: Exception) {
-            false
-        }
-    }
+    fun hasNativeWalletData() = runCatching { keychain.exists(Keychain.Key.BIP39_MNEMONIC.name) }.getOrDefault(false)
+    fun hasRNLdkData() = File(buildRnLdkAccountPath(), "channel_manager.bin").exists()
+    fun hasRNMmkvData() = getRnMmkvPath().exists()
 
-    suspend fun hasRNLdkData(): Boolean {
-        return File(rnLdkAccountPath, "channel_manager.bin").exists()
-    }
-
-    suspend fun hasRNMmkvData(): Boolean {
-        return rnMmkvPath.exists()
-    }
-
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun loadStringFromRNKeychain(key: RNKeychainKey): String? {
         val datastorePath = File(context.filesDir, "datastore/RN_KEYCHAIN.preferences_pb")
-        if (!datastorePath.exists()) {
-            return null
-        }
+        if (!datastorePath.exists()) return null
 
-        return try {
+        return runCatching {
             val preferences = context.rnKeychainDataStore.data.first()
 
             val passwordKey = stringPreferencesKey("${key.service}:p")
             val cipherKey = stringPreferencesKey("${key.service}:c")
 
-            val encryptedValue = preferences[passwordKey] ?: return null
+            val encryptedValue = preferences[passwordKey] ?: return@runCatching null
             val cipherInfo = preferences[cipherKey]
 
             val fullEncryptedValue = if (cipherInfo != null && !encryptedValue.contains(":")) {
@@ -270,22 +197,19 @@ class MigrationService @Inject constructor(
                 encryptedValue
             }
             decryptRNKeychainValue(fullEncryptedValue, key.service)
-        } catch (e: Exception) {
-            Logger.error("Error reading from RN_KEYCHAIN DataStore: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Error reading from RN_KEYCHAIN DataStore: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun decryptRNKeychainValue(encryptedValue: String, service: String): String? {
         if (!encryptedValue.contains(":")) {
-            return try {
+            return runCatching {
                 val encryptedBytes = android.util.Base64.decode(encryptedValue, android.util.Base64.DEFAULT)
                 decryptWithKeystore(encryptedBytes, service)
-            } catch (e: Exception) {
-                Logger.error("Failed to decrypt without cipher prefix: $e", e, context = TAG)
-                null
-            }
+            }.onFailure {
+                Logger.error("Failed to decrypt without cipher prefix: $it", it, context = TAG)
+            }.getOrNull()
         }
 
         val parts = encryptedValue.split(":", limit = 2)
@@ -297,16 +221,14 @@ class MigrationService @Inject constructor(
             return null
         }
 
-        return try {
+        return runCatching {
             val encryptedBytes = android.util.Base64.decode(encryptedDataBase64, android.util.Base64.DEFAULT)
             decryptWithKeystore(encryptedBytes, service)
-        } catch (e: Exception) {
-            Logger.error("Failed to decrypt RN keychain value: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decrypt RN keychain value: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun decryptWithKeystore(encryptedBytes: ByteArray, service: String): String? {
         if (encryptedBytes.size < GCM_IV_LENGTH) {
             Logger.error("Encrypted data too short: ${encryptedBytes.size} bytes", context = TAG)
@@ -316,16 +238,15 @@ class MigrationService @Inject constructor(
         val iv = encryptedBytes.sliceArray(0 until GCM_IV_LENGTH)
         val ciphertext = encryptedBytes.sliceArray(GCM_IV_LENGTH until encryptedBytes.size)
 
-        return try {
+        return runCatching {
             val keystore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
-            val alias = service
-            if (!keystore.containsAlias(alias)) {
-                Logger.error("Keystore alias '$alias' not found", context = TAG)
-                return null
+            if (!keystore.containsAlias(service)) {
+                Logger.error("Keystore alias '$service' not found", context = TAG)
+                return@runCatching null
             }
 
-            val secretKey = keystore.getKey(alias, null) as javax.crypto.SecretKey
+            val secretKey = keystore.getKey(service, null) as javax.crypto.SecretKey
 
             val transformation = "AES/GCM/NoPadding"
             val spec = javax.crypto.spec.GCMParameterSpec(GCM_TAG_LENGTH, iv)
@@ -335,77 +256,56 @@ class MigrationService @Inject constructor(
 
             val decryptedBytes = cipher.doFinal(ciphertext)
             String(decryptedBytes, Charsets.UTF_8)
-        } catch (e: Exception) {
-            Logger.error("Failed to decrypt with Keystore: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decrypt with Keystore: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    suspend fun migrateFromReactNative() {
+    suspend fun migrateFromReactNative() = runCatching {
         setShowingMigrationLoading(true)
 
-        try {
-            val mnemonicMigrated = try {
-                migrateMnemonic()
-                true
-            } catch (e: Exception) {
-                Logger.warn(
-                    "Could not migrate mnemonic: $e. User will need to manually restore.",
-                    context = TAG
-                )
-                false
+        val mnemonicMigrated = runCatching { migrateMnemonic() }.map { true }.onFailure {
+            Logger.warn("Could not migrate mnemonic: $it. User will need to manually restore.", context = TAG)
+        }.getOrDefault(false)
+
+        if (mnemonicMigrated) {
+            migratePassphrase()
+            migratePin()
+
+            if (hasRNLdkData()) {
+                migrateLdkData().onFailure {
+                    Logger.warn("LDK data migration failed, continuing with other migrations: $it", it, context = TAG)
+                }
             }
 
-            if (mnemonicMigrated) {
-                migratePassphrase()
-                migratePin()
-
-                if (hasRNLdkData()) {
-                    migrateLdkData()
-                        .onFailure { e ->
-                            Logger.warn(
-                                "LDK data migration failed, continuing with other migrations: $e",
-                                e,
-                                context = TAG
-                            )
-                        }
-                }
-
-                if (hasRNMmkvData()) {
-                    migrateMMKVData()
-                }
-
-                rnMigrationStore.edit {
-                    it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
-                    it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
-                }
-            } else {
-                markMigrationChecked()
-                setShowingMigrationLoading(false)
-                throw to.bitkit.utils.AppError(
-                    "Migration data unavailable. Please restore your wallet using your recovery phrase."
-                )
+            if (hasRNMmkvData()) {
+                migrateMMKVData()
             }
-        } catch (e: Exception) {
-            Logger.error("RN migration failed: $e", e, context = TAG)
+
+            rnMigrationStore.edit {
+                it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
+                it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
+            }
+        } else {
             markMigrationChecked()
             setShowingMigrationLoading(false)
-            throw e
+            throw AppError("Migration data unavailable. Please restore your wallet using your recovery phrase.")
         }
-    }
+    }.onFailure {
+        Logger.error("RN migration failed: $it", it, context = TAG)
+        markMigrationChecked()
+        setShowingMigrationLoading(false)
+    }.getOrThrow()
 
     private suspend fun migrateMnemonic() {
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
 
         if (mnemonic.isNullOrEmpty()) {
-            throw to.bitkit.utils.AppError(
-                "Migration data unavailable. Please restore your wallet using your recovery phrase."
-            )
+            throw AppError("Migration data unavailable. Please restore your wallet using your recovery phrase.")
         }
 
         bip39Service.validateMnemonic(mnemonic).onFailure {
-            throw to.bitkit.utils.AppError(
+            throw AppError(
                 "Recovery phrase is invalid. Please use your 12 or 24 word recovery phrase to restore manually."
             )
         }
@@ -415,17 +315,13 @@ class MigrationService @Inject constructor(
 
     private suspend fun migratePassphrase() {
         val passphrase = loadStringFromRNKeychain(RNKeychainKey.PASSPHRASE)
-        if (passphrase.isNullOrEmpty()) {
-            return
-        }
+        if (passphrase.isNullOrEmpty()) return
         keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, passphrase)
     }
 
     private suspend fun migratePin() {
         val pin = loadStringFromRNKeychain(RNKeychainKey.PIN)
-        if (pin.isNullOrEmpty()) {
-            return
-        }
+        if (pin.isNullOrEmpty()) return
 
         if (pin.length != Env.PIN_LENGTH) {
             Logger.warn(
@@ -443,8 +339,8 @@ class MigrationService @Inject constructor(
         keychain.saveString(Keychain.Key.PIN.name, pin)
     }
 
-    private suspend fun migrateLdkData() = runCatching {
-        val accountPath = rnLdkAccountPath
+    private fun migrateLdkData() = runCatching {
+        val accountPath = buildRnLdkAccountPath()
         val managerPath = File(accountPath, "channel_manager.bin")
 
         if (!managerPath.exists()) {
@@ -469,117 +365,104 @@ class MigrationService @Inject constructor(
             channelManager = managerData,
             channelMonitors = monitors,
         )
-    }.onFailure { e ->
-        Logger.error("Failed to migrate LDK data: $e", e, context = TAG)
+    }.onFailure {
+        Logger.error("Failed to migrate LDK data: $it", it, context = TAG)
     }
 
-    suspend fun loadRNMmkvData(): Map<String, String>? = runCatching {
-        if (!hasRNMmkvData()) {
-            return@runCatching null
-        }
+    fun loadRNMmkvData(): Map<String, String>? = runCatching {
+        if (!hasRNMmkvData()) return@runCatching null
 
-        val data = rnMmkvPath.readBytes()
+        val data = getRnMmkvPath().readBytes()
         val parser = MmkvParser(data)
         parser.parse().takeIf { it.isNotEmpty() }
-    }.onFailure { e ->
-        Logger.error("Failed to read MMKV data: $e", e, context = TAG)
+    }.onFailure {
+        Logger.error("Failed to read MMKV data: $it", it, context = TAG)
     }.getOrNull()
 
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNSettings(mmkvData: Map<String, String>): RNSettings? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+    private fun extractRNSettings(mmkvData: Map<String, String>): RNSettings? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val settingsJsonString = root["settings"]?.jsonPrimitive?.content ?: return null
+            val settingsJsonString = root["settings"]?.jsonPrimitive?.content ?: return@runCatching null
 
             json.decodeFromString<RNSettings>(settingsJsonString)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN settings: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN settings: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNMetadata(mmkvData: Map<String, String>): RNMetadata? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+    private fun extractRNMetadata(mmkvData: Map<String, String>): RNMetadata? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val metadataJsonString = root["metadata"]?.jsonPrimitive?.content ?: return null
+            val metadataJsonString = root["metadata"]?.jsonPrimitive?.content ?: return@runCatching null
 
             json.decodeFromString<RNMetadata>(metadataJsonString)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN metadata: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN metadata: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNTodos(mmkvData: Map<String, String>): RNTodos? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+    private fun extractRNTodos(mmkvData: Map<String, String>): RNTodos? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val todosJsonString = root["todos"]?.jsonPrimitive?.content ?: return null
+            val todosJsonString = root["todos"]?.jsonPrimitive?.content ?: return@runCatching null
 
             json.decodeFromString<RNTodos>(todosJsonString)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN todos: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN todos: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNWidgets(mmkvData: Map<String, String>): RNWidgetsWithOptions? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+    private fun extractRNWidgets(mmkvData: Map<String, String>): RNWidgetsWithOptions? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val widgetsJsonString = root["widgets"]?.jsonPrimitive?.content ?: return null
+            val widgetsJsonString = root["widgets"]?.jsonPrimitive?.content
+                ?: return@runCatching null
 
             val widgets = json.decodeFromString<RNWidgets>(widgetsJsonString)
             val widgetsData = json.parseToJsonElement(widgetsJsonString).jsonObject
-            val widgetOptions = convertRNWidgetPreferences(
-                widgetsData["widgets"]?.jsonObject ?: widgetsData
-            )
+            val widgetOptions = convertRNWidgetPreferences(widgetsData["widgets"]?.jsonObject ?: widgetsData)
 
             RNWidgetsWithOptions(widgets = widgets, widgetOptions = widgetOptions)
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN widgets: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN widgets: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNActivities(mmkvData: Map<String, String>): List<RNActivityItem>? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+    private fun extractRNActivities(mmkvData: Map<String, String>): List<RNActivityItem>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val activityJsonString = root["activity"]?.jsonPrimitive?.content ?: return null
+            val activityJsonString = root["activity"]?.jsonPrimitive?.content ?: return@runCatching null
 
             val activityState = json.decodeFromString<RNActivityState>(activityJsonString)
             activityState.items ?: emptyList()
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN activities: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN activities: $it", it, context = TAG)
+        }.getOrNull()
     }
 
     private fun extractTransfers(transfers: Map<String, List<RNRemoteTransfer>>?): Map<String, String> {
@@ -636,55 +519,82 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun extractRNWalletBackup(
-        mmkvData: Map<String, String>
-    ): Pair<Map<String, String>, Map<String, String>>? {
-        val rootJson = mmkvData["persist:root"] ?: return null
+    private fun extractRNWalletBackup(mmkvData: Map<String, String>): Pair<Map<String, String>, Map<String, String>>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val walletJsonString = root["wallet"]?.jsonPrimitive?.content ?: return null
+            val walletJsonString = root["wallet"]?.jsonPrimitive?.content ?: return@runCatching null
             val walletData = json.parseToJsonElement(walletJsonString).jsonObject
 
-            val walletState = runCatching {
-                json.decodeFromJsonElement<RNWalletState>(walletData)
-            }.getOrNull()
+            val walletState = runCatching { json.decodeFromJsonElement<RNWalletState>(walletData) }.getOrNull()
 
             walletState?.let { extractFromWalletState(it) } ?: run {
-                val walletBackup = runCatching {
-                    json.decodeFromJsonElement<RNRemoteWalletBackup>(walletData)
-                }.getOrNull()
-                walletBackup?.let { extractFromWalletBackup(it) }
+                runCatching { json.decodeFromJsonElement<RNRemoteWalletBackup>(walletData) }.getOrNull()?.let {
+                    extractFromWalletBackup(it)
+                }
             }
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN wallet backup: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN wallet backup: $it", it, context = TAG)
+        }.getOrNull()
     }
 
-    @Serializable
-    private data class RNWalletState(val wallets: Map<String, RNWalletData>? = null)
+    private fun extractRNBlocktank(mmkvData: Map<String, String>): Pair<List<String>, Map<String, String>>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
-    @Serializable
-    private data class RNWalletData(
-        val transfers: Map<String, List<RNRemoteTransfer>>? = null,
-        val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
-    )
-
-    @Suppress("NestedBlockDepth", "TooGenericExceptionCaught")
-    private suspend fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
-        val rootJson = mmkvData["persist:root"] ?: return null
-
-        return try {
-            val jsonStart = rootJson.indexOf("{")
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
             val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
 
             val root = json.parseToJsonElement(jsonString).jsonObject
-            val lightningJsonString = root["lightning"]?.jsonPrimitive?.content ?: return null
+            val blocktankJsonString = root["blocktank"]?.jsonPrimitive?.content ?: return@runCatching null
+
+            val blocktankData = json.parseToJsonElement(blocktankJsonString).jsonObject
+            val orderIds = mutableListOf<String>()
+            val paidOrdersMap = mutableMapOf<String, String>()
+
+            blocktankData["orders"]?.jsonArray?.forEach { orderElement ->
+                orderElement.jsonObject["id"]?.jsonPrimitive?.content?.let { id ->
+                    orderIds.add(id)
+                }
+            }
+
+            blocktankData["paidOrders"]?.jsonObject?.forEach { (orderId, txIdElement) ->
+                val txId = txIdElement.jsonPrimitive.content
+                paidOrdersMap[orderId] = txId
+                if (orderId !in orderIds) {
+                    orderIds.add(orderId)
+                }
+            }
+
+            if (orderIds.isEmpty() && paidOrdersMap.isEmpty()) {
+                return@runCatching null
+            }
+
+            Logger.info(
+                "Extracted ${orderIds.size} order IDs and ${paidOrdersMap.size} paid orders from local blocktank",
+                context = TAG,
+            )
+            Pair(orderIds, paidOrdersMap)
+        }.onFailure {
+            Logger.error("Failed to decode RN blocktank: $it", it, context = TAG)
+        }.getOrNull()
+    }
+
+    @Suppress("NestedBlockDepth")
+    private fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
+
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
+            val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
+
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val lightningJsonString = root["lightning"]?.jsonPrimitive?.content
+                ?: return@runCatching null
 
             val lightningState = json.decodeFromString<RNLightningState>(lightningJsonString)
             val closedChannels = mutableListOf<RNChannel>()
@@ -700,10 +610,9 @@ class MigrationService @Inject constructor(
             }
 
             closedChannels.takeIf { it.isNotEmpty() }
-        } catch (e: Exception) {
-            Logger.error("Failed to decode RN lightning state: $e", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.error("Failed to decode RN lightning state: $it", it, context = TAG)
+        }.getOrNull()
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -759,16 +668,16 @@ class MigrationService @Inject constructor(
                     activityId = it.id
                 }
                 ActivityTags(activityId = activityId, tags = tagList)
-            }.onFailure { e ->
-                Logger.error("Failed to get activity ID for $txId: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to get activity ID for $txId: $it", it, context = TAG)
             }.getOrNull()
         } ?: emptyList()
 
         if (allTags.isNotEmpty()) {
             runCatching {
                 coreService.activity.upsertTags(allTags)
-            }.onFailure { e ->
-                Logger.error("Failed to migrate tags: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate tags: $it", it, context = TAG)
             }
         }
 
@@ -806,7 +715,7 @@ class MigrationService @Inject constructor(
                 else -> PaymentState.PENDING
             }
 
-            val timestampSecs = (item.timestamp / MILLISECONDS_TO_SECONDS).toULong()
+            val timestampSecs = (item.timestamp / MS_PER_SEC).toULong()
             val invoice = item.address?.takeIf { it.isNotEmpty() } ?: "migrated:${item.id}"
 
             Activity.Lightning(
@@ -833,14 +742,12 @@ class MigrationService @Inject constructor(
     }
 
     private suspend fun applyRNClosedChannels(channels: List<RNChannel>) {
-        val now = (System.currentTimeMillis() / MILLISECONDS_TO_SECONDS).toULong()
+        val now = (System.currentTimeMillis() / MS_PER_SEC).toULong()
 
         val closedChannels = channels.mapNotNull { channel ->
             val fundingTxid = channel.fundingTxid ?: return@mapNotNull null
 
-            val closedAtSecs = channel.createdAt?.let {
-                (it / MILLISECONDS_TO_SECONDS).toULong()
-            } ?: now
+            val closedAtSecs = channel.createdAt?.let { (it / MS_PER_SEC).toULong() } ?: now
 
             val outboundMsat = (channel.outboundCapacitySat ?: 0u) * 1000u
             val inboundMsat = (channel.inboundCapacitySat ?: 0u) * 1000u
@@ -904,51 +811,51 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "TooGenericExceptionCaught")
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun applyRNWidgetPreferences(widgetOptions: Map<String, ByteArray>) {
         widgetOptions["price"]?.let { priceData ->
-            try {
-                val priceJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+            runCatching {
+                val priceJson = json.decodeFromString<JsonObject>(
                     priceData.decodeToString()
                 )
                 val selectedPairs = priceJson["selectedPairs"]?.jsonArray?.mapNotNull { pairElement ->
                     val pairStr = pairElement.jsonPrimitive.content.replace("_", "/")
                     when (pairStr) {
-                        "BTC/USD" -> to.bitkit.data.dto.price.TradingPair.BTC_USD
-                        "BTC/EUR" -> to.bitkit.data.dto.price.TradingPair.BTC_EUR
-                        "BTC/GBP" -> to.bitkit.data.dto.price.TradingPair.BTC_GBP
-                        "BTC/JPY" -> to.bitkit.data.dto.price.TradingPair.BTC_JPY
+                        "BTC/USD" -> TradingPair.BTC_USD
+                        "BTC/EUR" -> TradingPair.BTC_EUR
+                        "BTC/GBP" -> TradingPair.BTC_GBP
+                        "BTC/JPY" -> TradingPair.BTC_JPY
                         else -> null
                     }
-                } ?: listOf(to.bitkit.data.dto.price.TradingPair.BTC_USD)
+                } ?: listOf(TradingPair.BTC_USD)
 
                 val periodStr = priceJson["selectedPeriod"]?.jsonPrimitive?.content ?: "1D"
                 val period = when (periodStr) {
-                    "1D" -> to.bitkit.data.dto.price.GraphPeriod.ONE_DAY
-                    "1W" -> to.bitkit.data.dto.price.GraphPeriod.ONE_WEEK
-                    "1M" -> to.bitkit.data.dto.price.GraphPeriod.ONE_MONTH
-                    "1Y" -> to.bitkit.data.dto.price.GraphPeriod.ONE_YEAR
-                    else -> to.bitkit.data.dto.price.GraphPeriod.ONE_DAY
+                    "1D" -> GraphPeriod.ONE_DAY
+                    "1W" -> GraphPeriod.ONE_WEEK
+                    "1M" -> GraphPeriod.ONE_MONTH
+                    "1Y" -> GraphPeriod.ONE_YEAR
+                    else -> GraphPeriod.ONE_DAY
                 }
 
                 val showSource = priceJson["showSource"]?.jsonPrimitive?.content
                     ?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updatePricePreferences(
-                    to.bitkit.models.widget.PricePreferences(
+                    PricePreferences(
                         enabledPairs = selectedPairs,
                         period = period,
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate price preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate price preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["weather"]?.let { weatherData ->
-            try {
-                val weatherJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+            runCatching {
+                val weatherJson = json.decodeFromString<JsonObject>(
                     weatherData.decodeToString()
                 )
                 val showTitle = weatherJson["showStatus"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
@@ -958,21 +865,21 @@ class MigrationService @Inject constructor(
                     ?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateWeatherPreferences(
-                    to.bitkit.models.widget.WeatherPreferences(
+                    WeatherPreferences(
                         showTitle = showTitle,
                         showDescription = showDescription,
                         showCurrentFee = showCurrentFee,
                         showNextBlockFee = showNextBlockFee
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate weather preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate weather preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["news"]?.let { newsData ->
-            try {
-                val newsJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+            runCatching {
+                val newsJson = json.decodeFromString<JsonObject>(
                     newsData.decodeToString()
                 )
                 val showTime = newsJson["showDate"]?.jsonPrimitive?.content
@@ -981,19 +888,19 @@ class MigrationService @Inject constructor(
                     ?.toBooleanStrictOrNull() ?: true
 
                 widgetsStore.updateHeadlinePreferences(
-                    to.bitkit.models.widget.HeadlinePreferences(
+                    HeadlinePreferences(
                         showTime = showTime,
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate news preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate news preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["blocks"]?.let { blocksData ->
-            try {
-                val blocksJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+            runCatching {
+                val blocksJson = json.decodeFromString<JsonObject>(
                     blocksData.decodeToString()
                 )
                 val showBlock = blocksJson["height"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
@@ -1005,7 +912,7 @@ class MigrationService @Inject constructor(
                 val showSource = blocksJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateBlocksPreferences(
-                    to.bitkit.models.widget.BlocksPreferences(
+                    BlocksPreferences(
                         showBlock = showBlock,
                         showTime = showTime,
                         showDate = showDate,
@@ -1014,25 +921,25 @@ class MigrationService @Inject constructor(
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate blocks preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate blocks preferences: $it", it, context = TAG)
             }
         }
 
         widgetOptions["facts"]?.let { factsData ->
-            try {
-                val factsJson = json.decodeFromString<kotlinx.serialization.json.JsonObject>(
+            runCatching {
+                val factsJson = json.decodeFromString<JsonObject>(
                     factsData.decodeToString()
                 )
                 val showSource = factsJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateFactsPreferences(
-                    to.bitkit.models.widget.FactsPreferences(
+                    FactsPreferences(
                         showSource = showSource
                     )
                 )
-            } catch (e: Exception) {
-                Logger.error("Failed to migrate facts preferences: $e", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to migrate facts preferences: $it", it, context = TAG)
             }
         }
     }
@@ -1040,12 +947,12 @@ class MigrationService @Inject constructor(
     private suspend fun migrateMMKVData() {
         val mmkvData = loadRNMmkvData() ?: return
 
-        extractRNActivities(mmkvData)?.let { activities ->
-            applyRNActivities(activities)
+        extractRNActivities(mmkvData)?.let {
+            applyRNActivities(it)
         }
 
-        extractRNClosedChannels(mmkvData)?.let { channels ->
-            applyRNClosedChannels(channels)
+        extractRNClosedChannels(mmkvData)?.let {
+            applyRNClosedChannels(it)
         }
 
         extractRNSettings(mmkvData)?.let { settings ->
@@ -1063,13 +970,35 @@ class MigrationService @Inject constructor(
         extractRNTodos(mmkvData)?.let { todos ->
             applyRNTodos(todos)
         }
+
+        extractRNBlocktank(mmkvData)?.let { (orderIds, paidOrders) ->
+            applyRNBlocktank(orderIds, paidOrders)
+        }
     }
 
-    suspend fun hasRNRemoteBackup(): Boolean = runCatching {
-        rnBackupClient.hasBackup()
-    }.onFailure { e ->
-        Logger.error("Failed to check RN remote backup", e, context = TAG)
-    }.getOrDefault(false)
+    private suspend fun applyRNBlocktank(orderIds: List<String>, paidOrders: Map<String, String>) {
+        if (orderIds.isEmpty()) return
+
+        paidOrders.forEach { (orderId, txId) ->
+            cacheStore.addPaidOrder(orderId, txId)
+        }
+
+        runCatching {
+            val fetchedOrders = coreService.blocktank.orders(
+                orderIds = orderIds,
+                filter = null,
+                refresh = true,
+            )
+            if (fetchedOrders.isNotEmpty()) {
+                coreService.blocktank.upsertOrderList(fetchedOrders)
+                if (paidOrders.isNotEmpty()) {
+                    createTransfersForPaidOrders(paidOrders, fetchedOrders)
+                }
+            }
+        }.onFailure { e ->
+            Logger.warn("Failed to fetch and upsert local Blocktank orders: $e", context = TAG)
+        }
+    }
 
     suspend fun getRNRemoteBackupTimestamp(): ULong? = runCatching {
         rnBackupClient.getLatestBackupTimestamp()
@@ -1204,7 +1133,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRNRemoteMetadata(data: ByteArray) {
+    private fun applyRNRemoteMetadata(data: ByteArray) {
         runCatching {
             pendingRemoteMetadata = decodeBackupData<RNMetadata>(data)
         }.onFailure { e ->
@@ -1212,7 +1141,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private suspend fun applyRNRemoteWallet(data: ByteArray) {
+    private fun applyRNRemoteWallet(data: ByteArray) {
         runCatching {
             val backup = decodeBackupData<RNRemoteWalletBackup>(data)
 
@@ -1255,32 +1184,54 @@ class MigrationService @Inject constructor(
     private suspend fun applyRNRemoteBlocktank(data: ByteArray) {
         runCatching {
             val backup = decodeBackupData<RNRemoteBlocktankBackup>(data)
-            val orderIds = mutableListOf<String>()
 
-            backup.orders?.let { orders ->
-                orderIds.addAll(orders.map { it.id })
-            }
-
-            backup.paidOrders?.let { paidOrderIds ->
-                orderIds.addAll(paidOrderIds)
-            }
-
-            if (orderIds.isNotEmpty()) {
-                runCatching {
-                    val fetchedOrders = coreService.blocktank.orders(
-                        orderIds = orderIds,
-                        filter = null,
-                        refresh = true,
-                    )
-                    if (fetchedOrders.isNotEmpty()) {
-                        coreService.blocktank.upsertOrderList(fetchedOrders)
-                    }
-                }.onFailure { e ->
-                    Logger.warn("Failed to fetch and upsert Blocktank orders: $e", context = TAG)
+            backup.paidOrders?.let { paidOrders ->
+                paidOrders.forEach { (orderId, txId) ->
+                    cacheStore.addPaidOrder(orderId, txId)
+                }
+                if (paidOrders.isNotEmpty()) {
+                    pendingRemotePaidOrders = paidOrders
                 }
             }
         }.onFailure { e ->
             Logger.warn("Failed to decode RN remote blocktank backup: $e", context = TAG)
+        }
+    }
+
+    private suspend fun createTransfersForPaidOrders(
+        paidOrdersMap: Map<String, String>,
+        orders: List<com.synonym.bitkitcore.IBtOrder>,
+    ) {
+        val now = System.currentTimeMillis() / 1000
+        val transfers = paidOrdersMap.mapNotNull { (orderId, txId) ->
+            val order = orders.find { it.id == orderId }
+            when {
+                order == null -> {
+                    Logger.warn("Paid order $orderId not found in fetched orders", context = TAG)
+                    null
+                }
+                order.state2 == com.synonym.bitkitcore.BtOrderState2.EXECUTED -> null
+                else -> TransferEntity(
+                    id = txId,
+                    type = TransferType.TO_SPENDING,
+                    amountSats = (order.clientBalanceSat.safe() + order.feeSat.safe()).toLong(),
+                    channelId = null,
+                    fundingTxId = null,
+                    lspOrderId = orderId,
+                    isSettled = false,
+                    createdAt = now,
+                    settledAt = null,
+                )
+            }
+        }
+
+        if (transfers.isNotEmpty()) {
+            runCatching {
+                transferDao.upsert(transfers)
+                Logger.info("Created ${transfers.size} transfers for paid Blocktank orders", context = TAG)
+            }.onFailure { e ->
+                Logger.error("Failed to create transfers for paid orders: $e", context = TAG)
+            }
         }
     }
 
@@ -1327,6 +1278,31 @@ class MigrationService @Inject constructor(
             applyRNMetadata(metadata)
             pendingRemoteMetadata = null
         }
+
+        pendingRemotePaidOrders?.let { paidOrders ->
+            applyRemotePaidOrders(paidOrders)
+            pendingRemotePaidOrders = null
+        }
+    }
+
+    private suspend fun applyRemotePaidOrders(paidOrders: Map<String, String>) {
+        if (paidOrders.isEmpty()) return
+
+        val orderIds = paidOrders.keys.toList()
+
+        runCatching {
+            val fetchedOrders = coreService.blocktank.orders(
+                orderIds = orderIds,
+                filter = null,
+                refresh = true,
+            )
+            if (fetchedOrders.isNotEmpty()) {
+                coreService.blocktank.upsertOrderList(fetchedOrders)
+                createTransfersForPaidOrders(paidOrders, fetchedOrders)
+            }
+        }.onFailure { e ->
+            Logger.warn("Failed to fetch and process remote paid orders: $e", context = TAG)
+        }
     }
 
     private suspend fun applyRemoteTransfers(transfers: Map<String, String>) {
@@ -1356,7 +1332,7 @@ class MigrationService @Inject constructor(
                     boostTxIds = updatedParentBoostTxIds,
                 )
 
-                var updatedNewOnchain = newOnchain.copy(
+                val updatedNewOnchain = newOnchain.copy(
                     isBoosted = false,
                     boostTxIds = newOnchain.boostTxIds.filter { it != oldTxId },
                 )
@@ -1427,7 +1403,7 @@ class MigrationService @Inject constructor(
         var wasUpdated = false
 
         if (item.timestamp > 0) {
-            val migratedTimestamp = (item.timestamp / MILLISECONDS_TO_SECONDS).toULong()
+            val migratedTimestamp = (item.timestamp / MS_PER_SEC).toULong()
             if (updated.timestamp != migratedTimestamp) {
                 updated = updated.copy(timestamp = migratedTimestamp)
                 wasUpdated = true
@@ -1435,7 +1411,7 @@ class MigrationService @Inject constructor(
         }
         item.confirmTimestamp?.let { confirmTimestamp ->
             if (confirmTimestamp > 0) {
-                val migratedConfirmTimestamp = (confirmTimestamp / MILLISECONDS_TO_SECONDS).toULong()
+                val migratedConfirmTimestamp = (confirmTimestamp / MS_PER_SEC).toULong()
                 if (updated.confirmTimestamp != migratedConfirmTimestamp) {
                     updated = updated.copy(confirmTimestamp = migratedConfirmTimestamp)
                     wasUpdated = true
@@ -1510,15 +1486,15 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     private fun convertRNWidgetPreferences(
-        widgetsDict: kotlinx.serialization.json.JsonObject?
+        widgetsDict: JsonObject?,
     ): Map<String, ByteArray> {
         val result = mutableMapOf<String, ByteArray>()
         if (widgetsDict == null) return result
 
         fun getBool(
-            source: kotlinx.serialization.json.JsonObject,
+            source: JsonObject,
             key: String,
             fallbackKey: String? = null,
             defaultValue: Boolean = false,
@@ -1526,15 +1502,16 @@ class MigrationService @Inject constructor(
             val keys = if (fallbackKey != null) listOf(key, fallbackKey) else listOf(key)
             for (k in keys) {
                 source[k]?.let { element ->
-                    when {
-                        element is kotlinx.serialization.json.JsonPrimitive && element.isString -> {
-                            val str = element.content.lowercase()
-                            return str == "true" || str == "1"
+                    when (element) {
+                        is JsonPrimitive -> {
+                            return if (element.isString) {
+                                val str = element.content.lowercase()
+                                str == "true" || str == "1"
+                            } else {
+                                element.content.toBooleanStrictOrNull() ?: defaultValue
+                            }
                         }
-                        element is kotlinx.serialization.json.JsonPrimitive -> {
-                            return element.content.toBooleanStrictOrNull()
-                                ?: defaultValue
-                        }
+
                         else -> continue
                     }
                 }
@@ -1550,7 +1527,7 @@ class MigrationService @Inject constructor(
             val mappedPairs = pairsArray?.mapNotNull { pairElement ->
                 pairElement.jsonPrimitive.content.replace("_", "/")
             } ?: emptyList()
-            val selectedPairs = if (mappedPairs.isNotEmpty()) mappedPairs else listOf("BTC/USD")
+            val selectedPairs = mappedPairs.ifEmpty { listOf("BTC/USD") }
 
             val rnPeriod = prefs["period"]?.jsonPrimitive?.content ?: "1D"
             val periodMap = mapOf(
@@ -1622,7 +1599,25 @@ class MigrationService @Inject constructor(
 data class PendingChannelMigration(
     val channelManager: ByteArray,
     val channelMonitors: List<ByteArray>,
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as PendingChannelMigration
+
+        if (!channelManager.contentEquals(other.channelManager)) return false
+        if (channelMonitors != other.channelMonitors) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = channelManager.contentHashCode()
+        result = 31 * result + channelMonitors.hashCode()
+        return result
+    }
+}
 
 @Serializable
 data class RNSettings(
@@ -1761,8 +1756,76 @@ data class RNWidgetsWithOptions(
     val widgetOptions: Map<String, ByteArray>,
 )
 
+private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore("rn_migration")
+private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore("RN_KEYCHAIN")
+
 private enum class RNKeychainKey(val service: String) {
     MNEMONIC("wallet0"),
     PASSPHRASE("wallet0passphrase"),
     PIN("pin"),
 }
+
+@Serializable
+private data class RNWalletState(val wallets: Map<String, RNWalletData>? = null)
+
+@Serializable
+private data class RNWalletData(
+    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
+    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+)
+
+@Serializable
+private data class RNRemoteActivityItem(
+    val id: String,
+    val activityType: String,
+    val txType: String,
+    val txId: String? = null,
+    val value: Long,
+    val fee: Long? = null,
+    val feeRate: Long? = null,
+    val address: String? = null,
+    val confirmed: Boolean? = null,
+    val timestamp: Long,
+    val isBoosted: Boolean? = null,
+    val isTransfer: Boolean? = null,
+    val exists: Boolean? = null,
+    val confirmTimestamp: Long? = null,
+    val channelId: String? = null,
+    val transferTxId: String? = null,
+    val status: String? = null,
+    val message: String? = null,
+    val preimage: String? = null,
+    val boostedParents: List<String>? = null,
+)
+
+@Serializable
+private data class RNRemoteWalletBackup(
+    val transfers: Map<String, List<RNRemoteTransfer>>? = null,
+    val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+)
+
+@Serializable
+private data class RNRemoteTransfer(val txId: String? = null, val type: String? = null)
+
+@Serializable
+private data class RNRemoteBoostedTx(
+    val oldTxId: String? = null,
+    val newTxId: String? = null,
+    val childTransaction: String? = null,
+)
+
+@Serializable
+private data class RNRemoteBlocktankBackup(
+    val orders: List<RNRemoteBlocktankOrder>? = null,
+    val paidOrders: Map<String, String>? = null,
+)
+
+@Serializable
+private data class RNRemoteBlocktankOrder(
+    val id: String,
+    val state: String? = null,
+    val lspBalanceSat: ULong? = null,
+    val clientBalanceSat: ULong? = null,
+    val channelExpiryWeeks: Int? = null,
+    val createdAt: String? = null,
+)
