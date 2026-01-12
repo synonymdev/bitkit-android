@@ -95,6 +95,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.SweepRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.AppUpdaterService
@@ -142,6 +143,7 @@ class AppViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
+    private val sweepRepo: SweepRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
@@ -376,6 +378,7 @@ class AppViewModel @Inject constructor(
         walletRepo.syncBalances()
         migrationService.setRestoringFromRNRemoteBackup(false)
         migrationService.setShowingMigrationLoading(false)
+        checkForSweepableFunds()
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
@@ -424,12 +427,7 @@ class AppViewModel @Inject constructor(
         migrationService.setShowingMigrationLoading(false)
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
-
-        toast(
-            type = Toast.ToastType.SUCCESS,
-            title = "Migration Complete",
-            description = "Your wallet has been successfully migrated"
-        )
+        checkForSweepableFunds()
     }
 
     private suspend fun finishMigrationWithFallbackSync() {
@@ -443,12 +441,7 @@ class AppViewModel @Inject constructor(
         migrationService.setShowingMigrationLoading(false)
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
-
-        toast(
-            type = Toast.ToastType.SUCCESS,
-            title = "Migration Complete",
-            description = "Your wallet has been successfully migrated"
-        )
+        checkForSweepableFunds()
     }
 
     private suspend fun finishMigrationWithError() {
@@ -460,6 +453,13 @@ class AppViewModel @Inject constructor(
             title = "Migration Warning",
             description = "Migration completed but node restart failed. Please restart the app."
         )
+    }
+
+    fun checkForSweepableFunds() {
+        viewModelScope.launch(bgDispatcher) {
+            sweepRepo.hasSweepableFunds()
+                .onSuccess { hasFunds -> if (hasFunds) showSheet(Sheet.SweepPrompt) }
+        }
     }
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
@@ -1835,7 +1835,7 @@ class AppViewModel @Inject constructor(
     // region security
     private suspend fun resetIsAuthenticatedStateInternal() {
         val settings = settingsStore.data.first()
-        val needsAuth = settings.isPinEnabled && settings.isPinOnLaunchEnabled
+        val needsAuth = settings.isPinEnabled
         _isAuthenticated.value = !needsAuth
     }
 
@@ -1875,7 +1875,6 @@ class AppViewModel @Inject constructor(
 
     fun addPin(pin: String) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(isPinOnLaunchEnabled = true) }
             settingsStore.addDismissedSuggestion(Suggestion.SECURE)
         }
         editPin(pin)
