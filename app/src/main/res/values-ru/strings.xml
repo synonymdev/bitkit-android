@@ -260,7 +260,7 @@
     <string name="lightning__wait_text_bottom">Подключение и Синхронизация...</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;Условия использования&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Условия использования</string>
-    <string name="onboarding__tos_checkbox_value">Я подтверждаю, что прочитал и принимаю &lt;accent&gt;Условия использования.&lt;/accent&gt;</string>
+    <string name="onboarding__tos_checkbox_value">Я подтверждаю, что прочитал и принимаю Условия использования.</string>
     <string name="onboarding__pp_checkbox">Политика Конфиденциальности</string>
     <string name="onboarding__pp_checkbox_value">Я подтверждаю, что прочитал и принимаю &lt;accent&gt;Политику Конфиденциальности.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_title">С вами начинается &lt;accent&gt;изменение&lt;/accent&gt;</string>

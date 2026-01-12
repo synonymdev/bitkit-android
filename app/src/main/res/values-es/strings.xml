@@ -177,7 +177,7 @@
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 segundos).</string>
     <string name="lightning__wait_text_bottom">Conectando y Sincronizando...</string>
     <string name="onboarding__tos_checkbox">Condiciones de uso</string>
-    <string name="onboarding__tos_checkbox_value">Declaro que he leído y acepto los &lt;accent&gt;términos de uso.&lt;/accent&gt;</string>
+    <string name="onboarding__tos_checkbox_value">Declaro que he leído y acepto los términos de uso.</string>
     <string name="onboarding__pp_checkbox">Política de privacidad</string>
     <string name="onboarding__pp_checkbox_value">Declaro que he leído y acepto la &lt;accent&gt;política de privacidad.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Use Bitkit para pagar a cualquiera, en cualquier sitio, en cualquier momento, y gaste su bitcoin en las cosa que valora en la vida.</string>

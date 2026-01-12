@@ -280,7 +280,7 @@
     <string name="lightning__wait_text_bottom">Connecting &amp; Syncing...</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;terms of use&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Terms of use</string>
-    <string name="onboarding__tos_checkbox_value">I declare that I have read and accept the &lt;accent&gt;terms of use.&lt;/accent&gt;</string>
+    <string name="onboarding__tos_checkbox_value">I declare that I have read and accept the terms of use.</string>
     <string name="onboarding__pp_checkbox">Privacy Policy</string>
     <string name="onboarding__pp_checkbox_value">I declare that I have read and accept the &lt;accent&gt;privacy policy.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_title">You can ₿ \n&lt;accent&gt;the change&lt;/accent&gt;</string>

@@ -275,7 +275,7 @@
     <string name="lightning__wait_text_bottom">Podłączanie i synchronizacja...</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;warunki użytkowania&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Warunki użytkowania</string>
-    <string name="onboarding__tos_checkbox_value">Oświadczam, że zapoznałem się i akceptuję &lt;accent&gt;warunki użytkowania.&lt;/accent&gt;</string>
+    <string name="onboarding__tos_checkbox_value">Oświadczam, że zapoznałem się i akceptuję warunki użytkowania.</string>
     <string name="onboarding__pp_checkbox">Polityka prywatności</string>
     <string name="onboarding__pp_checkbox_value">Oświadczam, że zapoznałem się i akceptuję &lt;accent&gt;politykę prywatności.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_title">Możesz ₿yć \n&lt;accent&gt;zmianą&lt;/accent&gt;</string>
