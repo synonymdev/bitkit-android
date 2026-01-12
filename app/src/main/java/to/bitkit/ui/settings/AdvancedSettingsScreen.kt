@@ -57,6 +57,9 @@ fun AdvancedSettingsScreen(
         onAddressViewerClick = {
             navController.navigate(Routes.AddressViewer)
         },
+        onSweepFundsClick = {
+            navController.navigate(Routes.SweepNav)
+        },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
         onResetSuggestionsDialogConfirm = {
             viewModel.resetSuggestions()
@@ -77,6 +80,7 @@ private fun Content(
     onElectrumServerClick: () -> Unit = {},
     onRgsServerClick: () -> Unit = {},
     onAddressViewerClick: () -> Unit = {},
+    onSweepFundsClick: () -> Unit = {},
     onSuggestionsResetClick: () -> Unit = {},
     onResetSuggestionsDialogConfirm: () -> Unit = {},
     onResetSuggestionsDialogCancel: () -> Unit = {},
@@ -137,6 +141,12 @@ private fun Content(
                 title = stringResource(R.string.settings__adv__address_viewer),
                 onClick = onAddressViewerClick,
                 modifier = Modifier.testTag("AddressViewer"),
+            )
+
+            SettingsButtonRow(
+                title = stringResource(R.string.sweep__nav_title),
+                onClick = onSweepFundsClick,
+                modifier = Modifier.testTag("SweepFunds"),
             )
 
             SettingsButtonRow(

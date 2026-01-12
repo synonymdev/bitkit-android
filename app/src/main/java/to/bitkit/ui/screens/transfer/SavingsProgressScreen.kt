@@ -1,7 +1,5 @@
 package to.bitkit.ui.screens.transfer
 
-import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -56,7 +54,6 @@ fun SavingsProgressScreen(
     onContinueClick: () -> Unit = {},
     onTransferUnavailable: () -> Unit = {},
 ) {
-    val window = LocalActivity.current?.window
     val context = LocalContext.current
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
 
@@ -66,8 +63,6 @@ fun SavingsProgressScreen(
         val channelsFailedToCoopClose = transfer.closeSelectedChannels()
 
         if (channelsFailedToCoopClose.isEmpty()) {
-            window?.clearFlags(FLAG_KEEP_SCREEN_ON)
-
             wallet.refreshState()
             delay(5000)
             progressState = SavingsProgressState.SUCCESS
@@ -77,7 +72,6 @@ fun SavingsProgressScreen(
 
             if (nonTrustedChannels.isEmpty()) {
                 // All channels are trusted peers - show error and navigate back immediately
-                window?.clearFlags(FLAG_KEEP_SCREEN_ON)
                 app.toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.lightning__close_error),
@@ -89,7 +83,6 @@ fun SavingsProgressScreen(
                     channels = nonTrustedChannels,
                     onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
                     onTransferUnavailable = {
-                        window?.clearFlags(FLAG_KEEP_SCREEN_ON)
                         app.toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.lightning__close_error),
@@ -104,17 +97,10 @@ fun SavingsProgressScreen(
         }
     }
 
-    // Keeps screen on while this view is active
-    DisposableEffect(Unit) {
-        window?.addFlags(FLAG_KEEP_SCREEN_ON)
-        onDispose {
-            window?.clearFlags(FLAG_KEEP_SCREEN_ON)
-        }
-    }
-
     Content(
         progressState = progressState,
         onContinueClick = { onContinueClick() },
+        modifier = Modifier.keepScreenOn(),
     )
 }
 
@@ -122,10 +108,11 @@ fun SavingsProgressScreen(
 private fun Content(
     progressState: SavingsProgressState,
     onContinueClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     val inProgress = progressState == SavingsProgressState.PROGRESS
     ScreenColumn(
-        modifier = Modifier.testTag(if (inProgress) "TransferSettingUp" else "TransferSuccess")
+        modifier = modifier.testTag(if (inProgress) "TransferSettingUp" else "TransferSuccess")
     ) {
         AppTopBar(
             titleText = when (progressState) {
