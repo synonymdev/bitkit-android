@@ -86,14 +86,14 @@ fun TermsOfUseScreen(
             ) {
                 TermsText(
                     title = stringResource(R.string.onboarding__tos_checkbox),
-                    htmlText = AnnotatedString(stringResource(R.string.onboarding__tos_checkbox_value)),
+                    bodyText = AnnotatedString(stringResource(R.string.onboarding__tos_checkbox_value)),
                     modifier = Modifier
                         .padding(horizontal = horizontalPadding)
                         .testTag("Check1")
                 )
                 TermsText(
                     title = stringResource(R.string.onboarding__pp_checkbox),
-                    htmlText = stringResource(R.string.onboarding__pp_checkbox_value)
+                    bodyText = stringResource(R.string.onboarding__pp_checkbox_value)
                         .withAccentLink(Env.PRIVACY_POLICY_URL),
                     modifier = Modifier
                         .padding(horizontal = horizontalPadding)
@@ -117,7 +117,7 @@ fun TermsOfUseScreen(
 @Composable
 private fun TermsText(
     title: String,
-    htmlText: AnnotatedString,
+    bodyText: AnnotatedString,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -128,7 +128,7 @@ private fun TermsText(
         VerticalSpacer(14.dp)
         BodyMSB(title)
         VerticalSpacer(4.dp)
-        BodySSB(text = htmlText, color = Colors.White64)
+        BodySSB(text = bodyText, color = Colors.White64)
         VerticalSpacer(14.dp)
         HorizontalDivider()
     }
