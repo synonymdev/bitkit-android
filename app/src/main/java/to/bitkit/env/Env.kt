@@ -146,12 +146,6 @@ internal object Env {
             else -> "https://bitkit.stag0.blocktank.to/backups-ldk"
         }
 
-    val rnBackupServerPubKey: String
-        get() = when (network) {
-            Network.BITCOIN -> "0236efd76e37f96cf2dced9d52ff84c97e5b3d4a75e7d494807291971783f38377"
-            else -> "02c03b8b8c1b5500b622646867d99bf91676fac0f38e2182c91a9ff0d053a21d6d"
-        }
-
     // endregion
 
     // region paths
