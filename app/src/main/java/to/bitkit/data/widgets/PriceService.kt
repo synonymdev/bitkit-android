@@ -180,6 +180,6 @@ class PriceService @Inject constructor(
  * Price-specific error types
  */
 sealed class PriceError(message: String) : AppError(message) {
-    data class InvalidResponse(override val message: String) : PriceError(message)
-    data class NetworkError(override val message: String) : PriceError(message)
+    class InvalidResponse(override val message: String) : PriceError(message)
+    class NetworkError(override val message: String) : PriceError(message)
 }

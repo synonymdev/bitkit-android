@@ -33,10 +33,10 @@ class CurrencyService @Inject constructor(
             }
         }
 
-        throw lastError ?: CurrencyError.Unknown
+        throw lastError ?: CurrencyError.Unknown()
     }
 }
 
 sealed class CurrencyError(message: String) : AppError(message) {
-    data object Unknown : CurrencyError("Unknown error occurred while fetching rates")
+    class Unknown : CurrencyError("Unknown error occurred while fetching rates")
 }

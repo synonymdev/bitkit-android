@@ -101,5 +101,5 @@ class BlocksService @Inject constructor(
  * Block-specific error types
  */
 sealed class BlockError(message: String) : AppError(message) {
-    data class InvalidResponse(override val message: String) : BlockError(message)
+    class InvalidResponse(override val message: String) : BlockError(message)
 }
