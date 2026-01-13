@@ -186,7 +186,9 @@ fun BlocksEditContent(
 
             PrimaryButton(
                 text = stringResource(R.string.common__preview),
-                enabled = blocksPreferences.run { showBlock || showTime || showDate || showTransactions || showSize || showSource },
+                enabled = blocksPreferences.run {
+                    showBlock || showTime || showDate || showTransactions || showSize || showSource
+                },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("WidgetEditPreview"),

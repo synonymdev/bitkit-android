@@ -43,8 +43,8 @@ import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-@Suppress("TooManyFunctions")
 @OptIn(ExperimentalTime::class)
+@Suppress("TooManyFunctions")
 @Singleton
 class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -133,7 +133,7 @@ class CurrencyRepo @Inject constructor(
     private suspend fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
-        try {
+        runCatching {
             val fetchedRates = currencyService.fetchLatestRates()
             cacheStore.update { it.copy(cachedRates = fetchedRates) }
             _currencyState.update {
@@ -144,7 +144,7 @@ class CurrencyRepo @Inject constructor(
                 )
             }
             Logger.debug("Currency rates refreshed successfully", context = TAG)
-        } catch (e: Exception) {
+        }.onFailure { e ->
             Logger.error("Currency rates refresh failed", e, context = TAG)
             _currencyState.update { it.copy(error = e) }
 
@@ -152,9 +152,8 @@ class CurrencyRepo @Inject constructor(
                 val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
                 _currencyState.update { it.copy(hasStaleData = isStale) }
             }
-        } finally {
-            isRefreshing = false
         }
+        isRefreshing = false
     }
 
     suspend fun switchUnit() = withContext(bgDispatcher) {

@@ -31,6 +31,7 @@ private val Context.widgetsDataStore: DataStore<WidgetsData> by dataStore(
     serializer = WidgetsSerializer,
 )
 
+@Suppress("TooManyFunctions")
 @Singleton
 class WidgetsStore @Inject constructor(
     @ApplicationContext private val context: Context,

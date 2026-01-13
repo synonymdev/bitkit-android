@@ -246,6 +246,7 @@ private fun PreviewShown() {
     }
 }
 
+@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview24Words() {

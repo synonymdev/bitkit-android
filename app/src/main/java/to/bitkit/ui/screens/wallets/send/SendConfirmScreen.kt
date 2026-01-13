@@ -85,6 +85,7 @@ import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import java.time.Instant
 
+@Suppress("MagicNumber")
 @Composable
 fun SendConfirmScreen(
     savedStateHandle: SavedStateHandle,
@@ -600,6 +601,7 @@ private fun sendUiState() = SendUiState(
     ),
 )
 
+@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "onchain")
 @Composable
 private fun PreviewOnChain() {
@@ -620,6 +622,7 @@ private fun PreviewOnChain() {
     }
 }
 
+@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "onchain", device = Devices.NEXUS_5)
 @Composable
 private fun PreviewOnChainLongFeeSmallScreen() {
@@ -660,6 +663,7 @@ private fun PreviewOnChainFeeLoading() {
     }
 }
 
+@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun PreviewLightning() {

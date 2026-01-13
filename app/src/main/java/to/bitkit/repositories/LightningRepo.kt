@@ -74,7 +74,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
 class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
@@ -149,6 +149,7 @@ class LightningRepo @Inject constructor(
         return@withContext executeOperation(operationName, operation)
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun <T> executeOperation(
         operationName: String,
         operation: suspend () -> Result<T>,
@@ -164,6 +165,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun setup(
         walletIndex: Int,
         customServerUrl: String? = null,
@@ -190,7 +192,7 @@ class LightningRepo @Inject constructor(
         Logger.warn("Failed to get trusted peers from blocktank", e = it, context = TAG)
     }.getOrNull()
 
-    @Suppress("LongMethod", "LongParameterList")
+    @Suppress("LongMethod", "LongParameterList", "TooGenericExceptionCaught")
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
@@ -299,6 +301,7 @@ class LightningRepo @Inject constructor(
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
             return@withContext Result.success(Unit)
@@ -390,6 +393,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun registerClosedChannel(channelId: String, reason: ClosureReason?) = withContext(bgDispatcher) {
         try {
             val channel = channelCache[channelId] ?: run {
@@ -438,6 +442,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
         stop().onSuccess {
@@ -758,6 +763,7 @@ class LightningRepo @Inject constructor(
         lightningService.listSpendableOutputs()
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun calculateTotalFee(
         amountSats: ULong,
         address: Address? = null,
@@ -885,6 +891,7 @@ class LightningRepo @Inject constructor(
         channels: List<ChannelDetails>,
     ): Pair<List<ChannelDetails>, List<ChannelDetails>> = lightningService.separateTrustedChannels(channels)
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
         return@executeWhenNodeRunning try {
             val token = token ?: firebaseMessaging.token.await()
@@ -907,6 +914,7 @@ class LightningRepo @Inject constructor(
 
     fun registerForNotificationsAsync(token: String) = scope.launch { registerForNotifications(token) }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
         satsPerVByte: ULong,
@@ -929,7 +937,8 @@ class LightningRepo @Inject constructor(
                 satsPerVByte = satsPerVByte,
             )
             Logger.debug(
-                "bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte"
+                "bumpFeeByRbf success, replacementTxId: $replacementTxId " +
+                    "originalTxId: $originalTxId, satsPerVByte: $satsPerVByte"
             )
             Result.success(replacementTxId)
         } catch (e: Throwable) {
@@ -942,6 +951,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun accelerateByCpfp(
         originalTxId: Txid,
         satsPerVByte: ULong,
@@ -972,12 +982,15 @@ class LightningRepo @Inject constructor(
                 toAddress = destinationAddress,
             )
             Logger.debug(
-                "accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"
+                "accelerateByCpfp success, newDestinationTxId: $newDestinationTxId " +
+                    "originalTxId: $originalTxId, satsPerVByte: $satsPerVByte " +
+                    "destinationAddress: $destinationAddress"
             )
             Result.success(newDestinationTxId)
         } catch (e: Throwable) {
             Logger.error(
-                "accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress",
+                "accelerateByCpfp error originalTxId: $originalTxId, " +
+                    "satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress",
                 e,
                 context = TAG
             )

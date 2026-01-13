@@ -1,5 +1,3 @@
-@file:Suppress("TooManyFunctions")
-
 package to.bitkit.ext
 
 import android.icu.text.DateFormat

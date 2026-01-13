@@ -25,17 +25,6 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 
-object CoinSelectPreferenceTestTags {
-    const val SCREEN = "coin_select_preference_screen"
-    const val MANUAL_BUTTON = "manual_button"
-    const val AUTOPILOT_BUTTON = "autopilot_button"
-    const val LARGEST_FIRST_BUTTON = "largest_first_button"
-    const val CONSOLIDATE_BUTTON = "consolidate_button"
-    const val FIRST_IN_FIRST_OUT_BUTTON = "first_in_first_out_button"
-    const val BRANCH_AND_BOUND_BUTTON = "branch_and_bound_button"
-    const val SINGLE_RANDOM_DRAW_BUTTON = "single_random_draw_button"
-}
-
 @Composable
 fun CoinSelectPreferenceScreen(
     navController: NavController,
@@ -166,7 +155,18 @@ private fun Content(
     }
 }
 
-@Preview
+object CoinSelectPreferenceTestTags {
+    const val SCREEN = "coin_select_preference_screen"
+    const val MANUAL_BUTTON = "manual_button"
+    const val AUTOPILOT_BUTTON = "autopilot_button"
+    const val LARGEST_FIRST_BUTTON = "largest_first_button"
+    const val CONSOLIDATE_BUTTON = "consolidate_button"
+    const val FIRST_IN_FIRST_OUT_BUTTON = "first_in_first_out_button"
+    const val BRANCH_AND_BOUND_BUTTON = "branch_and_bound_button"
+    const val SINGLE_RANDOM_DRAW_BUTTON = "single_random_draw_button"
+}
+
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -178,9 +178,9 @@ private fun Preview() {
     }
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
-private fun Preview2() {
+private fun PreviewManual() {
     AppThemeSurface {
         Content(
             uiState = CoinSelectPreferenceUiState(

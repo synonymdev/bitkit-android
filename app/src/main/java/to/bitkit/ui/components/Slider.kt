@@ -46,6 +46,7 @@ private const val TRACK_HEIGHT_DP = 8
 private const val STEP_MARKER_WIDTH_DP = 4
 private const val STEP_MARKER_HEIGHT_DP = 16
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun StepSlider(
     value: Int,

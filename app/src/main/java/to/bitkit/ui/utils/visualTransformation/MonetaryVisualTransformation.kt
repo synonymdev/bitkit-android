@@ -91,6 +91,7 @@ class MonetaryVisualTransformation(
         return if (endsWithDecimal) "$formatted." else formatted
     }
 
+    @Suppress("NestedBlockDepth", "LoopWithTooManyJumpStatements")
     private fun createOffsetMapping(original: String, transformed: String): OffsetMapping {
         return object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {

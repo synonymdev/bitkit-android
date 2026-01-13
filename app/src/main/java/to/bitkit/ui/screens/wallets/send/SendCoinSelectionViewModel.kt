@@ -39,34 +39,32 @@ class SendCoinSelectionViewModel @Inject constructor(
         this.onchainActivities = onchainActivities
     }
 
-    fun loadUtxos(requiredAmount: ULong, address: String) {
-        viewModelScope.launch {
-            try {
-                val sortedUtxos = lightningRepo.listSpendableOutputs().getOrThrow()
-                    .sortedByDescending { it.valueSats }
+    fun loadUtxos(requiredAmount: ULong, address: String) = viewModelScope.launch {
+        runCatching {
+            val sortedUtxos = lightningRepo.listSpendableOutputs().getOrThrow()
+                .sortedByDescending { it.valueSats }
 
-                val totalRequired = calculateTotalRequired(
-                    address = address,
-                    amountSats = requiredAmount,
-                    utxosToSpend = sortedUtxos,
+            val totalRequired = calculateTotalRequired(
+                address = address,
+                amountSats = requiredAmount,
+                utxosToSpend = sortedUtxos,
+            )
+
+            val totalSelected = sortedUtxos.sumOf { it.valueSats }
+
+            _uiState.update { state ->
+                state.copy(
+                    availableUtxos = sortedUtxos,
+                    selectedUtxos = sortedUtxos,
+                    autoSelectCoinsOn = true,
+                    totalRequiredSat = totalRequired,
+                    totalSelectedSat = totalSelected,
+                    isSelectionValid = validateCoinSelection(totalSelected, totalRequired),
                 )
-
-                val totalSelected = sortedUtxos.sumOf { it.valueSats }
-
-                _uiState.update { state ->
-                    state.copy(
-                        availableUtxos = sortedUtxos,
-                        selectedUtxos = sortedUtxos,
-                        autoSelectCoinsOn = true,
-                        totalRequiredSat = totalRequired,
-                        totalSelectedSat = totalSelected,
-                        isSelectionValid = validateCoinSelection(totalSelected, totalRequired),
-                    )
-                }
-            } catch (e: Throwable) {
-                Logger.error("Failed to load UTXOs for coin selection", e)
-                ToastEventBus.send(Exception("Failed to load UTXOs: ${e.message}"))
             }
+        }.onFailure {
+            Logger.error("Failed to load UTXOs for coin selection", it)
+            ToastEventBus.send(Exception("Failed to load UTXOs: ${it.message}"))
         }
     }
 

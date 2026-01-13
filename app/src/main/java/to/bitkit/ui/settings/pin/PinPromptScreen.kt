@@ -35,6 +35,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
+@Suppress("MagicNumber")
 @Composable
 fun PinPromptScreen(
     onContinue: () -> Unit,

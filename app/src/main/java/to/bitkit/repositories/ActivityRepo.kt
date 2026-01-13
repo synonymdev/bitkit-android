@@ -45,7 +45,7 @@ import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
 
 private const val SYNC_TIMEOUT_MS = 40_000L
 
-@Suppress("LargeClass", "LongParameterList")
+@Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class ActivityRepo @Inject constructor(
@@ -145,13 +145,12 @@ class ActivityRepo @Inject constructor(
     }
 
     private fun findOpenChannelForTransaction(txid: String): String? {
-        return try {
+        return runCatching {
             val channels = lightningRepo.lightningState.value.channels
             if (channels.isEmpty()) return null
 
-            channels.firstOrNull { channel ->
-                channel.fundingTxo?.txid == txid
-            }?.channelId
+            channels.firstOrNull { channel -> channel.fundingTxo?.txid == txid }
+                ?.channelId
                 ?: run {
                     val orders = blocktankRepo.blocktankState.value.orders
                     val matchingOrder = orders.firstOrNull { order ->
@@ -163,19 +162,16 @@ class ActivityRepo @Inject constructor(
                         channel.fundingTxo?.txid == orderChannel.fundingTx.id
                     }?.channelId
                 }
-        } catch (e: Exception) {
-            Logger.warn("Failed to find open channel for transaction: $txid", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.warn("Failed to find open channel for transaction: '$txid'", it, context = TAG)
+        }.getOrNull()
     }
 
-    private suspend fun findClosedChannelForTransaction(txid: String): String? {
-        return coreService.activity.findClosedChannelForTransaction(txid, null)
-    }
+    private suspend fun findClosedChannelForTransaction(txid: String): String? =
+        coreService.activity.findClosedChannelForTransaction(txid, null)
 
-    suspend fun getOnchainActivityByTxId(txid: String): OnchainActivity? {
-        return coreService.activity.getOnchainActivityByTxId(txid)
-    }
+    suspend fun getOnchainActivityByTxId(txid: String): OnchainActivity? =
+        coreService.activity.getOnchainActivityByTxId(txid)
 
     /**
      * Checks if a transaction is inbound (received) by looking up the payment direction.
@@ -275,51 +271,37 @@ class ActivityRepo @Inject constructor(
         txType: PaymentType?,
         retry: Boolean = true,
     ): Result<Activity> = withContext(bgDispatcher) {
-        if (paymentHashOrTxId.isEmpty()) {
-            return@withContext Result.failure(
-                IllegalArgumentException("paymentHashOrTxId is empty")
-            )
-        }
+        runCatching {
+            require(paymentHashOrTxId.isNotEmpty()) { "paymentHashOrTxId is empty" }
 
-        return@withContext try {
-            suspend fun findActivity(): Activity? = getActivities(
-                filter = type,
-                txType = txType,
-                limit = 10u
-            ).getOrNull()?.firstOrNull { it.matchesPaymentId(paymentHashOrTxId) }
+            suspend fun findActivity(): Activity? = getActivities(filter = type, txType = txType, limit = 10u)
+                .getOrNull()
+                ?.firstOrNull { it.matchesPaymentId(paymentHashOrTxId) }
 
             var activity = findActivity()
             if (activity == null && retry) {
                 Logger.warn(
-                    "activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after sync",
+                    "activity with paymentHashOrTxId:'$paymentHashOrTxId' not found, retrying after sync",
                     context = TAG
                 )
 
-                lightningRepo.sync().onSuccess {
-                    Logger.debug("Syncing LN node SUCCESS", context = TAG)
-                }
+                lightningRepo.sync().onSuccess { Logger.debug("Syncing LN node SUCCESS", context = TAG) }
 
                 syncActivities().onSuccess {
                     Logger.debug(
-                        "Sync success, searching again the activity with paymentHashOrTxId:$paymentHashOrTxId",
+                        "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
                         context = TAG
                     )
                     activity = findActivity()
                 }
             }
 
-            if (activity != null) {
-                Result.success(activity)
-            } else {
-                Result.failure(IllegalStateException("Activity not found"))
-            }
-        } catch (e: Exception) {
+            checkNotNull(activity) { "Activity not found" }
+        }.onFailure {
             Logger.error(
-                "findActivityByPaymentId error. Parameters:" +
-                    "\n paymentHashOrTxId:$paymentHashOrTxId type:$type txType:$txType",
+                "findActivityByPaymentId error (paymentHashOrTxId:'$paymentHashOrTxId' type:'$type' txType:'$txType')",
                 context = TAG
             )
-            Result.failure(e)
         }
     }
 

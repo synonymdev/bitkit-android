@@ -498,6 +498,7 @@ private fun SectionTitle(text: String) {
     VerticalSpacer(8.dp)
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun SectionRow(
     name: String,

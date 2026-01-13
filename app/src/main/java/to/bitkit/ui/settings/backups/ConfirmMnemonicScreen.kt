@@ -39,6 +39,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ConfirmMnemonicScreen(
     uiState: BackupContract.UiState,

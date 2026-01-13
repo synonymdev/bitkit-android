@@ -22,6 +22,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.ElectrumServerPeer
+import to.bitkit.models.MAX_VALID_PORT
 import to.bitkit.models.Toast
 import to.bitkit.models.getDefaultPort
 import to.bitkit.repositories.LightningRepo
@@ -122,19 +123,18 @@ class ElectrumConfigViewModel @Inject constructor(
         }
     }
 
+    @Suppress("ComplexCondition")
     fun connectToServer() {
         val currentState = _uiState.value
         val port = currentState.port.toIntOrNull()
         val protocol = currentState.protocol
 
-        if (currentState.host.isBlank() || port == null || port <= 0 || protocol == null) {
-            return
-        }
+        if (currentState.host.isBlank() || port == null || port <= 0 || protocol == null) return
 
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(bgDispatcher) {
-            try {
+            runCatching {
                 val electrumServer = ElectrumServer.fromUserInput(
                     host = currentState.host,
                     port = port,
@@ -153,7 +153,7 @@ class ElectrumConfigViewModel @Inject constructor(
                         }
                     }
                     .onFailure { error -> throw error }
-            } catch (e: Exception) {
+            }.onFailure { e ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -178,7 +178,7 @@ class ElectrumConfigViewModel @Inject constructor(
             error = context.getString(R.string.settings__es__error_port)
         } else {
             val portNumber = port.toIntOrNull()
-            if (portNumber == null || portNumber <= 0 || portNumber > 65535) {
+            if (portNumber == null || portNumber <= 0 || portNumber > MAX_VALID_PORT) {
                 error = context.getString(R.string.settings__es__error_port_invalid)
             }
         }

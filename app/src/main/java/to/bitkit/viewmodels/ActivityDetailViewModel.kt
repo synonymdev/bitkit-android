@@ -200,7 +200,7 @@ class ActivityDetailViewModel @Inject constructor(
         channelId: String?,
         txId: String?,
     ): IBtOrder? = withContext(bgDispatcher) {
-        try {
+        runCatching {
             val orders = blocktankRepo.blocktankState.value.orders
 
             if (channelId != null) {
@@ -214,10 +214,9 @@ class ActivityDetailViewModel @Inject constructor(
             }
 
             null
-        } catch (e: Exception) {
-            Logger.warn("Failed to find order for transfer: channelId=$channelId, txId=$txId", e, context = TAG)
-            null
-        }
+        }.onFailure {
+            Logger.warn("Failed to find order for transfer: channelId='$channelId', txId='$txId'", it, context = TAG)
+        }.getOrNull()
     }
 
     private companion object {

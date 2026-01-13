@@ -156,6 +156,7 @@ class LightningConnectionsViewModel @Inject constructor(
         _selectedChannel.update { updatedChannel?.mapToUiModel() }
     }
 
+    @Suppress("ReturnCount")
     private fun findUpdatedChannel(
         currentChannel: ChannelDetails,
         allChannels: List<ChannelDetails>,
@@ -243,6 +244,7 @@ class LightningConnectionsViewModel @Inject constructor(
         details = this
     )
 
+    @Suppress("ForbiddenComment")
     private fun getChannelName(channel: ChannelDetails): String {
         val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
 

@@ -1,5 +1,3 @@
-@file:Suppress("CompositionLocalAllowlist")
-
 package to.bitkit.ui
 
 import androidx.compose.material3.DrawerState

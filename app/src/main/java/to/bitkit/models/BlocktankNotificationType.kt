@@ -2,7 +2,7 @@ package to.bitkit.models
 
 import kotlinx.serialization.Serializable
 
-@Suppress("EnumEntryName")
+@Suppress("EnumEntryNameCase", "EnumNaming")
 @Serializable
 enum class BlocktankNotificationType {
     incomingHtlc,

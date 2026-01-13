@@ -33,6 +33,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Suppress("TooManyFunctions", "LongParameterList")
 @Singleton
 class WidgetsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,

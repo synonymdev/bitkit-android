@@ -6,6 +6,8 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
+import to.bitkit.utils.AppError
+import to.bitkit.utils.HttpError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,26 +17,26 @@ class LnurlService @Inject constructor(
     private val client: HttpClient,
 ) {
     suspend fun requestLnurlWithdraw(callbackUrl: String): Result<LnurlWithdrawResponse> = runCatching {
-        Logger.debug("Requesting LNURL withdraw via: '$callbackUrl'")
+        Logger.debug("Requesting LNURL withdraw via: '$callbackUrl'", context = TAG)
 
         val response: HttpResponse = client.get(callbackUrl)
-        Logger.debug("Http call: $response")
+        Logger.debug("Http call: $response", context = TAG)
 
         if (!response.status.isSuccess()) {
-            throw Exception("HTTP error: ${response.status}")
+            throw HttpError("requestLnurlWithdraw error: '${response.status.description}'", response.status.value)
         }
 
         val withdrawResponse = response.body<LnurlWithdrawResponse>()
 
         when {
             withdrawResponse.status == "ERROR" -> {
-                throw Exception("LNURL error: ${withdrawResponse.reason}")
+                throw AppError("requestLnurlWithdraw error: ${withdrawResponse.reason}")
             }
 
             else -> withdrawResponse
         }
     }.onFailure {
-        Logger.warn("Failed to request LNURL withdraw", e = it, context = TAG)
+        Logger.warn("Failed to request LNURL withdraw", it, context = TAG)
     }
 
     suspend fun fetchLnurlInvoice(
@@ -42,7 +44,7 @@ class LnurlService @Inject constructor(
         amountSats: ULong,
         comment: String? = null,
     ): Result<LnurlPayResponse> = runCatching {
-        Logger.debug("Fetching LNURL pay invoice from: $callbackUrl")
+        Logger.debug("Fetching LNURL pay invoice from: $callbackUrl", context = TAG)
 
         val response = client.get(callbackUrl) {
             url {
@@ -52,51 +54,50 @@ class LnurlService @Inject constructor(
                 }
             }
         }
-        Logger.debug("Http call: $response")
+        Logger.debug("Http call: $response", context = TAG)
 
         if (!response.status.isSuccess()) {
-            throw Exception("HTTP error: ${response.status}")
+            throw HttpError("fetchLnurlInvoice error: '${response.status.description}'", response.status.value)
         }
 
         return@runCatching response.body<LnurlPayResponse>()
     }
 
     suspend fun fetchLnurlChannelInfo(url: String): Result<LnurlChannelInfoResponse> = runCatching {
-        Logger.debug("Fetching LNURL channel info from: $url")
+        Logger.debug("Fetching LNURL channel info from: $url", context = TAG)
 
         val response: HttpResponse = client.get(url)
-        Logger.debug("Http call: $response")
+        Logger.debug("Http call: $response", context = TAG)
 
         if (!response.status.isSuccess()) {
-            throw Exception("HTTP error: ${response.status}")
+            throw HttpError("fetchLnurlChannelInfo error: '${response.status.description}'", response.status.value)
         }
 
         return@runCatching response.body<LnurlChannelInfoResponse>()
     }.onFailure {
-        Logger.warn("Failed to fetch channel info", e = it, context = TAG)
+        Logger.warn("Failed to fetch channel info", it, context = TAG)
     }
 
-    suspend fun requestLnurlChannel(
-        url: String,
-    ): Result<LnurlChannelResponse> = runCatching {
-        Logger.debug("Requesting LNURL channel request via: '$url'")
+    suspend fun requestLnurlChannel(url: String): Result<LnurlChannelResponse> = runCatching {
+        Logger.debug("Requesting LNURL channel request via: '$url'", context = TAG)
 
         val response: HttpResponse = client.get(url)
-        Logger.debug("Http call: $response")
+        Logger.debug("Http call: $response", context = TAG)
 
-        if (!response.status.isSuccess()) throw Exception("HTTP error: ${response.status}")
+        if (!response.status.isSuccess()) {
+            throw HttpError("requestLnurlChannel error: '${response.status.description}'", response.status.value)
+        }
 
         val parsedResponse = response.body<LnurlChannelResponse>()
 
         when {
             parsedResponse.status == "ERROR" -> {
-                throw Exception("LNURL channel error: ${parsedResponse.reason}")
+                throw HttpError("requestLnurlChannel error: '${response.status.description}'", response.status.value)
             }
-
             else -> parsedResponse
         }
     }.onFailure {
-        Logger.warn("Failed to request LNURL channel", e = it, context = TAG)
+        Logger.warn("Failed to request LNURL channel", it, context = TAG)
     }
 
     companion object {

@@ -6,6 +6,7 @@ import io.ktor.client.request.get
 import io.ktor.http.isSuccess
 import to.bitkit.env.Env
 import to.bitkit.models.FxRateResponse
+import to.bitkit.utils.HttpError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,7 +21,7 @@ class BlocktankHttpClient @Inject constructor(
 
         return when (response.status.isSuccess()) {
             true -> response.body()
-            else -> throw Exception("Http error: ${response.status}")
+            else -> throw HttpError("fetchLatestRates error: '${response.status.description}'", response.status.value)
         }
     }
 }

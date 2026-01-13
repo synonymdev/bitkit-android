@@ -41,6 +41,7 @@ import to.bitkit.ext.txType
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -59,6 +60,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ActivityRow(
     item: Activity,
@@ -210,6 +212,7 @@ private fun TransactionStatusText(
 private fun AmountView(
     item: Activity,
     prefix: String,
+    currencies: CurrencyState = LocalCurrencies.current,
 ) {
     val amount = item.totalValue()
 
@@ -227,7 +230,9 @@ private fun AmountView(
 
     val settings = settingsViewModel ?: return
     val currency = currencyViewModel ?: return
-    val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+
+    val primaryDisplay = currencies.primaryDisplay
+    val displayUnit = currencies.displayUnit
 
     val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
 

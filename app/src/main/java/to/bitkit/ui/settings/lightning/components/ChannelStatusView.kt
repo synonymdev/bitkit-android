@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package to.bitkit.ui.settings.lightning.components
 
 import androidx.compose.foundation.background

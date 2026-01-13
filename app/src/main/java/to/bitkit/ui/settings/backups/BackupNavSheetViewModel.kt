@@ -27,6 +27,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class BackupNavSheetViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -72,29 +73,28 @@ class BackupNavSheetViewModel @Inject constructor(
         }
     }
 
-    fun loadMnemonicData() {
-        viewModelScope.launch {
-            try {
-                val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)!! // NPE handled with UI toast
-                val bip39Passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name) ?: ""
+    fun loadMnemonicData() = viewModelScope.launch {
+        runCatching {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)!! // NPE handled with UI toast
+            val bip39Passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name) ?: ""
 
-                _uiState.update {
-                    it.copy(
-                        bip39Mnemonic = mnemonic,
-                        bip39Passphrase = bip39Passphrase,
-                    )
-                }
-            } catch (e: Throwable) {
-                Logger.error("Error loading mnemonic", e, context = TAG)
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.security__mnemonic_error),
-                    description = context.getString(R.string.security__mnemonic_error_description),
+            _uiState.update {
+                it.copy(
+                    bip39Mnemonic = mnemonic,
+                    bip39Passphrase = bip39Passphrase,
                 )
             }
+        }.onFailure {
+            Logger.error("Error loading mnemonic", it, context = TAG)
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.security__mnemonic_error),
+                description = context.getString(R.string.security__mnemonic_error_description),
+            )
         }
     }
 
+    @Suppress("MagicNumber")
     fun onRevealMnemonic() {
         viewModelScope.launch {
             delay(200) // Small delay for better UX

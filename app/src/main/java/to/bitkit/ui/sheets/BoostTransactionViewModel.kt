@@ -73,7 +73,7 @@ class BoostTransactionViewModel @Inject constructor(
 
     private fun initializeFeeEstimates() {
         viewModelScope.launch {
-            try {
+            runCatching {
                 val activityContent = activity?.v1 ?: run {
                     handleError("Activity value is null")
                     return@launch
@@ -129,8 +129,8 @@ class BoostTransactionViewModel @Inject constructor(
                         handleError("Failed to get fee estimates: ${error?.message}", error)
                     }
                 }
-            } catch (e: Exception) {
-                handleError("Unexpected error during fee estimation", e)
+            }.onFailure {
+                handleError("Unexpected error during fee estimation", it)
             }
         }
     }
@@ -176,13 +176,13 @@ class BoostTransactionViewModel @Inject constructor(
         _uiState.update { it.copy(boosting = true) }
 
         viewModelScope.launch {
-            try {
+            runCatching {
                 when (currentActivity.v1.txType) {
                     PaymentType.SENT -> handleRbfBoost(currentActivity)
                     PaymentType.RECEIVED -> handleCpfpBoost(currentActivity)
                 }
-            } catch (e: Exception) {
-                handleError("Unexpected error during boost", e)
+            }.onFailure {
+                handleError("Unexpected error during boost", it)
             }
         }
     }

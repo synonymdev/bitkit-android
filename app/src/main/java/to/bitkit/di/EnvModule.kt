@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package to.bitkit.di
 
 import dagger.Module

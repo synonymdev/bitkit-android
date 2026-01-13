@@ -1,3 +1,5 @@
+@file:Suppress("MatchingDeclarationName")
+
 package to.bitkit.models
 
 import com.synonym.bitkitcore.AddressType

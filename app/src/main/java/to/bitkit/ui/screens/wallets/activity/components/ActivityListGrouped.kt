@@ -134,6 +134,7 @@ fun ActivityListGrouped(
 }
 
 // region utils
+@Suppress("CyclomaticComplexMethod")
 private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
     val now = Instant.now()
     val zoneId = ZoneId.systemDefault()

@@ -23,6 +23,8 @@ sealed class ServiceError(message: String) : AppError(message) {
     class GeoBlocked : ServiceError("Geo blocked user")
 }
 
+class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)
+
 // region ldk
 class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
     constructor(inner: BuildException) : this(LdkException.Build(inner))

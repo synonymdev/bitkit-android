@@ -43,6 +43,7 @@ class HealthRepo @Inject constructor(
         observeBackupStatus()
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private fun collectState() {
         val internetHealthState = connectivityRepo.isOnline.map { connectivityState ->
             when (connectivityState) {

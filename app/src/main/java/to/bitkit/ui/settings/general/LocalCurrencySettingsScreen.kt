@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.FxRate
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.SearchInput
@@ -35,8 +36,11 @@ import to.bitkit.viewmodels.CurrencyViewModel
 fun LocalCurrencySettingsScreen(
     currencyViewModel: CurrencyViewModel,
     navController: NavController,
+    currencies: CurrencyState = LocalCurrencies.current,
 ) {
-    val (rates, _, _, selectedCurrency) = LocalCurrencies.current
+    val rates = currencies.rates
+    val selectedCurrency = currencies.selectedCurrency
+
     var searchText by remember { mutableStateOf("") }
 
     val mostUsedCurrenciesList = remember { listOf("USD", "GBP", "CAD", "CNY", "EUR") }

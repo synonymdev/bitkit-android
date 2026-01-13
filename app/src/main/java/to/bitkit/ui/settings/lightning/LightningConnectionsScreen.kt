@@ -225,7 +225,10 @@ private fun Content(
                     VerticalSpacer(16.dp)
                     TertiaryButton(
                         text = stringResource(
-                            if (showClosed) R.string.lightning__conn_closed_hide else R.string.lightning__conn_closed_show
+                            when (showClosed) {
+                                true -> R.string.lightning__conn_closed_hide
+                                else -> R.string.lightning__conn_closed_show
+                            }
                         ),
                         onClick = { showClosed = !showClosed },
                         modifier = Modifier

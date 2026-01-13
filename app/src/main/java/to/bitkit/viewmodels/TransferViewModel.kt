@@ -50,7 +50,7 @@ import kotlin.time.ExperimentalTime
 const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
 const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
 
-@Suppress("LongParameterList")
+@Suppress("TooManyFunctions", "LongParameterList")
 @OptIn(ExperimentalTime::class)
 @HiltViewModel
 class TransferViewModel @Inject constructor(
@@ -218,50 +218,48 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun watchOrder(orderId: String): Result<Boolean> {
+    private suspend fun watchOrder(orderId: String): Result<Boolean> = runCatching {
         Logger.debug("Started watching order: '$orderId'", context = TAG)
-        try {
-            // Step 0: Starting
-            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_0) }
-            Logger.debug("LN setup step: $LN_SETUP_STEP_0", context = TAG)
-            delay(MIN_STEP_DELAY_MS)
 
-            // Poll until payment is confirmed (order state becomes PAID or EXECUTED)
-            val paidOrder = pollUntil(orderId) { order ->
-                order.state2 == BtOrderState2.PAID || order.state2 == BtOrderState2.EXECUTED
-            } ?: return Result.failure(Exception("Order not found or expired"))
+        // Step 0: Starting
+        settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_0) }
+        Logger.debug("LN setup step: $LN_SETUP_STEP_0", context = TAG)
+        delay(MIN_STEP_DELAY_MS)
 
-            // Step 1: Payment confirmed
-            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_1) }
-            Logger.debug("LN setup step: $LN_SETUP_STEP_1", context = TAG)
-            delay(MIN_STEP_DELAY_MS)
+        // Poll until payment is confirmed (order state becomes PAID or EXECUTED)
+        val paidOrder = pollUntil(orderId) { order ->
+            order.state2 == BtOrderState2.PAID || order.state2 == BtOrderState2.EXECUTED
+        } ?: return Result.failure(Exception("Order not found or expired"))
 
-            // Try to open channel (idempotent - safe to call multiple times)
-            blocktankRepo.openChannel(paidOrder.id)
+        // Step 1: Payment confirmed
+        settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_1) }
+        Logger.debug("LN setup step: $LN_SETUP_STEP_1", context = TAG)
+        delay(MIN_STEP_DELAY_MS)
 
-            // Step 2: Channel opening requested
-            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_2) }
-            Logger.debug("LN setup step: $LN_SETUP_STEP_2", context = TAG)
-            delay(MIN_STEP_DELAY_MS)
+        // Try to open channel (idempotent - safe to call multiple times)
+        blocktankRepo.openChannel(paidOrder.id)
 
-            // Poll until channel is ready (EXECUTED state or channel has state)
-            pollUntil(orderId) { order ->
-                order.state2 == BtOrderState2.EXECUTED || order.channel?.state != null
-            } ?: return Result.failure(Exception("Order not found or expired"))
+        // Step 2: Channel opening requested
+        settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_2) }
+        Logger.debug("LN setup step: $LN_SETUP_STEP_2", context = TAG)
+        delay(MIN_STEP_DELAY_MS)
 
-            // Step 3: Complete
-            transferRepo.syncTransferStates()
-            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_3) }
-            Logger.debug("LN setup step: $LN_SETUP_STEP_3", context = TAG)
+        // Poll until channel is ready (EXECUTED state or channel has state)
+        pollUntil(orderId) { order ->
+            order.state2 == BtOrderState2.EXECUTED || order.channel?.state != null
+        } ?: return Result.failure(Exception("Order not found or expired"))
 
-            Logger.debug("Order settled: '$orderId'", context = TAG)
-            return Result.success(true)
-        } catch (e: Throwable) {
-            Logger.error("Failed to watch order: '$orderId'", e, context = TAG)
-            return Result.failure(e)
-        } finally {
-            Logger.debug("Stopped watching order: '$orderId'", context = TAG)
-        }
+        // Step 3: Complete
+        transferRepo.syncTransferStates()
+        settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_3) }
+        Logger.debug("LN setup step: $LN_SETUP_STEP_3", context = TAG)
+
+        Logger.debug("Order settled: '$orderId'", context = TAG)
+        return@runCatching true
+    }.onFailure {
+        Logger.error("Failed to watch order: '$orderId'", it, context = TAG)
+    }.also {
+        Logger.debug("Stopped watching order: '$orderId'", context = TAG)
     }
 
     private suspend fun pollUntil(orderId: String, condition: (IBtOrder) -> Boolean): IBtOrder? {

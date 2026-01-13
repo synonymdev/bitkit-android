@@ -78,10 +78,18 @@ fun SettingsScreen(
                 app.toast(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(
-                        if (newValue) R.string.settings__dev_enabled_title else R.string.settings__dev_disabled_title
+                        if (newValue) {
+                            R.string.settings__dev_enabled_title
+                        } else {
+                            R.string.settings__dev_disabled_title
+                        }
                     ),
                     description = context.getString(
-                        if (newValue) R.string.settings__dev_enabled_message else R.string.settings__dev_disabled_message
+                        if (newValue) {
+                            R.string.settings__dev_enabled_message
+                        } else {
+                            R.string.settings__dev_disabled_message
+                        }
                     ),
                 )
                 enableDevModeTapCount = 0

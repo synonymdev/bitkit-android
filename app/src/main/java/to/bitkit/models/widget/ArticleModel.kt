@@ -29,6 +29,7 @@ fun ArticleDTO.toArticleModel() = ArticleModel(
  * @param dateString Date string in format "EEE, dd MMM yyyy HH:mm:ss Z"
  * @return Human-readable time difference (e.g. "5 hours ago")
  */
+@Suppress("TooGenericExceptionCaught", "MagicNumber")
 private fun timeAgo(dateString: String): String {
     return try {
         val formatters = listOf(

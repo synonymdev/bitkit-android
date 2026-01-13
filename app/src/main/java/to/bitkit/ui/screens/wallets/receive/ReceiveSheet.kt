@@ -18,8 +18,8 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
-import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.openNotificationSettings
+import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.walletViewModel

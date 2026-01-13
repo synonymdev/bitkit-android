@@ -70,7 +70,7 @@ import kotlin.time.ExperimentalTime
  *   Idle State:          running=false, synced≥required
  * ```
  */
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class BackupRepo @Inject constructor(
@@ -492,7 +492,7 @@ class BackupRepo @Inject constructor(
 
         _isRestoring.update { true }
 
-        return@withContext try {
+        val result = runCatching {
             performRestore(BackupCategory.METADATA) { dataBytes ->
                 val parsed = json.decodeFromString<MetadataBackupV1>(String(dataBytes))
                 val cleanCache = parsed.cache.resetBip21() // Force address rotation
@@ -503,7 +503,6 @@ class BackupRepo @Inject constructor(
                 Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
                 parsed.createdAt
             }
-
             performRestore(BackupCategory.SETTINGS) { dataBytes ->
                 val parsed = json.decodeFromString<SettingsBackupV1>(String(dataBytes))
                 settingsStore.restoreFromBackup(parsed)
@@ -532,13 +531,13 @@ class BackupRepo @Inject constructor(
             }
 
             Logger.info("Full restore success", context = TAG)
-            Result.success(Unit)
-        } catch (e: Throwable) {
+        }.onFailure { e ->
             Logger.warn("Full restore error", e = e, context = TAG)
-            Result.failure(e)
-        } finally {
-            _isRestoring.update { false }
         }
+
+        _isRestoring.update { false }
+
+        return@withContext result
     }
 
     suspend fun getLatestBackupTime(): ULong? = withContext(ioDispatcher) {
