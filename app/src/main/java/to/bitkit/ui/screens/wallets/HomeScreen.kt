@@ -638,26 +638,7 @@ private fun TopBar(
             .zIndex(1f)
     ) {
         TopAppBar(
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clickableAlpha(onClick = onClickProfile)
-                        .testTag("Header")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AccountCircle,
-                        contentDescription = stringResource(R.string.slashtags__your_name_capital),
-                        tint = Colors.White64,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    HorizontalSpacer(16.dp)
-                    Title(
-                        text = stringResource(R.string.slashtags__your_name_capital),
-                        Modifier.testTag("EmptyProfileHeader")
-                    )
-                }
-            },
+            title = {},
             actions = {
                 AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
                 HorizontalSpacer(4.dp)
