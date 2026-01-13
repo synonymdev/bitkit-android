@@ -207,6 +207,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
 - PREFER to use one-liners with `run { }` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
+- NEVER use file-level `@file:Suppress(...)` annotations; ALWAYS add `@Suppress(...)` as close as possible to the erroring lines (function, property, or statement level)
 
 ### Architecture Guidelines
 
