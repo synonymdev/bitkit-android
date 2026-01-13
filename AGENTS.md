@@ -206,6 +206,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
 - PREFER to use one-liners with `run { }` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
+- ALWAYS add imports instead of inline fully-qualified names
 
 ### Architecture Guidelines
 
