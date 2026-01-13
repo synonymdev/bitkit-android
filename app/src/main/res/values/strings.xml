@@ -75,8 +75,8 @@
     <string name="common__preview">Preview</string>
     <string name="coming_soon__button">Wallet overview</string>
     <string name="coming_soon__description">This feature is currently in development and will be available soon.</string>
-    <string name="coming_soon__title">Coming soon</string>
     <string name="coming_soon__headline">Coming\n&lt;accent&gt;soon&lt;/accent&gt;</string>
+    <string name="coming_soon__title">Coming soon</string>
     <string name="fee__instant__title">Instant</string>
     <string name="fee__instant__description">±2-10 seconds</string>
     <string name="fee__instant__shortRange">2-10s</string>
