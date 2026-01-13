@@ -363,7 +363,12 @@
     <string name="other__update_critical_button">Update Bitkit</string>
     <string name="other__camera_ask_title">Permission to use camera</string>
     <string name="other__camera_ask_msg">Bitkit needs permission to use your camera</string>
+    <string name="other__camera_init_error">Failed to initialize camera: {message}</string>
     <string name="other__camera_no_text">&lt;bold&gt;It appears Bitkit does not have permission to access your camera.&lt;/bold&gt;\n\nTo utilize this feature in the future you will need to enable camera permissions for this app from your phone\'s settings.</string>
+    <string name="other__camera_permission_button">Enable camera</string>
+    <string name="other__camera_permission_description">Allow camera access to scan bitcoin invoices and pay more quickly.</string>
+    <string name="other__camera_permission_title">SCAN\n&lt;accent&gt;QR CODE&lt;/accent&gt;</string>
+    <string name="other__camera_scan_qr">Scan QR</string>
     <string name="other__clipboard_redirect_title">Clipboard Data Detected</string>
     <string name="other__clipboard_redirect_msg">Do you want to be redirected to the relevant screen?</string>
     <string name="other__coming_soon">Coming soon</string>
@@ -410,6 +415,7 @@
     <string name="other__lnurl_withdr_error_minmax">Incorrect LNURL withdraw params, min/max not set correctly.</string>
     <string name="other__lnurl_withdr_success_title">Withdraw Requested</string>
     <string name="other__lnurl_withdr_success_msg">Your withdraw was successfully requested. Waiting for payment.</string>
+    <string name="other__logs_export_error">Failed to create log zip file</string>
     <string name="other__node_error_starting">Error starting: %1$s</string>
     <string name="other__node_initializing">Setting up wallet…</string>
     <string name="other__node_running">Running</string>
@@ -489,6 +495,7 @@
     <string name="security__mnemonic_multiple_header">Multiple Devices</string>
     <string name="security__mnemonic_multiple_text">Don\'t use your Bitkit recovery phrase on multiple phones simultaneously, as this can corrupt your data.</string>
     <string name="security__mnemonic_latest_backup">&lt;bold&gt;Latest data backup:&lt;/bold&gt; {time}</string>
+    <string name="security__mnemonic_load_error">Failed to load mnemonic</string>
     <string name="security__pin_security_header">Increase Security</string>
     <string name="security__pin_security_title">&lt;accent&gt;Protect&lt;/accent&gt;\nyour bitcoin</string>
     <string name="security__pin_security_text">To increase wallet security, you can set up a PIN code and Face ID.</string>
@@ -634,6 +641,7 @@
     <string name="settings__bg__include_amount">Include amount in notifications</string>
     <string name="settings__bg__notifications_header">Notifications</string>
     <string name="settings__bg__privacy_header">Privacy</string>
+    <string name="settings__bg__setup">Set up in background</string>
     <string name="settings__bg__switch_title">Get paid when Bitkit is closed</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__bnb_desc">Finds exact amount matches to minimize change</string>
@@ -681,6 +689,7 @@
     <string name="settings__support__report_text">Please describe the issue you are experiencing or ask a general question.</string>
     <string name="settings__support__label_address">Email address</string>
     <string name="settings__support__label_message">Issue or question</string>
+    <string name="settings__support__link_error">Failed to open support links</string>
     <string name="settings__support__placeholder_address">satoshi@satoshi.com</string>
     <string name="settings__support__placeholder_message">Describe the issue or ask a question</string>
     <string name="settings__support__text_button">Send</string>
@@ -1186,6 +1195,11 @@
     <string name="widgets__blocks__name">Bitcoin Blocks</string>
     <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks.</string>
     <string name="widgets__blocks__error">Couldn\'t get blocks data</string>
+    <string name="widgets__blocks__field__block">Block</string>
+    <string name="widgets__blocks__field__date">Date</string>
+    <string name="widgets__blocks__field__size">Size</string>
+    <string name="widgets__blocks__field__time">Time</string>
+    <string name="widgets__blocks__field__transactions">Transactions</string>
     <string name="widgets__facts__name">Bitcoin Facts</string>
     <string name="widgets__facts__description">Discover fun facts about Bitcoin, every time you open your wallet.</string>
     <string name="widgets__calculator__name">Bitcoin Calculator</string>
