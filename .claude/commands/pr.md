@@ -1,6 +1,6 @@
 ---
 description: Create a PR on GitHub for the current branch
-argument_hint: "[branch] [--dry] [--draft]"
+argument_hint: "[branch] [--dry] [--draft] [-- instructions]"
 allowed_tools: Bash, Read, Glob, Grep, Write, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents, mcp__github__issue_read
 ---
 
@@ -12,6 +12,8 @@ Create a PR on GitHub using the `gh` CLI for the currently checked-out branch.
 - `/pr --dry` - Generate description only, save to `.ai/`
 - `/pr --draft` - Create as draft PR
 - `/pr develop --draft` - Draft PR against non-default branch
+- `/pr -- focus on commit abc123` - With custom instructions for description
+- `/pr master --draft -- describe migration test in QA` - Combined with all options
 
 ## Steps
 
@@ -24,6 +26,7 @@ Run `gh pr view --json number,url 2>/dev/null` to check if a PR already exists f
 - `--dry`: Skip PR creation, only generate and save description
 - `--draft`: Create PR as draft
 - First non-flag argument: base branch (default: auto-detected, see Step 2.5)
+- Everything after `--` separator (if present): Custom instructions for PR generation
 - **If no flags provided**: Use `AskUserQuestion` to prompt user:
   - Open PR (create and publish)
   - Draft PR (create as draft)
@@ -42,6 +45,10 @@ If no base branch argument provided, detect the repo's default branch:
 - Fetch 10 most recent PRs (open or closed) from the extracted repo for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
+- **If custom instructions provided:**
+  - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
+    - Read full commit message: `git log -1 --format='%B' <commit_sha>`
+  - Store instructions for use in description generation
 
 ### 4. Extract Linked Issues
 Scan commits for issue references:
@@ -101,6 +108,14 @@ This PR adds support for...
 - Avoid excessive bold formatting like `**this:** that`
 - Minimize code and file references like `TheClassName` or `someFunctionName`, `thisFileName.ext`
 - Exception: for refactoring PRs (1:10 ratio of functionality to code changes), more technical detail is ok
+
+**Custom Instructions (if provided):**
+When the user provides custom instructions after `--`:
+- Parse any referenced commit SHAs and read their full messages
+- Focus the description content on areas the user emphasizes
+- Structure QA Notes according to user's specific testing instructions
+- Custom instructions take priority over default generation rules for sections they address
+- Preserve exact testing steps provided by the user (don't summarize or omit details)
 
 **QA Notes / Testing Scenarios:**
 - Structure with numbered headings and steps
