@@ -20,7 +20,7 @@ internal object Env {
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
-    val walletSyncIntervalSecs = 10_uL
+    const val walletSyncIntervalSecs = 10_uL
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
@@ -56,7 +56,7 @@ internal object Env {
                 Network.BITCOIN -> ElectrumServers.MAINNET.FULCRUM
                 Network.REGTEST -> if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
                 Network.TESTNET -> ElectrumServers.TESTNET
-                else -> throw Error("${network.name} network not implemented")
+                else -> TODO("${network.name} network not implemented")
             }
         }
 
