@@ -158,14 +158,20 @@ private fun Menu(
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__contacts),
             iconRes = R.drawable.ic_users,
-            onClick = null, // TODO IMPLEMENT CONTACTS
+            onClick = {
+                rootNavController.navigateIfNotCurrent(Routes.Contacts)
+                scope.launch { drawerState.close() }
+            },
             modifier = Modifier.testTag("DrawerContacts")
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__profile),
             iconRes = R.drawable.ic_user_square,
-            onClick = null, // TODO IMPLEMENT PROFILE
+            onClick = {
+                rootNavController.navigateIfNotCurrent(Routes.Profile)
+                scope.launch { drawerState.close() }
+            },
             modifier = Modifier.testTag("DrawerProfile")
         )
 

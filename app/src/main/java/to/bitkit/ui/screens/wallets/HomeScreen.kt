@@ -169,11 +169,7 @@ fun HomeScreen(
             homeViewModel.refreshWidgets()
         },
         onClickProfile = {
-            if (!hasSeenProfileIntro) {
-                rootNavController.navigate(Routes.ProfileIntro)
-            } else {
-                rootNavController.navigate(Routes.CreateProfile)
-            }
+            rootNavController.navigate(Routes.Profile)
         },
         onRemoveSuggestion = { suggestion ->
             homeViewModel.removeSuggestion(suggestion)
@@ -214,11 +210,7 @@ fun HomeScreen(
                 }
 
                 Suggestion.PROFILE -> {
-                    if (!hasSeenProfileIntro) {
-                        rootNavController.navigate(Routes.ProfileIntro)
-                    } else {
-                        rootNavController.navigate(Routes.CreateProfile)
-                    }
+                    rootNavController.navigate(Routes.Profile)
                 }
 
                 Suggestion.SHOP -> {
