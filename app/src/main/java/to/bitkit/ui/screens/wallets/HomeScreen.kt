@@ -118,6 +118,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun HomeScreen(
     isRefreshing: Boolean,
@@ -275,6 +276,7 @@ fun HomeScreen(
     )
 }
 
+@Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun Content(

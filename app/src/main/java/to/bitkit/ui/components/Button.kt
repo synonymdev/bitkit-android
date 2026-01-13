@@ -1,3 +1,5 @@
+@file:Suppress("MatchingDeclarationName")
+
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.BorderStroke

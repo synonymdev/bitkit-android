@@ -52,8 +52,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
 
-private const val zIndexScrim = 10f
-private const val zIndexMenu = 11f
+private const val Z_INDEX_SCRIM = 10f
+private const val Z_INDEX_MENU = 11f
 private val bgScrim = Colors.Black50
 private val drawerBg = Colors.Brand
 private val drawerWidth = 200.dp
@@ -77,7 +77,7 @@ fun DrawerMenu(
         },
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(zIndexScrim)
+            .zIndex(Z_INDEX_SCRIM)
     )
 
     AnimatedVisibility(
@@ -91,7 +91,7 @@ fun DrawerMenu(
         modifier = modifier.then(
             Modifier
                 .fillMaxHeight()
-                .zIndex(zIndexMenu)
+                .zIndex(Z_INDEX_MENU)
                 .blockPointerInputPassthrough()
         )
     ) {

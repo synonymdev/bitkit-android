@@ -49,7 +49,8 @@ internal fun Context.notificationBuilder(
         extra?.let { putExtras(it) }
     }
     val flags = FLAG_IMMUTABLE or FLAG_ONE_SHOT
-    // TODO: review if needed:
+
+    @Suppress("ForbiddenComment") // TODO: review if needed:
     val pendingIntent = PendingIntent.getActivity(this, 0, intent, flags)
 
     return NotificationCompat.Builder(this, channelId)

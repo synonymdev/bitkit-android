@@ -120,7 +120,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@Suppress("LongParameterList")
+@Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @HiltViewModel
 class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
@@ -616,6 +616,7 @@ class AppViewModel @Inject constructor(
 
     // region send
 
+    @Suppress("CyclomaticComplexMethod")
     private fun observeSendEvents() {
         viewModelScope.launch {
             sendEvents.collect {
@@ -1301,6 +1302,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod")
     private suspend fun proceedWithPayment() {
         delay(SCREEN_TRANSITION_DELAY_MS) // wait for screen transitions when applicable
 

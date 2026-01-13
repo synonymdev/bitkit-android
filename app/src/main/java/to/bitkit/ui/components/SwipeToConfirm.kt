@@ -215,6 +215,7 @@ fun SwipeToConfirm(
     }
 }
 
+@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {

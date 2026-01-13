@@ -159,6 +159,7 @@ class ExternalNodeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
+            @Suppress("ForbiddenComment")
             // TODO: pass customFeeRate to ldk-node when supported
             lightningRepo.openChannel(
                 peer = requireNotNull(_uiState.value.peer),

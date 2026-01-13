@@ -16,14 +16,14 @@ class CurrencyService @Inject constructor(
     private val maxRetries = 3
 
     suspend fun fetchLatestRates(): List<FxRate> {
-        var lastError: Exception? = null
+        var lastError: Throwable? = null
 
         for (attempt in 0 until maxRetries) {
-            try {
+            runCatching {
                 val response = ServiceQueue.FOREX.background { blocktankHttpClient.fetchLatestRates() }
                 val rates = response.tickers
                 return rates
-            } catch (e: Exception) {
+            }.onFailure { e ->
                 lastError = e
                 if (attempt < maxRetries - 1) {
                     // Wait a bit before retrying, with exponential backoff

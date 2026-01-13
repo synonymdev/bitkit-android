@@ -30,6 +30,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
@@ -44,6 +45,7 @@ fun RowScope.WalletBalanceView(
     sats: Long,
     icon: Painter,
     modifier: Modifier = Modifier,
+    currencies: CurrencyState = LocalCurrencies.current,
 ) {
     val isPreview = LocalInspectionMode.current
     if (isPreview) {
@@ -67,7 +69,9 @@ fun RowScope.WalletBalanceView(
 
     val settings = settingsViewModel ?: return
     val currency = currencyViewModel ?: return
-    val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+
+    val displayUnit = currencies.displayUnit
+    val primaryDisplay = currencies.primaryDisplay
     val converted: ConvertedAmount? = currency.convert(sats = sats)
 
     val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()

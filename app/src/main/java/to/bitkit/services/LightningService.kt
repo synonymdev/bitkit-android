@@ -58,7 +58,7 @@ import kotlin.time.Duration
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
-@Suppress("LargeClass")
+@Suppress("LargeClass", "TooManyFunctions")
 @Singleton
 class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -120,6 +120,7 @@ class LightningService @Inject constructor(
         )
     }
 
+    @Suppress("ForbiddenComment")
     private suspend fun build(
         walletIndex: Int,
         customServerUrl: String?,
@@ -194,6 +195,7 @@ class LightningService @Inject constructor(
         )
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -558,6 +560,7 @@ class LightningService @Inject constructor(
         }.getOrThrow()
     }
 
+    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -575,6 +578,7 @@ class LightningService @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -595,6 +599,7 @@ class LightningService @Inject constructor(
     // endregion
 
     // region utxo selection
+    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -610,6 +615,7 @@ class LightningService @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun selectUtxosWithAlgorithm(
         targetAmountSats: ULong,
         satsPerVByte: ULong,
@@ -750,6 +756,7 @@ class LightningService @Inject constructor(
     }
     // endregion
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun getAddressBalance(address: String): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         return ServiceQueue.LDK.background {
@@ -775,7 +782,7 @@ class LightningService @Inject constructor(
     // endregion
 
     // region debug
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "TooGenericExceptionCaught")
     fun dumpNetworkGraphInfo(bolt11: String) {
         val node = this.node ?: run {
             Logger.error("Node not available for network graph dump", context = TAG)

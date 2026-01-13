@@ -33,6 +33,7 @@ fun SuccessScreen(
 ) {
     SuccessContent(
         onContinue = {
+            @Suppress("ForbiddenComment")
             // TODO: verify backup
             onContinue()
         },

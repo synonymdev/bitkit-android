@@ -46,6 +46,7 @@ import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.WalletViewModel
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun SendSheet(
     appViewModel: AppViewModel,

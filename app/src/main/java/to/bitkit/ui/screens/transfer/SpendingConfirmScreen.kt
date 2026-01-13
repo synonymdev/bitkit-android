@@ -108,6 +108,7 @@ fun SpendingConfirmScreen(
     )
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun Content(
     onBackClick: () -> Unit,

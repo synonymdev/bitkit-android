@@ -374,9 +374,9 @@ private fun processImageFromGallery(
     context: Context,
     uri: Uri,
     onScanSuccess: (String) -> Unit,
-    onError: (Exception) -> Unit,
+    onError: (Throwable) -> Unit,
 ) {
-    try {
+    runCatching {
         val image = InputImage.fromFilePath(context, uri)
         val options = BarcodeScannerOptions.Builder()
             .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
@@ -399,8 +399,8 @@ private fun processImageFromGallery(
                 Logger.error("Failed to scan QR code from gallery", e)
                 onError(e)
             }
-    } catch (e: Exception) {
-        Logger.error("Failed to process image from gallery", e)
-        onError(e)
+    }.onFailure {
+        Logger.error("Failed to process image from gallery", it)
+        onError(it)
     }
 }

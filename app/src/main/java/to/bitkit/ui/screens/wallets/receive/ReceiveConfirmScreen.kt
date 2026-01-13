@@ -1,3 +1,5 @@
+@file:Suppress("MatchingDeclarationName")
+
 package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.foundation.layout.Arrangement

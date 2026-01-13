@@ -29,7 +29,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
-@Suppress("LongParameterList")
+@Suppress("TooManyFunctions", "LongParameterList")
 @HiltViewModel
 class DevSettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

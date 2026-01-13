@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package to.bitkit.ui
 
 import android.content.Intent
@@ -768,7 +770,7 @@ private fun RootNavHost(
 }
 
 // region destinations
-@Suppress("LongParameterList")
+@Suppress("LongMethod", "LongParameterList")
 private fun NavGraphBuilder.home(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
@@ -878,6 +880,7 @@ private fun NavGraphBuilder.settings(
     composableWithDefaultTransitions<Routes.Settings> {
         SettingsScreen(navController)
     }
+    @Suppress("ForbiddenComment")
     // TODO: display as sheet
     composableWithDefaultTransitions<Routes.QuickPayIntro> {
         QuickPayIntroScreen(
@@ -1352,6 +1355,7 @@ private fun NavGraphBuilder.support(
     }
 }
 
+@Suppress("LongMethod")
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,

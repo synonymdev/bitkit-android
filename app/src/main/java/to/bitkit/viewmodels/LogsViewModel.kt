@@ -51,9 +51,10 @@ class LogsViewModel @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     fun prepareLogForSharing(logFile: LogFile, onReady: (Uri) -> Unit) {
         viewModelScope.launch {
-            try {
+            runCatching {
                 withContext(Dispatchers.IO) {
                     val tempDir = application.externalCacheDir?.resolve("logs")?.apply { mkdirs() }
                         ?: error("External cache dir is not available")
@@ -71,8 +72,8 @@ class LogsViewModel @Inject constructor(
                         onReady(contentUri)
                     }
                 }
-            } catch (e: Exception) {
-                Logger.error("Error preparing file for sharing", e)
+            }.onFailure {
+                Logger.error("Error preparing file for sharing", it)
             }
         }
     }

@@ -19,6 +19,7 @@ enum class ServiceQueue {
 
     private val scope by lazy { CoroutineScope(newSingleThreadDispatcher(name) + SupervisorJob()) }
 
+    @Suppress("TooGenericExceptionCaught")
     fun <T> blocking(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,
@@ -36,6 +37,7 @@ enum class ServiceQueue {
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun <T> background(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,

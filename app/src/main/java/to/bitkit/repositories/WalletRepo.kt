@@ -41,7 +41,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions")
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -75,11 +75,10 @@ class WalletRepo @Inject constructor(
     }
 
     fun loadFromCache() {
-        // TODO try keeping in sync with cache if performant and reliable
         repoScope.launch {
             val cacheData = cacheStore.data.first()
-            _walletState.update { currentState ->
-                currentState.copy(
+            _walletState.update {
+                it.copy(
                     onchainAddress = cacheData.onchainAddress,
                     bolt11 = cacheData.bolt11,
                     bip21 = cacheData.bip21,
@@ -98,12 +97,10 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun checkAddressUsage(address: String): Result<Boolean> = withContext(bgDispatcher) {
-        return@withContext try {
-            val result = coreService.isAddressUsed(address)
-            Result.success(result)
-        } catch (e: Exception) {
-            Logger.error("checkAddressUsage error", e, context = TAG)
-            Result.failure(e)
+        runCatching {
+            coreService.isAddressUsed(address)
+        }.onFailure {
+            Logger.error("checkAddressUsage error", it, context = TAG)
         }
     }
 
@@ -178,8 +175,8 @@ class WalletRepo @Inject constructor(
             syncBalances()
             lightningRepo.sync().onSuccess {
                 syncBalances()
-            }.onFailure { e ->
-                if (e is TimeoutCancellationException) {
+            }.onFailure {
+                if (it is TimeoutCancellationException) {
                     syncBalances()
                 }
             }
@@ -195,9 +192,9 @@ class WalletRepo @Inject constructor(
         deriveBalanceStateUseCase().onSuccess { balanceState ->
             runCatching { cacheStore.cacheBalance(balanceState) }
             _balanceState.update { balanceState }
-        }.onFailure { e ->
-            if (e !is CancellationException) {
-                Logger.warn("Could not sync balances ${errLogOf(e)}", context = TAG)
+        }.onFailure {
+            if (it !is CancellationException) {
+                Logger.warn("Could not sync balances ${errLogOf(it)}", context = TAG)
             }
         }
     }
@@ -285,32 +282,28 @@ class WalletRepo @Inject constructor(
 
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
-        try {
+        runCatching {
             val mnemonic = generateEntropyMnemonic()
             keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
             setWalletExistsState()
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Create wallet error", e, context = TAG)
-            Result.failure(e)
+        }.onFailure {
+            Logger.error("createWallet error", it, context = TAG)
         }
     }
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
-        try {
+        runCatching {
             keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
             setWalletExistsState()
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Restore wallet error", e)
-            Result.failure(e)
+        }.onFailure {
+            Logger.error("restoreWallet error", it)
         }
     }
 
@@ -346,7 +339,7 @@ class WalletRepo @Inject constructor(
         isChange: Boolean = false,
         count: Int = 20,
     ): Result<List<AddressModel>> = withContext(bgDispatcher) {
-        return@withContext try {
+        return@withContext runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()
 
@@ -375,14 +368,12 @@ class WalletRepo @Inject constructor(
                 )
             }
 
-            Result.success(addresses)
-        } catch (e: Exception) {
-            Logger.error("Error getting addresses", e)
-            Result.failure(e)
+            return@runCatching addresses
+        }.onFailure {
+            Logger.error("Error getting addresses", it)
         }
     }
 
-    // Bolt11 management
     fun getBolt11(): String = _walletState.value.bolt11
 
     suspend fun setBolt11(bolt11: String) {
@@ -390,7 +381,6 @@ class WalletRepo @Inject constructor(
         _walletState.update { it.copy(bolt11 = bolt11) }
     }
 
-    // BIP21 management
     suspend fun setBip21(bip21: String) {
         runCatching { cacheStore.setBip21(bip21) }
         _walletState.update { it.copy(bip21 = bip21) }
@@ -410,7 +400,6 @@ class WalletRepo @Inject constructor(
         )
     }
 
-    // BIP21 state management
     fun setBip21AmountSats(amount: ULong?) = _walletState.update { it.copy(bip21AmountSats = amount) }
 
     fun setBip21Description(description: String) = _walletState.update { it.copy(bip21Description = description) }
@@ -426,7 +415,6 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    // Payment ID management
     private suspend fun paymentHash(): String? = withContext(bgDispatcher) {
         val bolt11 = getBolt11()
         if (bolt11.isEmpty()) return@withContext null
@@ -435,8 +423,8 @@ class WalletRepo @Inject constructor(
                 is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
                 else -> null
             }
-        }.onFailure { e ->
-            Logger.error("Error extracting payment hash from bolt11", e, context = TAG)
+        }.onFailure {
+            Logger.error("Error extracting payment hash from bolt11", it, context = TAG)
         }.getOrNull()
     }
 
@@ -447,7 +435,6 @@ class WalletRepo @Inject constructor(
         return@withContext address.ifEmpty { null }
     }
 
-    // Pre-activity metadata tag management
     suspend fun addTagToSelected(newTag: String): Result<Unit> = withContext(bgDispatcher) {
         val paymentId = paymentId()
         if (paymentId == null || paymentId.isEmpty()) {
@@ -465,8 +452,8 @@ class WalletRepo @Inject constructor(
                     )
                 }
                 settingsStore.addLastUsedTag(newTag)
-            }.onFailure { e ->
-                Logger.error("Failed to add tag to pre-activity metadata", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to add tag to pre-activity metadata", it, context = TAG)
             }
     }
 
@@ -486,8 +473,8 @@ class WalletRepo @Inject constructor(
                         selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
                     )
                 }
-            }.onFailure { e ->
-                Logger.error("Failed to remove tag from pre-activity metadata", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to remove tag from pre-activity metadata", it, context = TAG)
             }
     }
 
@@ -497,27 +484,9 @@ class WalletRepo @Inject constructor(
 
         preActivityMetadataRepo.resetPreActivityMetadataTags(paymentId).onSuccess {
             _walletState.update { it.copy(selectedTags = emptyList()) }
-        }.onFailure { e ->
-            Logger.error("Failed to reset tags for pre-activity metadata", e, context = TAG)
+        }.onFailure {
+            Logger.error("Failed to reset tags for pre-activity metadata", it, context = TAG)
         }
-    }
-
-    suspend fun loadTagsForCurrentInvoice() {
-        val paymentId = paymentId()
-        if (paymentId == null || paymentId.isEmpty()) {
-            _walletState.update { it.copy(selectedTags = emptyList()) }
-            return
-        }
-
-        preActivityMetadataRepo.getPreActivityMetadata(paymentId, searchByAddress = false)
-            .onSuccess { metadata ->
-                _walletState.update {
-                    it.copy(selectedTags = metadata?.tags ?: emptyList())
-                }
-            }
-            .onFailure { e ->
-                Logger.error("Failed to load tags for current invoice", e, context = TAG)
-            }
     }
 
     // BIP21 invoice creation and persistence
@@ -555,11 +524,12 @@ class WalletRepo @Inject constructor(
             if (newPaymentId != null && newPaymentId.isNotEmpty() && newBip21Url.isNotEmpty()) {
                 persistPreActivityMetadata(newPaymentId, tagsToMigrate, newBip21Url)
             }
-        }.onFailure { e ->
-            Logger.error("Update BIP21 invoice error", e, context = TAG)
+        }.onFailure {
+            Logger.error("Update BIP21 invoice error", it, context = TAG)
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun shouldRequestAdditionalLiquidity(): Result<Boolean> = withContext(bgDispatcher) {
         return@withContext try {
             if (coreService.isGeoBlocked()) return@withContext Result.success(false)

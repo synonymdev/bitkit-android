@@ -49,6 +49,7 @@ class ShopWebViewClient(
         )
     }
 
+    @Suppress("ComplexCondition")
     override fun onReceivedError(
         view: WebView?,
         request: WebResourceRequest?,

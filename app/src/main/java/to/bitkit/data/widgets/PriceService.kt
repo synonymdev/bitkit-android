@@ -146,7 +146,7 @@ class PriceService @Inject constructor(
     }
 
     private fun formatPrice(pair: TradingPair, price: Double): String {
-        return try {
+        return runCatching {
             val currency = Currency.getInstance(pair.quote)
             val numberFormat = NumberFormat.getCurrencyInstance(Locale.US).apply {
                 this.currency = currency
@@ -161,14 +161,9 @@ class PriceService @Inject constructor(
             val formatted = numberFormat.format(price)
             val currencySymbol = currency.symbol
             formatted.replace(currencySymbol, "").trim()
-        } catch (e: Exception) {
-            Logger.warn(
-                e = e,
-                msg = "Error formatting price for ${pair.displayName}",
-                context = TAG
-            )
-            String.format("%.2f", price)
-        }
+        }.onFailure {
+            Logger.warn("Error formatting price for ${pair.displayName}", e = it, context = TAG)
+        }.getOrDefault(String.format(Locale.US, "%.2f", price))
     }
 
     companion object {

@@ -43,7 +43,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("LongParameterList")
+@Suppress("TooManyFunctions", "LongParameterList")
 @HiltViewModel
 class WalletViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

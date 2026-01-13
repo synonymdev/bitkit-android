@@ -34,7 +34,7 @@ class LogsRepo @Inject constructor(
     private val chatwootHttpClient: ChatwootHttpClient,
 ) {
     suspend fun postQuestion(email: String, message: String): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext try {
+        runCatching {
             val logsBase64 = zipLogs().getOrDefault("")
             val logsFileName = "bitkit_logs_${System.currentTimeMillis()}.zip"
 
@@ -48,16 +48,15 @@ class LogsRepo @Inject constructor(
                     logsFileName = logsFileName,
                 )
             )
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Logger.error(msg = e.message, e = e, context = TAG)
-            Result.failure(e)
+        }.onFailure {
+            Logger.error(it.message, e = it, context = TAG)
         }
     }
 
     /** Lists log files sorted by newest first */
+    @Suppress("NestedBlockDepth")
     suspend fun getLogs(): Result<List<LogFile>> = withContext(bgDispatcher) {
-        try {
+        runCatching {
             val logDir = Env.logDir
 
             val logFiles = logDir
@@ -81,15 +80,14 @@ class LogsRepo @Inject constructor(
                 ?.sortedByDescending { it.file.lastModified() }
                 ?: emptyList()
 
-            return@withContext Result.success(logFiles)
-        } catch (e: Exception) {
-            Logger.error("Failed to load logs", e, context = TAG)
-            Result.failure(e)
+            return@runCatching logFiles
+        }.onFailure {
+            Logger.error("Failed to load logs", it, context = TAG)
         }
     }
 
     suspend fun loadLogContent(logFile: LogFile): Result<List<String>> = withContext(bgDispatcher) {
-        try {
+        runCatching {
             if (!logFile.file.exists()) {
                 Logger.error("Logs file not found", context = TAG)
                 return@withContext Result.failure(Exception("Logs file not found"))
@@ -101,10 +99,10 @@ class LogsRepo @Inject constructor(
                     lines.add(line.trim())
                 }
             }
-            return@withContext Result.success(lines)
-        } catch (e: Exception) {
-            Logger.error("Failed to load log content", e, context = TAG)
-            return@withContext Result.failure(e)
+
+            return@runCatching lines
+        }.onFailure {
+            Logger.error("Failed to load log content", it, context = TAG)
         }
     }
 
@@ -139,7 +137,7 @@ class LogsRepo @Inject constructor(
         limit: Int = 20,
         source: LogSource? = null,
     ): Result<String> = withContext(bgDispatcher) {
-        return@withContext try {
+        runCatching {
             val logsResult = getLogs().onFailure {
                 return@withContext Result.failure(it)
             }
@@ -162,14 +160,13 @@ class LogsRepo @Inject constructor(
                 return@withContext Result.failure(Exception("No log files found"))
             }
 
-            val base64String = createZipBase64(logsToZip)
-            Result.success(base64String)
-        } catch (e: Exception) {
-            Logger.error("Failed to zip logs", e, context = TAG)
-            Result.failure(e)
+            return@runCatching createZipBase64(logsToZip)
+        }.onFailure {
+            Logger.error("Failed to zip logs", it, context = TAG)
         }
     }
 
+    @Suppress("NestedBlockDepth")
     private fun createZipBase64(logFiles: List<LogFile>): String {
         val zipBytes = ByteArrayOutputStream().use { byteArrayOut ->
             ZipOutputStream(byteArrayOut).use { zipOut ->

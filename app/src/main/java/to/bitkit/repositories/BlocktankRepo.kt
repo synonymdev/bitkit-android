@@ -55,7 +55,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions")
 class BlocktankRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
@@ -119,7 +119,7 @@ class BlocktankRepo @Inject constructor(
     }
 
     suspend fun refreshInfo() = withContext(bgDispatcher) {
-        try {
+        runCatching {
             // Load from cache first
             val cachedInfo = coreService.blocktank.info(refresh = false)
             _blocktankState.update { it.copy(info = cachedInfo) }
@@ -129,8 +129,8 @@ class BlocktankRepo @Inject constructor(
             _blocktankState.update { it.copy(info = info) }
 
             Logger.debug("Blocktank info refreshed", context = TAG)
-        } catch (e: Throwable) {
-            Logger.error("Failed to refresh blocktank info", e, context = TAG)
+        }.onFailure {
+            Logger.error("Failed to refresh blocktank info", it, context = TAG)
         }
     }
 
@@ -138,7 +138,7 @@ class BlocktankRepo @Inject constructor(
         if (isRefreshing) return@withContext
         isRefreshing = true
 
-        try {
+        runCatching {
             Logger.verbose("Refreshing blocktank orders…", context = TAG)
 
             val paidOrderIds = cacheStore.data.first().paidOrders.keys
@@ -172,27 +172,24 @@ class BlocktankRepo @Inject constructor(
                 context = TAG
             )
             openChannelWithPaidOrders()
-        } catch (e: Throwable) {
-            Logger.error("Failed to refresh orders", e, context = TAG)
-        } finally {
-            isRefreshing = false
+        }.onFailure {
+            Logger.error("Failed to refresh orders", it, context = TAG)
         }
+
+        isRefreshing = false
     }
 
     suspend fun refreshMinCjitSats() = withContext(bgDispatcher) {
-        try {
+        runCatching {
             val lspBalance = getDefaultLspBalance(clientBalance = 0u)
-            val fees = estimateOrderFee(
-                spendingBalanceSats = 0u,
-                receivingBalanceSats = lspBalance,
-            ).getOrThrow()
+            val fees = estimateOrderFee(spendingBalanceSats = 0u, receivingBalanceSats = lspBalance).getOrThrow()
 
             val minimum = (ceil(fees.feeSat.toDouble() * 1.1 / 1000) * 1000).toInt()
             _blocktankState.update { it.copy(minCjitSats = minimum) }
 
             Logger.debug("Updated minCjitSats to: $minimum", context = TAG)
-        } catch (e: Throwable) {
-            Logger.error("Failed to refresh minCjitSats", e, context = TAG)
+        }.onFailure {
+            Logger.error("Failed to refresh minCjitSats", it, context = TAG)
         }
     }
 
@@ -200,7 +197,7 @@ class BlocktankRepo @Inject constructor(
         amountSats: ULong,
         description: String = Env.DEFAULT_INVOICE_MESSAGE,
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
-        try {
+        runCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
             val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
@@ -217,10 +214,9 @@ class BlocktankRepo @Inject constructor(
 
             repoScope.launch { refreshOrders() }
 
-            Result.success(cjitEntry)
-        } catch (e: Throwable) {
-            Logger.error("Failed to create CJIT", e, context = TAG)
-            Result.failure(e)
+            return@runCatching cjitEntry
+        }.onFailure {
+            Logger.error("Failed to create CJIT", it, context = TAG)
         }
     }
 
@@ -229,13 +225,16 @@ class BlocktankRepo @Inject constructor(
         receivingBalanceSats: ULong = spendingBalanceSats * 2u,
         channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
     ): Result<IBtOrder> = withContext(bgDispatcher) {
-        try {
+        runCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
 
             val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
             Logger.info(
-                "Buying channel with lspBalanceSat: $receivingBalanceSats, channelExpiryWeeks: $channelExpiryWeeks, options: $options",
+                "Buying channel with " +
+                    "lspBalanceSat: '$receivingBalanceSats', " +
+                    "channelExpiryWeeks: '$channelExpiryWeeks', " +
+                    "options: '$options'",
                 context = TAG,
             )
 
@@ -247,10 +246,9 @@ class BlocktankRepo @Inject constructor(
 
             repoScope.launch { refreshOrders() }
 
-            Result.success(order)
-        } catch (e: Throwable) {
-            Logger.error("Failed to create order", e, context = TAG)
-            Result.failure(e)
+            return@runCatching order
+        }.onFailure {
+            Logger.error("Failed to create order", it, context = TAG)
         }
     }
 
@@ -261,7 +259,7 @@ class BlocktankRepo @Inject constructor(
     ): Result<IBtEstimateFeeResponse2> = withContext(bgDispatcher) {
         Logger.info("Estimating order fee for spendingSats=$spendingBalanceSats, receivingSats=$receivingBalanceSats")
 
-        try {
+        runCatching {
             val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
             val estimate = coreService.blocktank.estimateFee(
@@ -272,15 +270,15 @@ class BlocktankRepo @Inject constructor(
 
             Logger.debug("Estimated order fee: '$estimate'")
 
-            Result.success(estimate)
-        } catch (e: Throwable) {
-            Logger.error("Failed to estimate order fee", e, context = TAG)
-            Result.failure(e)
+            return@runCatching estimate
+        }.onFailure {
+            Logger.error("Failed to estimate order fee", it, context = TAG)
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun openChannel(orderId: String): Result<IBtOrder> = withContext(bgDispatcher) {
-        try {
+        runCatching {
             Logger.debug("Opening channel for order: '$orderId'", context = TAG)
             val order = coreService.blocktank.open(orderId)
 
@@ -293,10 +291,9 @@ class BlocktankRepo @Inject constructor(
 
             _blocktankState.update { state -> state.copy(orders = updatedOrders) }
 
-            Result.success(order)
-        } catch (e: Throwable) {
-            Logger.error("Failed to open channel for order: $orderId", e, context = TAG)
-            Result.failure(e)
+            return@runCatching order
+        }.onFailure {
+            Logger.error("Failed to open channel for order: $orderId", it, context = TAG)
         }
     }
 
@@ -304,15 +301,14 @@ class BlocktankRepo @Inject constructor(
         orderId: String,
         refresh: Boolean = false,
     ): Result<IBtOrder?> = withContext(bgDispatcher) {
-        try {
+        runCatching {
             if (refresh) {
                 refreshOrders()
             }
             val order = _blocktankState.value.orders.find { it.id == orderId }
-            Result.success(order)
-        } catch (e: Throwable) {
-            Logger.error("Failed to get order: $orderId", e, context = TAG)
-            Result.failure(e)
+            return@runCatching order
+        }.onFailure {
+            Logger.error("Failed to get order: $orderId", it, context = TAG)
         }
     }
 
@@ -446,8 +442,8 @@ class BlocktankRepo @Inject constructor(
                     Result.success(claimGiftCodeWithoutLiquidity(code, amount))
                 }
             }.getOrThrow()
-        }.onFailure { e ->
-            Logger.error("Failed to claim gift code", e, context = TAG)
+        }.onFailure {
+            Logger.error("Failed to claim gift code", it, context = TAG)
         }
     }
 

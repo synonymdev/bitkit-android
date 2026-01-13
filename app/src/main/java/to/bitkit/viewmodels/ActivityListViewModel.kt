@@ -88,7 +88,9 @@ class ActivityListViewModel @Inject constructor(
             activityRepo.activitiesChanged,
         ) { debouncedSearch, filtersWithoutSearch, _ ->
             fetchFilteredActivities(filtersWithoutSearch.copy(searchText = debouncedSearch))
-        }.collect { _filteredActivities.value = it }
+        }.collect {
+            _filteredActivities.value = it
+        }
     }
 
     private suspend fun refreshActivityState() {

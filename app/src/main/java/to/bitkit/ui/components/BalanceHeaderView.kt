@@ -24,6 +24,7 @@ import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
@@ -39,6 +40,7 @@ fun BalanceHeaderView(
     sats: Long,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    currencies: CurrencyState = LocalCurrencies.current,
     prefix: String? = null,
     showBitcoinSymbol: Boolean = true,
     useSwipeToHide: Boolean = true,
@@ -68,7 +70,10 @@ fun BalanceHeaderView(
 
     val settings = settingsViewModel ?: return
     val currency = currencyViewModel ?: return
-    val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+
+    val displayUnit = currencies.displayUnit
+    val primaryDisplay = currencies.primaryDisplay
+
     val converted: ConvertedAmount? = currency.convert(sats = sats)
 
     val isSwipeToHideEnabled by settings.enableSwipeToHideBalance.collectAsStateWithLifecycle()

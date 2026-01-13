@@ -13,6 +13,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
 import javax.inject.Inject
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,

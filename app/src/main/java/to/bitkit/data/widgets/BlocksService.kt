@@ -62,7 +62,7 @@ class BlocksService @Inject constructor(
         val numberFormat = NumberFormat.getNumberInstance(Locale.US)
 
         // Format difficulty (convert to trillions)
-        val difficulty = String.format("%.2f", blockInfo.difficulty / 1_000_000_000_000.0)
+        val difficulty = String.format(Locale.US, "%.2f", blockInfo.difficulty / 1_000_000_000_000.0)
 
         // Format size (convert to KB)
         val sizeKb = (blockInfo.size / 1024.0)

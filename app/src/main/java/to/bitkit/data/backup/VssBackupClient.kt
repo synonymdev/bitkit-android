@@ -30,7 +30,7 @@ class VssBackupClient @Inject constructor(
     private var isSetup = CompletableDeferred<Unit>()
 
     suspend fun setup(walletIndex: Int = 0) = withContext(ioDispatcher) {
-        try {
+        runCatching {
             withTimeout(30.seconds) {
                 Logger.debug("VSS client setting up…", context = TAG)
                 val vssUrl = Env.vssServerUrl
@@ -59,9 +59,9 @@ class VssBackupClient @Inject constructor(
                 isSetup.complete(Unit)
                 Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
             }
-        } catch (e: Throwable) {
-            isSetup.completeExceptionally(e)
-            Logger.error("VSS client setup error", e = e, context = TAG)
+        }.onFailure {
+            isSetup.completeExceptionally(it)
+            Logger.error("VSS client setup error", e = it, context = TAG)
         }
     }
 

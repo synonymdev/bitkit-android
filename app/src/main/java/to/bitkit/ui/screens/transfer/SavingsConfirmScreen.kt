@@ -85,6 +85,7 @@ fun SavingsConfirmScreen(
     )
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun SavingsConfirmContent(
     amount: ULong,

@@ -568,6 +568,7 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                @Suppress("ForbiddenComment")
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_assign),
                     size = ButtonSize.Small,

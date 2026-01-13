@@ -61,6 +61,7 @@ class WakeNodeWorker @AssistedInject constructor(
     private val timeout = 2.minutes
     private val deliverSignal = CompletableDeferred<Unit>()
 
+    @Suppress("TooGenericExceptionCaught")
     override suspend fun doWork(): Result {
         Logger.debug("Node wakeup from notification…", context = TAG)
 
