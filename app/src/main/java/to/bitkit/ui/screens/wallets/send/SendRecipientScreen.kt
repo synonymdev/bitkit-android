@@ -169,7 +169,7 @@ fun SendRecipientScreen(
                 app?.toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__qr_error_header),
-                    description = "Failed to initialize camera: ${e.message}"
+                    description = context.getString(R.string.other__camera_init_error, e.message.orEmpty())
                 )
                 isCameraInitialized = false
             }
@@ -388,7 +388,7 @@ private fun CameraPreviewWithControls(
         }
 
         BodyMSB(
-            "Scan QR",
+            stringResource(R.string.other__camera_scan_qr),
             color = Colors.White,
             modifier = Modifier
                 .padding(top = 31.dp)
@@ -425,12 +425,16 @@ private fun PermissionDenied(
             .background(Colors.Black)
             .padding(32.dp)
     ) {
-        Display("SCAN\n<accent>QR CODE</accent>".withAccent(accentColor = Colors.Brand), color = Colors.White)
+        Display(
+            stringResource(R.string.other__camera_permission_title)
+                .withAccent(accentColor = Colors.Brand),
+            color = Colors.White
+        )
 
         VerticalSpacer(8.dp)
 
         BodyM(
-            "Allow camera access to scan bitcoin invoices and pay more quickly.",
+            stringResource(R.string.other__camera_permission_description),
             color = Colors.White64,
             modifier = Modifier.fillMaxWidth()
         )
@@ -438,7 +442,7 @@ private fun PermissionDenied(
         VerticalSpacer(32.dp)
 
         PrimaryButton(
-            text = "Enable camera",
+            text = stringResource(R.string.other__camera_permission_button),
             icon = {
                 Icon(painter = painterResource(R.drawable.ic_camera), contentDescription = null)
             },

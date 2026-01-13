@@ -75,8 +75,8 @@ class RecoveryViewModel @Inject constructor(
                     }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
-                        title = "Error",
-                        description = "Failed to create log zip file",
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.other__logs_export_error),
                     )
                 }
             )
@@ -100,8 +100,8 @@ class RecoveryViewModel @Inject constructor(
                 viewModelScope.launch {
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
-                        title = "Error",
-                        description = "Failed to open support links",
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.settings__support__link_error),
                     )
                 }
             }

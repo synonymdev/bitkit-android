@@ -36,10 +36,10 @@ import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -169,7 +169,7 @@ private fun Content(
             FillHeight()
 
             SettingsSwitchRow(
-                title = "Set up in background",
+                title = stringResource(R.string.settings__bg__setup),
                 isChecked = hasNotificationPermission,
                 colors = AppSwitchDefaults.colorsPurple,
                 onClick = onSystemSettingsClick,
