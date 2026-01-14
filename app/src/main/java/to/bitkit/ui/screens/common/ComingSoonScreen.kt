@@ -2,9 +2,7 @@ package to.bitkit.ui.screens.common
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -16,6 +14,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -50,14 +49,14 @@ fun ComingSoonScreen(
                 text = stringResource(R.string.coming_soon__headline).withAccent(accentColor = Colors.Brand),
                 color = Colors.White
             )
-            Spacer(Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(text = stringResource(R.string.coming_soon__description), color = Colors.White64)
-            Spacer(Modifier.height(54.dp))
+            VerticalSpacer(54.dp)
             PrimaryButton(
                 text = stringResource(R.string.coming_soon__button),
                 onClick = onWalletOverviewClick,
             )
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
