@@ -171,7 +171,7 @@ class WalletRepo @Inject constructor(
         val startHeight = lightningRepo.lightningState.value.block()?.height
         Logger.debug("Sync $sourceLabel started at block height=$startHeight", context = TAG)
 
-        val result = measured("Sync $sourceLabel") {
+        val result = measured(label = "Sync $sourceLabel", context = TAG) {
             syncBalances()
             lightningRepo.sync().onSuccess {
                 syncBalances()

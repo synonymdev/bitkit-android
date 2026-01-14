@@ -27,7 +27,7 @@ enum class ServiceQueue {
     ): T {
         return runBlocking(coroutineContext) {
             try {
-                measured(functionName) {
+                measured(label = functionName, context = TAG) {
                     block()
                 }
             } catch (e: Exception) {
@@ -45,7 +45,7 @@ enum class ServiceQueue {
     ): T {
         return withContext(coroutineContext) {
             try {
-                measured(functionName) {
+                measured(label = functionName, context = TAG) {
                     block()
                 }
             } catch (e: Exception) {
@@ -53,6 +53,10 @@ enum class ServiceQueue {
                 throw AppError(e)
             }
         }
+    }
+
+    companion object {
+        private const val TAG = "ServiceQueue"
     }
 }
 
