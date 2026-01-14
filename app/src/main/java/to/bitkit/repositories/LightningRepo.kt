@@ -269,7 +269,6 @@ class LightningRepo @Inject constructor(
                     channelMigration = channelMigration,
                 )
             } else {
-                Logger.error("Node start error", e, context = TAG)
                 _lightningState.update {
                     it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
                 }
@@ -935,9 +934,10 @@ class LightningRepo @Inject constructor(
         executeWhenNodeRunning("exportNetworkGraphToFile") {
             lightningService.exportNetworkGraphToFile(outputDir)
         }
+    // endregion
 
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Restarting LDK node", context = TAG)
+        Logger.info("Restarting node", context = TAG)
         stop().onFailure {
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
@@ -945,11 +945,10 @@ class LightningRepo @Inject constructor(
         start(shouldRetry = false).onFailure {
             Logger.error("Failed to start node during restart", it, context = TAG)
             return@withContext Result.failure(it)
+        }.onSuccess {
+            Logger.info("Node restarted successfully", context = TAG)
         }
-        Logger.info("LDK node restarted successfully", context = TAG)
-        Result.success(Unit)
     }
-    // endregion
 
     companion object {
         private const val TAG = "LightningRepo"
