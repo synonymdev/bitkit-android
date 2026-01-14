@@ -8,7 +8,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import to.bitkit.ext.callerName
 import to.bitkit.utils.AppError
-import to.bitkit.utils.Logger
 import to.bitkit.utils.measured
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
@@ -19,40 +18,28 @@ enum class ServiceQueue {
 
     private val scope by lazy { CoroutineScope(newSingleThreadDispatcher(name) + SupervisorJob()) }
 
-    @Suppress("TooGenericExceptionCaught")
     fun <T> blocking(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,
         block: suspend CoroutineScope.() -> T,
-    ): T {
-        return runBlocking(coroutineContext) {
-            try {
-                measured(label = functionName, context = TAG) {
-                    block()
-                }
-            } catch (e: Exception) {
-                Logger.error("ServiceQueue.$name error", e)
-                throw AppError(e)
+    ): T = runBlocking(coroutineContext) {
+        runCatching {
+            measured(label = functionName, context = TAG) {
+                block()
             }
-        }
+        }.getOrElse { throw AppError(it) }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun <T> background(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,
         block: suspend CoroutineScope.() -> T,
-    ): T {
-        return withContext(coroutineContext) {
-            try {
-                measured(label = functionName, context = TAG) {
-                    block()
-                }
-            } catch (e: Exception) {
-                Logger.error("ServiceQueue.$name error", e)
-                throw AppError(e)
+    ): T = withContext(coroutineContext) {
+        runCatching {
+            measured(label = functionName, context = TAG) {
+                block()
             }
-        }
+        }.getOrElse { throw AppError(it) }
     }
 
     companion object {
