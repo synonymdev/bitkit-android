@@ -61,6 +61,10 @@ fun DevSettingsScreen(
                     viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
                 }
             )
+            SettingsTextButtonRow(
+                title = "Wipe Logs",
+                onClick = viewModel::wipeLogs
+            )
 
             if (Env.network == Network.REGTEST) {
                 SectionHeader("REGTEST")

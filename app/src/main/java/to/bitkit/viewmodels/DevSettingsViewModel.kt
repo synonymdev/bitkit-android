@@ -27,6 +27,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions", "LongParameterList")
@@ -116,7 +117,7 @@ class DevSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             logsRepo.zipLogsForSharing()
                 .onSuccess { uri -> onReady(uri) }
-                .onFailure { err ->
+                .onFailure {
                     ToastEventBus.send(
                         type = Toast.ToastType.WARNING,
                         title = context.getString(R.string.lightning__error_logs),
@@ -125,6 +126,8 @@ class DevSettingsViewModel @Inject constructor(
                 }
         }
     }
+
+    fun wipeLogs() = Logger.reset()
 
     fun resetBackupState() {
         viewModelScope.launch {
