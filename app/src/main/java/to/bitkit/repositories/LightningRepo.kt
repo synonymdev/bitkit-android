@@ -346,7 +346,7 @@ class LightningRepo @Inject constructor(
                 lightningService.sync()
                 refreshChannelCache()
                 syncState()
-                if (syncPending.get()) delay(SYNC_LOOP_DEBOUNCE_MS)
+                if (syncPending.get()) delay(MS_SYNC_LOOP_DEBOUNCE)
             } while (syncPending.getAndSet(false))
         } finally {
             _lightningState.update { it.copy(isSyncingWallet = false) }
@@ -410,7 +410,7 @@ class LightningRepo @Inject constructor(
             }
 
             val channelName = channel.inboundScidAlias?.toString()
-                ?: (channel.channelId.take(CHANNEL_ID_PREVIEW_LENGTH) + "…")
+                ?: (channel.channelId.take(LENGTH_CHANNEL_ID_PREVIEW) + "…")
 
             val closedAt = (System.currentTimeMillis() / 1000L).toULong()
 
@@ -922,7 +922,9 @@ class LightningRepo @Inject constructor(
             return@runCatching replacementTxId
         }.onFailure {
             Logger.error(
-                "bumpFeeByRbf error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte", it, context = TAG,
+                "bumpFeeByRbf error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte",
+                it,
+                context = TAG,
             )
         }
     }
@@ -959,25 +961,25 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
-        Logger.info("Estimating routing fees for bolt11: $bolt11")
+        Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
         lightningService.estimateRoutingFees(bolt11)
             .onSuccess {
                 Logger.info("Routing fees estimated: $it", context = TAG)
             }
             .onFailure {
-                Logger.error("Routing fees estimation failed", it, context = TAG)
+                Logger.error("estimateRoutingFees error", it, context = TAG)
             }
     }
 
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
-            Logger.info("Estimating routing fees for amount: $amountSats")
+            Logger.info("Estimating routing fees for amount: $amountSats", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats)
                 .onSuccess {
                     Logger.info("Routing fees estimated: $it", context = TAG)
                 }
                 .onFailure {
-                    Logger.error("Routing fees estimation failed", it, context = TAG)
+                    Logger.error("estimateRoutingFees error", it, context = TAG)
                 }
         }
 
@@ -1006,8 +1008,8 @@ class LightningRepo @Inject constructor(
 
     companion object {
         private const val TAG = "LightningRepo"
-        private const val CHANNEL_ID_PREVIEW_LENGTH = 10
-        private const val SYNC_LOOP_DEBOUNCE_MS = 500L
+        private const val LENGTH_CHANNEL_ID_PREVIEW = 10
+        private const val MS_SYNC_LOOP_DEBOUNCE = 500L
     }
 }
 

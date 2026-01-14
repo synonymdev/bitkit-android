@@ -67,16 +67,13 @@ class WalletViewModel @Inject constructor(
     @Volatile
     private var isStarting = false
 
-    // Local UI state
     var walletExists by mutableStateOf(walletRepo.walletExists())
         private set
 
     val isRecoveryMode = lightningRepo.isRecoveryMode
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
-
-    val isRestoringFromRNRemoteBackup: StateFlow<Boolean> =
-        migrationService.isRestoringFromRNRemoteBackup
+    val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = migrationService.isRestoringFromRNRemoteBackup
 
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Initial)
     val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
@@ -92,51 +89,49 @@ class WalletViewModel @Inject constructor(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private fun checkAndPerformRNMigration() {
-        viewModelScope.launch(bgDispatcher) {
-            val isChecked = migrationService.isMigrationChecked()
-            if (isChecked) {
-                loadCacheIfWalletExists()
-                return@launch
-            }
+    private fun checkAndPerformRNMigration() = viewModelScope.launch(bgDispatcher) {
+        val isChecked = migrationService.isMigrationChecked()
+        if (isChecked) {
+            loadCacheIfWalletExists()
+            return@launch
+        }
 
-            val hasNative = migrationService.hasNativeWalletData()
-            if (hasNative) {
-                migrationService.markMigrationChecked()
-                loadCacheIfWalletExists()
-                return@launch
-            }
+        val hasNative = migrationService.hasNativeWalletData()
+        if (hasNative) {
+            migrationService.markMigrationChecked()
+            loadCacheIfWalletExists()
+            return@launch
+        }
 
-            val hasRN = migrationService.hasRNWalletData()
-            if (!hasRN) {
-                migrationService.markMigrationChecked()
-                loadCacheIfWalletExists()
-                return@launch
-            }
+        val hasRN = migrationService.hasRNWalletData()
+        if (!hasRN) {
+            migrationService.markMigrationChecked()
+            loadCacheIfWalletExists()
+            return@launch
+        }
 
-            migrationService.setShowingMigrationLoading(true)
+        migrationService.setShowingMigrationLoading(true)
 
-            runCatching {
-                migrationService.migrateFromReactNative()
-                walletRepo.setWalletExistsState()
-                walletExists = walletRepo.walletExists()
-                loadCacheIfWalletExists()
-                if (walletExists) {
-                    val channelMigration = buildChannelMigrationIfAvailable()
-                    startNode(0, channelMigration)
-                } else {
-                    migrationService.setShowingMigrationLoading(false)
-                }
-            }.onFailure { e ->
-                Logger.error("RN migration failed: $e", e, context = "WalletViewModel")
-                migrationService.markMigrationChecked()
+        runCatching {
+            migrationService.migrateFromReactNative()
+            walletRepo.setWalletExistsState()
+            walletExists = walletRepo.walletExists()
+            loadCacheIfWalletExists()
+            if (walletExists) {
+                val channelMigration = buildChannelMigrationIfAvailable()
+                startNode(0, channelMigration)
+            } else {
                 migrationService.setShowingMigrationLoading(false)
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = "Migration Failed",
-                    description = "Please restore your wallet manually using your recovery phrase"
-                )
             }
+        }.onFailure {
+            Logger.error("RN migration failed: $it", it, context = "WalletViewModel")
+            migrationService.markMigrationChecked()
+            migrationService.setShowingMigrationLoading(false)
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = "Migration Failed",
+                description = "Please restore your wallet manually using your recovery phrase"
+            )
         }
     }
 
@@ -146,13 +141,11 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    private fun collectStates() {
-        viewModelScope.launch {
-            walletState.collect { state ->
-                walletExists = state.walletExists
-                if (state.walletExists && _restoreState.value == RestoreState.InProgress.Wallet) {
-                    restoreFromBackup()
-                }
+    private fun collectStates() = viewModelScope.launch {
+        walletState.collect {
+            walletExists = it.walletExists
+            if (it.walletExists && _restoreState.value == RestoreState.InProgress.Wallet) {
+                restoreFromBackup()
             }
         }
     }
@@ -161,8 +154,8 @@ class WalletViewModel @Inject constructor(
         _restoreState.update { RestoreState.InProgress.Metadata }
         runCatching {
             restoreFromMostRecentBackup()
-        }.onFailure { e ->
-            Logger.error("Restore from backup failed", e, context = TAG)
+        }.onFailure {
+            Logger.error("Restore from backup failed", it, context = TAG)
         }
         _restoreState.update { RestoreState.Completed }
     }
@@ -187,28 +180,23 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    private suspend fun restoreFromRNRemoteBackup() {
-        runCatching {
-            migrationService.restoreFromRNRemoteBackup()
-            walletRepo.loadFromCache()
-        }.onFailure { e ->
-            Logger.warn("RN remote backup restore failed, falling back to VSS", e, context = TAG)
-            backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
-        }
+    private suspend fun restoreFromRNRemoteBackup() = runCatching {
+        migrationService.restoreFromRNRemoteBackup()
+        walletRepo.loadFromCache()
+    }.onFailure {
+        Logger.warn("RN remote backup restore failed, falling back to VSS", it, context = TAG)
+        backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
     }
 
-    fun onRestoreContinue() {
+    fun onRestoreContinue() = _restoreState.update { RestoreState.Settled }
+
+    @Suppress("ForbiddenComment")
+    fun proceedWithoutRestore(onDone: () -> Unit) = viewModelScope.launch {
+        // TODO start LDK without trying to restore backup state from VSS if possible
+        lightningRepo.stop()
+        delay(LOADING_MS.milliseconds)
         _restoreState.update { RestoreState.Settled }
-    }
-
-    fun proceedWithoutRestore(onDone: () -> Unit) {
-        viewModelScope.launch {
-            // TODO start LDK without trying to restore backup state from VSS if possible
-            lightningRepo.stop()
-            delay(LOADING_MS.milliseconds)
-            _restoreState.update { RestoreState.Settled }
-            onDone()
-        }
+        onDone()
     }
 
     fun setInitNodeLifecycleState() = lightningRepo.setInitNodeLifecycleState()
@@ -259,10 +247,10 @@ class WalletViewModel @Inject constructor(
                     walletRepo.refreshBip21()
                 }
             }
-            .onFailure { error ->
-                Logger.error("Node startup error", error, context = TAG)
-                if (error !is RecoveryModeException) {
-                    ToastEventBus.send(error)
+            .onFailure {
+                Logger.error("Node startup error", it, context = TAG)
+                if (it !is RecoveryModeException) {
+                    ToastEventBus.send(it)
                 }
             }
     }
@@ -272,19 +260,19 @@ class WalletViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             lightningRepo.stop()
-                .onFailure { error ->
-                    Logger.error("Node stop error", error)
-                    ToastEventBus.send(error)
+                .onFailure {
+                    Logger.error("Node stop error", it)
+                    ToastEventBus.send(it)
                 }
         }
     }
 
     fun refreshState() = viewModelScope.launch {
         walletRepo.syncNodeAndWallet()
-            .onFailure { error ->
-                Logger.error("Failed to refresh state: ${error.message}", error)
-                if (error is CancellationException || error.isTxSyncTimeout()) return@onFailure
-                ToastEventBus.send(error)
+            .onFailure {
+                Logger.error("Failed to refresh state: ${it.message}", it)
+                if (it is CancellationException || it.isTxSyncTimeout()) return@onFailure
+                ToastEventBus.send(it)
             }
     }
 
@@ -295,11 +283,11 @@ class WalletViewModel @Inject constructor(
         lightningRepo.clearPendingSync()
 
         syncJob = viewModelScope.launch {
-            _isRefreshing.value = true
+            _isRefreshing.update { true }
             try {
                 walletRepo.syncNodeAndWallet(source = SyncSource.MANUAL)
             } finally {
-                _isRefreshing.value = false
+                _isRefreshing.update { false }
             }
         }
     }
@@ -311,30 +299,26 @@ class WalletViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
                         title = context.getString(R.string.common__success),
-                        description = context.getString(R.string.wallet__peer_disconnected),
+                        description = context.getString(R.string.wallet__peer_disconnected)
                     )
                 }
-                .onFailure { error ->
+                .onFailure {
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
-                        description = error.message ?: context.getString(R.string.common__error_body)
+                        description = it.message ?: context.getString(R.string.common__error_desc)
                     )
                 }
         }
     }
 
-    fun updateBip21Invoice(
-        amountSats: ULong? = walletState.value.bip21AmountSats,
-    ) {
-        viewModelScope.launch {
-            walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.wallet__error_invoice_update),
-                    description = error.message ?: context.getString(R.string.common__error_body)
-                )
-            }
+    fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
+        walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__error_invoice_update),
+                description = error.message ?: context.getString(R.string.common__error_desc)
+            )
         }
     }
 
@@ -344,11 +328,9 @@ class WalletViewModel @Inject constructor(
         walletRepo.refreshBip21()
     }
 
-    fun wipeWallet() {
-        viewModelScope.launch(bgDispatcher) {
-            walletRepo.wipeWallet().onFailure { error ->
-                ToastEventBus.send(error)
-            }
+    fun wipeWallet() = viewModelScope.launch(bgDispatcher) {
+        walletRepo.wipeWallet().onFailure {
+            ToastEventBus.send(it)
         }
     }
 
@@ -358,8 +340,8 @@ class WalletViewModel @Inject constructor(
             .onSuccess {
                 backupRepo.scheduleFullBackup()
             }
-            .onFailure { error ->
-                ToastEventBus.send(error)
+            .onFailure {
+                ToastEventBus.send(it)
             }
     }
 
@@ -370,22 +352,22 @@ class WalletViewModel @Inject constructor(
         walletRepo.restoreWallet(
             mnemonic = mnemonic,
             bip39Passphrase = bip39Passphrase,
-        ).onFailure { error ->
-            ToastEventBus.send(error)
+        ).onFailure {
+            ToastEventBus.send(it)
         }
     }
 
     // region debug methods
 
     fun addTagToSelected(newTag: String) = viewModelScope.launch {
-        walletRepo.addTagToSelected(newTag).onFailure { e ->
-            ToastEventBus.send(e)
+        walletRepo.addTagToSelected(newTag).onFailure {
+            ToastEventBus.send(it)
         }
     }
 
     fun removeTag(tag: String) = viewModelScope.launch {
-        walletRepo.removeTag(tag).onFailure { e ->
-            ToastEventBus.send(e)
+        walletRepo.removeTag(tag).onFailure {
+            ToastEventBus.send(it)
         }
     }
 
@@ -395,7 +377,7 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Description(newText: String) {
         if (newText.isEmpty()) {
-            Logger.warn("Empty")
+            Logger.warn(context.getString(R.string.common__empty))
         }
         walletRepo.setBip21Description(newText)
     }

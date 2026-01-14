@@ -36,6 +36,7 @@ import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.services.CoreService
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -43,7 +44,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
 
-private const val SYNC_TIMEOUT_MS = 40_000L
+private const val MS_SYNC_TIMEOUT = 40_000L
 
 @Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @OptIn(ExperimentalTime::class)
@@ -78,7 +79,7 @@ class ActivityRepo @Inject constructor(
         Logger.debug("syncActivities called", context = TAG)
 
         val result = runCatching {
-            withTimeout(SYNC_TIMEOUT_MS) {
+            withTimeout(MS_SYNC_TIMEOUT) {
                 Logger.debug("isSyncingLdkNodePayments = ${isSyncingLdkNodePayments.value}", context = TAG)
                 isSyncingLdkNodePayments.first { !it }
             }
@@ -111,12 +112,12 @@ class ActivityRepo @Inject constructor(
      * Syncs `ldk-node` [PaymentDetails] list to `bitkit-core` [Activity] items.
      */
     suspend fun syncLdkNodePayments(payments: List<PaymentDetails>): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             val channelIdsByTxId = findChannelsForPayments(payments)
             coreService.activity.syncLdkNodePaymentsToActivities(payments, channelIdsByTxId = channelIdsByTxId)
             notifyActivitiesChanged()
-        }.onFailure { e ->
-            Logger.error("Error syncing LDK payments:", e, context = TAG)
+        }.onFailure {
+            Logger.error("Error syncing LDK payments:", it, context = TAG)
         }
     }
 
@@ -136,36 +137,33 @@ class ActivityRepo @Inject constructor(
         return@withContext channelIdsByTxId
     }
 
-    private suspend fun findChannelForTransaction(txid: String, direction: PaymentDirection): String? {
-        return if (direction == PaymentDirection.OUTBOUND) {
-            findOpenChannelForTransaction(txid)
-        } else {
-            findClosedChannelForTransaction(txid)
-        }
+    private suspend fun findChannelForTransaction(
+        txid: String,
+        direction: PaymentDirection,
+    ): String? = if (direction == PaymentDirection.OUTBOUND) {
+        findOpenChannelForTransaction(txid)
+    } else {
+        findClosedChannelForTransaction(txid)
     }
 
-    private fun findOpenChannelForTransaction(txid: String): String? {
-        return runCatching {
-            val channels = lightningRepo.lightningState.value.channels
-            if (channels.isEmpty()) return null
+    private fun findOpenChannelForTransaction(txid: String): String? = runCatching {
+        val channels = lightningRepo.lightningState.value.channels
+        if (channels.isEmpty()) return null
 
-            channels.firstOrNull { channel -> channel.fundingTxo?.txid == txid }
-                ?.channelId
-                ?: run {
-                    val orders = blocktankRepo.blocktankState.value.orders
-                    val matchingOrder = orders.firstOrNull { order ->
-                        order.payment?.onchain?.transactions?.any { it.txId == txid } == true
-                    } ?: return null
+        channels.firstOrNull { channel -> channel.fundingTxo?.txid == txid }
+            ?.channelId
+            ?: run {
+                val orders = blocktankRepo.blocktankState.value.orders
+                val matchingOrder = orders.firstOrNull { order ->
+                    order.payment?.onchain?.transactions?.any { it.txId == txid } == true
+                } ?: return null
 
-                    val orderChannel = matchingOrder.channel ?: return null
-                    channels.firstOrNull { channel ->
-                        channel.fundingTxo?.txid == orderChannel.fundingTx.id
-                    }?.channelId
-                }
-        }.onFailure {
-            Logger.warn("Failed to find open channel for transaction: '$txid'", it, context = TAG)
-        }.getOrNull()
-    }
+                val orderChannel = matchingOrder.channel ?: return null
+                channels.firstOrNull { it.fundingTxo?.txid == orderChannel.fundingTx.id }?.channelId
+            }
+    }.onFailure {
+        Logger.warn("Failed to find open channel for transaction: '$txid'", it, context = TAG)
+    }.getOrNull()
 
     private suspend fun findClosedChannelForTransaction(txid: String): String? =
         coreService.activity.findClosedChannelForTransaction(txid, null)
@@ -178,9 +176,7 @@ class ActivityRepo @Inject constructor(
      */
     suspend fun isReceivedTransaction(txid: String): Boolean = withContext(bgDispatcher) {
         lightningRepo.getPayments().getOrNull()?.let { payments ->
-            payments.firstOrNull { payment ->
-                (payment.kind as? PaymentKind.Onchain)?.txid == txid
-            }
+            payments.firstOrNull { (it.kind as? PaymentKind.Onchain)?.txid == txid }
         }?.direction == PaymentDirection.INBOUND
     }
 
@@ -254,13 +250,9 @@ class ActivityRepo @Inject constructor(
         return coreService.activity.getBoostTxDoesExist(boostTxIds)
     }
 
-    suspend fun isCpfpChildTransaction(txId: String): Boolean {
-        return coreService.activity.isCpfpChildTransaction(txId)
-    }
+    suspend fun isCpfpChildTransaction(txId: String): Boolean = coreService.activity.isCpfpChildTransaction(txId)
 
-    suspend fun getTxIdsInBoostTxIds(): Set<String> {
-        return coreService.activity.getTxIdsInBoostTxIds()
-    }
+    suspend fun getTxIdsInBoostTxIds(): Set<String> = coreService.activity.getTxIdsInBoostTxIds()
 
     /**
      * Gets a specific activity by payment hash or txID with retry logic
@@ -290,7 +282,7 @@ class ActivityRepo @Inject constructor(
                 syncActivities().onSuccess {
                     Logger.debug(
                         "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
-                        context = TAG
+                        context = TAG,
                     )
                     activity = findActivity()
                 }
@@ -300,7 +292,7 @@ class ActivityRepo @Inject constructor(
         }.onFailure {
             Logger.error(
                 "findActivityByPaymentId error (paymentHashOrTxId:'$paymentHashOrTxId' type:'$type' txType:'$txType')",
-                context = TAG
+                context = TAG,
             )
         }
     }
@@ -315,9 +307,9 @@ class ActivityRepo @Inject constructor(
         limit: UInt? = null,
         sortDirection: SortDirection? = null,
     ): Result<List<Activity>> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.get(filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
-        }.onFailure { e ->
+        }.onFailure {
             Logger.error(
                 "getActivities error. Parameters:" +
                     "\nfilter:$filter " +
@@ -328,27 +320,27 @@ class ActivityRepo @Inject constructor(
                     "maxDate:$maxDate " +
                     "limit:$limit " +
                     "sortDirection:$sortDirection",
-                e = e,
-                context = TAG
+                it,
+                context = TAG,
             )
         }
     }
 
     suspend fun getActivity(id: String): Result<Activity?> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.getActivity(id)
-        }.onFailure { e ->
-            Logger.error("getActivity error for ID: $id", e, context = TAG)
+        }.onFailure {
+            Logger.error("getActivity error for ID: $id", it, context = TAG)
         }
     }
 
     suspend fun getClosedChannels(
         sortDirection: SortDirection = SortDirection.ASC,
     ): Result<List<ClosedChannelDetails>> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.closedChannels(sortDirection)
-        }.onFailure { e ->
-            Logger.error("Error getting closed channels (sortDirection=$sortDirection)", e, context = TAG)
+        }.onFailure {
+            Logger.error("Error getting closed channels (sortDirection=$sortDirection)", it, context = TAG)
         }
     }
 
@@ -361,7 +353,7 @@ class ActivityRepo @Inject constructor(
         activity: Activity,
         forceUpdate: Boolean = false,
     ): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             if (id in cacheStore.data.first().deletedActivities && !forceUpdate) {
                 Logger.debug("Activity $id was deleted", context = TAG)
                 return@withContext Result.failure(
@@ -372,8 +364,8 @@ class ActivityRepo @Inject constructor(
             }
             coreService.activity.update(id, activity)
             notifyActivitiesChanged()
-        }.onFailure { e ->
-            Logger.error("updateActivity error for ID: $id", e, context = TAG)
+        }.onFailure {
+            Logger.error("updateActivity error for ID: $id", it, context = TAG)
         }
     }
 
@@ -387,31 +379,20 @@ class ActivityRepo @Inject constructor(
         activityIdToDelete: String,
         activity: Activity,
     ): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext updateActivity(
+        updateActivity(
             id = id,
             activity = activity
-        ).fold(
-            onSuccess = {
-                Logger.debug(
-                    "Activity $id updated with success. new data: $activity",
-                    context = TAG
-                )
-
-                val tags = coreService.activity.tags(activityIdToDelete)
-                addTagsToActivity(activityId = id, tags = tags)
-
-                Result.success(Unit)
-            },
-            onFailure = { e ->
-                Logger.error(
-                    "Update activity fail. Parameters: id:$id, " +
-                        "activityIdToDelete:$activityIdToDelete activity:$activity",
-                    e = e,
-                    context = TAG
-                )
-                Result.failure(e)
-            }
-        )
+        ).onSuccess {
+            Logger.debug("Activity $id updated with success. new data: $activity", context = TAG)
+            val tags = coreService.activity.tags(activityIdToDelete)
+            addTagsToActivity(activityId = id, tags = tags)
+        }.onFailure {
+            Logger.error(
+                "updateActivity error: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity",
+                it,
+                context = TAG,
+            )
+        }
     }
 
     private suspend fun boostPendingActivities() = withContext(bgDispatcher) {
@@ -467,7 +448,7 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun deleteActivity(id: String): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             val deleted = coreService.activity.delete(id)
             if (deleted) {
                 cacheStore.addActivityToDeletedList(id)
@@ -475,34 +456,35 @@ class ActivityRepo @Inject constructor(
             } else {
                 return@withContext Result.failure(Exception("Activity not deleted"))
             }
-        }.onFailure { e ->
-            Logger.error("deleteActivity error for ID: $id", e, context = TAG)
+        }.onFailure {
+            Logger.error("deleteActivity error for ID: $id", it, context = TAG)
         }
     }
 
     suspend fun insertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             if (activity.rawId() in cacheStore.data.first().deletedActivities) {
                 Logger.debug("Activity ${activity.rawId()} was deleted, skipping", context = TAG)
                 return@withContext Result.failure(Exception("Activity ${activity.rawId()} was deleted"))
             }
             coreService.activity.insert(activity)
             notifyActivitiesChanged()
-        }.onFailure { e ->
-            Logger.error("insertActivity error", e, context = TAG)
+        }.onFailure {
+            Logger.error("insertActivity error", it, context = TAG)
         }
     }
 
     suspend fun upsertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
-            if (activity.rawId() in cacheStore.data.first().deletedActivities) {
-                Logger.debug("Activity ${activity.rawId()} was deleted, skipping", context = TAG)
-                return@withContext Result.failure(Exception("Activity ${activity.rawId()} was deleted"))
+        runCatching {
+            val id = activity.rawId()
+            if (id in cacheStore.data.first().deletedActivities) {
+                Logger.debug("Activity $id was deleted, skipping", context = TAG)
+                return@withContext Result.failure(AppError("Activity $id was deleted"))
             }
             coreService.activity.upsert(activity)
             notifyActivitiesChanged()
-        }.onFailure { e ->
-            Logger.error("upsertActivity error", e, context = TAG)
+        }.onFailure {
+            Logger.error("upsertActivity error", it, context = TAG)
         }
     }
 
@@ -515,11 +497,9 @@ class ActivityRepo @Inject constructor(
     ): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
             requireNotNull(cjitEntry)
-
             val amount = channel.amountOnClose
             val now = nowTimestamp().epochSecond.toULong()
-
-            return@withContext insertActivity(
+            insertActivity(
                 Activity.Lightning(
                     LightningActivity(
                         id = channel.fundingTxo?.txid.orEmpty(),
@@ -536,9 +516,9 @@ class ActivityRepo @Inject constructor(
                         seenAt = null,
                     )
                 )
-            )
-        }.onFailure { e ->
-            Logger.error("insertActivity error", e, context = TAG)
+            ).getOrThrow()
+        }.onFailure {
+            Logger.error("insertActivity error", it, context = TAG)
         }
     }
 
@@ -551,7 +531,7 @@ class ActivityRepo @Inject constructor(
         activityId: String,
         tags: List<String>,
     ): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             checkNotNull(coreService.activity.getActivity(activityId)) { "Activity with ID $activityId not found" }
 
             val existingTags = coreService.activity.tags(activityId)
@@ -564,8 +544,8 @@ class ActivityRepo @Inject constructor(
             } else {
                 Logger.info("No new tags to add to activity $activityId", context = TAG)
             }
-        }.onFailure { e ->
-            Logger.error("addTagsToActivity error for activity $activityId", e, context = TAG)
+        }.onFailure {
+            Logger.error("addTagsToActivity error for activity $activityId", it, context = TAG)
         }
     }
 
@@ -579,7 +559,8 @@ class ActivityRepo @Inject constructor(
         tags: List<String>,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (tags.isEmpty()) return@withContext Result.failure(IllegalArgumentException("No tags selected"))
-        return@withContext findActivityByPaymentId(
+
+        findActivityByPaymentId(
             paymentHashOrTxId = paymentHashOrTxId,
             type = type,
             txType = txType
@@ -593,14 +574,14 @@ class ActivityRepo @Inject constructor(
      */
     suspend fun removeTagsFromActivity(activityId: String, tags: List<String>): Result<Unit> =
         withContext(bgDispatcher) {
-            return@withContext runCatching {
+            runCatching {
                 checkNotNull(coreService.activity.getActivity(activityId)) { "Activity with ID $activityId not found" }
 
                 coreService.activity.dropTags(activityId, tags)
                 notifyActivitiesChanged()
                 Logger.info("Removed ${tags.size} tags from activity $activityId", context = TAG)
-            }.onFailure { e ->
-                Logger.error("removeTagsFromActivity error for activity $activityId", e, context = TAG)
+            }.onFailure {
+                Logger.error("removeTagsFromActivity error for activity $activityId", it, context = TAG)
             }
         }
 
@@ -608,20 +589,20 @@ class ActivityRepo @Inject constructor(
      * Gets all tags for an activity
      */
     suspend fun getActivityTags(activityId: String): Result<List<String>> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.tags(activityId)
-        }.onFailure { e ->
-            Logger.error("getActivityTags error for activity $activityId", e, context = TAG)
+        }.onFailure {
+            Logger.error("getActivityTags error for activity $activityId", it, context = TAG)
         }
     }
 
     suspend fun getAllAvailableTags(): Result<List<String>> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.allPossibleTags()
         }.onSuccess { tags ->
             _state.update { it.copy(tags = tags) }
-        }.onFailure { e ->
-            Logger.error("getAllAvailableTags error", e, context = TAG)
+        }.onFailure {
+            Logger.error("getAllAvailableTags error", it, context = TAG)
         }
     }
 
@@ -629,15 +610,15 @@ class ActivityRepo @Inject constructor(
      * Get all [ActivityTags] for backup
      */
     suspend fun getAllActivitiesTags(): Result<List<ActivityTags>> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.getAllActivitiesTags()
-        }.onFailure { e ->
-            Logger.error("getAllActivityTags error", e, context = TAG)
+        }.onFailure {
+            Logger.error("getAllActivityTags error", it, context = TAG)
         }
     }
 
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.upsertList(payload.activities)
             coreService.activity.upsertTags(payload.activityTags)
             coreService.activity.upsertClosedChannelList(payload.closedChannels)
@@ -652,25 +633,25 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun markAllUnseenActivitiesAsSeen(): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.markAllUnseenActivitiesAsSeen()
             notifyActivitiesChanged()
-        }.onFailure { e ->
-            Logger.error("Failed to mark all activities as seen: $e", e, context = TAG)
+        }.onFailure {
+            Logger.error("Failed to mark all activities as seen: $it", it, context = TAG)
         }
     }
 
-    // MARK: - Development/Testing Methods
+    // MARK: - Debug Methods
 
     /**
      * Removes all activities
      */
     suspend fun removeAllActivities(): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             coreService.activity.removeAll()
             Logger.info("Removed all activities", context = TAG)
-        }.onFailure { e ->
-            Logger.error("removeAllActivities error", e, context = TAG)
+        }.onFailure {
+            Logger.error("removeAllActivities error", it, context = TAG)
         }
     }
 
@@ -678,8 +659,7 @@ class ActivityRepo @Inject constructor(
      * Generates random test data (regtest only) with business logic
      */
     suspend fun generateTestData(count: Int = 100): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
-            // Business logic: validate count is reasonable
+        runCatching {
             val validatedCount = count.coerceIn(1, 1000)
             if (validatedCount != count) {
                 Logger.warn("Adjusted test data count from $count to $validatedCount", context = TAG)
@@ -687,8 +667,8 @@ class ActivityRepo @Inject constructor(
 
             coreService.activity.generateRandomTestData(validatedCount)
             Logger.info("Generated $validatedCount test activities", context = TAG)
-        }.onFailure { e ->
-            Logger.error("generateTestData error", e, context = TAG)
+        }.onFailure {
+            Logger.error("generateTestData error", it, context = TAG)
         }
     }
 
