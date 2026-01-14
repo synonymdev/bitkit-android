@@ -164,13 +164,6 @@ fun HomeScreen(
             walletViewModel.onPullToRefresh()
             homeViewModel.refreshWidgets()
         },
-        onClickProfile = {
-            if (!hasSeenProfileIntro) {
-                rootNavController.navigate(Routes.ProfileIntro)
-            } else {
-                rootNavController.navigate(Routes.CreateProfile)
-            }
-        },
         onRemoveSuggestion = { suggestion ->
             homeViewModel.removeSuggestion(suggestion)
         },
@@ -278,7 +271,6 @@ private fun Content(
     drawerState: DrawerState,
     hazeState: HazeState = rememberHazeState(),
     latestActivities: List<Activity>?,
-    onClickProfile: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
     onClickSuggestion: (Suggestion) -> Unit = {},
@@ -297,7 +289,6 @@ private fun Content(
         val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         TopBar(
             hazeState = hazeState,
-            onClickProfile = onClickProfile,
             rootNavController = rootNavController,
             scope = scope,
             drawerState = drawerState,
@@ -616,7 +607,6 @@ private fun Widgets(homeUiState: HomeUiState) {
 @OptIn(ExperimentalMaterial3Api::class)
 private fun TopBar(
     hazeState: HazeState,
-    onClickProfile: () -> Unit,
     rootNavController: NavController,
     scope: CoroutineScope,
     drawerState: DrawerState,
