@@ -15,7 +15,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -284,7 +283,6 @@ fun ContentView(
 
     val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
     val isRestoringFromRNRemoteBackup by walletViewModel.isRestoringFromRNRemoteBackup.collectAsStateWithLifecycle()
-    var restoreRetryCount by remember { mutableIntStateOf(0) }
 
     // React to nodeLifecycleState changes
     LaunchedEffect(nodeLifecycleState, restoreState, isRestoringFromRNRemoteBackup) {
@@ -310,22 +308,15 @@ fun ContentView(
     }
 
     if (walletIsInitializing) {
-        // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
             WalletRestoreErrorView(
-                retryCount = restoreRetryCount,
+                retryCount = restoreState.retryCount(),
                 hazeState = hazeState,
-                onRetry = {
-                    restoreRetryCount++
-                    walletViewModel.setInitNodeLifecycleState()
-                    walletViewModel.start()
-                },
+                onRetry = walletViewModel::onRestoreRetry,
                 onProceedWithoutRestore = {
-                    walletViewModel.proceedWithoutRestore(
-                        onDone = {
-                            walletIsInitializing = false
-                        }
-                    )
+                    walletViewModel.onProceedWithoutRestore {
+                        walletIsInitializing = false
+                    }
                 },
             )
         } else {
@@ -419,6 +410,7 @@ fun ContentView(
                             },
                             onCancel = { appViewModel.hideSheet() },
                         )
+
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
