@@ -8,7 +8,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
 import org.lightningdevkit.ldknode.LogRecord
@@ -146,7 +145,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val errMsg = e?.let { errLogOf(it) }.orEmpty()
+        val errMsg = e?.let { errorLogOf(it) }.orEmpty()
         val message = formatLog(LogLevel.WARN, "$msg $errMsg", context, path, line)
         if (compact) Log.w(tag, message) else Log.w(tag, message, e)
         saver.save(message)
@@ -159,7 +158,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val errMsg = e?.let { errLogOf(it) }.orEmpty()
+        val errMsg = e?.let { errorLogOf(it) }.orEmpty()
         val message = formatLog(LogLevel.ERROR, "$msg $errMsg", context, path, line)
         if (compact) Log.e(tag, message) else Log.e(tag, message, e)
         saver.save(message)
@@ -355,4 +354,4 @@ inline fun <reified T : Any> jsonLogOf(value: T): String {
     }.toString()
 }
 
-fun errLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"
+fun errorLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"

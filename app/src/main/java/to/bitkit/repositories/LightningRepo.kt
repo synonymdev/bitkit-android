@@ -63,7 +63,7 @@ import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import to.bitkit.utils.errLogOf
+import to.bitkit.utils.errorLogOf
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -128,14 +128,12 @@ class LightningRepo @Inject constructor(
         // If node is not in a state that can become running, fail fast
         if (!nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                Exception("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
+                AppError("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
             )
         }
 
         val nodeRunning = withTimeoutOrNull(waitTimeout) {
-            if (nodeLifecycleState.isRunning()) {
-                return@withTimeoutOrNull true
-            }
+            if (nodeLifecycleState.isRunning()) return@withTimeoutOrNull true
 
             // Otherwise, wait for it to transition to running state
             Logger.verbose("Waiting for node to run before executing '$operationName'", context = TAG)
@@ -182,7 +180,8 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runCatching {
-        val info = coreService.blocktank.info(refresh = false) ?: coreService.blocktank.info(refresh = true)
+        val info = coreService.blocktank.info(refresh = false)
+            ?: coreService.blocktank.info(refresh = true)
         info?.nodes?.toPeerDetailsList()?.also {
             Logger.info("Fetched ${it.size} trusted peers from remote", context = TAG)
         }
@@ -217,16 +216,16 @@ class LightningRepo @Inject constructor(
 
             // Setup if needed
             if (lightningService.node == null) {
-                val setup = setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
-                if (setup.isFailure) {
+                val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
+                if (setupResult.isFailure) {
                     _lightningState.update {
                         it.copy(
                             nodeLifecycleState = NodeLifecycleState.ErrorStarting(
-                                setup.exceptionOrNull() ?: NodeSetupError()
+                                setupResult.exceptionOrNull() ?: NodeSetupError()
                             )
                         )
                     }
-                    return@withContext setup
+                    return@withContext setupResult
                 }
             }
 
@@ -247,12 +246,13 @@ class LightningRepo @Inject constructor(
             updateGeoBlockState()
             refreshChannelCache()
 
-            // Post-startup tasks
+            // Post-startup tasks (non-blocking)
             connectToTrustedPeers().onFailure {
                 Logger.error("Failed to connect to trusted peers", it, context = TAG)
             }
-            sync()
-            registerForNotifications().getOrThrow()
+            sync().getOrThrow().also {
+                scope.launch { registerForNotifications() }
+            }
         }.onFailure { e ->
             if (shouldRetry) {
                 val retryDelay = 2.seconds
@@ -279,7 +279,9 @@ class LightningRepo @Inject constructor(
 
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
-        _eventHandlers.toList().forEach { it.invoke(event) }
+        _eventHandlers.toList().forEach {
+            runCatching { it.invoke(event) }
+        }
         _nodeEvents.emit(event)
     }
 
@@ -408,7 +410,7 @@ class LightningRepo @Inject constructor(
 
             Logger.info("Registered closed channel: ${channel.userChannelId}", context = TAG)
         }.onFailure {
-            Logger.error("Failed to register closed channel: $it", it, context = TAG)
+            Logger.error("Failed to register closed channel: ${errorLogOf(it)}", it, context = TAG)
         }
     }
 
@@ -743,7 +745,7 @@ class LightningRepo @Inject constructor(
         }.recoverCatching {
             if (it is CancellationException) throw it
             val fallbackFee = 1000uL
-            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee', ${errLogOf(it)}", context = TAG)
+            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee', ${errorLogOf(it)}", context = TAG)
             return@recoverCatching fallbackFee
         }
     }
@@ -933,7 +935,7 @@ class LightningRepo @Inject constructor(
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
         Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
         lightningService.estimateRoutingFees(bolt11).onSuccess {
-            Logger.info("Routing fees estimated: $it", context = TAG)
+            Logger.info("Routing fees estimated: '$it'", context = TAG)
         }.onFailure {
             Logger.error("estimateRoutingFees error", it, context = TAG)
         }
@@ -941,7 +943,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
-            Logger.info("Estimating routing fees for amount: $amountSats", context = TAG)
+            Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
                 Logger.info("Routing fees estimated: $it", context = TAG)
             }.onFailure {
