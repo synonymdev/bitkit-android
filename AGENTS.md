@@ -171,6 +171,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS ensure a method exist before calling it
 - ALWAYS remove unused code after refactors
 - ALWAYS follow Material3 design guidelines for UI components
+- ALWAYS use `VerticalSpacer` and `HorizontalSpacer` components instead of `Spacer(modifier = Modifier.height())` or `Spacer(modifier = Modifier.width())`
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
