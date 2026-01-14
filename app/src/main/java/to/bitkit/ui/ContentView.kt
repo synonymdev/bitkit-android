@@ -39,6 +39,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
@@ -208,6 +209,7 @@ fun ContentView(
     transferViewModel: TransferViewModel,
     settingsViewModel: SettingsViewModel,
     backupsViewModel: BackupsViewModel,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -312,6 +314,7 @@ fun ContentView(
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
             WalletRestoreErrorView(
                 retryCount = restoreRetryCount,
+                hazeState = hazeState,
                 onRetry = {
                     restoreRetryCount++
                     walletViewModel.setInitNodeLifecycleState()
