@@ -15,12 +15,13 @@ fun Duration.formatted(): String = toComponents { hours, minutes, seconds, nanos
 
 internal inline fun <T> measured(
     label: String,
+    context: String,
     block: () -> T,
 ): T {
     var result: T
     val elapsed = measureTime {
         result = block()
     }
-    Logger.perf("$label took ${elapsed.formatted()}")
+    Logger.perf("$label took ${elapsed.formatted()}", context = context)
     return result
 }

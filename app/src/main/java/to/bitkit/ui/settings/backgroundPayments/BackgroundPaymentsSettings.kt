@@ -107,7 +107,7 @@ private fun Content(
 
             NotificationPreview(
                 enabled = hasPermission,
-                title = stringResource(R.string.notification_received_title),
+                title = stringResource(R.string.notification__received__title),
                 description = "₿ 21 000",
                 showDetails = showDetails,
                 modifier = Modifier.fillMaxWidth()

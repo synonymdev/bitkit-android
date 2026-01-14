@@ -53,7 +53,7 @@ fun NotificationPreview(
                 BodySSB(text = title, color = Colors.Black)
                 val textDescription = when (showDetails) {
                     true -> description
-                    else -> stringResource(R.string.notification_received_body_hidden)
+                    else -> stringResource(R.string.notification__received__body_hidden)
                 }
                 AnimatedContent(targetState = textDescription) { text ->
                     Footnote(text = text, color = Colors.Gray3)

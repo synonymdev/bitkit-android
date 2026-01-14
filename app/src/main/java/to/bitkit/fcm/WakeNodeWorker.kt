@@ -76,8 +76,8 @@ class WakeNodeWorker @AssistedInject constructor(
             Logger.warn("Notification type is null, proceeding with node wake", context = TAG)
         }
 
-        try {
-            measured(TAG) {
+        return runCatching {
+            measured(label = "doWork", context = TAG) {
                 lightningRepo.start(
                     walletIndex = 0,
                     timeout = timeout,
@@ -92,31 +92,35 @@ class WakeNodeWorker @AssistedInject constructor(
                         Logger.error("Missing orderId", context = TAG)
                     } else {
                         Logger.info("Open channel request for order $orderId", context = TAG)
-                        blocktankRepo.openChannel(orderId).onFailure { e ->
-                            Logger.error("Failed to open channel", e, context = TAG)
+                        blocktankRepo.openChannel(orderId).onFailure {
+                            Logger.error("Failed to open channel", it, context = TAG)
                             bestAttemptContent = NotificationDetails(
-                                title = appContext.getString(R.string.notification_channel_open_failed_title),
-                                body = e.message ?: appContext.getString(R.string.common__error_desc),
+                                title = appContext.getString(R.string.notification__channel_open_failed_title),
+                                body = it.message ?: appContext.getString(R.string.common__error_body),
                             )
                             deliver()
                         }
                     }
                 }
             }
-            withTimeout(timeout) { deliverSignal.await() } // Stops node on timeout & avoids notification replay by OS
-            return Result.success()
-        } catch (e: Exception) {
-            val reason = e.message ?: appContext.getString(R.string.common__error_desc)
-
-            bestAttemptContent = NotificationDetails(
-                title = appContext.getString(R.string.notification_lightning_error_title),
-                body = reason,
-            )
-            Logger.error("Lightning error", e, context = TAG)
-            deliver()
-
-            return Result.failure(workDataOf("Reason" to reason))
+            // Stops node on timeout & avoids notification replay by OS
+            withTimeout(timeout) { deliverSignal.await() }
         }
+            .fold(
+                onSuccess = { Result.success() },
+                onFailure = { e ->
+                    val reason = e.message ?: appContext.getString(R.string.common__error_body)
+
+                    bestAttemptContent = NotificationDetails(
+                        title = appContext.getString(R.string.notification__lightning_error_title),
+                        body = reason,
+                    )
+                    Logger.error("Lightning error", e, context = TAG)
+                    deliver()
+
+                    Result.failure(workDataOf("Reason" to reason))
+                }
+            )
     }
 
     /**
@@ -125,14 +129,14 @@ class WakeNodeWorker @AssistedInject constructor(
      */
     private suspend fun handleLdkEvent(event: Event) {
         val showDetails = settingsStore.data.first().showNotificationDetails
-        val hiddenBody = appContext.getString(R.string.notification_received_body_hidden)
+        val hiddenBody = appContext.getString(R.string.notification__received__body_hidden)
         when (event) {
             is Event.PaymentReceived -> onPaymentReceived(event, showDetails, hiddenBody)
 
             is Event.ChannelPending -> {
                 bestAttemptContent = NotificationDetails(
-                    title = appContext.getString(R.string.notification_channel_opened_title),
-                    body = appContext.getString(R.string.notification_channel_pending_body),
+                    title = appContext.getString(R.string.notification__channel_opened_title),
+                    body = appContext.getString(R.string.notification__channel_pending_body),
                 )
                 // Don't deliver, give a chance for channelReady event to update the content if it's a turbo channel
             }
@@ -142,7 +146,7 @@ class WakeNodeWorker @AssistedInject constructor(
 
             is Event.PaymentFailed -> {
                 bestAttemptContent = NotificationDetails(
-                    title = appContext.getString(R.string.notification_payment_failed_title),
+                    title = appContext.getString(R.string.notification__payment_failed_title),
                     body = "⚡ ${event.reason}",
                 )
 
@@ -158,18 +162,18 @@ class WakeNodeWorker @AssistedInject constructor(
     private suspend fun onChannelClosed(event: Event.ChannelClosed) {
         bestAttemptContent = when (notificationType) {
             mutualClose -> NotificationDetails(
-                title = appContext.getString(R.string.notification_channel_closed_title),
-                body = appContext.getString(R.string.notification_channel_closed_mutual_body),
+                title = appContext.getString(R.string.notification__channel_closed__title),
+                body = appContext.getString(R.string.notification__channel_closed__mutual_body),
             )
 
             orderPaymentConfirmed -> NotificationDetails(
-                title = appContext.getString(R.string.notification_channel_open_bg_failed_title),
-                body = appContext.getString(R.string.notification_please_try_again_body),
+                title = appContext.getString(R.string.notification__channel_open_bg_failed_title),
+                body = appContext.getString(R.string.notification__please_try_again_body),
             )
 
             else -> NotificationDetails(
-                title = appContext.getString(R.string.notification_channel_closed_title),
-                body = appContext.getString(R.string.notification_channel_closed_reason_body, event.reason),
+                title = appContext.getString(R.string.notification__channel_closed__title),
+                body = appContext.getString(R.string.notification__channel_closed__reason_body, event.reason),
             )
         }
 
@@ -193,7 +197,7 @@ class WakeNodeWorker @AssistedInject constructor(
         )
         val content = if (showDetails) "$BITCOIN_SYMBOL $sats" else hiddenBody
         bestAttemptContent = NotificationDetails(
-            title = appContext.getString(R.string.notification_received_title),
+            title = appContext.getString(R.string.notification__received__title),
             body = content,
         )
         if (notificationType == incomingHtlc) {
@@ -206,10 +210,10 @@ class WakeNodeWorker @AssistedInject constructor(
         showDetails: Boolean,
         hiddenBody: String,
     ) {
-        val viaNewChannel = appContext.getString(R.string.notification_via_new_channel_body)
+        val viaNewChannel = appContext.getString(R.string.notification__received__body_channel)
         if (notificationType == cjitPaymentArrived) {
             bestAttemptContent = NotificationDetails(
-                title = appContext.getString(R.string.notification_received_title),
+                title = appContext.getString(R.string.notification__received__title),
                 body = viaNewChannel,
             )
 
@@ -235,8 +239,8 @@ class WakeNodeWorker @AssistedInject constructor(
             }
         } else if (notificationType == orderPaymentConfirmed) {
             bestAttemptContent = NotificationDetails(
-                title = appContext.getString(R.string.notification_channel_opened_title),
-                body = appContext.getString(R.string.notification_channel_ready_body),
+                title = appContext.getString(R.string.notification__channel_opened_title),
+                body = appContext.getString(R.string.notification__channel_ready_body),
             )
         }
         deliver()
