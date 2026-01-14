@@ -37,6 +37,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import to.bitkit.utils.errorLogOf
 import to.bitkit.utils.isTxSyncTimeout
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -57,7 +58,7 @@ class WalletViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
-        private val RESTORE_WAIT_TIMEOUT = 30.seconds
+        private val TIMEOUT_RESTORE_WAIT = 30.seconds
     }
 
     val lightningState = lightningRepo.lightningState
@@ -88,7 +89,6 @@ class WalletViewModel @Inject constructor(
         collectStates()
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun checkAndPerformRNMigration() = viewModelScope.launch(bgDispatcher) {
         val isChecked = migrationService.isMigrationChecked()
         if (isChecked) {
@@ -124,7 +124,7 @@ class WalletViewModel @Inject constructor(
                 migrationService.setShowingMigrationLoading(false)
             }
         }.onFailure {
-            Logger.error("RN migration failed: $it", it, context = "WalletViewModel")
+            Logger.error("RN migration failed: ${errorLogOf(it)}", it, context = TAG)
             migrationService.markMigrationChecked()
             migrationService.setShowingMigrationLoading(false)
             ToastEventBus.send(
@@ -225,9 +225,9 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun waitForRestoreIfNeeded() {
         if (!_restoreState.value.isOngoing()) return
-        withTimeoutOrNull(RESTORE_WAIT_TIMEOUT) {
+        withTimeoutOrNull(TIMEOUT_RESTORE_WAIT) {
             _restoreState.first { !it.isOngoing() }
-        } ?: Logger.warn("Restore wait timed out, proceeding anyway", context = TAG)
+        } ?: Logger.warn("waitForRestoreIfNeeded timeout, proceeding anyway", context = TAG)
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? =

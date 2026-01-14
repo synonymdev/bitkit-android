@@ -13,6 +13,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
+import to.bitkit.utils.errorLogOf
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,13 +33,12 @@ class WipeWalletUseCase @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
 ) {
-    @Suppress("TooGenericExceptionCaught")
     suspend operator fun invoke(
         walletIndex: Int = 0,
         resetWalletState: () -> Unit,
         onSuccess: () -> Unit,
     ): Result<Unit> {
-        try {
+        return runCatching {
             backupRepo.setWiping(true)
             backupRepo.reset()
 
@@ -58,20 +58,20 @@ class WipeWalletUseCase @Inject constructor(
 
             migrationService.markMigrationChecked()
 
-            return lightningRepo.wipeStorage(walletIndex)
+            lightningRepo.wipeStorage(walletIndex)
                 .onSuccess {
                     onSuccess()
                     Logger.reset()
                 }
-        } catch (e: Throwable) {
-            Logger.error("Wipe wallet error", e, context = TAG)
-            return Result.failure(e)
-        } finally {
+                .getOrThrow()
+        }.onFailure {
+            Logger.error("Wipe wallet error: ${errorLogOf(it)}", it, context = TAG)
+        }.also {
             backupRepo.setWiping(false)
         }
     }
 
-    companion object Companion {
-        const val TAG = "WipeWalletUseCase"
+    companion object {
+        private const val TAG = "WipeWalletUseCase"
     }
 }

@@ -22,6 +22,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.Date
 import java.util.Locale
+import kotlin.time.measureTime
 import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
 
 private const val APP = "APP"
@@ -33,9 +34,11 @@ enum class LogLevel { PERF, VERBOSE, GOSSIP, TRACE, DEBUG, INFO, WARN, ERROR; }
 
 val Logger = AppLogger()
 
-class AppLogger(
-    private val source: LogSource = LogSource.Bitkit,
-) {
+class AppLogger(private val source: LogSource = LogSource.Bitkit) {
+    companion object {
+        private const val TAG = "Logger"
+    }
+
     private var delegate: LoggerImpl? = null
 
     init {
@@ -48,7 +51,7 @@ class AppLogger(
     }
 
     fun reset() {
-        warn("Wiping entire logs directory...")
+        warn("Wiping entire logs directory…", context = TAG)
         runCatching { Env.logDir.deleteRecursively() }
         delegate = runCatching { createDelegate() }.getOrNull()
     }
@@ -355,3 +358,16 @@ inline fun <reified T : Any> jsonLogOf(value: T): String {
 }
 
 fun errorLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"
+
+internal inline fun <T> measured(
+    label: String,
+    context: String,
+    block: () -> T,
+): T {
+    var result: T
+    val elapsed = measureTime {
+        result = block()
+    }
+    Logger.perf("$label took $elapsed", context = context)
+    return result
+}
