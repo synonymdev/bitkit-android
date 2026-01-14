@@ -137,7 +137,8 @@ class MainActivity : FragmentActivity() {
                         transferViewModel = transferViewModel,
                         settingsViewModel = settingsViewModel,
                         backupsViewModel = backupsViewModel,
-                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f)
+                        hazeState = hazeState,
+                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
                     )
 
                     AnimatedVisibility(
