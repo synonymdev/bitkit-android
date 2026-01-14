@@ -118,7 +118,7 @@ class LightningRepo @Inject constructor(
         waitTimeout: Duration = 1.minutes,
         operation: suspend () -> Result<T>,
     ): Result<T> = withContext(bgDispatcher) {
-        Logger.verbose("Operation called: $operationName", context = TAG)
+        Logger.verbose("Operation called: '$operationName'", context = TAG)
 
         val nodeLifecycleState = _lightningState.value.nodeLifecycleState
         if (nodeLifecycleState.isRunning()) {
@@ -337,8 +337,8 @@ class LightningRepo @Inject constructor(
     }
 
     fun syncAsync() = scope.launch {
-        sync().onFailure { error ->
-            Logger.warn("Sync failed", e = error, context = TAG)
+        sync().onFailure {
+            Logger.warn("Sync failed", it, context = TAG)
         }
     }
 
@@ -346,22 +346,15 @@ class LightningRepo @Inject constructor(
     fun clearPendingSync() = syncPending.set(false)
 
     private suspend fun refreshChannelCache() = withContext(bgDispatcher) {
-        val channels = lightningService.channels ?: return@withContext
-        channels.forEach { channel ->
-            channelCache[channel.channelId] = channel
+        lightningService.channels?.forEach {
+            channelCache[it.channelId] = it
         }
     }
 
     private fun handleLdkEvent(event: Event) {
         when (event) {
-            is Event.ChannelPending, is Event.ChannelReady -> scope.launch {
-                refreshChannelCache()
-            }
-
-            is Event.ChannelClosed -> scope.launch {
-                registerClosedChannel(channelId = event.channelId, reason = event.reason)
-            }
-
+            is Event.ChannelPending, is Event.ChannelReady -> scope.launch { refreshChannelCache() }
+            is Event.ChannelClosed -> scope.launch { registerClosedChannel(event.channelId, event.reason) }
             else -> Unit
         }
     }
@@ -369,21 +362,21 @@ class LightningRepo @Inject constructor(
     private suspend fun registerClosedChannel(channelId: String, reason: ClosureReason?) = withContext(bgDispatcher) {
         runCatching {
             val channel = channelCache[channelId] ?: run {
-                Logger.error("Could not find channel details for closed channel: channelId=$channelId", context = TAG)
+                Logger.error("Could not find details for closed channel: channelId='$channelId'", context = TAG)
                 return@withContext
             }
 
             val fundingTxo = channel.fundingTxo
             if (fundingTxo == null) {
                 Logger.error(
-                    "Channel has no funding transaction, cannot persist closed channel: channelId=$channelId",
+                    "Channel has no funding transaction, cannot persist closed channel: channelId='$channelId'",
                     context = TAG,
                 )
                 return@withContext
             }
 
-            val channelName =
-                channel.inboundScidAlias?.toString() ?: (channel.channelId.take(LENGTH_CHANNEL_ID_PREVIEW) + "…")
+            val channelName = channel.inboundScidAlias?.toString()
+                ?: (channel.channelId.take(LENGTH_CHANNEL_ID_PREVIEW) + "…")
 
             val closedAt = (System.currentTimeMillis() / 1000L).toULong()
 
@@ -514,8 +507,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        lightningService.connectToTrustedPeers()
-        Result.success(Unit)
+        runCatching { lightningService.connectToTrustedPeers() }
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("connectPeer") {
@@ -531,8 +523,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun newAddress(): Result<String> = executeWhenNodeRunning("newAddress") {
-        val address = lightningService.newAddress()
-        Result.success(address)
+        runCatching { lightningService.newAddress() }
     }
 
     suspend fun createInvoice(
@@ -541,8 +532,7 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = 86_400u,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
         updateGeoBlockState()
-        val invoice = lightningService.receive(amountSats, description, expirySeconds)
-        Result.success(invoice)
+        runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
     @Suppress("ForbiddenComment")
@@ -618,9 +608,9 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
-        val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
-        syncState()
-        Result.success(paymentId)
+        runCatching { lightningService.send(bolt11, sats) }.also {
+            syncState()
+        }
     }
 
     @Suppress("LongParameterList")
@@ -641,20 +631,11 @@ class LightningRepo @Inject constructor(
         val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
 
         // use passed utxos if specified, otherwise run auto coin select if enabled
-        val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
-            sats = sats,
-            satsPerVByte = satsPerVByte,
-        )
+        val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(sats, satsPerVByte)
 
         Logger.debug("UTXOs selected to spend: $finalUtxosToSpend", context = TAG)
 
-        val txId = lightningService.send(
-            address = address,
-            sats = sats,
-            satsPerVByte = satsPerVByte,
-            utxosToSpend = finalUtxosToSpend,
-            isMaxAmount = isMaxAmount
-        )
+        val txId = lightningService.send(address, sats, satsPerVByte, finalUtxosToSpend, isMaxAmount)
 
         val preActivityMetadata = PreActivityMetadata(
             paymentId = txId,
@@ -760,7 +741,7 @@ class LightningRepo @Inject constructor(
             satsPerVByte.toULong()
         }.onFailure {
             if (it !is CancellationException) {
-                Logger.error("getFeeRateForSpeed error: speed:$speed", it, context = TAG)
+                Logger.error("getFeeRateForSpeed error: speed: '$speed'", it, context = TAG)
             }
         }
     }
@@ -787,13 +768,9 @@ class LightningRepo @Inject constructor(
         force: Boolean = false,
         forceCloseReason: String? = null,
     ): Result<Unit> = executeWhenNodeRunning("closeChannel") {
-        lightningService.closeChannel(
-            channel,
-            force,
-            forceCloseReason,
-        )
-        syncState()
-        Result.success(Unit)
+        runCatching { lightningService.closeChannel(channel, force, forceCloseReason) }.also {
+            syncState()
+        }
     }
 
     fun syncState() {
@@ -856,13 +833,13 @@ class LightningRepo @Inject constructor(
             require(token.isNotEmpty()) { "FCM token is empty or null" }
 
             if (cachedToken == token) {
-                Logger.debug("Skipped registering for notifications, current device token already registered")
+                Logger.debug("registerForNotifications skipped, device token already registered")
                 return@executeWhenNodeRunning Result.success(Unit)
             }
 
             lspNotificationsService.registerDevice(token)
         }.onFailure {
-            Logger.error("Register for notifications error", it, context = TAG)
+            Logger.error("registerForNotifications error", it, context = TAG)
         }
     }
 
@@ -945,9 +922,9 @@ class LightningRepo @Inject constructor(
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
             Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
-                Logger.info("Routing fees estimated: $it", context = TAG)
+                Logger.info("Routing fees estimated: '$it'", context = TAG)
             }.onFailure {
-                Logger.error("estimateRoutingFees error", it, context = TAG)
+                Logger.error("estimateRoutingFeesForAmount error", it, context = TAG)
             }
         }
 
