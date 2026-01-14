@@ -323,14 +323,12 @@ class LightningService @Inject constructor(
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val uri = peer.uri
+
         return ServiceQueue.LDK.background {
             try {
                 Logger.debug("Connecting peer: $uri", context = TAG)
-
                 node.connect(peer.nodeId, peer.address, persist = true)
-
                 Logger.info("Peer connected: $uri", context = TAG)
-
                 Result.success(Unit)
             } catch (e: NodeException) {
                 val error = LdkError(e)
@@ -340,31 +338,26 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun disconnectPeer(peer: PeerDetails) {
+    suspend fun disconnectPeer(peer: PeerDetails): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val uri = peer.uri
-        Logger.debug("Disconnecting peer: $uri", context = TAG)
-        try {
-            ServiceQueue.LDK.background {
-                node.disconnect(peer.nodeId)
-            }
-            Logger.info("Peer disconnected: $uri", context = TAG)
-        } catch (e: NodeException) {
-            Logger.warn("Peer disconnect error: $uri", LdkError(e), context = TAG)
-        }
-    }
 
-    fun hasExternalPeers(): Boolean {
-        val ourPeers = this.peers.orEmpty().map { it.uri }
-        val lspPeers = this.trustedPeers.map { it.uri }.toSet()
-        return ourPeers.any { p -> p !in lspPeers }
+        return ServiceQueue.LDK.background {
+            try {
+                Logger.debug("Disconnecting peer: $uri", context = TAG)
+                node.disconnect(peer.nodeId)
+                Logger.info("Peer disconnected: $uri", context = TAG)
+                Result.success(Unit)
+            } catch (e: NodeException) {
+                Logger.warn("Peer disconnect error: $uri", LdkError(e), context = TAG)
+                Result.failure(e)
+            }
+        }
     }
 
     fun getLspPeerNodeIds(): Set<String> = trustedPeers.map { it.nodeId }.toSet()
 
-    fun separateTrustedChannels(
-        channels: List<ChannelDetails>,
-    ): Pair<List<ChannelDetails>, List<ChannelDetails>> {
+    fun separateTrustedChannels(channels: List<ChannelDetails>): Pair<List<ChannelDetails>, List<ChannelDetails>> {
         val trustedPeerIds = getLspPeerNodeIds()
         val trusted = channels.filter { it.counterpartyNodeId in trustedPeerIds }
         val nonTrusted = channels.filter { it.counterpartyNodeId !in trustedPeerIds }
