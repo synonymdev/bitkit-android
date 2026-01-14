@@ -245,6 +245,7 @@ class HomeViewModel @Inject constructor(
                     Suggestion.QUICK_PAY,
                     Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
                     Suggestion.SHOP,
+                    Suggestion.PROFILE,
                 )
             }
 
@@ -259,6 +260,7 @@ class HomeViewModel @Inject constructor(
                     Suggestion.SUPPORT,
                     Suggestion.INVITE,
                     Suggestion.SHOP,
+                    Suggestion.PROFILE,
                 )
             }
 
@@ -272,6 +274,7 @@ class HomeViewModel @Inject constructor(
                     Suggestion.SECURE.takeIf { !settings.isPinEnabled },
                     Suggestion.SUPPORT,
                     Suggestion.INVITE,
+                    Suggestion.PROFILE,
                 )
             }
         }
