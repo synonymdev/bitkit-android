@@ -243,7 +243,7 @@ private fun BackupRetryButton(onClick: () -> Unit) {
     }
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     val categories = BackupCategory.entries
