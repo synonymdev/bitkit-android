@@ -196,7 +196,7 @@ class UtxoSelectionTests {
         // Send transaction spending only the selected UTXOs
         val destinationAddress = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
         val sendAmount = 10_000uL // Send 10,000 sats
-        val feeRate = 1u // 1 sat/vbyte
+        val feeRate = 1uL // 1 sat/vbyte
 
         println("Sending $sendAmount sats to $destinationAddress using specific UTXOs")
         val txId = lightningService.send(
@@ -320,7 +320,7 @@ class UtxoSelectionTests {
 
         // Test parameters
         val targetAmountSats = 25_000uL // Target amount for selection
-        val feeRate = 1u // 1 sat/vbyte
+        val feeRate = 1uL // 1 sat/vbyte
 
         // Test each coin selection algorithm
         val algorithms: List<CoinSelectionAlgorithm> = CoinSelectionAlgorithm.entries
