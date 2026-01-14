@@ -4,7 +4,6 @@ import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.ext.toRelativeTimeString
 import to.bitkit.utils.Logger
-import to.bitkit.utils.errorLogOf
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -50,6 +49,6 @@ private fun timeAgo(dateString: String): String {
 
         parsedDateTime.toInstant().toEpochMilli().toRelativeTimeString()
     }.onFailure {
-        Logger.warn("Failed to parse date: ${errorLogOf(it)}", it, context = TAG)
+        Logger.warn("Failed to parse date: ${it.message}", it, context = TAG)
     }.getOrDefault("")
 }
