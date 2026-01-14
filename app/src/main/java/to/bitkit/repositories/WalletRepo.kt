@@ -35,7 +35,7 @@ import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import to.bitkit.utils.errLogOf
+import to.bitkit.utils.errorLogOf
 import to.bitkit.utils.measured
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -194,7 +194,7 @@ class WalletRepo @Inject constructor(
             _balanceState.update { balanceState }
         }.onFailure {
             if (it !is CancellationException) {
-                Logger.warn("Could not sync balances ${errLogOf(it)}", context = TAG)
+                Logger.warn("Could not sync balances ${errorLogOf(it)}", context = TAG)
             }
         }
     }
