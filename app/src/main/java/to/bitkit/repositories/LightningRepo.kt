@@ -820,9 +820,7 @@ class LightningRepo @Inject constructor(
         return isRunning && lightningService.canReceive()
     }
 
-    fun separateTrustedChannels(
-        channels: List<ChannelDetails>,
-    ): Pair<List<ChannelDetails>, List<ChannelDetails>> = lightningService.separateTrustedChannels(channels)
+    fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
 
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
         runCatching {
