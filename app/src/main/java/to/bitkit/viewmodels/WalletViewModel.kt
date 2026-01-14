@@ -30,7 +30,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.repositories.RecoveryModeException
+import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.MigrationService
@@ -249,7 +249,7 @@ class WalletViewModel @Inject constructor(
             }
             .onFailure {
                 Logger.error("Node startup error", it, context = TAG)
-                if (it !is RecoveryModeException) {
+                if (it !is RecoveryModeError) {
                     ToastEventBus.send(it)
                 }
             }
