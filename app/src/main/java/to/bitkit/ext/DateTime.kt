@@ -75,7 +75,7 @@ fun Long.toRelativeTimeString(
     clock: Clock = Clock.System,
     style: RelativeDateTimeFormatter.Style = RelativeDateTimeFormatter.Style.LONG,
     capitalizationContext: DisplayContext = DisplayContext.CAPITALIZATION_FOR_MIDDLE_OF_SENTENCE,
-    ): String {
+): String {
     val now = nowMillis(clock)
     val diffMillis = now - this
 

@@ -172,7 +172,7 @@ class LightningRepo @Inject constructor(
                 customServerUrl,
                 customRgsServerUrl,
                 trustedPeers,
-                channelMigration
+                channelMigration,
             )
         }.onFailure {
             Logger.error("Node setup error", it, context = TAG)
@@ -948,7 +948,8 @@ class LightningRepo @Inject constructor(
         }
         Logger.info("LDK node restarted successfully", context = TAG)
         Result.success(Unit)
-    } // endregion
+    }
+    // endregion
 
     companion object {
         private const val TAG = "LightningRepo"

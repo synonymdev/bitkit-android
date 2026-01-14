@@ -118,55 +118,56 @@ class CoreService @Inject constructor(
         // Block queue until the init completes forcing any additional calls to wait for it
         ServiceQueue.CORE.blocking {
             runCatching {
-                val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex))
-                Logger.info("bitkit-core database init: $result")
+                val result = initDb(Env.bitkitCoreStoragePath(walletIndex))
+                Logger.info("bitkit-core database init: '$result'", context = TAG)
             }.onFailure {
-                Logger.error("bitkit-core database init failed", it)
+                Logger.error("bitkit-core database init failed", it, context = TAG)
             }
 
             runCatching {
                 val blocktankUrl = Env.blocktankApiUrl
                 updateBlocktankUrl(newUrl = blocktankUrl)
-                Logger.info("Blocktank URL updated to: $blocktankUrl")
+                Logger.info("Blocktank URL updated to: '$blocktankUrl'", context = TAG)
             }.onFailure {
-                Logger.error("Failed to update Blocktank URL", it)
+                Logger.error("Failed to update Blocktank URL", it, context = TAG)
             }
         }
     }
 
     @Suppress("KotlinConstantConditions")
     suspend fun isGeoBlocked(): Boolean {
+        val tag = "GeoCheck"
         if (!Env.isGeoblockingEnabled) {
-            Logger.verbose("Geoblocking disabled via build config", context = "GeoCheck")
+            Logger.verbose("Geoblocking disabled via build config", context = tag)
             return false
         }
 
         return ServiceQueue.CORE.background {
             runCatching {
-                Logger.verbose("Checking geo status…", context = "GeoCheck")
+                Logger.verbose("Checking geo status…", context = tag)
                 val response = httpClient.get(Env.geoCheckUrl)
 
                 when (response.status.value) {
                     HttpStatusCode.OK.value -> {
-                        Logger.verbose("Region allowed", context = "GeoCheck")
+                        Logger.verbose("Region allowed", context = tag)
                         false
                     }
 
                     HttpStatusCode.Forbidden.value -> {
-                        Logger.warn("Region blocked", context = "GeoCheck")
+                        Logger.warn("Region blocked", context = tag)
                         true
                     }
 
                     else -> {
                         Logger.warn(
                             "Unexpected status code: ${response.status.value}, defaulting to false",
-                            context = "GeoCheck"
+                            context = tag
                         )
                         false
                     }
                 }
             }.onFailure {
-                Logger.warn("Error. defaulting isGeoBlocked to false", context = "GeoCheck")
+                Logger.warn("Error. defaulting isGeoBlocked to false", context = tag)
             }.getOrDefault(false)
         }
     }
@@ -174,16 +175,14 @@ class CoreService @Inject constructor(
     suspend fun wipeData(): Result<Unit> = ServiceQueue.CORE.background {
         runCatching {
             val result = wipeAllDatabases()
-            Logger.info("Core DB wipe: $result", context = TAG)
-        }.onFailure { e ->
-            Logger.error("Core DB wipe error", e, context = TAG)
+            Logger.info("Core DB wipe: '$result'", context = TAG)
+        }.onFailure {
+            Logger.error("Core DB wipe error", it, context = TAG)
         }
     }
 
-    suspend fun isAddressUsed(address: String): Boolean {
-        return ServiceQueue.CORE.background {
-            com.synonym.bitkitcore.isAddressUsed(address = address)
-        }
+    suspend fun isAddressUsed(address: String): Boolean = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.isAddressUsed(address = address)
     }
 
     companion object {

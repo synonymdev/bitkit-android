@@ -308,7 +308,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext wipeWalletUseCase(
+        wipeWalletUseCase(
             walletIndex = walletIndex,
             resetWalletState = ::resetState,
             onSuccess = ::setWalletExistsState,
@@ -329,7 +329,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun newAddress(): Result<String> = withContext(bgDispatcher) {
-        return@withContext lightningRepo.newAddress()
+        lightningRepo.newAddress()
             .onSuccess { address -> setOnchainAddress(address) }
             .onFailure { error -> Logger.error("Error generating new address", error) }
     }
@@ -339,7 +339,7 @@ class WalletRepo @Inject constructor(
         isChange: Boolean = false,
         count: Int = 20,
     ): Result<List<AddressModel>> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()
 
@@ -418,7 +418,8 @@ class WalletRepo @Inject constructor(
     private suspend fun paymentHash(): String? = withContext(bgDispatcher) {
         val bolt11 = getBolt11()
         if (bolt11.isEmpty()) return@withContext null
-        return@withContext runCatching {
+
+        runCatching {
             when (val decoded = decode(bolt11)) {
                 is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
                 else -> null
@@ -432,41 +433,39 @@ class WalletRepo @Inject constructor(
         val hash = paymentHash()
         if (hash != null) return@withContext hash
         val address = getOnchainAddress()
+
         return@withContext address.ifEmpty { null }
     }
 
     suspend fun addTagToSelected(newTag: String): Result<Unit> = withContext(bgDispatcher) {
         val paymentId = paymentId()
         if (paymentId == null || paymentId.isEmpty()) {
-            Logger.warn("Cannot add tag: payment ID not available", context = TAG)
-            return@withContext Result.failure(
-                IllegalStateException("Cannot add tag: payment ID not available")
-            )
+            val exception = IllegalStateException("Cannot add tag: payment ID not available")
+            Logger.warn(exception.message, context = TAG)
+            return@withContext Result.failure(exception)
         }
 
-        return@withContext preActivityMetadataRepo.addPreActivityMetadataTags(paymentId, listOf(newTag))
-            .onSuccess {
-                _walletState.update {
-                    it.copy(
-                        selectedTags = (it.selectedTags + newTag).distinct()
-                    )
-                }
-                settingsStore.addLastUsedTag(newTag)
-            }.onFailure {
-                Logger.error("Failed to add tag to pre-activity metadata", it, context = TAG)
+        preActivityMetadataRepo.addPreActivityMetadataTags(paymentId, listOf(newTag)).onSuccess {
+            _walletState.update {
+                it.copy(
+                    selectedTags = (it.selectedTags + newTag).distinct()
+                )
             }
+            settingsStore.addLastUsedTag(newTag)
+        }.onFailure {
+            Logger.error("Failed to add tag to pre-activity metadata", it, context = TAG)
+        }
     }
 
     suspend fun removeTag(tag: String): Result<Unit> = withContext(bgDispatcher) {
         val paymentId = paymentId()
         if (paymentId == null || paymentId.isEmpty()) {
-            Logger.warn("Cannot remove tag: payment ID not available", context = TAG)
-            return@withContext Result.failure(
-                IllegalStateException("Cannot remove tag: payment ID not available")
-            )
+            val exception = IllegalStateException("Cannot remove tag: payment ID not available")
+            Logger.warn(exception.message, context = TAG)
+            return@withContext Result.failure(exception)
         }
 
-        return@withContext preActivityMetadataRepo.removePreActivityMetadataTags(paymentId, listOf(tag))
+        preActivityMetadataRepo.removePreActivityMetadataTags(paymentId, listOf(tag))
             .onSuccess {
                 _walletState.update {
                     it.copy(
@@ -494,7 +493,7 @@ class WalletRepo @Inject constructor(
         amountSats: ULong? = walletState.value.bip21AmountSats,
         description: String = walletState.value.bip21Description,
     ): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             val oldPaymentId = paymentId()
             val tagsToMigrate = if (oldPaymentId != null && oldPaymentId.isNotEmpty()) {
                 preActivityMetadataRepo
@@ -529,20 +528,18 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun shouldRequestAdditionalLiquidity(): Result<Boolean> = withContext(bgDispatcher) {
-        return@withContext try {
-            if (coreService.isGeoBlocked()) return@withContext Result.success(false)
+        runCatching {
+            if (coreService.isGeoBlocked()) return@runCatching false
 
             val channels = lightningRepo.lightningState.value.channels
-            if (channels.filterOpen().isEmpty()) return@withContext Result.success(false)
+            if (channels.filterOpen().isEmpty()) return@runCatching false
 
             val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }
 
-            Result.success((_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats)
-        } catch (e: Exception) {
-            Logger.error("shouldRequestAdditionalLiquidity error", e, context = TAG)
-            Result.failure(e)
+            return@runCatching (_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats
+        }.onFailure {
+            Logger.error("shouldRequestAdditionalLiquidity error", it, context = TAG)
         }
     }
 

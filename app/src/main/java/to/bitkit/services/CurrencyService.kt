@@ -23,8 +23,8 @@ class CurrencyService @Inject constructor(
                 val response = ServiceQueue.FOREX.background { blocktankHttpClient.fetchLatestRates() }
                 val rates = response.tickers
                 return rates
-            }.onFailure { e ->
-                lastError = e
+            }.onFailure {
+                lastError = it
                 if (attempt < maxRetries - 1) {
                     // Wait a bit before retrying, with exponential backoff
                     val waitTime = 2.0.pow(attempt.toDouble()).toLong() * 1000L
