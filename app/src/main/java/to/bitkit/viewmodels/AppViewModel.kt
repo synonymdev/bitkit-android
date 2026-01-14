@@ -1359,7 +1359,7 @@ class AppViewModel @Inject constructor(
                         toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.wallet__error_sending_title),
-                            description = e.message ?: context.getString(R.string.common__error_desc)
+                            description = e.message ?: context.getString(R.string.common__error_body)
                         )
                         hideSheet()
                     }
@@ -1815,7 +1815,7 @@ class AppViewModel @Inject constructor(
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message ?: context.getString(R.string.common__error_desc)
+            description = error.message ?: context.getString(R.string.common__error_body)
         )
     }
 

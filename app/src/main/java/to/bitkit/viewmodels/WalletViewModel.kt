@@ -306,7 +306,7 @@ class WalletViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
-                        description = it.message ?: context.getString(R.string.common__error_desc)
+                        description = it.message ?: context.getString(R.string.common__error_body)
                     )
                 }
         }
@@ -317,7 +317,7 @@ class WalletViewModel @Inject constructor(
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_invoice_update),
-                description = error.message ?: context.getString(R.string.common__error_desc)
+                description = error.message ?: context.getString(R.string.common__error_body)
             )
         }
     }

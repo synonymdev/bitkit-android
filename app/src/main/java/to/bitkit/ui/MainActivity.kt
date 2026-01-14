@@ -79,8 +79,8 @@ class MainActivity : FragmentActivity() {
         initNotificationChannel()
         initNotificationChannel(
             id = CHANNEL_ID_NODE,
-            name = getString(R.string.notification_channel_node_name),
-            desc = getString(R.string.notification_channel_node_desc),
+            name = getString(R.string.notification__channel_node__name),
+            desc = getString(R.string.notification__channel_node__body),
             importance = NotificationManager.IMPORTANCE_LOW
         )
         appViewModel.handleDeeplinkIntent(intent)
