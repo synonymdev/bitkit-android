@@ -190,8 +190,14 @@ class WalletViewModel @Inject constructor(
 
     fun onRestoreContinue() = _restoreState.update { RestoreState.Settled }
 
+    fun onRestoreRetry() = viewModelScope.launch(bgDispatcher) {
+        _restoreState.update { it.incrementRetryCount() }
+        setInitNodeLifecycleState()
+        lightningRepo.restartNode()
+    }
+
     @Suppress("ForbiddenComment")
-    fun proceedWithoutRestore(onDone: () -> Unit) = viewModelScope.launch {
+    fun onProceedWithoutRestore(onDone: () -> Unit) = viewModelScope.launch {
         // TODO start LDK without trying to restore backup state from VSS if possible
         lightningRepo.stop()
         delay(LOADING_MS.milliseconds)
@@ -224,13 +230,13 @@ class WalletViewModel @Inject constructor(
         } ?: Logger.warn("Restore wait timed out, proceeding anyway", context = TAG)
     }
 
-    private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
-        val migration = migrationService.peekPendingChannelMigration() ?: return null
-        return ChannelDataMigration(
-            channelManager = migration.channelManager.map { it.toUByte() },
-            channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
-        )
-    }
+    private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? =
+        migrationService.peekPendingChannelMigration()?.let { migration ->
+            ChannelDataMigration(
+                channelManager = migration.channelManager.map { it.toUByte() },
+                channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
+            )
+        }
 
     private suspend fun startNode(
         walletIndex: Int = 0,
@@ -392,14 +398,18 @@ class WalletViewModel @Inject constructor(
 
 sealed interface RestoreState {
     data object Initial : RestoreState
+
     sealed interface InProgress : RestoreState {
         object Wallet : InProgress
         object Metadata : InProgress
     }
 
+    data class Retry(val count: Int) : RestoreState
     data object Completed : RestoreState
     data object Settled : RestoreState
 
+    fun retryCount() = (this as? Retry)?.count ?: 0
+    fun incrementRetryCount(): RestoreState = if (this is Retry) Retry(count + 1) else this
     fun isOngoing() = this is InProgress
     fun isIdle() = this is Initial || this is Settled
 }
