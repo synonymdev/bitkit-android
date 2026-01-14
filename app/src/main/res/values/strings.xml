@@ -47,6 +47,7 @@
     <string name="common__sat_vbyte">₿ / vbyte</string>
     <string name="common__sat_vbyte_compact">₿/vbyte</string>
     <string name="common__edit">Edit</string>
+    <string name="common__empty">Empty</string>
     <string name="common__copy">Copy</string>
     <string name="common__share">Share</string>
     <string name="common__search">Search</string>

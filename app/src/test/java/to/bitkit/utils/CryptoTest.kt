@@ -1,5 +1,3 @@
-@file:Suppress("SpacingBetweenDeclarationsWithAnnotations", "Wrapping")
-
 package to.bitkit.utils
 
 import org.junit.Before
@@ -13,6 +11,7 @@ import to.bitkit.fcm.EncryptedNotification
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
+@Suppress("SpacingBetweenDeclarationsWithAnnotations", "Wrapping")
 class CryptoTest {
     private lateinit var sut: Crypto
 

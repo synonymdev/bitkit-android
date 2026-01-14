@@ -46,7 +46,7 @@ class SendAmountContentTest {
     fun whenNodeNotRunning_shouldShowSyncView() {
         composeTestRule.setContent {
             SendAmountContent(
-                nodeLifecycleState = nodeLifecycleState,
+                nodeLifecycleState = NodeLifecycleState.Initializing,
                 uiState = uiState,
                 amountInputViewModel = previewAmountInputViewModel(),
             )

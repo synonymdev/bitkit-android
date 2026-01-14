@@ -359,7 +359,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `disconnectPeer should succeed when node is running`() = test {
         startNodeForTesting()
         val testPeer = PeerDetails.of("nodeId", "host", "9735")
-        whenever(lightningService.disconnectPeer(any())).thenReturn(Unit)
+        whenever(lightningService.disconnectPeer(any())).thenReturn(Result.success(Unit))
 
         val result = sut.disconnectPeer(testPeer)
         assertTrue(result.isSuccess)

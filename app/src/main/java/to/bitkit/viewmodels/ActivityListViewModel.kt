@@ -89,7 +89,7 @@ class ActivityListViewModel @Inject constructor(
         ) { debouncedSearch, filtersWithoutSearch, _ ->
             fetchFilteredActivities(filtersWithoutSearch.copy(searchText = debouncedSearch))
         }.collect {
-            _filteredActivities.value = it
+            _filteredActivities.update { it }
         }
     }
 
@@ -115,8 +115,8 @@ class ActivityListViewModel @Inject constructor(
             search = filters.searchText.takeIf { it.isNotEmpty() },
             minDate = filters.startDate?.let { it / 1000 }?.toULong(),
             maxDate = filters.endDate?.let { it / 1000 }?.toULong(),
-        ).getOrElse { e ->
-            Logger.error("Failed to filter activities", e)
+        ).getOrElse {
+            Logger.error("Failed to filter activities", it, context = TAG)
             return null
         }
 
@@ -132,9 +132,9 @@ class ActivityListViewModel @Inject constructor(
     private suspend fun filterOutReplacedSentTransactions(activities: List<Activity>): List<Activity> {
         val txIdsInBoostTxIds = activityRepo.getTxIdsInBoostTxIds()
 
-        return activities.filter { activity ->
-            if (activity is Activity.Onchain) {
-                val onchain = activity.v1
+        return activities.filter {
+            if (it is Activity.Onchain) {
+                val onchain = it.v1
                 if (!onchain.doesExist &&
                     onchain.txType == PaymentType.SENT &&
                     txIdsInBoostTxIds.contains(onchain.txId)
@@ -180,6 +180,7 @@ class ActivityListViewModel @Inject constructor(
     ): StateFlow<T> = stateIn(viewModelScope, started, initialValue)
 
     companion object {
+        private const val TAG = "ActivityListViewModel"
         private const val SIZE_LATEST = 3
         private const val MS_TIMEOUT_SUB = 5000L
     }
