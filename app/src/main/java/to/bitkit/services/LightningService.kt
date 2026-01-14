@@ -1,6 +1,8 @@
 package to.bitkit.services
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -74,6 +76,8 @@ class LightningService @Inject constructor(
     val syncStatusChanged: SharedFlow<Unit> = _syncStatusChanged.asSharedFlow()
 
     private lateinit var trustedPeers: List<PeerDetails>
+
+    private var listenerJob: Job? = null
 
     suspend fun setup(
         walletIndex: Int,
@@ -195,7 +199,6 @@ class LightningService @Inject constructor(
         )
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -212,16 +215,16 @@ class LightningService @Inject constructor(
         // start event listener after node started
         onEvent?.let { eventHandler ->
             shouldListenForEvents = true
-            launch {
-                try {
+            listenerJob = launch {
+                runCatching {
                     Logger.debug("LDK event listener started", context = TAG)
                     if (timeout != null) {
                         withTimeout(timeout) { listenForEvents(eventHandler) }
                     } else {
                         listenForEvents(eventHandler)
                     }
-                } catch (e: Exception) {
-                    Logger.error("LDK event listener error", e, context = TAG)
+                }.onFailure {
+                    Logger.error("LDK event listener error", it, context = TAG)
                 }
             }
         }
@@ -231,6 +234,8 @@ class LightningService @Inject constructor(
 
     suspend fun stop() {
         shouldListenForEvents = false
+        listenerJob?.cancelAndJoin()
+        listenerJob = null
         val node = this.node ?: throw ServiceError.NodeNotStarted()
 
         Logger.debug("Stopping node…", context = TAG)
@@ -539,7 +544,7 @@ class LightningService @Inject constructor(
         Logger.debug("Paying bolt11: $bolt11", context = TAG)
 
         val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
-            .getOrElse { e -> throw LdkError(e as NodeException) }
+            .getOrElse { throw LdkError(it as NodeException) }
 
         return ServiceQueue.LDK.background {
             runCatching {
@@ -553,62 +558,52 @@ class LightningService @Inject constructor(
         }.getOrThrow()
     }
 
-    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
-            return@background try {
+            return@background runCatching {
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val feesMsat = node.bolt11Payment().estimateRoutingFees(invoice)
                 val feeSat = feesMsat / 1000u
                 Result.success(feeSat)
-            } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+            }.getOrElse {
+                Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
     }
 
-    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
-            return@background try {
+            return@background runCatching {
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val amountMsat = amountSats * 1000u
                 val feesMsat = node.bolt11Payment().estimateRoutingFeesUsingAmount(invoice, amountMsat)
                 val feeSat = feesMsat / 1000u
                 Result.success(feeSat)
-            } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+            }.getOrElse {
+                Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
     }
     // endregion
 
     // region utxo selection
-    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
-            return@background try {
+            return@background runCatching {
                 val result = node.onchainPayment().listSpendableOutputs()
                 Result.success(result)
-            } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+            }.getOrElse {
+                Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
     }
 
-    @Suppress("TooGenericExceptionCaught", "InstanceOfCheckForException")
     suspend fun selectUtxosWithAlgorithm(
         targetAmountSats: ULong,
         satsPerVByte: ULong,
@@ -618,7 +613,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background {
-            return@background try {
+            runCatching {
                 val result = node.onchainPayment().selectUtxosWithAlgorithm(
                     targetAmountSats = targetAmountSats,
                     feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
@@ -626,10 +621,8 @@ class LightningService @Inject constructor(
                     utxos = utxos,
                 )
                 Result.success(result)
-            } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+            }.getOrElse {
+                Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
     }
@@ -749,20 +742,16 @@ class LightningService @Inject constructor(
     }
     // endregion
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun getAddressBalance(address: String): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         return ServiceQueue.LDK.background {
-            try {
+            runCatching {
                 node.getAddressBalance(addressStr = address)
-            } catch (e: Exception) {
-                Logger.error("Error getting address balance for address: $address", e, context = TAG)
-                throw e
-            }
+            }.onFailure {
+                Logger.error("Error getting address balance for address: '$address'", it, context = TAG)
+            }.getOrThrow()
         }
     }
-
-    // endregion
 
     // region state
     val nodeId: String? get() = node?.nodeId()
@@ -775,7 +764,7 @@ class LightningService @Inject constructor(
     // endregion
 
     // region debug
-    @Suppress("LongMethod", "TooGenericExceptionCaught")
+    @Suppress("LongMethod")
     fun dumpNetworkGraphInfo(bolt11: String) {
         val node = this.node ?: run {
             Logger.error("Node not available for network graph dump", context = TAG)
@@ -787,13 +776,13 @@ class LightningService @Inject constructor(
         sb.appendLine("\n\n=== ROUTE NOT FOUND - NETWORK GRAPH DUMP ===\n")
 
         // 1. Invoice Info
-        try {
+        runCatching {
             val invoice = Bolt11Invoice.fromStr(bolt11)
             sb.appendLine("Invoice Info:")
             sb.appendLine("  - Payment Hash: ${invoice.paymentHash()}")
             sb.appendLine("  - Invoice: $bolt11")
-        } catch (e: Exception) {
-            sb.appendLine("Failed to parse bolt11 invoice: $e")
+        }.getOrElse {
+            sb.appendLine("Failed to parse bolt11 invoice: $it")
         }
 
         // 2. Our Node Info
@@ -916,8 +905,8 @@ class LightningService @Inject constructor(
                 channelCount = graph.listChannels().size,
                 latestRgsSyncTimestamp = node.status().latestRgsSnapshotTimestamp,
             )
-        }.onFailure { e ->
-            Logger.error("Failed to get network graph info", e, context = TAG)
+        }.onFailure {
+            Logger.error("Failed to get network graph info", it, context = TAG)
         }.getOrNull()
     }
 
@@ -942,8 +931,8 @@ class LightningService @Inject constructor(
 
                 Logger.info("Exported ${nodes.size} nodes to ${outputFile.absolutePath}", context = TAG)
                 outputFile
-            }.onFailure { e ->
-                Logger.error("Failed to export network graph to file", e, context = TAG)
+            }.onFailure {
+                Logger.error("Failed to export network graph to file", it, context = TAG)
             }
         }
     }
