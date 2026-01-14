@@ -155,7 +155,7 @@ class VssBackupClient @Inject constructor(
         }
     }
 
-    companion object Companion {
+    companion object {
         private const val TAG = "VssBackupClient"
     }
 }
