@@ -339,7 +339,7 @@ class WalletViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
                         title = context.getString(R.string.common__success),
-                        description = "Peer disconnected.,"
+                        description = context.getString(R.string.wallet__peer_disconnected),
                     )
                 }
                 .onFailure { error ->
