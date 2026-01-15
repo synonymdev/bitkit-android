@@ -27,7 +27,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
 import javax.crypto.Cipher
-import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
@@ -48,8 +47,6 @@ class RNBackupClient @Inject constructor(
         private const val SIGNED_MESSAGE_PREFIX = "react-native-ldk backup server auth:"
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 16
-        private const val PBKDF2_ITERATIONS = 2048
-        private const val PBKDF2_KEY_LENGTH_BITS = 512
     }
 
     @Volatile

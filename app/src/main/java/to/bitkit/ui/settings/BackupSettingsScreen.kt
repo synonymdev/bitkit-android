@@ -124,7 +124,7 @@ private fun BackupSettingsScreenContent(
                 if (Env.isE2eTest && allSynced) {
                     Icon(
                         painter = painterResource(R.drawable.ic_check_circle),
-                        contentDescription = "All Synced",
+                        contentDescription = null,
                         tint = Colors.Green,
                         modifier = Modifier
                             .padding(end = 4.dp)
@@ -243,7 +243,7 @@ private fun BackupRetryButton(onClick: () -> Unit) {
     }
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     val categories = BackupCategory.entries

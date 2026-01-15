@@ -36,6 +36,11 @@ class AppStatusViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(R.string.settings__status__backup__error)).thenReturn(failedBackupSubtitle)
         whenever(context.getString(R.string.settings__status__backup__ready)).thenReturn(readyBackupSubtitle)
+        whenever(context.getString(R.string.other__node_stopped)).thenReturn("Stopped")
+        whenever(context.getString(R.string.other__node_starting)).thenReturn("Starting")
+        whenever(context.getString(R.string.other__node_running)).thenReturn("Running")
+        whenever(context.getString(R.string.other__node_stopping)).thenReturn("Stopping")
+        whenever(context.getString(R.string.other__node_initializing)).thenReturn("Setting up wallet…")
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(AppHealthState()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(cacheStore.backupStatuses).thenReturn(flowOf(emptyMap()))

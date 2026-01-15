@@ -14,11 +14,11 @@ enum class ActivityBannerType(
     SPENDING(
         color = Colors.Purple,
         icon = R.drawable.ic_transfer,
-        title = R.string.activity_banner__transfer_in_progress
+        title = R.string.lightning__transfer_in_progress
     ),
     SAVINGS(
         color = Colors.Brand,
         icon = R.drawable.ic_transfer,
-        title = R.string.activity_banner__transfer_in_progress
+        title = R.string.lightning__transfer_in_progress
     )
 }

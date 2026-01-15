@@ -96,11 +96,11 @@ class NotifyPaymentReceivedHandler @Inject constructor(
 
     private suspend fun buildNotificationContent(sats: Long): NotificationDetails {
         val settings = settingsStore.data.first()
-        val title = context.getString(R.string.notification_received_title)
+        val title = context.getString(R.string.notification__received__title)
         val body = if (settings.showNotificationDetails) {
             formatNotificationAmount(sats, settings)
         } else {
-            context.getString(R.string.notification_received_body_hidden)
+            context.getString(R.string.notification__received__body_hidden)
         }
         return NotificationDetails(title, body)
     }
@@ -117,7 +117,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             }
         } ?: "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}"
 
-        return context.getString(R.string.notification_received_body_amount, amountText)
+        return context.getString(R.string.notification__received__body_amount, amountText)
     }
 
     companion object {

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.CacheStore
@@ -36,45 +37,40 @@ class AppStatusViewModel @Inject constructor(
         collectState()
     }
 
-    private fun collectState() {
-        viewModelScope.launch {
-            combine(
-                healthRepo.healthState,
-                cacheStore.backupStatuses,
-                lightningRepo.lightningState,
-            ) { healthState, backupStatuses, lightningState ->
-                AppStatusUiState(
-                    health = healthState,
-                    backupSubtitle = computeBackupSubtitle(healthState.backups, backupStatuses),
-                    nodeSubtitle = when (healthState.node) {
-                        HealthState.ERROR -> context.getString(R.string.settings__status__lightning_node__error)
-                        else -> lightningState.nodeLifecycleState.uiText
-                    },
-                )
-            }.collect { newState ->
-                _uiState.value = newState
-            }
+    private fun collectState() = viewModelScope.launch {
+        combine(
+            healthRepo.healthState,
+            cacheStore.backupStatuses,
+            lightningRepo.lightningState,
+        ) { healthState, backupStatuses, lightningState ->
+            AppStatusUiState(
+                health = healthState,
+                backupSubtitle = computeBackupSubtitle(healthState.backups, backupStatuses),
+                nodeSubtitle = when (healthState.node) {
+                    HealthState.ERROR -> context.getString(R.string.settings__status__lightning_node__error)
+                    else -> lightningState.nodeLifecycleState.uiText(context)
+                },
+            )
+        }.collect { newState ->
+            _uiState.update { newState }
         }
     }
 
     private fun computeBackupSubtitle(
         backupHealthState: HealthState,
         backupStatuses: Map<BackupCategory, BackupItemStatus>,
-    ): String {
-        return when (backupHealthState) {
-            HealthState.ERROR -> context.getString(R.string.settings__status__backup__error)
-            else -> {
-                val syncTimes = BackupCategory.entries
-                    .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
-                    .map { category -> backupStatuses[category]?.synced ?: 0L }
+    ) = when (backupHealthState) {
+        HealthState.ERROR -> context.getString(R.string.settings__status__backup__error)
+        else -> {
+            val syncTimes = BackupCategory.entries
+                .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
+                .map { category -> backupStatuses[category]?.synced ?: 0L }
 
-                when (val maxSyncTime = syncTimes.max()) {
-                    0L -> context.getString(R.string.settings__status__backup__ready)
-                    else -> runCatching { maxSyncTime.toLocalizedTimestamp() }
-                        .getOrDefault(
-                            context.getString(R.string.settings__status__backup__ready)
-                        )
-                }
+            when (val maxSyncTime = syncTimes.max()) {
+                0L -> context.getString(R.string.settings__status__backup__ready)
+                else -> runCatching { maxSyncTime.toLocalizedTimestamp() }.getOrDefault(
+                    context.getString(R.string.settings__status__backup__ready)
+                )
             }
         }
     }

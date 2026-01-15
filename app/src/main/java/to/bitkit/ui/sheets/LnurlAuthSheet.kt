@@ -62,13 +62,11 @@ private fun Content(
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
-        // TODO add missing localized text
-        SheetTopBar(titleText = "Log In")
+        SheetTopBar(titleText = stringResource(R.string.other__lnurl_auth_login_title))
         VerticalSpacer(16.dp)
 
         BodyM(
-            // TODO add missing localized text
-            text = "Log in to {domain}?".replace("{domain}", domain),
+            text = stringResource(R.string.other__lnurl_auth_login_prompt).replace("{domain}", domain),
             color = Colors.White64,
         )
 
@@ -93,9 +91,8 @@ private fun Content(
                     .weight(1f)
                     .testTag("LnurlAuthCancel")
             )
-            // TODO add missing localized text
             PrimaryButton(
-                text = "Log In",
+                text = stringResource(R.string.other__lnurl_auth_login_button),
                 onClick = onContinue,
                 fullWidth = false,
                 modifier = Modifier
