@@ -719,8 +719,8 @@ class AppViewModel @Inject constructor(
     private suspend fun validateLightningInvoice(invoice: LightningInvoice) {
         if (invoice.isExpired) {
             showAddressValidationError(
-                titleRes = R.string.other__pay_insufficient_spending,
-                descriptionRes = R.string.other__pay_insufficient_spending_description,
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__expired,
             )
             return
         }
@@ -730,7 +730,7 @@ class AppViewModel @Inject constructor(
             if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
                 showAddressValidationError(
                     titleRes = R.string.other__pay_insufficient_spending,
-                    descriptionRes = R.string.other__pay_insufficient_spending_description,
+                    descriptionRes = R.string.other__pay_insufficient_savings_description,
                 )
                 return
             }
