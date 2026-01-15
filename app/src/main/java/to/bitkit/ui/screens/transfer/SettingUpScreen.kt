@@ -42,7 +42,8 @@ import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
 
-@Suppress("TooGenericExceptionCaught")
+private const val TAG = "SettingUpScreen"
+
 @Composable
 fun SettingUpScreen(
     viewModel: TransferViewModel,
@@ -59,11 +60,11 @@ fun SettingUpScreen(
             delay(5000)
 
             runCatching {
-                Logger.debug("Auto-mining a block", context = "SettingUpScreen")
+                Logger.debug("Auto-mining a block", context = TAG)
                 regtestMine(1u)
-                Logger.debug("Successfully mined a block", context = "SettingUpScreen")
+                Logger.debug("Successfully mined a block", context = TAG)
             }.onFailure {
-                Logger.error("Failed to mine block: $it", context = "SettingUpScreen")
+                Logger.error("Failed to mine block", it, context = TAG)
             }
         }
     }
