@@ -41,7 +41,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.models.BlocktankBackupV1
-import to.bitkit.models.EUR_CURRENCY
+import to.bitkit.models.EUR
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
@@ -378,7 +378,7 @@ class BlocktankRepo @Inject constructor(
     }
 
     private fun getSatsPerEur(): ULong? {
-        return currencyRepo.convertFiatToSats(BigDecimal(1), EUR_CURRENCY).getOrNull()
+        return currencyRepo.convertFiatToSats(BigDecimal(1), EUR).getOrNull()
     }
 
     private fun totalBtChannelsValueSats(info: IBtInfo?): ULong {

@@ -53,10 +53,10 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors

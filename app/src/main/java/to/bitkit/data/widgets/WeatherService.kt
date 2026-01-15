@@ -11,6 +11,7 @@ import to.bitkit.data.dto.FeeEstimates
 import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.env.Env
 import to.bitkit.ext.nowMs
+import to.bitkit.models.USD
 import to.bitkit.models.WidgetType
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.utils.AppError
@@ -35,20 +36,25 @@ class WeatherService @Inject constructor(
     override val widgetType = WidgetType.WEATHER
     override val refreshInterval = 8.minutes
 
+    @Volatile
     private var cachedFeeEstimates: FeeEstimates? = null
+
+    @Volatile
     private var feeEstimatesTimestamp: Long = 0L
+
+    @Volatile
     private var cachedHistoricalData: List<BlockFeeRates>? = null
+
+    @Volatile
     private var historicalDataTimestamp: Long = 0L
 
     companion object {
         private const val TAG = "WeatherService"
 
-        @Suppress("SpellCheckingInspection")
-        private const val AVERAGE_SEGWIT_VBYTES_SIZE = 140
+        private const val AVERAGE_SEGWIT_VB_SIZE = 140
         private const val USD_GOOD_THRESHOLD = 1.0 // $1 USD threshold for good condition
         private const val PERCENTILE_LOW = 0.33
         private const val PERCENTILE_HIGH = 0.66
-        private const val USD_CURRENCY = "USD"
         private val TTL_FEE_ESTIMATES = 2.minutes
         private val TTL_HISTORICAL_DATA = 30.minutes
     }
@@ -64,16 +70,16 @@ class WeatherService @Inject constructor(
         val condition = calculateCondition(feeEstimates.normal, history)
 
         // Calculate average fee for display
-        val avgFeeSats = (feeEstimates.normal * AVERAGE_SEGWIT_VBYTES_SIZE).toInt()
+        val avgFeeSats = (feeEstimates.normal * AVERAGE_SEGWIT_VB_SIZE).toLong()
         val currentFee = formatFeeForDisplay(avgFeeSats)
 
         WeatherDTO(
             condition = condition,
             currentFee = currentFee,
-            nextBlockFee = feeEstimates.fast
+            nextBlockFee = feeEstimates.fast,
         )
     }.onFailure {
-        Logger.warn("Failed to fetch weather data", e = it, context = TAG)
+        Logger.warn("Failed to fetch weather data", it, context = TAG)
     }
 
     private suspend fun getFeeEstimates(): FeeEstimates {
@@ -118,8 +124,8 @@ class WeatherService @Inject constructor(
         val highThreshold = historicalFees[floor(historicalFees.size * PERCENTILE_HIGH).toInt()]
 
         // Check USD threshold first
-        val avgFeeSats = currentFeeRate * AVERAGE_SEGWIT_VBYTES_SIZE
-        val avgFeeUsd = currencyRepo.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY).getOrNull()
+        val avgFeeSats = currentFeeRate * AVERAGE_SEGWIT_VB_SIZE
+        val avgFeeUsd = currencyRepo.convertSatsToFiat(avgFeeSats.toLong(), USD).getOrNull()
             ?: return FeeCondition.AVERAGE
 
         if (avgFeeUsd.value <= BigDecimal(USD_GOOD_THRESHOLD)) return FeeCondition.GOOD
@@ -132,8 +138,8 @@ class WeatherService @Inject constructor(
         }
     }
 
-    private fun formatFeeForDisplay(satoshis: Int): String {
-        val usdValue = currencyRepo.convertSatsToFiat(satoshis.toLong(), currency = USD_CURRENCY).getOrNull()
+    private fun formatFeeForDisplay(sats: Long): String {
+        val usdValue = currencyRepo.convertSatsToFiat(sats, USD).getOrNull()
         return usdValue?.formatted.orEmpty()
     }
 }
