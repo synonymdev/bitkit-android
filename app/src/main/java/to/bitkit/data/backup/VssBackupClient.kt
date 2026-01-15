@@ -36,8 +36,8 @@ class VssBackupClient @Inject constructor(
                 val vssUrl = Env.vssServerUrl
                 val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
                 val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
-                Logger.verbose("Building VSS client with vssUrl: '$vssUrl'")
-                Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'")
+                Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
+                Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
                 if (lnurlAuthServerUrl.isNotEmpty()) {
                     val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                         ?: throw ServiceError.MnemonicNotFound()
@@ -85,9 +85,9 @@ class VssBackupClient @Inject constructor(
                 value = data,
             )
         }.onSuccess {
-            Logger.verbose("VSS 'putObject' success for '$key' at version: ${it.version}", context = TAG)
-        }.onFailure { e ->
-            Logger.verbose("VSS 'putObject' error for '$key'", e = e, context = TAG)
+            Logger.verbose("VSS 'putObject' success for '$key' at version: '${it.version}'", context = TAG)
+        }.onFailure {
+            Logger.verbose("VSS 'putObject' error for '$key'", it, context = TAG)
         }
     }
 
@@ -104,8 +104,8 @@ class VssBackupClient @Inject constructor(
             } else {
                 Logger.verbose("VSS 'getObject' success for '$key'", context = TAG)
             }
-        }.onFailure { e ->
-            Logger.verbose("VSS 'getObject' error for '$key'", e = e, context = TAG)
+        }.onFailure {
+            Logger.verbose("VSS 'getObject' error for '$key'", it, context = TAG)
         }
     }
 
@@ -116,8 +116,8 @@ class VssBackupClient @Inject constructor(
             vssListKeys(prefix = prefix)
         }.onSuccess {
             Logger.verbose("VSS 'listKeys' success - found ${it.size} key(s)", context = TAG)
-        }.onFailure { e ->
-            Logger.verbose("VSS 'listKeys' error", e = e, context = TAG)
+        }.onFailure {
+            Logger.verbose("VSS 'listKeys' error", it, context = TAG)
         }
     }
 
@@ -132,8 +132,8 @@ class VssBackupClient @Inject constructor(
             } else {
                 Logger.verbose("VSS 'deleteObject' success for '$key' - key did not exist", context = TAG)
             }
-        }.onFailure { e ->
-            Logger.verbose("VSS 'deleteObject' error for '$key'", e = e, context = TAG)
+        }.onFailure {
+            Logger.verbose("VSS 'deleteObject' error for '$key'", it, context = TAG)
         }
     }
 
@@ -150,8 +150,8 @@ class VssBackupClient @Inject constructor(
             deletedCount
         }.onSuccess {
             Logger.verbose("VSS 'deleteAllKeys' success - deleted $it key(s)", context = TAG)
-        }.onFailure { e ->
-            Logger.verbose("VSS 'deleteAllKeys' error", e = e, context = TAG)
+        }.onFailure {
+            Logger.verbose("VSS 'deleteAllKeys' error", it, context = TAG)
         }
     }
 
