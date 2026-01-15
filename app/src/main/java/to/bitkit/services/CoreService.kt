@@ -564,6 +564,7 @@ class ActivityService(
     private fun buildUpdatedOnchainActivity(
         existingActivity: Activity.Onchain,
         confirmationData: ConfirmationData,
+        ldkValue: ULong,
         channelId: String? = null,
     ): OnchainActivity {
         var preservedIsTransfer = existingActivity.v1.isTransfer
@@ -576,6 +577,12 @@ class ActivityService(
 
         val finalDoesExist = if (confirmationData.isConfirmed) true else existingActivity.v1.doesExist
 
+        val preservedValue = if (existingActivity.v1.value > ldkValue) {
+            existingActivity.v1.value
+        } else {
+            ldkValue
+        }
+
         val updatedOnChain = existingActivity.v1.copy(
             confirmed = confirmationData.isConfirmed,
             confirmTimestamp = confirmationData.confirmedTimestamp,
@@ -583,6 +590,7 @@ class ActivityService(
             updatedAt = confirmationData.timestamp,
             isTransfer = preservedIsTransfer,
             channelId = preservedChannelId,
+            value = preservedValue,
         )
 
         return updatedOnChain
@@ -631,10 +639,16 @@ class ActivityService(
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
 
-        val existingActivity = getActivityById(payment.id)
+        var existingActivity = getActivityById(payment.id)
+        if (existingActivity == null) {
+            getOnchainActivityByTxId(kind.txid)?.let {
+                existingActivity = Activity.Onchain(it)
+            }
+        }
+
         if (existingActivity != null &&
             existingActivity is Activity.Onchain &&
-            (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
+            ((existingActivity as Activity.Onchain).v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
         ) {
             return
         }
@@ -655,10 +669,12 @@ class ActivityService(
 
         val resolvedAddress = resolveAddressForInboundPayment(kind, existingActivity, payment, transactionDetails)
 
+        val ldkValue = payment.amountSats ?: 0u
         val onChain = if (existingActivity is Activity.Onchain) {
             buildUpdatedOnchainActivity(
-                existingActivity = existingActivity,
+                existingActivity = existingActivity as Activity.Onchain,
                 confirmationData = confirmationData,
+                ldkValue = ldkValue,
                 channelId = resolvedChannelId,
             )
         } else {
@@ -676,8 +692,9 @@ class ActivityService(
             return
         }
 
-        if (existingActivity != null) {
-            updateActivity(payment.id, Activity.Onchain(onChain))
+        if (existingActivity != null && existingActivity is Activity.Onchain) {
+            val existingOnchain = existingActivity.v1
+            updateActivity(existingOnchain.id, Activity.Onchain(onChain))
         } else {
             upsertActivity(Activity.Onchain(onChain))
         }
