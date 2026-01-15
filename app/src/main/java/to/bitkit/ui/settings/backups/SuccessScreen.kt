@@ -32,11 +32,7 @@ fun SuccessScreen(
     onBack: () -> Unit,
 ) {
     SuccessContent(
-        onContinue = {
-            @Suppress("ForbiddenComment")
-            // TODO: verify backup
-            onContinue()
-        },
+        onContinue = onContinue,
         onBack = onBack,
     )
 }

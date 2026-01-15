@@ -1,5 +1,3 @@
-@file:Suppress("MatchingDeclarationName")
-
 package to.bitkit.ui.settings.backups
 
 import androidx.compose.foundation.Image
