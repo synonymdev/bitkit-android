@@ -26,6 +26,9 @@ class SendCoinSelectionViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "SendCoinSelectionViewModel"
+    }
 
     private val _uiState = MutableStateFlow(CoinSelectionUiState())
     val uiState = _uiState.asStateFlow()
@@ -63,7 +66,7 @@ class SendCoinSelectionViewModel @Inject constructor(
                 )
             }
         }.onFailure {
-            Logger.error("Failed to load UTXOs for coin selection", it)
+            Logger.error("Failed to load UTXOs for coin selection", it, context = TAG)
             ToastEventBus.send(Exception("Failed to load UTXOs: ${it.message}"))
         }
     }
@@ -82,8 +85,8 @@ class SendCoinSelectionViewModel @Inject constructor(
                             _tagsByTxId.update { currentMap -> currentMap + (txId to tags) }
                         }
                     }
-                    .onFailure { e ->
-                        Logger.error("Failed to load tags for utxo $txId", e)
+                    .onFailure {
+                        Logger.error("Failed to load tags for utxo $txId", it, context = TAG)
                     }
             }
         }
