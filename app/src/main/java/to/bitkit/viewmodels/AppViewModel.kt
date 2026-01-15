@@ -988,12 +988,6 @@ class AppViewModel @Inject constructor(
                 ?.invoice
                 ?.takeIf { invoice ->
                     if (invoice.isExpired) {
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__expired),
-                        )
-
                         Logger.debug(
                             "Lightning invoice expired in unified URI, defaulting to onchain-only",
                             context = TAG
