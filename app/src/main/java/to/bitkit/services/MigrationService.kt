@@ -1239,10 +1239,6 @@ class MigrationService @Inject constructor(
         if (hasRNMmkvData()) {
             val mmkvData = loadRNMmkvData() ?: return
 
-            extractRNMetadata(mmkvData)?.let { metadata ->
-                applyRNMetadata(metadata)
-            }
-
             extractRNActivities(mmkvData)?.let { activities ->
                 applyOnchainMetadata(activities)
             }
@@ -1256,6 +1252,10 @@ class MigrationService @Inject constructor(
                     Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
                     applyBoostTransactions(boosts)
                 }
+            }
+
+            extractRNMetadata(mmkvData)?.let { metadata ->
+                applyRNMetadata(metadata)
             }
         }
 
@@ -1450,6 +1450,19 @@ class MigrationService @Inject constructor(
             }
         }
 
+        val backupValue = item.value.toULong()
+        if (backupValue > updated.value) {
+            updated = updated.copy(value = backupValue)
+            wasUpdated = true
+        }
+
+        item.fee?.let { backupFee ->
+            if (backupFee.toULong() > updated.fee) {
+                updated = updated.copy(fee = backupFee.toULong())
+                wasUpdated = true
+            }
+        }
+
         item.address?.let { address ->
             if (address.isNotEmpty() && updated.address != address) {
                 updated = updated.copy(address = address)
@@ -1460,29 +1473,79 @@ class MigrationService @Inject constructor(
         return if (wasUpdated) updated else null
     }
 
-    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
+    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LongMethod")
     private suspend fun applyOnchainMetadata(items: List<RNActivityItem>) {
         val onchainItems = items.filter { it.activityType == "onchain" }
+        var updatedCount = 0
+        var createdCount = 0
 
         onchainItems.forEach { item ->
             val txId = item.txId ?: item.id.takeIf { it.isNotEmpty() } ?: return@forEach
 
             val onchain = activityRepo.getOnchainActivityByTxId(txId)
-            if (onchain == null) {
-                Logger.warn("Onchain activity not found for txId: $txId", context = TAG)
-                return@forEach
-            }
+            if (onchain != null) {
+                updateOnchainActivityMetadata(item, onchain)?.let { updated ->
+                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
+                        .onSuccess { updatedCount++ }
+                        .onFailure { e ->
+                            Logger.error(
+                                "Failed to update onchain activity metadata for $txId: $e",
+                                e,
+                                context = TAG
+                            )
+                        }
+                }
+            } else {
+                val timestampSecs = (item.timestamp / MS_PER_SEC).toULong()
+                val now = (System.currentTimeMillis() / MS_PER_SEC).toULong()
 
-            updateOnchainActivityMetadata(item, onchain)?.let { updated ->
-                activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
+                val activityTimestamp = if (timestampSecs > 0u) timestampSecs else now
+
+                val newOnchain = OnchainActivity(
+                    id = item.id,
+                    txType = if (item.txType == "sent") PaymentType.SENT else PaymentType.RECEIVED,
+                    txId = txId,
+                    value = item.value.toULong(),
+                    fee = (item.fee ?: 0).toULong(),
+                    feeRate = (item.feeRate ?: 1).toULong(),
+                    address = item.address ?: "",
+                    timestamp = activityTimestamp,
+                    confirmed = item.confirmed ?: false,
+                    isBoosted = item.isBoosted ?: false,
+                    boostTxIds = emptyList(),
+                    isTransfer = item.isTransfer ?: false,
+                    confirmTimestamp = item.confirmTimestamp?.let { (it / MS_PER_SEC).toULong() },
+                    channelId = item.channelId,
+                    transferTxId = item.transferTxId,
+                    doesExist = item.exists ?: true,
+                    createdAt = activityTimestamp,
+                    updatedAt = activityTimestamp,
+                    seenAt = now,
+                )
+
+                activityRepo.upsertActivity(Activity.Onchain(newOnchain))
+                    .onSuccess {
+                        createdCount++
+
+                        item.boostedParents?.takeIf { it.isNotEmpty() }?.let { parents ->
+                            applyBoostedParents(parents, txId)
+                        }
+                    }
                     .onFailure { e ->
                         Logger.error(
-                            "Failed to update onchain activity metadata for $txId: $e",
+                            "Failed to create onchain activity for unsupported address $txId: $e",
                             e,
                             context = TAG
                         )
                     }
             }
+        }
+
+        if (updatedCount > 0 || createdCount > 0) {
+            Logger.info(
+                "Applied metadata to $updatedCount onchain activities, created $createdCount for unsupported addresses",
+                context = TAG
+            )
         }
     }
 
