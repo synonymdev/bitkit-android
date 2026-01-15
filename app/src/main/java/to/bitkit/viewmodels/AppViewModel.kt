@@ -552,7 +552,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun notifyPaymentReceived(event: Event) {
         val command = NotifyPaymentReceived.Command.from(event) ?: return
-        val result = notifyPaymentReceivedHandler.invoke(command).getOrNull()
+        val result = notifyPaymentReceivedHandler(command).getOrNull()
         if (result !is NotifyPaymentReceived.Result.ShowSheet) return
         showTransactionSheet(result.sheet)
     }

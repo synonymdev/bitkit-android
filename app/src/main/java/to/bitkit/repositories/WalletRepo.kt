@@ -307,7 +307,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        wipeWalletUseCase.invoke(
+        wipeWalletUseCase(
             walletIndex = walletIndex,
             resetWalletState = ::resetState,
             onSuccess = ::setWalletExistsState,

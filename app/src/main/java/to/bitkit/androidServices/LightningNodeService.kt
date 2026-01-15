@@ -79,7 +79,7 @@ class LightningNodeService : Service() {
         if (event !is Event.PaymentReceived && event !is Event.OnchainTransactionReceived) return
         val command = NotifyPaymentReceived.Command.from(event, includeNotification = true) ?: return
 
-        notifyPaymentReceivedHandler.invoke(command).onSuccess {
+        notifyPaymentReceivedHandler(command).onSuccess {
             Logger.debug("Payment notification result: $it", context = TAG)
             if (it !is NotifyPaymentReceived.Result.ShowNotification) return
             showPaymentNotification(it.sheet, it.notification)
