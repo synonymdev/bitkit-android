@@ -90,10 +90,8 @@ class LnurlService @Inject constructor(
 
         val parsedResponse = response.body<LnurlChannelResponse>()
 
-        when {
-            parsedResponse.status == "ERROR" -> {
-                throw HttpError("requestLnurlChannel error: '${response.status.description}'", response.status.value)
-            }
+        when (parsedResponse.status == "ERROR") {
+            true -> throw HttpError("requestLnurlChannel error: '${parsedResponse.reason}'", response.status.value)
             else -> parsedResponse
         }
     }.onFailure {

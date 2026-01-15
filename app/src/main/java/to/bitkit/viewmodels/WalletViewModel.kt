@@ -191,7 +191,7 @@ class WalletViewModel @Inject constructor(
     fun onRestoreContinue() = _restoreState.update { RestoreState.Settled }
 
     fun onRestoreRetry() = viewModelScope.launch(bgDispatcher) {
-        _restoreState.update { it.incrementRetryCount() }
+        _restoreState.update { it.countRetry() }
         setInitNodeLifecycleState()
         lightningRepo.restartNode()
     }
@@ -409,7 +409,7 @@ sealed interface RestoreState {
     data object Settled : RestoreState
 
     fun retryCount() = (this as? Retry)?.count ?: 0
-    fun incrementRetryCount(): RestoreState = if (this is Retry) Retry(count + 1) else this
+    fun countRetry(): RestoreState = if (this is Retry) Retry(count + 1) else Retry(1)
     fun isOngoing() = this is InProgress
     fun isIdle() = this is Initial || this is Settled
 }

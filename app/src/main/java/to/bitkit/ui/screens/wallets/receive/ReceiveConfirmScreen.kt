@@ -1,5 +1,3 @@
-@file:Suppress("MatchingDeclarationName")
-
 package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.foundation.layout.Arrangement
@@ -47,17 +45,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
-
-// TODO replace with direct use of the now serializable IcJitEntry
-@Serializable
-data class CjitEntryDetails(
-    val networkFeeSat: Long,
-    val serviceFeeSat: Long,
-    val channelSizeSat: Long,
-    val feeSat: Long,
-    val receiveAmountSats: Long,
-    val invoice: String,
-)
 
 @Composable
 fun ReceiveConfirmScreen(
@@ -196,6 +183,17 @@ private fun Content(
         }
     }
 }
+
+// TODO replace with direct use of the now serializable IcJitEntry
+@Serializable
+data class CjitEntryDetails(
+    val networkFeeSat: Long,
+    val serviceFeeSat: Long,
+    val channelSizeSat: Long,
+    val feeSat: Long,
+    val receiveAmountSats: Long,
+    val invoice: String,
+)
 
 @Preview(showSystemUi = true)
 @Composable

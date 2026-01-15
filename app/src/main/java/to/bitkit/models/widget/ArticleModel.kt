@@ -9,6 +9,8 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
+private const val TAG = "ArticleModel"
+
 @Serializable
 data class ArticleModel(
     val title: String,
@@ -48,7 +50,7 @@ private fun timeAgo(dateString: String): String {
         }
 
         if (parsedDateTime == null) {
-            Logger.debug("Failed to parse date: Unparseable date: $dateString")
+            Logger.debug("Failed to parse date: Unparseable date: $dateString", context = TAG)
             return ""
         }
 
@@ -67,7 +69,7 @@ private fun timeAgo(dateString: String): String {
             else -> "$diffMonths months ago"
         }
     } catch (e: Exception) {
-        Logger.warn("An unexpected error occurred while parsing date: ${e.message}")
+        Logger.warn("An unexpected error occurred while parsing date", e = e, context = TAG)
         ""
     }
 }
