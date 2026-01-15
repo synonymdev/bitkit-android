@@ -982,6 +982,17 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
+        // Check network mismatch
+        val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
+        if (NetworkValidationHelper.isNetworkMismatch(addressNetwork, Env.network)) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__scan_err_decoding),
+                description = context.getString(R.string.other__scan__error__generic),
+            )
+            return
+        }
+
         val lnInvoice: LightningInvoice? = invoice.params?.get("lightning")?.let { bolt11 ->
             runCatching { decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
