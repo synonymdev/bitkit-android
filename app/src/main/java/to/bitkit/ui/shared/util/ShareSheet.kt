@@ -45,7 +45,7 @@ fun shareQrCode(context: Context, bitmap: Bitmap, text: String) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        val chooser = Intent.createChooser(intent, "Share Qr code via")
+        val chooser = Intent.createChooser(intent, context.getString(R.string.other__share_qr))
         context.startActivity(chooser)
     } catch (e: IOException) {
         Logger.error("Failed to share QR code", e, context = "ShareSheet")

@@ -25,6 +25,10 @@ class LogsViewModel @Inject constructor(
     private val application: Application,
     private val logsRepo: LogsRepo,
 ) : AndroidViewModel(application) {
+    companion object {
+        private const val TAG = "LogsViewModel"
+    }
+
     private val _logs = MutableStateFlow<List<LogFile>>(emptyList())
     val logs: StateFlow<List<LogFile>> = _logs.asStateFlow()
 
@@ -46,12 +50,11 @@ class LogsViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _selectedLogContent.update { listOf("Log file not found") }
-                    Logger.error("Failed to load log content", e)
+                    Logger.error("Failed to load log content", e, context = TAG)
                 }
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     fun prepareLogForSharing(logFile: LogFile, onReady: (Uri) -> Unit) {
         viewModelScope.launch {
             runCatching {
@@ -73,7 +76,7 @@ class LogsViewModel @Inject constructor(
                     }
                 }
             }.onFailure {
-                Logger.error("Error preparing file for sharing", it)
+                Logger.error("Error preparing file for sharing", it, context = TAG)
             }
         }
     }

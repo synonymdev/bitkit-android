@@ -11,7 +11,6 @@ import to.bitkit.fcm.EncryptedNotification
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
-@Suppress("SpacingBetweenDeclarationsWithAnnotations", "Wrapping")
 class CryptoTest {
     private lateinit var sut: Crypto
 
@@ -86,14 +85,12 @@ class CryptoTest {
         val derivationName = "bitkit-notifications"
 
         @Suppress("MaxLineLength")
-        val ciphertext = ("l2fInfyw64gO12odo8iipISloQJ45Rc4WjFmpe95brdaAMDq+T/L9ZChcmMCXnR0J6BXd8sSI" +
-            "Je/0bmby8uSZZJuVCzwF76XHfY5oq0Y1/hKzyZTn8nG3dqfiLHnAPy1tZFQfm5ALgjwWnViYJLXoGFpXs7kLMA=")
-            .fromBase64()
+        val ciphertext = ("l2fInfyw64gO12odo8iipISloQJ45Rc4WjFmpe95brdaAMDq+T/L9ZChcmMCXnR0J6BXd8sSIJe/0bmby8uSZZJuVCzwF76XHfY5oq0Y1/hKzyZTn8nG3dqfiLHnAPy1tZFQfm5ALgjwWnViYJLXoGFpXs7kLMA=").fromBase64()
         val iv = "2b8ed77fd2198e3ed88cfaa794a246e8"
         val tag = "caddd13746d6a6aed16176734964d3a3"
+
         @Suppress("MaxLineLength")
-        val decryptedPayload = """{"source":"blocktank","type":"incomingHtlc","payload":""" +
-            """{"secretMessage":"hello"},"createdAt":"2024-09-18T13:33:52.555Z"}"""
+        val decryptedPayload = """{"source":"blocktank","type":"incomingHtlc","payload":{"secretMessage":"hello"},"createdAt":"2024-09-18T13:33:52.555Z"}"""
 
         // Without derivationName
         val sharedSecret = sut.generateSharedSecret(clientPrivateKey.fromHex(), serverPublicKey)
