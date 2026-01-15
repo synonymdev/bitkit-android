@@ -83,6 +83,8 @@ import java.util.concurrent.Executors
 const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
 const val SCAN_RESULT_KEY = "SCAN_RESULT"
 
+private const val TAG = "QrScanningScreen"
+
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
@@ -400,7 +402,7 @@ private fun processImageFromGallery(
                 onError(e)
             }
     }.onFailure {
-        Logger.error("Failed to process image from gallery", it)
+        Logger.error("Failed to process image from gallery", it, context = TAG)
         onError(it)
     }
 }

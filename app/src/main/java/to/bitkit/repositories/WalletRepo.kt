@@ -302,7 +302,7 @@ class WalletRepo @Inject constructor(
             }
             setWalletExistsState()
         }.onFailure {
-            Logger.error("restoreWallet error", it)
+            Logger.error("restoreWallet error", it, context = TAG)
         }
     }
 
@@ -319,7 +319,6 @@ class WalletRepo @Inject constructor(
         _balanceState.update { BalanceState() }
     }
 
-    // Blockchain address management
     fun getOnchainAddress(): String = _walletState.value.onchainAddress
 
     suspend fun setOnchainAddress(address: String) {
@@ -330,7 +329,7 @@ class WalletRepo @Inject constructor(
     suspend fun newAddress(): Result<String> = withContext(bgDispatcher) {
         lightningRepo.newAddress()
             .onSuccess { address -> setOnchainAddress(address) }
-            .onFailure { error -> Logger.error("Error generating new address", error) }
+            .onFailure { error -> Logger.error("Error generating new address", error, context = TAG) }
     }
 
     suspend fun getAddresses(
@@ -369,7 +368,7 @@ class WalletRepo @Inject constructor(
 
             return@runCatching addresses
         }.onFailure {
-            Logger.error("Error getting addresses", it)
+            Logger.error("Error getting addresses", it, context = TAG)
         }
     }
 

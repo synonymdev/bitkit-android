@@ -53,7 +53,7 @@ class ShopWebViewInterface(
                 }
             }
         }.onFailure {
-            Logger.error("Error parsing message: $message", it)
+            Logger.error("Error parsing message: $message", it, context = "WebView")
         }
     }
 
