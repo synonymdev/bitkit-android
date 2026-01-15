@@ -649,6 +649,7 @@ class AppViewModel @Inject constructor(
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                     SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                     SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
+                    SendEvent.Contacts -> mainScreenEffect(MainScreenEffect.Navigate(Routes.Contacts))
                 }
             }
         }
@@ -2124,6 +2125,7 @@ sealed interface SendEvent {
     data object ClearPayConfirmation : SendEvent
     data object BackToAmount : SendEvent
     data object NavToAddress : SendEvent
+    data object Contacts : SendEvent
 }
 
 sealed interface LnurlParams {

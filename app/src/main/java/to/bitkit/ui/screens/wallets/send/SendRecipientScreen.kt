@@ -258,9 +258,7 @@ fun SendRecipientScreen(
                 galleryLauncher.launch("image/*")
             }
         },
-        onClickContact = {
-            app?.toast(AppError("Coming soon: Contact"))
-        },
+        onClickContact = { onEvent(SendEvent.Contacts) },
         onClickPaste = { onEvent(SendEvent.Paste) },
         onClickManual = { onEvent(SendEvent.EnterManually) },
         cameraPermissionGranted = cameraPermissionState.status.isGranted,
