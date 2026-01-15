@@ -191,16 +191,17 @@ private fun NodeStateSection(
     nodeLifecycleState: NodeLifecycleState,
     nodeStatus: NodeStatus?,
 ) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader("Node State")
         SettingsTextButtonRow(
             title = stringResource(R.string.lightning__status),
-            value = nodeLifecycleState.uiText,
+            value = nodeLifecycleState.uiText(context),
         )
 
         nodeStatus?.let { status ->
             SettingsTextButtonRow(
-                title = stringResource(R.string.common_ready),
+                title = stringResource(R.string.common__ready),
                 value = if (status.isRunning) "✅" else "⏳",
             )
             SettingsTextButtonRow(
@@ -344,7 +345,7 @@ private fun ChannelsSection(
                 VerticalSpacer(8.dp)
 
                 ChannelDetailRow(
-                    title = stringResource(R.string.common_ready),
+                    title = stringResource(R.string.common__ready),
                     value = if (channel.isChannelReady) "✅" else "❌",
                 )
                 ChannelDetailRow(
@@ -376,7 +377,7 @@ private fun ChannelsSection(
                     value = "₿ ${(channel.nextOutboundHtlcMinimumMsat / 1000u).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
-                    title = stringResource(R.string.common_confirmations),
+                    title = stringResource(R.string.common__confirmations),
                     value = "${channel.confirmations ?: 0}/${channel.confirmationsRequired ?: 0}",
                 )
 

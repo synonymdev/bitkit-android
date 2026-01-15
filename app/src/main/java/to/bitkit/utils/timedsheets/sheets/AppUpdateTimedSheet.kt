@@ -17,6 +17,7 @@ class AppUpdateTimedSheet @Inject constructor(
     override val type = TimedSheetType.APP_UPDATE
     override val priority = 5
 
+    @Suppress("TooGenericExceptionCaught")
     override suspend fun shouldShow(): Boolean = withContext(bgDispatcher) {
         try {
             val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android

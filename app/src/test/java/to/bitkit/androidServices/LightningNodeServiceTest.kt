@@ -105,7 +105,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             sats = 100L,
         )
         val notification = NotificationDetails(
-            title = context.getString(R.string.notification_received_title),
+            title = context.getString(R.string.notification__received__title),
             body = "Received ₿ 100 ($0.10)",
         )
         whenever(notifyPaymentReceivedHandler.invoke(any()))
@@ -147,7 +147,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
-            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification_received_title)
+            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
         assertNotNull("Payment notification should be present", paymentNotification)
 
@@ -184,7 +184,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
-            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification_received_title)
+            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
 
         assertNull("Payment notification should NOT be present in foreground", paymentNotification)
@@ -212,7 +212,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
-            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification_received_title)
+            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
         assertNotNull("Payment notification should be present", paymentNotification)
 

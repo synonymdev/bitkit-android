@@ -183,7 +183,7 @@ private fun Preview() {
             items(items = ActivityBannerType.entries) { item ->
                 ActivityBanner(
                     gradientColor = item.color,
-                    title = stringResource(R.string.activity_banner__transfer_in_progress),
+                    title = stringResource(R.string.lightning__transfer_in_progress),
                     icon = item.icon,
                     onClick = {},
                     modifier = Modifier.fillMaxWidth()

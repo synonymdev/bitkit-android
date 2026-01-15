@@ -114,7 +114,7 @@ fun SpendingWalletScreen(
                     if (canTransfer) {
                         SecondaryButton(
                             onClick = onTransferToSavingsClick,
-                            text = "Transfer To Savings", // TODO add missing localized text
+                            text = stringResource(R.string.wallet__transfer_to_savings),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
