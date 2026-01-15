@@ -75,7 +75,7 @@ class LightningService @Inject constructor(
     private val _syncStatusChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val syncStatusChanged: SharedFlow<Unit> = _syncStatusChanged.asSharedFlow()
 
-    private lateinit var trustedPeers: List<PeerDetails>
+    private var trustedPeers: List<PeerDetails> = emptyList()
 
     private var listenerJob: Job? = null
 
