@@ -108,6 +108,7 @@ import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.utils.Logger
+import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -739,6 +740,16 @@ class AppViewModel @Inject constructor(
     }
 
     private fun validateOnchainAddress(invoice: OnChainInvoice) {
+        // Check network mismatch
+        val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
+        if (NetworkValidationHelper.isNetworkMismatch(addressNetwork, Env.network)) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+            )
+            return
+        }
+
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
         if (maxSendOnchain == 0uL) {
