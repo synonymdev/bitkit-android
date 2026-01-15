@@ -37,7 +37,6 @@ import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import to.bitkit.utils.errorLogOf
 import to.bitkit.utils.isTxSyncTimeout
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -124,7 +123,7 @@ class WalletViewModel @Inject constructor(
                 migrationService.setShowingMigrationLoading(false)
             }
         }.onFailure {
-            Logger.error("RN migration failed: ${errorLogOf(it)}", it, context = TAG)
+            Logger.error("RN migration failed", it, context = TAG)
             migrationService.markMigrationChecked()
             migrationService.setShowingMigrationLoading(false)
             ToastEventBus.send(

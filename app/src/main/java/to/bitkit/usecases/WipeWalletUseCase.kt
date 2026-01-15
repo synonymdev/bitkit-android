@@ -14,7 +14,6 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
-import to.bitkit.utils.errorLogOf
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -66,7 +65,7 @@ class WipeWalletUseCase @Inject constructor(
                 }
                 .getOrThrow()
         }.onFailure {
-            Logger.error("Wipe wallet error: ${errorLogOf(it)}", it, context = TAG)
+            Logger.error("Wipe wallet error", it, context = TAG)
         }.also {
             backupRepo.setWiping(false)
         }

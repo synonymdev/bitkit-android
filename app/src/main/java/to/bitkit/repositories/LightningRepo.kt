@@ -63,7 +63,6 @@ import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import to.bitkit.utils.errorLogOf
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -402,7 +401,7 @@ class LightningRepo @Inject constructor(
 
             Logger.info("Registered closed channel: ${channel.userChannelId}", context = TAG)
         }.onFailure {
-            Logger.error("Failed to register closed channel: ${errorLogOf(it)}", it, context = TAG)
+            Logger.error("Failed to register closed channel", it, context = TAG)
         }
     }
 
@@ -725,7 +724,7 @@ class LightningRepo @Inject constructor(
         }.recoverCatching {
             if (it is CancellationException) throw it
             val fallbackFee = 1000uL
-            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee', ${errorLogOf(it)}", context = TAG)
+            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", e = it, context = TAG)
             return@recoverCatching fallbackFee
         }
     }
