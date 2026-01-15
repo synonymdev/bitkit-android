@@ -302,7 +302,7 @@ private fun CustomModeContent(
                 backgroundColor = Colors.Red16,
                 enabled = uiState.decreaseEnabled,
                 onClick = { onChangeAmount(false) },
-                contentDescription = "Reduce fee",
+                contentDescription = stringResource(R.string.wallet__boost_decrease_fee),
                 modifier = Modifier.testTag(BoostTransactionTestTags.DECREASE_FEE_BUTTON)
             )
 
@@ -349,7 +349,7 @@ private fun CustomModeContent(
                 backgroundColor = Colors.Green16,
                 enabled = uiState.increaseEnabled,
                 onClick = { onChangeAmount(true) },
-                contentDescription = "Increase fee",
+                contentDescription = stringResource(R.string.wallet__boost_increase_fee),
                 modifier = Modifier.testTag(BoostTransactionTestTags.INCREASE_FEE_BUTTON)
             )
         }

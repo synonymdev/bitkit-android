@@ -100,7 +100,7 @@ class LightningNodeService : Service() {
     }
 
     private fun createNotification(
-        contentText: String = getString(R.string.notification_running_in_background),
+        contentText: String = getString(R.string.notification__service__body),
     ): Notification {
         val notificationIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -120,7 +120,7 @@ class LightningNodeService : Service() {
             .setContentIntent(pendingIntent)
             .addAction(
                 R.drawable.ic_x,
-                getString(R.string.notification_stop_app),
+                getString(R.string.notification__service__stop),
                 stopPendingIntent
             )
             .build()

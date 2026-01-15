@@ -135,7 +135,7 @@ class DateTimeExtTest : BaseUnitTest() {
     fun `toRelativeTimeString preserves backward compatibility with default locale`() {
         val twoDaysAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2)
         val resultWithoutParam = twoDaysAgo.toRelativeTimeString()
-        val resultWithDefaultParam = twoDaysAgo.toRelativeTimeString(Locale.getDefault())
+        val resultWithDefaultParam = twoDaysAgo.toRelativeTimeString()
 
         assertEquals(resultWithDefaultParam, resultWithoutParam)
     }

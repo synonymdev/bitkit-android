@@ -31,7 +31,6 @@ import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.HealthState
-import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.AppHealthState
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyMSB
@@ -262,7 +261,7 @@ private fun Preview() {
                     backups = HealthState.READY,
                 ),
                 backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
-                nodeSubtitle = NodeLifecycleState.Running.uiText,
+                nodeSubtitle = "Running",
             ),
         )
     }

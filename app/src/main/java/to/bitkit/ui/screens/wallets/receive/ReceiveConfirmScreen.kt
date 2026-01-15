@@ -171,7 +171,7 @@ private fun Content(
             FillHeight()
 
             SettingsSwitchRow(
-                title = "Set up in background",
+                title = stringResource(R.string.settings__bg__setup),
                 isChecked = hasNotificationPermission,
                 colors = AppSwitchDefaults.colorsPurple,
                 onClick = onSystemSettingsClick,
