@@ -35,6 +35,10 @@
     <string name="cards__transferClosingChannel__title">Initiating</string>
     <string name="cards__transferPending__description">Ready in ±{duration}</string>
     <string name="cards__transferPending__title">Transfer</string>
+    <string name="coming_soon__button">Wallet overview</string>
+    <string name="coming_soon__description">This feature is currently in development and will be available soon.</string>
+    <string name="coming_soon__headline">Coming\n&lt;accent&gt;soon&lt;/accent&gt;</string>
+    <string name="coming_soon__title">Coming soon</string>
     <string name="common__advanced">Advanced</string>
     <string name="common__announced">Announced</string>
     <string name="common__are_you_sure">Are You Sure?</string>

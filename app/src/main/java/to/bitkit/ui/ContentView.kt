@@ -59,6 +59,7 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
+import to.bitkit.ui.screens.common.ComingSoonScreen
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
@@ -528,6 +529,7 @@ private fun RootNavHost(
             navController = navController,
         )
         settings(navController, settingsViewModel)
+        comingSoon(navController)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
         generalSettings(navController)
@@ -906,6 +908,23 @@ private fun NavGraphBuilder.settings(
     composableWithDefaultTransitions<Routes.LanguageSettings> {
         LanguageSettingsScreen(
             onBackClick = { navController.popBackStack() },
+        )
+    }
+}
+
+private fun NavGraphBuilder.comingSoon(
+    navController: NavHostController,
+) {
+    composableWithDefaultTransitions<Routes.Contacts> {
+        ComingSoonScreen(
+            onWalletOverviewClick = { navController.navigateToHome() },
+            onBackClick = { navController.popBackStack() }
+        )
+    }
+    composableWithDefaultTransitions<Routes.Profile> {
+        ComingSoonScreen(
+            onWalletOverviewClick = { navController.navigateToHome() },
+            onBackClick = { navController.popBackStack() }
         )
     }
 }
@@ -1932,6 +1951,12 @@ sealed interface Routes {
 
     @Serializable
     data object LanguageSettings : Routes
+
+    @Serializable
+    data object Contacts : Routes
+
+    @Serializable
+    data object Profile : Routes
 
     @Serializable
     data object ProfileIntro : Routes

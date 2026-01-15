@@ -16,15 +16,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -86,7 +83,6 @@ import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
-import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
@@ -168,13 +164,6 @@ fun HomeScreen(
             walletViewModel.onPullToRefresh()
             homeViewModel.refreshWidgets()
         },
-        onClickProfile = {
-            if (!hasSeenProfileIntro) {
-                rootNavController.navigate(Routes.ProfileIntro)
-            } else {
-                rootNavController.navigate(Routes.CreateProfile)
-            }
-        },
         onRemoveSuggestion = { suggestion ->
             homeViewModel.removeSuggestion(suggestion)
         },
@@ -214,11 +203,7 @@ fun HomeScreen(
                 }
 
                 Suggestion.PROFILE -> {
-                    if (!hasSeenProfileIntro) {
-                        rootNavController.navigate(Routes.ProfileIntro)
-                    } else {
-                        rootNavController.navigate(Routes.CreateProfile)
-                    }
+                    rootNavController.navigate(Routes.Profile)
                 }
 
                 Suggestion.SHOP -> {
@@ -287,7 +272,6 @@ private fun Content(
     drawerState: DrawerState,
     hazeState: HazeState = rememberHazeState(),
     latestActivities: List<Activity>?,
-    onClickProfile: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
     onClickSuggestion: (Suggestion) -> Unit = {},
@@ -306,7 +290,6 @@ private fun Content(
         val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         TopBar(
             hazeState = hazeState,
-            onClickProfile = onClickProfile,
             rootNavController = rootNavController,
             scope = scope,
             drawerState = drawerState,
@@ -625,7 +608,6 @@ private fun Widgets(homeUiState: HomeUiState) {
 @OptIn(ExperimentalMaterial3Api::class)
 private fun TopBar(
     hazeState: HazeState,
-    onClickProfile: () -> Unit,
     rootNavController: NavController,
     scope: CoroutineScope,
     drawerState: DrawerState,
@@ -647,26 +629,7 @@ private fun TopBar(
             .zIndex(1f)
     ) {
         TopAppBar(
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clickableAlpha(onClick = onClickProfile)
-                        .testTag("Header")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AccountCircle,
-                        contentDescription = stringResource(R.string.slashtags__your_name_capital),
-                        tint = Colors.White64,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    HorizontalSpacer(16.dp)
-                    Title(
-                        text = stringResource(R.string.slashtags__your_name_capital),
-                        Modifier.testTag("EmptyProfileHeader")
-                    )
-                }
-            },
+            title = {},
             actions = {
                 AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
                 HorizontalSpacer(4.dp)
