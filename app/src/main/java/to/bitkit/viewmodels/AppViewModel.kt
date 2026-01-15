@@ -28,6 +28,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -196,6 +197,7 @@ class AppViewModel @Inject constructor(
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
+    private var addressValidationJob: Job? = null
 
     fun setShowForgotPin(value: Boolean) {
         _showForgotPinSheet.value = value
@@ -662,6 +664,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun resetAddressInput() {
+        addressValidationJob?.cancel()
         _sendUiState.update { state ->
             state.copy(
                 addressInput = "",
@@ -672,15 +675,101 @@ class AppViewModel @Inject constructor(
 
     private fun onAddressChange(value: String) {
         val valueWithoutSpaces = value.removeSpaces()
-        viewModelScope.launch {
-            val result = runCatching { decode(valueWithoutSpaces) }
-            _sendUiState.update {
-                it.copy(
-                    addressInput = valueWithoutSpaces,
-                    isAddressInputValid = result.isSuccess,
+
+        // Update text immediately, reset validity until validation completes
+        _sendUiState.update {
+            it.copy(
+                addressInput = valueWithoutSpaces,
+                isAddressInputValid = false,
+            )
+        }
+
+        // Cancel pending validation
+        addressValidationJob?.cancel()
+
+        // Skip validation for empty input
+        if (valueWithoutSpaces.isEmpty()) return
+
+        // Start debounced validation
+        addressValidationJob = viewModelScope.launch {
+            delay(ADDRESS_VALIDATION_DEBOUNCE_MS)
+            validateAddressWithFeedback(valueWithoutSpaces)
+        }
+    }
+
+    private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
+        val scanResult = runCatching { decode(input) }
+
+        if (scanResult.isFailure) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+            )
+            return@withContext
+        }
+
+        when (val decoded = scanResult.getOrNull()) {
+            is Scanner.Lightning -> validateLightningInvoice(decoded.invoice)
+            is Scanner.OnChain -> validateOnchainAddress(decoded.invoice)
+            else -> _sendUiState.update { it.copy(isAddressInputValid = true) }
+        }
+    }
+
+    private suspend fun validateLightningInvoice(invoice: LightningInvoice) {
+        if (invoice.isExpired) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_insufficient_spending,
+                descriptionRes = R.string.other__pay_insufficient_spending_description,
+            )
+            return
+        }
+
+        if (invoice.amountSatoshis > 0uL) {
+            val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
+            if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
+                showAddressValidationError(
+                    titleRes = R.string.other__pay_insufficient_spending,
+                    descriptionRes = R.string.other__pay_insufficient_spending_description,
                 )
+                return
             }
         }
+
+        _sendUiState.update { it.copy(isAddressInputValid = true) }
+    }
+
+    private fun validateOnchainAddress(invoice: OnChainInvoice) {
+        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
+
+        if (maxSendOnchain == 0uL) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_insufficient_savings,
+                descriptionRes = R.string.other__pay_insufficient_savings_description,
+            )
+            return
+        }
+
+        if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_insufficient_savings,
+                descriptionRes = R.string.other__pay_insufficient_savings_description,
+            )
+            return
+        }
+
+        _sendUiState.update { it.copy(isAddressInputValid = true) }
+    }
+
+    private fun showAddressValidationError(
+        @StringRes titleRes: Int,
+        @StringRes descriptionRes: Int,
+    ) {
+        _sendUiState.update { it.copy(isAddressInputValid = false) }
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(titleRes),
+            description = context.getString(descriptionRes),
+        )
     }
 
     private fun onAddressContinue(data: String) {
@@ -1697,6 +1786,7 @@ class AppViewModel @Inject constructor(
     }
 
     suspend fun resetSendState() {
+        addressValidationJob?.cancel()
         val speed = settingsStore.data.first().defaultTransactionSpeed
         val rates = let {
             // Refresh blocktank info to get latest fee rates
@@ -2022,6 +2112,7 @@ class AppViewModel @Inject constructor(
         private const val REMOTE_RESTORE_NODE_RESTART_DELAY_MS = 500L
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
+        private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
     }
 }
 
