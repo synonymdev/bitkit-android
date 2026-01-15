@@ -1,25 +1,36 @@
 package to.bitkit.ui.sheets
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
@@ -39,8 +50,10 @@ import to.bitkit.ui.screens.wallets.withdraw.WithdrawErrorScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
+import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
@@ -88,6 +101,7 @@ fun SendSheet(
                     is SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
                     is SendEffect.NavigateToFee -> navController.navigate(SendRoute.FeeRate)
                     is SendEffect.NavigateToFeeCustom -> navController.navigate(SendRoute.FeeCustom)
+                    is SendEffect.NavigateToComingSoon -> navController.navigate(SendRoute.ComingSoon)
                 }
             }
         }
@@ -266,6 +280,11 @@ fun SendSheet(
                     }
                 )
             }
+            composableWithDefaultTransitions<SendRoute.ComingSoon> {
+                ComingSoonSheetContent(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
             composableWithDefaultTransitions<SendRoute.Error> {
                 val route = it.toRoute<SendRoute.Error>()
                 SendErrorScreen(
@@ -338,5 +357,50 @@ sealed interface SendRoute {
     data object Success : SendRoute
 
     @Serializable
+    data object ComingSoon : SendRoute
+
+    @Serializable
     data class Error(val errorMessage: String) : SendRoute
+}
+
+@Composable
+private fun ComingSoonSheetContent(
+    onBackClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .gradientBackground()
+            .navigationBarsPadding()
+    ) {
+        SheetTopBar(
+            titleText = stringResource(R.string.coming_soon__title),
+            onBack = onBackClick
+        )
+
+        Column(
+            modifier = Modifier.padding(horizontal = 32.dp)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.img_cronometer),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+
+            Display(
+                text = stringResource(R.string.coming_soon__headline).withAccent(accentColor = Colors.Brand),
+                color = Colors.White
+            )
+            VerticalSpacer(8.dp)
+            BodyM(text = stringResource(R.string.coming_soon__description), color = Colors.White64)
+            VerticalSpacer(54.dp)
+            PrimaryButton(
+                text = stringResource(R.string.coming_soon__button),
+                onClick = onBackClick,
+            )
+            VerticalSpacer(16.dp)
+        }
+    }
 }

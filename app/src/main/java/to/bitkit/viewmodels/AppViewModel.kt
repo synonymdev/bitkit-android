@@ -649,7 +649,7 @@ class AppViewModel @Inject constructor(
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                     SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                     SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
-                    SendEvent.Contacts -> mainScreenEffect(MainScreenEffect.Navigate(Routes.Contacts))
+                    SendEvent.Contacts -> setSendEffect(SendEffect.NavigateToComingSoon)
                 }
             }
         }
@@ -2085,6 +2085,7 @@ sealed class SendEffect {
     data object NavigateToQuickPay : SendEffect()
     data object NavigateToFee : SendEffect()
     data object NavigateToFeeCustom : SendEffect()
+    data object NavigateToComingSoon : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 
