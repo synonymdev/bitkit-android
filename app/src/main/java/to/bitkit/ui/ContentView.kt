@@ -360,6 +360,7 @@ fun ContentView(
         LocalTransferViewModel provides transferViewModel,
         LocalSettingsViewModel provides settingsViewModel,
         LocalBackupsViewModel provides backupsViewModel,
+        LocalToaster provides appViewModel.toaster,
         LocalDrawerState provides drawerState,
         LocalBalances provides balance,
         LocalCurrencies provides currencies,

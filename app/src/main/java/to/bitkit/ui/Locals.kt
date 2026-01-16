@@ -14,6 +14,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.ui.shared.toast.Toaster
 
 // Locals
 val LocalBalances = compositionLocalOf { BalanceState() }
@@ -29,6 +30,7 @@ val LocalActivityListViewModel = staticCompositionLocalOf<ActivityListViewModel?
 val LocalTransferViewModel = staticCompositionLocalOf<TransferViewModel?> { null }
 val LocalSettingsViewModel = staticCompositionLocalOf<SettingsViewModel?> { null }
 val LocalBackupsViewModel = staticCompositionLocalOf<BackupsViewModel?> { null }
+val LocalToaster = staticCompositionLocalOf<Toaster?> { null }
 
 val appViewModel: AppViewModel?
     @Composable get() = LocalAppViewModel.current
@@ -56,3 +58,6 @@ val backupsViewModel: BackupsViewModel?
 
 val drawerState: DrawerState?
     @Composable get() = LocalDrawerState.current
+
+val toaster: Toaster?
+    @Composable get() = LocalToaster.current

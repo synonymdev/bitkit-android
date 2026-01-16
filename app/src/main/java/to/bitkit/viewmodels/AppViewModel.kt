@@ -135,7 +135,7 @@ class AppViewModel @Inject constructor(
     healthRepo: HealthRepo,
     toastQueueProvider: @JvmSuppressWildcards (CoroutineDispatcher) -> ToastQueue,
     timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
-    toaster: Toaster,
+    val toaster: Toaster,
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
