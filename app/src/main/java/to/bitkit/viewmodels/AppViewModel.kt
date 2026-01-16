@@ -731,7 +731,7 @@ class AppViewModel @Inject constructor(
             if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
                 showAddressValidationError(
                     titleRes = R.string.other__pay_insufficient_spending,
-                    descriptionRes = R.string.other__pay_insufficient_savings_description,
+                    descriptionRes = R.string.other__pay_insufficient_spending_description,
                 )
                 return
             }
