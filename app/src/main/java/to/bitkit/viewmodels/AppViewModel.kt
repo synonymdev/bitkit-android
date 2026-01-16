@@ -713,7 +713,7 @@ class AppViewModel @Inject constructor(
 
         when (val decoded = scanResult.getOrNull()) {
             is Scanner.Lightning -> validateLightningInvoice(decoded.invoice)
-            is Scanner.OnChain -> validateOnchainAddress(decoded.invoice)
+            is Scanner.OnChain -> validateOnChainAddress(decoded.invoice)
             else -> _sendUiState.update { it.copy(isAddressInputValid = true) }
         }
     }
@@ -743,7 +743,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
-    private fun validateOnchainAddress(invoice: OnChainInvoice) {
+    private fun validateOnChainAddress(invoice: OnChainInvoice) {
         // Check network mismatch
         val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
         if (NetworkValidationHelper.isNetworkMismatch(addressNetwork, Env.network)) {
