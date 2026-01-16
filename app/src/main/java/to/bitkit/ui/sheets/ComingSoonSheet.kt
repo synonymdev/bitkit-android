@@ -1,9 +1,12 @@
-package to.bitkit.ui.screens.common
+package to.bitkit.ui.sheets
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -13,32 +16,51 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BottomSheet
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.shared.util.screen
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
+private fun Modifier.sheet() = this then sheetHeight(SheetSize.MEDIUM, isModal = true)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ComingSoonScreen(
+fun ComingSoonSheet(
     onWalletOverviewClick: () -> Unit,
-    onBackClick: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BottomSheet(onDismissRequest = onBack) {
+        ComingSoonSheetContent(
+            onWalletOverviewClick = onWalletOverviewClick,
+            onBack = onBack,
+            modifier = modifier.sheet()
+        )
+    }
+}
+
+@Composable
+fun ComingSoonSheetContent(
+    onWalletOverviewClick: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
-            .screen()
-            .testTag("ComingSoonScreen")
+            .fillMaxSize()
+            .gradientBackground()
+            .navigationBarsPadding()
+            .testTag("ComingSoonSheet")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.coming_soon__title),
-            onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
-        )
+        SheetTopBar(titleText = stringResource(R.string.coming_soon__title), onBack = onBack)
         Column(
             modifier = Modifier.padding(horizontal = 32.dp)
         ) {
@@ -60,7 +82,6 @@ fun ComingSoonScreen(
                 text = stringResource(R.string.coming_soon__button),
                 onClick = onWalletOverviewClick,
             )
-            VerticalSpacer(16.dp)
         }
     }
 }
@@ -69,9 +90,12 @@ fun ComingSoonScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ComingSoonScreen(
-            onWalletOverviewClick = {},
-            onBackClick = {}
-        )
+        BottomSheetPreview {
+            ComingSoonSheetContent(
+                onWalletOverviewClick = {},
+                onBack = {},
+                modifier = Modifier.sheet()
+            )
+        }
     }
 }

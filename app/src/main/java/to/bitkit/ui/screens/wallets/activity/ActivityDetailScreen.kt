@@ -78,6 +78,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.BoostTransactionSheet
+import to.bitkit.ui.sheets.ComingSoonSheet
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
@@ -168,6 +169,7 @@ fun ActivityDetailScreen(
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
                 val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
                 var showAddTagSheet by remember { mutableStateOf(false) }
+                var showAssignSheet by remember { mutableStateOf(false) }
                 var isCpfpChild by remember { mutableStateOf(false) }
                 var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
@@ -217,6 +219,7 @@ fun ActivityDetailScreen(
                         tags = tags,
                         onRemoveTag = { detailViewModel.removeTag(it) },
                         onAddTagClick = { showAddTagSheet = true },
+                        onAssignClick = { showAssignSheet = true },
                         onClickBoost = detailViewModel::onClickBoost,
                         onExploreClick = onExploreClick,
                         onChannelClick = onChannelClick,
@@ -282,6 +285,13 @@ fun ActivityDetailScreen(
                         )
                     }
                 }
+
+                if (showAssignSheet) {
+                    ComingSoonSheet(
+                        onWalletOverviewClick = onCloseClick,
+                        onBack = { showAssignSheet = false },
+                    )
+                }
             }
         }
     }
@@ -294,6 +304,7 @@ private fun ActivityDetailContent(
     tags: List<String>,
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
+    onAssignClick: () -> Unit,
     onClickBoost: () -> Unit,
     onExploreClick: (String) -> Unit,
     onChannelClick: ((String) -> Unit)?,
@@ -572,7 +583,7 @@ private fun ActivityDetailContent(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_assign),
                     size = ButtonSize.Small,
-                    onClick = { /* TODO: Implement assign functionality */ },
+                    onClick = onAssignClick,
                     enabled = !isSelfSend,
                     icon = {
                         Icon(
@@ -849,6 +860,7 @@ private fun PreviewLightningSent() {
             tags = listOf("Lunch", "Drinks"),
             onRemoveTag = {},
             onAddTagClick = {},
+            onAssignClick = {},
             onExploreClick = {},
             onChannelClick = null,
             onCopy = {},
@@ -879,6 +891,7 @@ private fun PreviewOnchain() {
             tags = emptyList(),
             onRemoveTag = {},
             onAddTagClick = {},
+            onAssignClick = {},
             onExploreClick = {},
             onChannelClick = null,
             onCopy = {},
@@ -910,6 +923,7 @@ private fun PreviewSheetSmallScreen() {
                 tags = listOf("Lunch", "Drinks"),
                 onRemoveTag = {},
                 onAddTagClick = {},
+                onAssignClick = {},
                 onExploreClick = {},
                 onChannelClick = null,
                 onCopy = {},
