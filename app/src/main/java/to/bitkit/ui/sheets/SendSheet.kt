@@ -89,6 +89,7 @@ fun SendSheet(
                     is SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
                     is SendEffect.NavigateToFee -> navController.navigate(SendRoute.FeeRate)
                     is SendEffect.NavigateToFeeCustom -> navController.navigate(SendRoute.FeeCustom)
+                    is SendEffect.NavigateToComingSoon -> navController.navigate(SendRoute.ComingSoon)
                 }
             }
         }
@@ -267,6 +268,12 @@ fun SendSheet(
                     }
                 )
             }
+            composableWithDefaultTransitions<SendRoute.ComingSoon> {
+                ComingSoonSheetContent(
+                    onWalletOverviewClick = { appViewModel.hideSheet() },
+                    onBack = { navController.popBackStack() },
+                )
+            }
             composableWithDefaultTransitions<SendRoute.Error> {
                 val route = it.toRoute<SendRoute.Error>()
                 SendErrorScreen(
@@ -337,6 +344,9 @@ sealed interface SendRoute {
 
     @Serializable
     data object Success : SendRoute
+
+    @Serializable
+    data object ComingSoon : SendRoute
 
     @Serializable
     data class Error(val errorMessage: String) : SendRoute

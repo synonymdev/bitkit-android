@@ -29,6 +29,7 @@ import to.bitkit.viewmodels.TagsViewModel
 fun ActivityAddTagSheet(
     listViewModel: ActivityListViewModel,
     activityViewModel: ActivityDetailViewModel,
+    modifier: Modifier = Modifier,
     tagsViewModel: TagsViewModel = hiltViewModel(),
     onDismiss: () -> Unit,
 ) {
@@ -66,7 +67,7 @@ fun ActivityAddTagSheet(
             focusOnShow = true,
             tagInputTestTag = "TagInput",
             addButtonTestTag = "ActivityTagsSubmit",
-            modifier = Modifier
+            modifier = modifier
                 .semantics { testTagsAsResourceId = true }
                 .sheetHeight(SheetSize.SMALL, isModal = true)
                 .gradientBackground()
@@ -87,9 +88,7 @@ private fun Preview() {
                 onTagConfirmed = {},
                 onInputUpdated = {},
                 onBack = {},
-                modifier = Modifier
-                    .sheetHeight(SheetSize.SMALL, isModal = true)
-                    .gradientBackground()
+                modifier = Modifier.sheetHeight(SheetSize.SMALL, isModal = true)
             )
         }
     }
