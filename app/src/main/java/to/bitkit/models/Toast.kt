@@ -1,6 +1,8 @@
 package to.bitkit.models
 
 import androidx.compose.runtime.Stable
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @Stable
 data class Toast(
@@ -8,11 +10,11 @@ data class Toast(
     val title: String,
     val body: String? = null,
     val autoHide: Boolean,
-    val visibilityTime: Long = VISIBILITY_TIME_DEFAULT,
+    val duration: Duration = DURATION_DEFAULT,
     val testTag: String? = null,
 ) {
     companion object {
-        const val VISIBILITY_TIME_DEFAULT = 3000L
+        val DURATION_DEFAULT: Duration = 3.seconds
     }
 }
 

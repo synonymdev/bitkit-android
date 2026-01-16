@@ -11,6 +11,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.ToastType
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
 
 @Suppress("TooManyFunctions")
 @Singleton
@@ -26,7 +27,7 @@ class Toaster @Inject constructor(
         title: String,
         body: String? = null,
         autoHide: Boolean = true,
-        visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
+        duration: Duration = Toast.DURATION_DEFAULT,
         testTag: String? = null,
     ) {
         _events.emit(
@@ -35,7 +36,7 @@ class Toaster @Inject constructor(
                 title = title,
                 body = body,
                 autoHide = autoHide,
-                visibilityTime = visibilityTime,
+                duration = duration,
                 testTag = testTag,
             )
         )

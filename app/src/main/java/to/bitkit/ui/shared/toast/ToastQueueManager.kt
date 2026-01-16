@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.models.Toast
+import kotlin.time.Duration
 
 private const val MAX_QUEUE_SIZE = 5
 
@@ -81,7 +82,7 @@ class ToastQueueManager(private val scope: CoroutineScope) {
         if (isPaused && toast != null) {
             isPaused = false
             if (toast.autoHide) {
-                startTimer(toast.visibilityTime)
+                startTimer(toast.duration)
             }
         }
     }
@@ -108,11 +109,11 @@ class ToastQueueManager(private val scope: CoroutineScope) {
 
         // Start auto-hide timer if enabled
         if (nextToast.autoHide) {
-            startTimer(nextToast.visibilityTime)
+            startTimer(nextToast.duration)
         }
     }
 
-    private fun startTimer(duration: Long) {
+    private fun startTimer(duration: Duration) {
         cancelTimer()
         timerJob = scope.launch {
             delay(duration)

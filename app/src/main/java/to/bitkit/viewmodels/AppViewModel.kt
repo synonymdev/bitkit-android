@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
@@ -240,7 +241,7 @@ class AppViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             toaster.events.collect {
-                toast(it.type, it.title, it.body, it.autoHide, it.visibilityTime)
+                toast(it.type, it.title, it.body, it.autoHide, it.duration)
             }
         }
         viewModelScope.launch {
@@ -1986,7 +1987,7 @@ class AppViewModel @Inject constructor(
         title: String,
         body: String? = null,
         autoHide: Boolean = true,
-        visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
+        duration: Duration = Toast.DURATION_DEFAULT,
         testTag: String? = null,
     ) {
         toastManager.enqueue(
@@ -1995,7 +1996,7 @@ class AppViewModel @Inject constructor(
                 title = title,
                 body = body,
                 autoHide = autoHide,
-                visibilityTime = visibilityTime,
+                duration = duration,
                 testTag = testTag,
             )
         )
@@ -2015,7 +2016,7 @@ class AppViewModel @Inject constructor(
             title = toast.title,
             body = toast.body,
             autoHide = toast.autoHide,
-            visibilityTime = toast.visibilityTime
+            duration = toast.duration
         )
     }
 
