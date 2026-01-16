@@ -1095,6 +1095,7 @@
     <string name="wallet__error_no_tx_msg">Please check your transaction info and try again.</string>
     <string name="wallet__error_no_tx_title">No transaction is available to broadcast.</string>
     <string name="wallet__error_sending_title">Error Sending</string>
+    <string name="wallet__error_utxo_load">Failed to load UTXOs: {raw}</string>
     <string name="wallet__filter_apply">Apply</string>
     <string name="wallet__filter_clear">Clear</string>
     <string name="wallet__filter_title">Select Range</string>
@@ -1113,6 +1114,8 @@
     <string name="wallet__lnurl_w_title">Withdraw Bitcoin</string>
     <string name="wallet__max_possible_fee_rate">Fee Exceeds Maximum Limit</string>
     <string name="wallet__max_possible_fee_rate_msg">Lower the custom fee and try again.</string>
+    <string name="wallet__migration_error_body">Please restore your wallet manually using your recovery phrase</string>
+    <string name="wallet__migration_error_title">Migration Failed</string>
     <string name="wallet__min_possible_fee_rate">Fee Below Minimum Limit</string>
     <string name="wallet__min_possible_fee_rate_msg">Increase the custom fee and try again.</string>
     <string name="wallet__minimum">MINIMUM</string>

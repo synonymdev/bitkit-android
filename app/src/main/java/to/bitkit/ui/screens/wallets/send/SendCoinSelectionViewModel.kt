@@ -1,16 +1,19 @@
 package to.bitkit.ui.screens.wallets.send
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.Activity.Onchain
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.SpendableUtxo
+import to.bitkit.R
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.ext.rawId
@@ -22,6 +25,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SendCoinSelectionViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val activityRepo: ActivityRepo,
@@ -68,7 +72,10 @@ class SendCoinSelectionViewModel @Inject constructor(
             }
         }.onFailure {
             Logger.error("Failed to load UTXOs for coin selection", it, context = TAG)
-            toaster.error("Failed to load UTXOs: ${it.message}")
+            toaster.error(
+                context.getString(R.string.wallet__error_utxo_load)
+                    .replace("{raw}", it.message.orEmpty())
+            )
         }
     }
 

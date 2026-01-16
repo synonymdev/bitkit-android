@@ -128,8 +128,8 @@ class WalletViewModel @Inject constructor(
             migrationService.markMigrationChecked()
             migrationService.setShowingMigrationLoading(false)
             toaster.error(
-                title = "Migration Failed",
-                body = "Please restore your wallet manually using your recovery phrase"
+                titleRes = R.string.wallet__migration_error_title,
+                bodyRes = R.string.wallet__migration_error_body,
             )
         }
     }

@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
@@ -185,8 +186,9 @@ class Toaster @Inject constructor() {
 
     suspend fun error(throwable: Throwable) = emit(
         type = ToastType.ERROR,
-        title = ToastText.Literal("Error"),
-        body = ToastText.Literal(throwable.message ?: "An unknown error occurred"),
+        title = ToastText.Resource(R.string.common__error),
+        body = throwable.message?.let { ToastText.Literal(it) }
+            ?: ToastText.Resource(R.string.common__error_body),
     )
     // endregion
 }
