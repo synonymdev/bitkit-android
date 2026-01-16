@@ -707,6 +707,7 @@ class AppViewModel @Inject constructor(
             showAddressValidationError(
                 titleRes = R.string.other__scan_err_decoding,
                 descriptionRes = R.string.other__scan__error__generic,
+                testTag = "InvalidAddressToast",
             )
             return@withContext
         }
@@ -723,6 +724,7 @@ class AppViewModel @Inject constructor(
             showAddressValidationError(
                 titleRes = R.string.other__scan_err_decoding,
                 descriptionRes = R.string.other__scan__error__expired,
+                testTag = "ExpiredLightningToast",
             )
             return
         }
@@ -735,6 +737,7 @@ class AppViewModel @Inject constructor(
                     titleRes = R.string.other__pay_insufficient_spending,
                     descriptionRes = R.string.other__pay_insufficient_spending_amount_description,
                     descriptionArgs = mapOf("amount" to shortfall.toString()),
+                    testTag = "InsufficientSpendingToast",
                 )
                 return
             }
@@ -750,6 +753,7 @@ class AppViewModel @Inject constructor(
             showAddressValidationError(
                 titleRes = R.string.other__scan_err_decoding,
                 descriptionRes = R.string.other__scan__error__generic,
+                testTag = "InvalidAddressToast",
             )
             return
         }
@@ -760,6 +764,7 @@ class AppViewModel @Inject constructor(
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_description,
+                testTag = "InsufficientSavingsToast",
             )
             return
         }
@@ -770,6 +775,7 @@ class AppViewModel @Inject constructor(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_amount_description,
                 descriptionArgs = mapOf("amount" to shortfall.toString()),
+                testTag = "InsufficientSavingsToast",
             )
             return
         }
@@ -781,6 +787,7 @@ class AppViewModel @Inject constructor(
         @StringRes titleRes: Int,
         @StringRes descriptionRes: Int,
         descriptionArgs: Map<String, String> = emptyMap(),
+        testTag: String? = null,
     ) {
         _sendUiState.update { it.copy(isAddressInputValid = false) }
         var description = context.getString(descriptionRes)
@@ -791,6 +798,7 @@ class AppViewModel @Inject constructor(
             type = Toast.ToastType.ERROR,
             title = context.getString(titleRes),
             description = description,
+            testTag = testTag,
         )
     }
 
@@ -1001,6 +1009,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
                 description = context.getString(R.string.other__scan__error__generic),
+                testTag = "InvalidAddressToast",
             )
             return
         }
@@ -1064,6 +1073,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_savings),
                 description = context.getString(R.string.other__pay_insufficient_savings_description),
+                testTag = "InsufficientSavingsToast",
             )
             return
         }
@@ -1076,6 +1086,7 @@ class AppViewModel @Inject constructor(
                 title = context.getString(R.string.other__pay_insufficient_savings),
                 description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
                     .replace("{amount}", shortfall.toString()),
+                testTag = "InsufficientSavingsToast",
             )
             return
         }
@@ -1101,6 +1112,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
                 description = context.getString(R.string.other__scan__error__expired),
+                testTag = "ExpiredLightningToast",
             )
             return
         }
@@ -1116,6 +1128,7 @@ class AppViewModel @Inject constructor(
                 title = context.getString(R.string.other__pay_insufficient_spending),
                 description = context.getString(R.string.other__pay_insufficient_spending_amount_description)
                     .replace("{amount}", shortfall.toString()),
+                testTag = "InsufficientSpendingToast",
             )
             return
         }
