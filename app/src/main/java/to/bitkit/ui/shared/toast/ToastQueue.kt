@@ -14,10 +14,10 @@ import kotlin.time.Duration
 private const val MAX_QUEUE_SIZE = 5
 
 /**
- * Manages a queue of toasts to display sequentially.
+ * A queue for displaying toasts sequentially.
  *
- * This ensures that toasts are shown one at a time without premature cancellation.
- * When a toast is displayed, it waits for its full visibility duration before
+ * Ensures toasts are shown one at a time without premature cancellation.
+ * When a toast is displayed, it waits for its full duration before
  * showing the next toast in the queue.
  *
  * Features:
@@ -27,7 +27,7 @@ private const val MAX_QUEUE_SIZE = 5
  * - Auto-advance to next toast on completion
  * - Max queue size with FIFO overflow handling
  */
-class ToastQueueManager(private val scope: CoroutineScope) {
+class ToastQueue(private val scope: CoroutineScope) {
     // Public state exposed to UI
     private val _currentToast = MutableStateFlow<Toast?>(null)
     val currentToast: StateFlow<Toast?> = _currentToast.asStateFlow()

@@ -6,7 +6,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
-import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.shared.toast.ToastQueue
 import javax.inject.Singleton
 
 @Module
@@ -19,7 +19,7 @@ object ViewModelModule {
     }
 
     @Provides
-    fun provideToastManagerProvider(): (CoroutineScope) -> ToastQueueManager {
-        return ::ToastQueueManager
+    fun provideToastQueueProvider(): (CoroutineScope) -> ToastQueue {
+        return ::ToastQueue
     }
 }

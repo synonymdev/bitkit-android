@@ -106,7 +106,7 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
-import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.shared.toast.ToastQueue
 import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -132,7 +132,7 @@ import kotlin.time.ExperimentalTime
 class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
     healthRepo: HealthRepo,
-    toastManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> ToastQueueManager,
+    toastQueueProvider: @JvmSuppressWildcards (CoroutineScope) -> ToastQueue,
     timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
     toaster: Toaster,
     @ApplicationContext private val context: Context,
@@ -1979,8 +1979,8 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    private val toastManager = toastManagerProvider(viewModelScope)
-    val currentToast: StateFlow<Toast?> = toastManager.currentToast
+    private val toastQueue = toastQueueProvider(viewModelScope)
+    val currentToast: StateFlow<Toast?> = toastQueue.currentToast
 
     fun toast(
         type: ToastType,
@@ -1990,7 +1990,7 @@ class AppViewModel @Inject constructor(
         duration: Duration = Toast.DURATION_DEFAULT,
         testTag: String? = null,
     ) {
-        toastManager.enqueue(
+        toastQueue.enqueue(
             Toast(
                 type = type,
                 title = title,
@@ -2020,11 +2020,11 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    fun hideToast() = toastManager.dismissCurrentToast()
+    fun hideToast() = toastQueue.dismissCurrentToast()
 
-    fun pauseToast() = toastManager.pauseCurrentToast()
+    fun pauseToast() = toastQueue.pauseCurrentToast()
 
-    fun resumeToast() = toastManager.resumeCurrentToast()
+    fun resumeToast() = toastQueue.resumeCurrentToast()
     // endregion
 
     // region security
