@@ -8,6 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import to.bitkit.models.Toast
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
 import to.bitkit.test.BaseUnitTest
 import kotlin.time.Duration.Companion.seconds
@@ -38,7 +39,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.enqueue(toast1)
         sut.enqueue(toast2)
 
-        assertEquals("Second", sut.currentToast.value?.title)
+        assertEquals(ToastText.Literal("Second"), sut.currentToast.value?.title)
     }
 
     @Test
@@ -49,7 +50,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.enqueue(toast1)
         sut.enqueue(toast2)
 
-        assertEquals("Second", sut.currentToast.value?.title)
+        assertEquals(ToastText.Literal("Second"), sut.currentToast.value?.title)
 
         sut.dismissCurrentToast()
 
@@ -105,7 +106,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
 
         toasts.forEach { sut.enqueue(it) }
 
-        assertEquals("Toast 6", sut.currentToast.value?.title)
+        assertEquals(ToastText.Literal("Toast 6"), sut.currentToast.value?.title)
     }
 
     @Test
@@ -141,8 +142,8 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
         autoHide: Boolean = true,
     ) = Toast(
         type = type,
-        title = title,
-        body = body,
+        title = ToastText.Literal(title),
+        body = body?.let { ToastText.Literal(it) },
         autoHide = autoHide,
         duration = 3.seconds,
     )

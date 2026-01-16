@@ -84,6 +84,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
@@ -241,9 +242,7 @@ class AppViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            toaster.events.collect {
-                toast(it.type, it.title, it.body, it.autoHide, it.duration)
-            }
+            toaster.events.collect { toastQueue.enqueue(it) }
         }
         viewModelScope.launch {
             // Delays are required for auth check on launch functionality
@@ -1985,8 +1984,8 @@ class AppViewModel @Inject constructor(
 
     fun toast(
         type: ToastType,
-        title: String,
-        body: String? = null,
+        title: ToastText,
+        body: ToastText? = null,
         autoHide: Boolean = true,
         duration: Duration = Toast.DURATION_DEFAULT,
         testTag: String? = null,
@@ -2003,23 +2002,48 @@ class AppViewModel @Inject constructor(
         )
     }
 
+    fun toast(
+        type: ToastType,
+        @StringRes titleRes: Int,
+        @StringRes bodyRes: Int? = null,
+        autoHide: Boolean = true,
+        duration: Duration = Toast.DURATION_DEFAULT,
+        testTag: String? = null,
+    ) = toast(
+        type = type,
+        title = ToastText.Resource(titleRes),
+        body = bodyRes?.let { ToastText.Resource(it) },
+        autoHide = autoHide,
+        duration = duration,
+        testTag = testTag,
+    )
+
+    fun toast(
+        type: ToastType,
+        title: String,
+        body: String? = null,
+        autoHide: Boolean = true,
+        duration: Duration = Toast.DURATION_DEFAULT,
+        testTag: String? = null,
+    ) = toast(
+        type = type,
+        title = ToastText.Literal(title),
+        body = body?.let { ToastText.Literal(it) },
+        autoHide = autoHide,
+        duration = duration,
+        testTag = testTag,
+    )
+
     fun toast(error: Throwable) {
         toast(
             type = ToastType.ERROR,
-            title = context.getString(R.string.common__error),
-            body = error.message ?: context.getString(R.string.common__error_body)
+            title = ToastText.Resource(R.string.common__error),
+            body = error.message?.let { ToastText.Literal(it) }
+                ?: ToastText.Resource(R.string.common__error_body)
         )
     }
 
-    fun toast(toast: Toast) {
-        toast(
-            type = toast.type,
-            title = toast.title,
-            body = toast.body,
-            autoHide = toast.autoHide,
-            duration = toast.duration
-        )
-    }
+    fun toast(toast: Toast) = toastQueue.enqueue(toast)
 
     fun hideToast() = toastQueue.dismissCurrentToast()
 

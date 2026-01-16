@@ -7,8 +7,8 @@ import kotlin.time.Duration.Companion.seconds
 @Stable
 data class Toast(
     val type: ToastType,
-    val title: String,
-    val body: String? = null,
+    val title: ToastText,
+    val body: ToastText? = null,
     val autoHide: Boolean,
     val duration: Duration = DURATION_DEFAULT,
     val testTag: String? = null,

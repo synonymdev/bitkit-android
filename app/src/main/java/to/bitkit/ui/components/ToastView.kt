@@ -53,7 +53,9 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
+import to.bitkit.models.asString
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -259,12 +261,12 @@ private fun ToastContent(
                     .padding(16.dp)
             ) {
                 BodyMSB(
-                    text = toast.title,
+                    text = toast.title.asString(),
                     color = tintColor,
                 )
                 toast.body?.let { body ->
                     Caption(
-                        text = body,
+                        text = body.asString(),
                         color = Colors.White
                     )
                 }
@@ -299,7 +301,7 @@ private fun ToastContent(
 
 @Preview(showSystemUi = true)
 @Composable
-private fun ToastContentPreview() {
+private fun Preview() {
     AppThemeSurface {
         ScreenColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -307,8 +309,8 @@ private fun ToastContentPreview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.WARNING,
-                    title = "You're still offline",
-                    body = "Check your connection to keep using Bitkit.",
+                    title = ToastText.Literal("You're still offline"),
+                    body = ToastText.Literal("Check your connection to keep using Bitkit."),
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -316,8 +318,8 @@ private fun ToastContentPreview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.LIGHTNING,
-                    title = "Instant Payments Ready",
-                    body = "You can now pay anyone, anywhere, instantly.",
+                    title = ToastText.Literal("Instant Payments Ready"),
+                    body = ToastText.Literal("You can now pay anyone, anywhere, instantly."),
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -325,8 +327,8 @@ private fun ToastContentPreview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.SUCCESS,
-                    title = "You're Back Online!",
-                    body = "Successfully reconnected to the Internet.",
+                    title = ToastText.Literal("You're Back Online!"),
+                    body = ToastText.Literal("Successfully reconnected to the Internet."),
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -334,8 +336,8 @@ private fun ToastContentPreview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.INFO,
-                    title = "General Message",
-                    body = "Used for neutral content to inform the user.",
+                    title = ToastText.Literal("General Message"),
+                    body = ToastText.Literal("Used for neutral content to inform the user."),
                     autoHide = false,
                 ),
                 onDismiss = {},
@@ -343,8 +345,8 @@ private fun ToastContentPreview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.ERROR,
-                    title = "Error Toast",
-                    body = "This is a toast message.",
+                    title = ToastText.Literal("Error Toast"),
+                    body = ToastText.Literal("This is a toast message."),
                     autoHide = true,
                 ),
                 onDismiss = {},
