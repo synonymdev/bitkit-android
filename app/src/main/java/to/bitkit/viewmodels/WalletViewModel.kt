@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.ToastText
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -301,14 +302,14 @@ class WalletViewModel @Inject constructor(
             lightningRepo.disconnectPeer(peer)
                 .onSuccess {
                     toaster.info(
-                        context.getString(R.string.common__success),
-                        context.getString(R.string.wallet__peer_disconnected),
+                        titleRes = R.string.common__success,
+                        bodyRes = R.string.wallet__peer_disconnected,
                     )
                 }
                 .onFailure {
                     toaster.error(
-                        title = context.getString(R.string.common__error),
-                        body = it.message ?: context.getString(R.string.common__error_body)
+                        title = ToastText.Resource(R.string.common__error),
+                        body = ToastText.Literal(it.message ?: context.getString(R.string.common__error_body)),
                     )
                 }
         }
@@ -317,8 +318,8 @@ class WalletViewModel @Inject constructor(
     fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
         walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
             toaster.error(
-                title = context.getString(R.string.wallet__error_invoice_update),
-                body = error.message ?: context.getString(R.string.common__error_body)
+                title = ToastText.Resource(R.string.wallet__error_invoice_update),
+                body = ToastText.Literal(error.message ?: context.getString(R.string.common__error_body)),
             )
         }
     }

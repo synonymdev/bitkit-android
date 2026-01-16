@@ -23,6 +23,7 @@ import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.ElectrumServerPeer
 import to.bitkit.models.MAX_VALID_PORT
+import to.bitkit.models.ToastText
 import to.bitkit.models.getDefaultPort
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.shared.toast.Toaster
@@ -247,8 +248,8 @@ class ElectrumConfigViewModel @Inject constructor(
             val validationError = validateInput()
             if (validationError != null) {
                 toaster.warning(
-                    title = context.getString(R.string.settings__es__error_peer),
-                    body = validationError,
+                    title = ToastText.Resource(R.string.settings__es__error_peer),
+                    body = ToastText.Literal(validationError),
                 )
             } else {
                 connectToServer()
@@ -268,8 +269,8 @@ class ElectrumConfigViewModel @Inject constructor(
             val validationError = validateInput(host, port)
             if (validationError != null) {
                 toaster.warning(
-                    title = context.getString(R.string.settings__es__error_peer),
-                    body = validationError,
+                    title = ToastText.Resource(R.string.settings__es__error_peer),
+                    body = ToastText.Literal(validationError),
                 )
                 return@launch
             }

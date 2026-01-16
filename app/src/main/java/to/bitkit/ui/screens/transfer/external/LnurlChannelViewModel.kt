@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.ext.of
+import to.bitkit.models.ToastText
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.Routes
 import to.bitkit.ui.shared.toast.Toaster
@@ -69,8 +70,8 @@ class LnurlChannelViewModel @Inject constructor(
             lightningRepo.requestLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
                 .onSuccess {
                     toaster.success(
-                        context.getString(R.string.other__lnurl_channel_success_title),
-                        context.getString(R.string.other__lnurl_channel_success_msg_no_peer),
+                        titleRes = R.string.other__lnurl_channel_success_title,
+                        bodyRes = R.string.other__lnurl_channel_success_msg_no_peer,
                     )
                     _uiState.update { it.copy(isConnected = true) }
                 }.onFailure { error ->
@@ -83,8 +84,8 @@ class LnurlChannelViewModel @Inject constructor(
 
     suspend fun errorToast(error: Throwable) {
         toaster.error(
-            title = context.getString(R.string.other__lnurl_channel_error),
-            body = error.message ?: "Unknown error",
+            title = ToastText.Resource(R.string.other__lnurl_channel_error),
+            body = ToastText.Literal(error.message ?: context.getString(R.string.common__error_body)),
         )
     }
 }

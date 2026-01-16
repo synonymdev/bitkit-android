@@ -74,8 +74,8 @@ class RecoveryViewModel @Inject constructor(
                         )
                     }
                     toaster.error(
-                        context.getString(R.string.common__error),
-                        context.getString(R.string.other__logs_export_error),
+                        titleRes = R.string.common__error,
+                        bodyRes = R.string.other__logs_export_error,
                     )
                 }
             )
@@ -98,8 +98,8 @@ class RecoveryViewModel @Inject constructor(
                 Logger.error("Failed to open support links", fallbackError, context = TAG)
                 viewModelScope.launch {
                     toaster.error(
-                        context.getString(R.string.common__error),
-                        context.getString(R.string.settings__support__link_error),
+                        titleRes = R.string.common__error,
+                        bodyRes = R.string.settings__support__link_error,
                     )
                 }
             }
@@ -120,8 +120,8 @@ class RecoveryViewModel @Inject constructor(
                 toaster.error(error)
             }.onSuccess {
                 toaster.success(
-                    context.getString(R.string.security__wiped_title),
-                    context.getString(R.string.security__wiped_message),
+                    titleRes = R.string.security__wiped_title,
+                    bodyRes = R.string.security__wiped_message,
                 )
             }
         }

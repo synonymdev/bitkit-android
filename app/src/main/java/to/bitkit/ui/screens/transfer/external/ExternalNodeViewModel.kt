@@ -20,6 +20,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.of
 import to.bitkit.ext.watchUntil
+import to.bitkit.models.ToastText
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.formatToModernDisplay
@@ -74,8 +75,8 @@ class ExternalNodeViewModel @Inject constructor(
                 setEffect(SideEffect.ConnectionSuccess)
             } else {
                 toaster.error(
-                    context.getString(R.string.lightning__error_add_title),
-                    context.getString(R.string.lightning__error_add),
+                    titleRes = R.string.lightning__error_add_title,
+                    bodyRes = R.string.lightning__error_add,
                 )
             }
         }
@@ -88,7 +89,7 @@ class ExternalNodeViewModel @Inject constructor(
             if (result.isSuccess) {
                 _uiState.update { it.copy(peer = result.getOrNull()) }
             } else {
-                toaster.error(context.getString(R.string.lightning__error_add_uri))
+                toaster.error(titleRes = R.string.lightning__error_add_uri)
             }
         }
     }
@@ -99,9 +100,11 @@ class ExternalNodeViewModel @Inject constructor(
         if (sats > maxAmount) {
             viewModelScope.launch {
                 toaster.error(
-                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
-                    body = context.getString(R.string.lightning__spending_amount__error_max__description)
-                        .replace("{amount}", maxAmount.formatToModernDisplay()),
+                    title = ToastText.Resource(R.string.lightning__spending_amount__error_max__title),
+                    body = ToastText.Literal(
+                        context.getString(R.string.lightning__spending_amount__error_max__description)
+                            .replace("{amount}", maxAmount.formatToModernDisplay())
+                    ),
                 )
             }
             return
@@ -133,8 +136,8 @@ class ExternalNodeViewModel @Inject constructor(
         val feeRate = _uiState.value.customFeeRate ?: 0u
         if (feeRate == 0u) {
             toaster.info(
-                context.getString(R.string.wallet__min_possible_fee_rate),
-                context.getString(R.string.wallet__min_possible_fee_rate_msg),
+                titleRes = R.string.wallet__min_possible_fee_rate,
+                bodyRes = R.string.wallet__min_possible_fee_rate_msg,
             )
             return false
         }
@@ -188,9 +191,11 @@ class ExternalNodeViewModel @Inject constructor(
                 val error = e.message.orEmpty()
                 Logger.warn("Error opening channel with peer: '${_uiState.value.peer}': '$error'")
                 toaster.error(
-                    title = context.getString(R.string.lightning__error_channel_purchase),
-                    body = context.getString(R.string.lightning__error_channel_setup_msg)
-                        .replace("{raw}", error),
+                    title = ToastText.Resource(R.string.lightning__error_channel_purchase),
+                    body = ToastText.Literal(
+                        context.getString(R.string.lightning__error_channel_setup_msg)
+                            .replace("{raw}", error)
+                    ),
                 )
             }
 

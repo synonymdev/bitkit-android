@@ -29,6 +29,7 @@ import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.amountOnClose
+import to.bitkit.models.ToastText
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
@@ -459,8 +460,8 @@ class TransferViewModel @Inject constructor(
                 channelsToClose = emptyList()
                 Logger.error("Cannot force close channels with trusted peer", context = TAG)
                 toaster.error(
-                    context.getString(R.string.lightning__force_failed_title),
-                    context.getString(R.string.lightning__force_failed_msg),
+                    titleRes = R.string.lightning__force_failed_title,
+                    bodyRes = R.string.lightning__force_failed_msg,
                 )
                 return@runCatching
             }
@@ -483,21 +484,21 @@ class TransferViewModel @Inject constructor(
                 val skippedMsg = context.getString(R.string.lightning__force_channels_skipped)
                 val bodyText = if (trustedChannels.isNotEmpty()) "$initMsg $skippedMsg" else initMsg
                 toaster.lightning(
-                    title = context.getString(R.string.lightning__force_init_title),
-                    body = bodyText,
+                    title = ToastText.Resource(R.string.lightning__force_init_title),
+                    body = ToastText.Literal(bodyText),
                 )
             } else {
                 Logger.error("Force close failed for ${failedChannels.size} channels", context = TAG)
                 toaster.error(
-                    context.getString(R.string.lightning__force_failed_title),
-                    context.getString(R.string.lightning__force_failed_msg),
+                    titleRes = R.string.lightning__force_failed_title,
+                    bodyRes = R.string.lightning__force_failed_msg,
                 )
             }
         }.onFailure {
             Logger.error("Force close failed", e = it, context = TAG)
             toaster.error(
-                context.getString(R.string.lightning__force_failed_title),
-                context.getString(R.string.lightning__force_failed_msg),
+                titleRes = R.string.lightning__force_failed_title,
+                bodyRes = R.string.lightning__force_failed_msg,
             )
         }
         _isForceTransferLoading.value = false

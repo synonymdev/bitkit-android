@@ -95,6 +95,38 @@ class Toaster @Inject constructor() {
     )
     // endregion
 
+    // region ToastText overloads
+    suspend fun success(
+        title: ToastText,
+        body: ToastText? = null,
+        testTag: String? = null,
+    ) = emit(ToastType.SUCCESS, title, body, testTag = testTag)
+
+    suspend fun info(
+        title: ToastText,
+        body: ToastText? = null,
+        testTag: String? = null,
+    ) = emit(ToastType.INFO, title, body, testTag = testTag)
+
+    suspend fun lightning(
+        title: ToastText,
+        body: ToastText? = null,
+        testTag: String? = null,
+    ) = emit(ToastType.LIGHTNING, title, body, testTag = testTag)
+
+    suspend fun warning(
+        title: ToastText,
+        body: ToastText? = null,
+        testTag: String? = null,
+    ) = emit(ToastType.WARNING, title, body, testTag = testTag)
+
+    suspend fun error(
+        title: ToastText,
+        body: ToastText? = null,
+        testTag: String? = null,
+    ) = emit(ToastType.ERROR, title, body, testTag = testTag)
+    // endregion
+
     // region String literal overloads
     suspend fun success(
         title: String,
