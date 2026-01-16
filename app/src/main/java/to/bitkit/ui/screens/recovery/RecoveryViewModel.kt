@@ -73,7 +73,10 @@ class RecoveryViewModel @Inject constructor(
                             isExportingLogs = false,
                         )
                     }
-                    toaster.error(R.string.common__error, R.string.other__logs_export_error)
+                    toaster.error(
+                        context.getString(R.string.common__error),
+                        context.getString(R.string.other__logs_export_error),
+                    )
                 }
             )
         }
@@ -94,7 +97,10 @@ class RecoveryViewModel @Inject constructor(
             }.onFailure { fallbackError ->
                 Logger.error("Failed to open support links", fallbackError, context = TAG)
                 viewModelScope.launch {
-                    toaster.error(R.string.common__error, R.string.settings__support__link_error)
+                    toaster.error(
+                        context.getString(R.string.common__error),
+                        context.getString(R.string.settings__support__link_error),
+                    )
                 }
             }
         }
@@ -113,7 +119,10 @@ class RecoveryViewModel @Inject constructor(
             walletRepo.wipeWallet().onFailure { error ->
                 toaster.error(error)
             }.onSuccess {
-                toaster.success(R.string.security__wiped_title, R.string.security__wiped_message)
+                toaster.success(
+                    context.getString(R.string.security__wiped_title),
+                    context.getString(R.string.security__wiped_message),
+                )
             }
         }
     }

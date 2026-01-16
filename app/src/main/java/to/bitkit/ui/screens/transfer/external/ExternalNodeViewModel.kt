@@ -73,7 +73,10 @@ class ExternalNodeViewModel @Inject constructor(
                 _uiState.update { it.copy(peer = peer) }
                 setEffect(SideEffect.ConnectionSuccess)
             } else {
-                toaster.error(R.string.lightning__error_add_title, R.string.lightning__error_add)
+                toaster.error(
+                    context.getString(R.string.lightning__error_add_title),
+                    context.getString(R.string.lightning__error_add),
+                )
             }
         }
     }
@@ -85,7 +88,7 @@ class ExternalNodeViewModel @Inject constructor(
             if (result.isSuccess) {
                 _uiState.update { it.copy(peer = result.getOrNull()) }
             } else {
-                toaster.error(R.string.lightning__error_add_uri)
+                toaster.error(context.getString(R.string.lightning__error_add_uri))
             }
         }
     }
@@ -129,7 +132,10 @@ class ExternalNodeViewModel @Inject constructor(
     suspend fun validateCustomFeeRate(): Boolean {
         val feeRate = _uiState.value.customFeeRate ?: 0u
         if (feeRate == 0u) {
-            toaster.info(R.string.wallet__min_possible_fee_rate, R.string.wallet__min_possible_fee_rate_msg)
+            toaster.info(
+                context.getString(R.string.wallet__min_possible_fee_rate),
+                context.getString(R.string.wallet__min_possible_fee_rate_msg),
+            )
             return false
         }
         return true

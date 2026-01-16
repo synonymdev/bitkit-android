@@ -100,8 +100,8 @@ class DevSettingsViewModel @Inject constructor(
                 .onSuccess { uri -> onReady(uri) }
                 .onFailure {
                     toaster.warning(
-                        R.string.lightning__error_logs,
-                        R.string.lightning__error_logs_description,
+                        context.getString(R.string.lightning__error_logs),
+                        context.getString(R.string.lightning__error_logs_description),
                     )
                 }
         }

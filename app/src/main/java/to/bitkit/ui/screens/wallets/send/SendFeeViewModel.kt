@@ -105,12 +105,18 @@ class SendFeeViewModel @Inject constructor(
         // TODO update to use minimum instead of slow when using mempool api
         val minSatsPerVByte = sendUiState.feeRates?.slow ?: 1u
         if (satsPerVByte < minSatsPerVByte) {
-            toaster.info(R.string.wallet__min_possible_fee_rate, R.string.wallet__min_possible_fee_rate_msg)
+            toaster.info(
+                context.getString(R.string.wallet__min_possible_fee_rate),
+                context.getString(R.string.wallet__min_possible_fee_rate_msg),
+            )
             return false
         }
 
         if (satsPerVByte > maxSatsPerVByte) {
-            toaster.info(R.string.wallet__max_possible_fee_rate, R.string.wallet__max_possible_fee_rate_msg)
+            toaster.info(
+                context.getString(R.string.wallet__max_possible_fee_rate),
+                context.getString(R.string.wallet__max_possible_fee_rate_msg),
+            )
             return false
         }
 

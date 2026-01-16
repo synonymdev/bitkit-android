@@ -300,7 +300,10 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.disconnectPeer(peer)
                 .onSuccess {
-                    toaster.info(R.string.common__success, R.string.wallet__peer_disconnected)
+                    toaster.info(
+                        context.getString(R.string.common__success),
+                        context.getString(R.string.wallet__peer_disconnected),
+                    )
                 }
                 .onFailure {
                     toaster.error(
