@@ -76,10 +76,10 @@ jobs:
       fail-fast: false
       matrix:
         scenario:
-          - { name: migration_1, grep: "@migration_1" }
-          - { name: migration_2, grep: "@migration_2" }
-          - { name: migration_3, grep: "@migration_3" }
-          - { name: migration_4, grep: "@migration_4" }
+          - { name: migration_1-restore, grep: "@migration_1" }
+          - { name: migration_2-migration, grep: "@migration_2" }
+          - { name: migration_3-with-passphrase, grep: "@migration_3" }
+          - { name: migration_4-with-sweep, grep: "@migration_4" }
 
     name: e2e-tests - ${{ matrix.scenario.name }}
 
