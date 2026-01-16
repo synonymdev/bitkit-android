@@ -111,7 +111,7 @@ fun SendAmountScreen(
                 app?.toast(
                     type = ToastType.INFO,
                     title = context.getString(R.string.wallet__send_max_spending__title),
-                    description = context.getString(R.string.wallet__send_max_spending__description)
+                    body = context.getString(R.string.wallet__send_max_spending__description)
                 )
             }
             amountInputViewModel.setSats(maxSats, currencies)

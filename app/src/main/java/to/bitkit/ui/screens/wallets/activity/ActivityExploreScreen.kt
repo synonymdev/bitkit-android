@@ -169,7 +169,7 @@ fun ActivityExploreScreen(
                         app.toast(
                             type = ToastType.SUCCESS,
                             title = toastMessage,
-                            description = text.ellipsisMiddle(40),
+                            body = text.ellipsisMiddle(40),
                         )
                     },
                     onClickExplore = { txid ->

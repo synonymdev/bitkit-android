@@ -626,11 +626,11 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                     onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
-                    toast = { title, description ->
+                    toast = { title, body ->
                         appViewModel.toast(
                             type = ToastType.ERROR,
                             title = title,
-                            description = description
+                            body = body
                         )
                     },
                 )

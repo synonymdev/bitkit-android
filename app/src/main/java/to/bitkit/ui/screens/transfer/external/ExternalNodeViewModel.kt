@@ -97,7 +97,7 @@ class ExternalNodeViewModel @Inject constructor(
             viewModelScope.launch {
                 toaster.error(
                     title = context.getString(R.string.lightning__spending_amount__error_max__title),
-                    description = context.getString(R.string.lightning__spending_amount__error_max__description)
+                    body = context.getString(R.string.lightning__spending_amount__error_max__description)
                         .replace("{amount}", maxAmount.formatToModernDisplay()),
                 )
             }
@@ -183,7 +183,7 @@ class ExternalNodeViewModel @Inject constructor(
                 Logger.warn("Error opening channel with peer: '${_uiState.value.peer}': '$error'")
                 toaster.error(
                     title = context.getString(R.string.lightning__error_channel_purchase),
-                    description = context.getString(R.string.lightning__error_channel_setup_msg)
+                    body = context.getString(R.string.lightning__error_channel_setup_msg)
                         .replace("{raw}", error),
                 )
             }

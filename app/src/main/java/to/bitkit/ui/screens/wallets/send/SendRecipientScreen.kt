@@ -142,7 +142,7 @@ fun SendRecipientScreen(
                 app?.toast(
                     type = ToastType.ERROR,
                     title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__qr_error_text),
+                    body = context.getString(R.string.other__qr_error_text),
                 )
             }
         }
@@ -176,7 +176,7 @@ fun SendRecipientScreen(
                 app?.toast(
                     type = ToastType.ERROR,
                     title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__camera_init_error)
+                    body = context.getString(R.string.other__camera_init_error)
                         .replace("{message}", it.message.orEmpty())
                 )
                 isCameraInitialized = false

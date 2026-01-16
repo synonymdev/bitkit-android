@@ -131,7 +131,7 @@ fun ChannelDetailScreen(
             app.toast(
                 type = ToastType.SUCCESS,
                 title = context.getString(R.string.common__copied),
-                description = text,
+                body = text,
             )
         },
         onOpenUrl = { txId ->

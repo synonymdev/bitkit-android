@@ -93,7 +93,7 @@ class TransferViewModel @Inject constructor(
             setTransferEffect(
                 TransferEffect.ToastError(
                     title = context.getString(R.string.lightning__spending_amount__error_max__title),
-                    description = context.getString(
+                    body = context.getString(
                         R.string.lightning__spending_amount__error_max__description_zero
                     ),
                 )
@@ -481,10 +481,10 @@ class TransferViewModel @Inject constructor(
                 Logger.info("Force close initiated successfully for all channels", context = TAG)
                 val initMsg = context.getString(R.string.lightning__force_init_msg)
                 val skippedMsg = context.getString(R.string.lightning__force_channels_skipped)
-                val description = if (trustedChannels.isNotEmpty()) "$initMsg $skippedMsg" else initMsg
+                val bodyText = if (trustedChannels.isNotEmpty()) "$initMsg $skippedMsg" else initMsg
                 toaster.lightning(
                     title = context.getString(R.string.lightning__force_init_title),
-                    description = description,
+                    body = bodyText,
                 )
             } else {
                 Logger.error("Force close failed for ${failedChannels.size} channels", context = TAG)
@@ -566,6 +566,6 @@ data class TransferValues(
 sealed interface TransferEffect {
     data object OnOrderCreated : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
-    data class ToastError(val title: String, val description: String) : TransferEffect
+    data class ToastError(val title: String, val body: String) : TransferEffect
 }
 // endregion

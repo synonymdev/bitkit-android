@@ -230,7 +230,7 @@ fun ActivityDetailScreen(
                             app.toast(
                                 type = ToastType.SUCCESS,
                                 title = copyToastTitle,
-                                description = text.ellipsisMiddle(40)
+                                body = text.ellipsisMiddle(40)
                             )
                         },
                         feeRates = feeRates,
@@ -253,7 +253,7 @@ fun ActivityDetailScreen(
                                 app.toast(
                                     type = ToastType.SUCCESS,
                                     title = context.getString(R.string.wallet__boost_success_title),
-                                    description = context.getString(R.string.wallet__boost_success_msg),
+                                    body = context.getString(R.string.wallet__boost_success_msg),
                                     testTag = "BoostSuccessToast"
                                 )
                                 listViewModel.resync()
@@ -263,7 +263,7 @@ fun ActivityDetailScreen(
                                 app.toast(
                                     type = ToastType.ERROR,
                                     title = context.getString(R.string.wallet__boost_error_title),
-                                    description = context.getString(R.string.wallet__boost_error_msg),
+                                    body = context.getString(R.string.wallet__boost_error_msg),
                                     testTag = "BoostFailureToast"
                                 )
                                 detailViewModel.onDismissBoostSheet()
@@ -272,14 +272,14 @@ fun ActivityDetailScreen(
                                 app.toast(
                                     type = ToastType.ERROR,
                                     title = context.getString(R.string.wallet__send_fee_error),
-                                    description = context.getString(R.string.wallet__send_fee_error_max)
+                                    body = context.getString(R.string.wallet__send_fee_error_max)
                                 )
                             },
                             onMinFee = {
                                 app.toast(
                                     type = ToastType.ERROR,
                                     title = context.getString(R.string.wallet__send_fee_error),
-                                    description = context.getString(R.string.wallet__send_fee_error_min)
+                                    body = context.getString(R.string.wallet__send_fee_error_min)
                                 )
                             }
                         )

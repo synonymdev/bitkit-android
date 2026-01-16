@@ -84,7 +84,7 @@ fun SettingsScreen(
                             R.string.settings__dev_disabled_title
                         }
                     ),
-                    description = context.getString(
+                    body = context.getString(
                         if (newValue) {
                             R.string.settings__dev_enabled_message
                         } else {

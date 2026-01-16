@@ -128,7 +128,7 @@ class WalletViewModel @Inject constructor(
             migrationService.setShowingMigrationLoading(false)
             toaster.error(
                 title = "Migration Failed",
-                description = "Please restore your wallet manually using your recovery phrase"
+                body = "Please restore your wallet manually using your recovery phrase"
             )
         }
     }
@@ -305,7 +305,7 @@ class WalletViewModel @Inject constructor(
                 .onFailure {
                     toaster.error(
                         title = context.getString(R.string.common__error),
-                        description = it.message ?: context.getString(R.string.common__error_body)
+                        body = it.message ?: context.getString(R.string.common__error_body)
                     )
                 }
         }
@@ -315,7 +315,7 @@ class WalletViewModel @Inject constructor(
         walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
             toaster.error(
                 title = context.getString(R.string.wallet__error_invoice_update),
-                description = error.message ?: context.getString(R.string.common__error_body)
+                body = error.message ?: context.getString(R.string.common__error_body)
             )
         }
     }

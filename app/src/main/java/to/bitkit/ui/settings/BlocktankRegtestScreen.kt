@@ -115,14 +115,14 @@ fun BlocktankRegtestScreen(
                             app.toast(
                                 type = ToastType.SUCCESS,
                                 title = "Success",
-                                description = "Deposit successful. TxID: $txId",
+                                body = "Deposit successful. TxID: $txId",
                             )
                         }.onFailure {
                             Logger.error("Deposit failed", it)
                             app.toast(
                                 type = ToastType.ERROR,
                                 title = "Failed to deposit",
-                                description = it.message.orEmpty(),
+                                body = it.message.orEmpty(),
                             )
                         }
 
@@ -161,14 +161,14 @@ fun BlocktankRegtestScreen(
                                 app.toast(
                                     type = ToastType.SUCCESS,
                                     title = "Success",
-                                    description = "Successfully mined $count blocks",
+                                    body = "Successfully mined $count blocks",
                                 )
                             }.onFailure {
                                 Logger.error("Mining failed", it)
                                 app.toast(
                                     type = ToastType.ERROR,
                                     title = "Failed to mine",
-                                    description = it.message.orEmpty(),
+                                    body = it.message.orEmpty(),
                                 )
                             }
                             isMining = false
@@ -213,14 +213,14 @@ fun BlocktankRegtestScreen(
                             app.toast(
                                 type = ToastType.SUCCESS,
                                 title = "Success",
-                                description = "Payment successful. ID: $paymentId",
+                                body = "Payment successful. ID: $paymentId",
                             )
                         }.onFailure {
                             Logger.error("Payment failed", it)
                             app.toast(
                                 type = ToastType.ERROR,
                                 title = "Failed to pay invoice from LND",
-                                description = it.message.orEmpty(),
+                                body = it.message.orEmpty(),
                             )
                         }
                     }
@@ -280,7 +280,7 @@ fun BlocktankRegtestScreen(
                             app.toast(
                                 type = ToastType.SUCCESS,
                                 title = "Success",
-                                description = "Channel closed. Closing TxID: $closingTxId"
+                                body = "Channel closed. Closing TxID: $closingTxId"
                             )
                         }.onFailure {
                             Logger.error("Channel close failed", it)

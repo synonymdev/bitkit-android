@@ -94,7 +94,7 @@ class CurrencyRepo @Inject constructor(
                     if (isStale) {
                         toaster.error(
                             title = "Rates currently unavailable",
-                            description = "An error has occurred. Please try again later."
+                            body = "An error has occurred. Please try again later."
                         )
                     }
                 }

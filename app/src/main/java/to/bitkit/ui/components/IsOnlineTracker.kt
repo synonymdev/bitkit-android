@@ -33,7 +33,7 @@ fun IsOnlineTracker(
                 app.toast(
                     type = ToastType.SUCCESS,
                     title = context.getString(R.string.other__connection_back_title),
-                    description = context.getString(R.string.other__connection_back_msg),
+                    body = context.getString(R.string.other__connection_back_msg),
                 )
             }
 
@@ -41,7 +41,7 @@ fun IsOnlineTracker(
                 app.toast(
                     type = ToastType.WARNING,
                     title = context.getString(R.string.other__connection_issue),
-                    description = context.getString(R.string.other__connection_issue_explain),
+                    body = context.getString(R.string.other__connection_issue_explain),
                 )
             }
 

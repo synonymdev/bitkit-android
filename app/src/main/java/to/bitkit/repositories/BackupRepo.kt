@@ -375,7 +375,7 @@ class BackupRepo @Inject constructor(
         scope.launch {
             toaster.error(
                 title = context.getString(R.string.settings__backup__failed_title),
-                description = context.getString(R.string.settings__backup__failed_message).formatPlural(
+                body = context.getString(R.string.settings__backup__failed_message).formatPlural(
                     mapOf("interval" to (BACKUP_CHECK_INTERVAL / MINUTE_IN_MS))
                 ),
             )

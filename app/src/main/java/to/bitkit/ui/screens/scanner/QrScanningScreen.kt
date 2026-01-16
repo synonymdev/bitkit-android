@@ -152,7 +152,7 @@ fun QrScanningScreen(
                 app.toast(
                     type = ToastType.ERROR,
                     title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__qr_error_text),
+                    body = context.getString(R.string.other__qr_error_text),
                 )
             }
         }
@@ -258,7 +258,7 @@ private fun handlePaste(
         app.toast(
             type = ToastType.WARNING,
             title = context.getString(R.string.wallet__send_clipboard_empty_title),
-            description = context.getString(R.string.wallet__send_clipboard_empty_text),
+            body = context.getString(R.string.wallet__send_clipboard_empty_text),
         )
     }
     setScanResult(clipboard)

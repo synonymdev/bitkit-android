@@ -248,7 +248,7 @@ class ElectrumConfigViewModel @Inject constructor(
             if (validationError != null) {
                 toaster.warning(
                     title = context.getString(R.string.settings__es__error_peer),
-                    description = validationError,
+                    body = validationError,
                 )
             } else {
                 connectToServer()
@@ -269,7 +269,7 @@ class ElectrumConfigViewModel @Inject constructor(
             if (validationError != null) {
                 toaster.warning(
                     title = context.getString(R.string.settings__es__error_peer),
-                    description = validationError,
+                    body = validationError,
                 )
                 return@launch
             }

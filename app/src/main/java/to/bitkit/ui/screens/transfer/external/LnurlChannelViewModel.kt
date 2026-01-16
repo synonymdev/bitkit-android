@@ -84,7 +84,7 @@ class LnurlChannelViewModel @Inject constructor(
     suspend fun errorToast(error: Throwable) {
         toaster.error(
             title = context.getString(R.string.other__lnurl_channel_error),
-            description = error.message ?: "Unknown error",
+            body = error.message ?: "Unknown error",
         )
     }
 }

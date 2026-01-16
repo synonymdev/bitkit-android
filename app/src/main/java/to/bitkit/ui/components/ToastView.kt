@@ -226,9 +226,9 @@ fun ToastView(
                     text = toast.title,
                     color = tintColor,
                 )
-                toast.description?.let { description ->
+                toast.body?.let { body ->
                     Caption(
-                        text = description,
+                        text = body,
                         color = Colors.White
                     )
                 }
@@ -325,7 +325,7 @@ private fun ToastViewPreview() {
                 toast = Toast(
                     type = ToastType.WARNING,
                     title = "You're still offline",
-                    description = "Check your connection to keep using Bitkit.",
+                    body = "Check your connection to keep using Bitkit.",
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -334,7 +334,7 @@ private fun ToastViewPreview() {
                 toast = Toast(
                     type = ToastType.LIGHTNING,
                     title = "Instant Payments Ready",
-                    description = "You can now pay anyone, anywhere, instantly.",
+                    body = "You can now pay anyone, anywhere, instantly.",
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -343,7 +343,7 @@ private fun ToastViewPreview() {
                 toast = Toast(
                     type = ToastType.SUCCESS,
                     title = "You're Back Online!",
-                    description = "Successfully reconnected to the Internet.",
+                    body = "Successfully reconnected to the Internet.",
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -352,7 +352,7 @@ private fun ToastViewPreview() {
                 toast = Toast(
                     type = ToastType.INFO,
                     title = "General Message",
-                    description = "Used for neutral content to inform the user.",
+                    body = "Used for neutral content to inform the user.",
                     autoHide = false,
                 ),
                 onDismiss = {},
@@ -361,7 +361,7 @@ private fun ToastViewPreview() {
                 toast = Toast(
                     type = ToastType.ERROR,
                     title = "Error Toast",
-                    description = "This is a toast message.",
+                    body = "This is a toast message.",
                     autoHide = true,
                 ),
                 onDismiss = {},

@@ -77,7 +77,7 @@ fun ElectrumConfigScreen(
                 app.toast(
                     type = ToastType.SUCCESS,
                     title = context.getString(R.string.settings__es__server_updated_title),
-                    description = context.getString(R.string.settings__es__server_updated_message)
+                    body = context.getString(R.string.settings__es__server_updated_message)
                         .replace("{host}", uiState.host)
                         .replace("{port}", uiState.port),
                     testTag = "ElectrumUpdatedToast",
@@ -86,7 +86,7 @@ fun ElectrumConfigScreen(
                 app.toast(
                     type = ToastType.WARNING,
                     title = context.getString(R.string.settings__es__server_error),
-                    description = context.getString(R.string.settings__es__server_error_description),
+                    body = context.getString(R.string.settings__es__server_error_description),
                     testTag = "ElectrumErrorToast",
                 )
             }

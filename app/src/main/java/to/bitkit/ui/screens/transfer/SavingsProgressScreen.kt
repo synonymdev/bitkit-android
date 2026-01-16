@@ -73,7 +73,7 @@ fun SavingsProgressScreen(
                 app.toast(
                     type = ToastType.ERROR,
                     title = context.getString(R.string.lightning__close_error),
-                    description = context.getString(R.string.lightning__close_error_msg),
+                    body = context.getString(R.string.lightning__close_error_msg),
                 )
                 onTransferUnavailable()
             } else {
@@ -84,7 +84,7 @@ fun SavingsProgressScreen(
                         app.toast(
                             type = ToastType.ERROR,
                             title = context.getString(R.string.lightning__close_error),
-                            description = context.getString(R.string.lightning__close_error_msg),
+                            body = context.getString(R.string.lightning__close_error_msg),
                         )
                         onTransferUnavailable()
                     },

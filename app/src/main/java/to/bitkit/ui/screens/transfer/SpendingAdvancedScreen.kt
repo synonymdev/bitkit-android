@@ -93,7 +93,7 @@ fun SpendingAdvancedScreen(
                     app.toast(
                         type = ToastType.ERROR,
                         title = effect.title,
-                        description = effect.description,
+                        body = effect.body,
                     )
                 }
             }
