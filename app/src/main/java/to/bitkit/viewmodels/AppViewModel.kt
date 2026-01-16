@@ -1068,6 +1068,18 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        // Check if on-chain invoice amount exceeds available balance
+        if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+            val shortfall = invoice.amountSatoshis - maxSendOnchain
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+                description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
+                    .replace("{amount}", shortfall.toString()),
+            )
+            return
+        }
+
         Logger.info(
             when (invoice.amountSatoshis > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
