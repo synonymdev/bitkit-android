@@ -28,6 +28,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -132,7 +133,7 @@ import kotlin.time.ExperimentalTime
 class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
     healthRepo: HealthRepo,
-    toastQueueProvider: @JvmSuppressWildcards (CoroutineScope) -> ToastQueue,
+    toastQueueProvider: @JvmSuppressWildcards (CoroutineDispatcher) -> ToastQueue,
     timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
     toaster: Toaster,
     @ApplicationContext private val context: Context,
@@ -1979,7 +1980,7 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    private val toastQueue = toastQueueProvider(viewModelScope)
+    private val toastQueue = toastQueueProvider(Dispatchers.Main.immediate)
     val currentToast: StateFlow<Toast?> = toastQueue.currentToast
 
     fun toast(
