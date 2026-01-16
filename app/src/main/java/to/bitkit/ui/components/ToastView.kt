@@ -67,9 +67,45 @@ private const val TINT_ALPHA = 0.32f
 private const val SHADOW_ALPHA = 0.4f
 private const val ELEVATION_DP = 10
 
+@Composable
+fun ToastHost(
+    toast: Toast?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState = rememberHazeState(blurEnabled = true),
+    onDragStart: () -> Unit = {},
+    onDragEnd: () -> Unit = {},
+) {
+    Box(
+        contentAlignment = Alignment.TopCenter,
+        modifier = modifier.fillMaxSize(),
+    ) {
+        AnimatedContent(
+            targetState = toast,
+            transitionSpec = {
+                (fadeIn() + slideInVertically { -it })
+                    .togetherWith(fadeOut() + slideOutVertically { -it })
+                    .using(SizeTransform(clip = false))
+            },
+            contentAlignment = Alignment.TopCenter,
+            label = "toastAnimation",
+        ) {
+            if (it != null) {
+                ToastContent(
+                    toast = it,
+                    onDismiss = onDismiss,
+                    hazeState = hazeState,
+                    onDragStart = onDragStart,
+                    onDragEnd = onDragEnd
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
-fun ToastView(
+private fun ToastContent(
     toast: Toast,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -261,67 +297,14 @@ fun ToastView(
     }
 }
 
-@Composable
-private fun ToastHost(
-    toast: Toast?,
-    hazeState: HazeState,
-    onDismiss: () -> Unit,
-    onDragStart: () -> Unit = {},
-    onDragEnd: () -> Unit = {},
-) {
-    AnimatedContent(
-        targetState = toast,
-        transitionSpec = {
-            (fadeIn() + slideInVertically { -it })
-                .togetherWith(fadeOut() + slideOutVertically { -it })
-                .using(SizeTransform(clip = false))
-        },
-        contentAlignment = Alignment.TopCenter,
-        label = "toastAnimation",
-    ) {
-        if (it != null) {
-            ToastView(
-                toast = it,
-                onDismiss = onDismiss,
-                hazeState = hazeState,
-                onDragStart = onDragStart,
-                onDragEnd = onDragEnd
-            )
-        }
-    }
-}
-
-@Composable
-fun ToastOverlay(
-    toast: Toast?,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-    hazeState: HazeState = rememberHazeState(blurEnabled = true),
-    onDragStart: () -> Unit = {},
-    onDragEnd: () -> Unit = {},
-) {
-    Box(
-        contentAlignment = Alignment.TopCenter,
-        modifier = modifier.fillMaxSize(),
-    ) {
-        ToastHost(
-            toast = toast,
-            hazeState = hazeState,
-            onDismiss = onDismiss,
-            onDragStart = onDragStart,
-            onDragEnd = onDragEnd
-        )
-    }
-}
-
 @Preview(showSystemUi = true)
 @Composable
-private fun ToastViewPreview() {
+private fun ToastContentPreview() {
     AppThemeSurface {
         ScreenColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ToastView(
+            ToastContent(
                 toast = Toast(
                     type = ToastType.WARNING,
                     title = "You're still offline",
@@ -330,7 +313,7 @@ private fun ToastViewPreview() {
                 ),
                 onDismiss = {},
             )
-            ToastView(
+            ToastContent(
                 toast = Toast(
                     type = ToastType.LIGHTNING,
                     title = "Instant Payments Ready",
@@ -339,7 +322,7 @@ private fun ToastViewPreview() {
                 ),
                 onDismiss = {},
             )
-            ToastView(
+            ToastContent(
                 toast = Toast(
                     type = ToastType.SUCCESS,
                     title = "You're Back Online!",
@@ -348,7 +331,7 @@ private fun ToastViewPreview() {
                 ),
                 onDismiss = {},
             )
-            ToastView(
+            ToastContent(
                 toast = Toast(
                     type = ToastType.INFO,
                     title = "General Message",
@@ -357,7 +340,7 @@ private fun ToastViewPreview() {
                 ),
                 onDismiss = {},
             )
-            ToastView(
+            ToastContent(
                 toast = Toast(
                     type = ToastType.ERROR,
                     title = "Error Toast",

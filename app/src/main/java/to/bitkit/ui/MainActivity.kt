@@ -36,7 +36,7 @@ import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.IsOnlineTracker
-import to.bitkit.ui.components.ToastOverlay
+import to.bitkit.ui.components.ToastHost
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
@@ -173,7 +173,7 @@ class MainActivity : FragmentActivity() {
                 }
 
                 val currentToast by appViewModel.currentToast.collectAsStateWithLifecycle()
-                ToastOverlay(
+                ToastHost(
                     toast = currentToast,
                     hazeState = hazeState,
                     onDismiss = { appViewModel.hideToast() },
