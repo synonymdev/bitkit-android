@@ -211,6 +211,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
 - ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
+- NEVER use `*Manager` suffix for classes, PREFER narrow-scope constructs that do not tend to grow into unmaintainable god objects
 
 ### Architecture Guidelines
 
