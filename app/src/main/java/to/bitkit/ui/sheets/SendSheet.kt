@@ -269,7 +269,8 @@ fun SendSheet(
             }
             composableWithDefaultTransitions<SendRoute.ComingSoon> {
                 ComingSoonSheetContent(
-                    onBack = { navController.popBackStack() }
+                    onWalletOverviewClick = { appViewModel.hideSheet() },
+                    onBack = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<SendRoute.Error> {

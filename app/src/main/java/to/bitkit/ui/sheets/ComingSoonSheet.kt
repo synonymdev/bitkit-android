@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -15,9 +16,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -26,8 +29,27 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
+private fun Modifier.sheet() = this then sheetHeight(SheetSize.MEDIUM, isModal = true)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ComingSoonSheet(
+    onWalletOverviewClick: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BottomSheet(onDismissRequest = onBack) {
+        ComingSoonSheetContent(
+            onWalletOverviewClick = onWalletOverviewClick,
+            onBack = onBack,
+            modifier = modifier.sheet()
+        )
+    }
+}
+
 @Composable
 fun ComingSoonSheetContent(
+    onWalletOverviewClick: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -58,7 +80,7 @@ fun ComingSoonSheetContent(
             VerticalSpacer(54.dp)
             PrimaryButton(
                 text = stringResource(R.string.coming_soon__button),
-                onClick = onBack,
+                onClick = onWalletOverviewClick,
             )
         }
     }
@@ -70,8 +92,9 @@ private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             ComingSoonSheetContent(
+                onWalletOverviewClick = {},
                 onBack = {},
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheet()
             )
         }
     }
