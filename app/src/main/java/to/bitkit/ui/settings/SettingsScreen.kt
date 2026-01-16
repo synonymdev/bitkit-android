@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
@@ -76,7 +76,7 @@ fun SettingsScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
                 app.toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = context.getString(
                         if (newValue) {
                             R.string.settings__dev_enabled_title

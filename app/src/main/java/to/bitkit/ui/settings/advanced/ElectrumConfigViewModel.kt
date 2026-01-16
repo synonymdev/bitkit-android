@@ -23,10 +23,9 @@ import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.ElectrumServerPeer
 import to.bitkit.models.MAX_VALID_PORT
-import to.bitkit.models.Toast
 import to.bitkit.models.getDefaultPort
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import javax.inject.Inject
 
 @HiltViewModel
@@ -35,6 +34,7 @@ class ElectrumConfigViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
+    private val toaster: Toaster,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ElectrumConfigUiState())
@@ -246,8 +246,7 @@ class ElectrumConfigViewModel @Inject constructor(
         viewModelScope.launch {
             val validationError = validateInput()
             if (validationError != null) {
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
+                toaster.warning(
                     title = context.getString(R.string.settings__es__error_peer),
                     description = validationError,
                 )
@@ -268,8 +267,7 @@ class ElectrumConfigViewModel @Inject constructor(
 
             val validationError = validateInput(host, port)
             if (validationError != null) {
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
+                toaster.warning(
                     title = context.getString(R.string.settings__es__error_peer),
                     description = validationError,
                 )

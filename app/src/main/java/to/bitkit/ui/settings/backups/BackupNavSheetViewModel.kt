@@ -19,11 +19,10 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.HealthState
-import to.bitkit.models.Toast
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.ui.settings.backups.BackupContract.SideEffect
 import to.bitkit.ui.settings.backups.BackupContract.UiState
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -35,6 +34,7 @@ class BackupNavSheetViewModel @Inject constructor(
     private val keychain: Keychain,
     private val healthRepo: HealthRepo,
     private val cacheStore: CacheStore,
+    private val toaster: Toaster,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UiState())
@@ -86,11 +86,7 @@ class BackupNavSheetViewModel @Inject constructor(
             }
         }.onFailure {
             Logger.error("Error loading mnemonic", it, context = TAG)
-            ToastEventBus.send(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.security__mnemonic_error),
-                description = context.getString(R.string.security__mnemonic_error_description),
-            )
+            toaster.warning(R.string.security__mnemonic_error, R.string.security__mnemonic_error_description)
         }
     }
 
@@ -153,6 +149,12 @@ class BackupNavSheetViewModel @Inject constructor(
 
     fun resetState() {
         _uiState.update { UiState() }
+    }
+
+    fun onMnemonicCopied() {
+        viewModelScope.launch {
+            toaster.success(R.string.common__copied, R.string.security__mnemonic_copied)
+        }
     }
 }
 

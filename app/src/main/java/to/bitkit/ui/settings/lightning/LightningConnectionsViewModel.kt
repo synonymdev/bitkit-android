@@ -31,13 +31,12 @@ import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
-import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -51,6 +50,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val logsRepo: LogsRepo,
     private val walletRepo: WalletRepo,
     private val activityRepo: ActivityRepo,
+    private val toaster: Toaster,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
@@ -338,11 +338,10 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch {
             logsRepo.zipLogsForSharing()
                 .onSuccess { uri -> onReady(uri) }
-                .onFailure { err ->
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.lightning__error_logs),
-                        description = context.getString(R.string.lightning__error_logs_description),
+                .onFailure {
+                    toaster.warning(
+                        R.string.lightning__error_logs,
+                        R.string.lightning__error_logs_description,
                     )
                 }
         }
@@ -454,10 +453,9 @@ class LightningConnectionsViewModel @Inject constructor(
                 onSuccess = {
                     walletRepo.syncNodeAndWallet()
 
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.lightning__close_success_title),
-                        description = context.getString(R.string.lightning__close_success_msg),
+                    toaster.success(
+                        R.string.lightning__close_success_title,
+                        R.string.lightning__close_success_msg,
                     )
 
                     _closeConnectionUiState.update {
@@ -470,10 +468,9 @@ class LightningConnectionsViewModel @Inject constructor(
                 onFailure = { error ->
                     Logger.error("Failed to close channel", e = error, context = TAG)
 
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.lightning__close_error),
-                        description = context.getString(R.string.lightning__close_error_msg),
+                    toaster.warning(
+                        R.string.lightning__close_error,
+                        R.string.lightning__close_error_msg,
                     )
 
                     _closeConnectionUiState.update { it.copy(isLoading = false) }

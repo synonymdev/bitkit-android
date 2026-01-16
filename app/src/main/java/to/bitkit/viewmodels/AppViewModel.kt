@@ -83,6 +83,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
@@ -104,8 +105,8 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
@@ -132,6 +133,7 @@ class AppViewModel @Inject constructor(
     healthRepo: HealthRepo,
     toastManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> ToastQueueManager,
     timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
+    toaster: Toaster,
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
@@ -237,7 +239,7 @@ class AppViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            ToastEventBus.events.collect {
+            toaster.events.collect {
                 toast(it.type, it.title, it.description, it.autoHide, it.visibilityTime)
             }
         }
@@ -456,7 +458,7 @@ class AppViewModel @Inject constructor(
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
         toast(
-            type = Toast.ToastType.ERROR,
+            type = ToastType.ERROR,
             title = "Migration Warning",
             description = "Migration completed but node restart failed. Please restart the app."
         )
@@ -540,7 +542,7 @@ class AppViewModel @Inject constructor(
             return
         }
         toast(
-            type = Toast.ToastType.LIGHTNING,
+            type = ToastType.LIGHTNING,
             title = context.getString(R.string.lightning__channel_opened_title),
             description = context.getString(R.string.lightning__channel_opened_msg),
             testTag = "SpendingBalanceReadyToast",
@@ -550,7 +552,7 @@ class AppViewModel @Inject constructor(
     private suspend fun notifyTransactionRemoved(event: Event.OnchainTransactionEvicted) {
         if (activityRepo.wasTransactionReplaced(event.txid)) return
         toast(
-            type = Toast.ToastType.WARNING,
+            type = ToastType.WARNING,
             title = context.getString(R.string.wallet__toast_transaction_removed_title),
             description = context.getString(R.string.wallet__toast_transaction_removed_description),
             testTag = "TransactionRemovedToast",
@@ -565,7 +567,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun notifyTransactionUnconfirmed() = toast(
-        type = Toast.ToastType.WARNING,
+        type = ToastType.WARNING,
         title = context.getString(R.string.wallet__toast_transaction_unconfirmed_title),
         description = context.getString(R.string.wallet__toast_transaction_unconfirmed_description),
         testTag = "TransactionUnconfirmedToast",
@@ -574,7 +576,7 @@ class AppViewModel @Inject constructor(
     private suspend fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) {
         val isReceive = activityRepo.isReceivedTransaction(event.txid)
         toast(
-            type = Toast.ToastType.INFO,
+            type = ToastType.INFO,
             title = when (isReceive) {
                 true -> R.string.wallet__toast_received_transaction_replaced_title
                 else -> R.string.wallet__toast_transaction_replaced_title
@@ -591,7 +593,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun notifyPaymentFailed() = toast(
-        type = Toast.ToastType.ERROR,
+        type = ToastType.ERROR,
         title = context.getString(R.string.wallet__toast_payment_failed_title),
         description = context.getString(R.string.wallet__toast_payment_failed_description),
         testTag = "PaymentFailedToast",
@@ -914,7 +916,7 @@ class AppViewModel @Inject constructor(
             val minSendable = lnurl.data.minSendableSat()
             if (_sendUiState.value.amount < minSendable) {
                 toast(
-                    type = Toast.ToastType.ERROR,
+                    type = ToastType.ERROR,
                     title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
                     description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
                         .replace("{amount}", formatMoneyValue(minSendable)),
@@ -969,7 +971,7 @@ class AppViewModel @Inject constructor(
         val data = context.getClipboardText()?.trim()
         if (data.isNullOrBlank()) {
             toast(
-                type = Toast.ToastType.WARNING,
+                type = ToastType.WARNING,
                 title = context.getString(R.string.wallet__send_clipboard_empty_title),
                 description = context.getString(R.string.wallet__send_clipboard_empty_text),
             )
@@ -1025,7 +1027,7 @@ class AppViewModel @Inject constructor(
             else -> {
                 Logger.warn("Unhandled scan data: $scan", context = TAG)
                 toast(
-                    type = Toast.ToastType.WARNING,
+                    type = ToastType.WARNING,
                     title = context.getString(R.string.other__scan_err_decoding),
                     description = context.getString(R.string.other__scan_err_interpret_title),
                 )
@@ -1151,7 +1153,7 @@ class AppViewModel @Inject constructor(
     private suspend fun onScanLightning(invoice: LightningInvoice, scanResult: String) {
         if (invoice.isExpired) {
             toast(
-                type = Toast.ToastType.ERROR,
+                type = ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
                 description = context.getString(R.string.other__scan__error__expired),
                 testTag = "ExpiredLightningToast",
@@ -1212,7 +1214,7 @@ class AppViewModel @Inject constructor(
 
         if (!lightningRepo.canSend(minSendable)) {
             toast(
-                type = Toast.ToastType.WARNING,
+                type = ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_pay_error),
                 description = context.getString(R.string.other__lnurl_pay_error_no_capacity),
             )
@@ -1260,7 +1262,7 @@ class AppViewModel @Inject constructor(
 
         if (minWithdrawable > maxWithdrawable) {
             toast(
-                type = Toast.ToastType.WARNING,
+                type = ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_withdr_error),
                 description = context.getString(R.string.other__lnurl_withdr_error_minmax)
             )
@@ -1309,14 +1311,14 @@ class AppViewModel @Inject constructor(
                 domain = domain,
             ).onFailure {
                 toast(
-                    type = Toast.ToastType.WARNING,
+                    type = ToastType.WARNING,
                     title = context.getString(R.string.other__lnurl_auth_error),
                     description = context.getString(R.string.other__lnurl_auth_error_msg)
                         .replace("{raw}", it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName),
                 )
             }.onSuccess {
                 toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = context.getString(R.string.other__lnurl_auth_success_title),
                     description = when (domain.isNotBlank()) {
                         true -> context.getString(R.string.other__lnurl_auth_success_msg_domain)
@@ -1348,7 +1350,7 @@ class AppViewModel @Inject constructor(
         // val appNetwork = Env.network.toCoreNetworkType()
         // if (network != appNetwork) {
         //     toast(
-        //         type = Toast.ToastType.WARNING,
+        //         type = ToastType.WARNING,
         //         title = context.getString(R.string.other__qr_error_network_header),
         //         description = context.getString(R.string.other__qr_error_network_text)
         //             .replace("{selectedNetwork}", appNetwork.name)
@@ -1544,7 +1546,7 @@ class AppViewModel @Inject constructor(
                     }.onFailure { e ->
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
                         toast(
-                            type = Toast.ToastType.ERROR,
+                            type = ToastType.ERROR,
                             title = context.getString(R.string.wallet__error_sending_title),
                             description = e.message ?: context.getString(R.string.common__error_body)
                         )
@@ -1636,7 +1638,7 @@ class AppViewModel @Inject constructor(
                 paymentRequest = invoice
             ).onSuccess {
                 toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = context.getString(R.string.other__lnurl_withdr_success_title),
                     description = context.getString(R.string.other__lnurl_withdr_success_msg),
                 )
@@ -1980,7 +1982,7 @@ class AppViewModel @Inject constructor(
     val currentToast: StateFlow<Toast?> = toastManager.currentToast
 
     fun toast(
-        type: Toast.ToastType,
+        type: ToastType,
         title: String,
         description: String? = null,
         autoHide: Boolean = true,
@@ -2001,7 +2003,7 @@ class AppViewModel @Inject constructor(
 
     fun toast(error: Throwable) {
         toast(
-            type = Toast.ToastType.ERROR,
+            type = ToastType.ERROR,
             title = context.getString(R.string.common__error),
             description = error.message ?: context.getString(R.string.common__error_body)
         )
@@ -2054,7 +2056,7 @@ class AppViewModel @Inject constructor(
 
             if (newAttempts <= 0) {
                 toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = context.getString(R.string.security__wiped_title),
                     description = context.getString(R.string.security__wiped_message),
                 )

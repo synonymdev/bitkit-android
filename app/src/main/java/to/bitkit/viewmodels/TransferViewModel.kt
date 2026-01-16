@@ -29,7 +29,6 @@ import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.amountOnClose
-import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
@@ -37,7 +36,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.math.min
@@ -62,6 +61,7 @@ class TransferViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val clock: Clock,
+    private val toaster: Toaster,
 ) : ViewModel() {
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
     val spendingUiState = _spendingUiState.asStateFlow()
@@ -213,7 +213,7 @@ class TransferViewModel @Inject constructor(
                     launch { watchOrder(order.id) }
                 }
                 .onFailure { error ->
-                    ToastEventBus.send(error)
+                    toaster.error(error)
                 }
         }
     }
@@ -458,10 +458,9 @@ class TransferViewModel @Inject constructor(
             if (nonTrustedChannels.isEmpty()) {
                 channelsToClose = emptyList()
                 Logger.error("Cannot force close channels with trusted peer", context = TAG)
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__force_failed_title),
-                    description = context.getString(R.string.lightning__force_failed_msg)
+                toaster.error(
+                    R.string.lightning__force_failed_title,
+                    R.string.lightning__force_failed_msg
                 )
                 return@runCatching
             }
@@ -483,25 +482,22 @@ class TransferViewModel @Inject constructor(
                 val initMsg = context.getString(R.string.lightning__force_init_msg)
                 val skippedMsg = context.getString(R.string.lightning__force_channels_skipped)
                 val description = if (trustedChannels.isNotEmpty()) "$initMsg $skippedMsg" else initMsg
-                ToastEventBus.send(
-                    type = Toast.ToastType.LIGHTNING,
+                toaster.lightning(
                     title = context.getString(R.string.lightning__force_init_title),
                     description = description,
                 )
             } else {
                 Logger.error("Force close failed for ${failedChannels.size} channels", context = TAG)
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__force_failed_title),
-                    description = context.getString(R.string.lightning__force_failed_msg)
+                toaster.error(
+                    R.string.lightning__force_failed_title,
+                    R.string.lightning__force_failed_msg
                 )
             }
         }.onFailure {
             Logger.error("Force close failed", e = it, context = TAG)
-            ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.lightning__force_failed_title),
-                description = context.getString(R.string.lightning__force_failed_msg)
+            toaster.error(
+                R.string.lightning__force_failed_title,
+                R.string.lightning__force_failed_msg
             )
         }
         _isForceTransferLoading.value = false

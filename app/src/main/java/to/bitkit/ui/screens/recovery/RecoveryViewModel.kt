@@ -17,11 +17,10 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
-import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -32,6 +31,7 @@ class RecoveryViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
     private val settingsStore: SettingsStore,
+    private val toaster: Toaster,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecoveryUiState())
@@ -73,11 +73,7 @@ class RecoveryViewModel @Inject constructor(
                             isExportingLogs = false,
                         )
                     }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = context.getString(R.string.other__logs_export_error),
-                    )
+                    toaster.error(R.string.common__error, R.string.other__logs_export_error)
                 }
             )
         }
@@ -98,11 +94,7 @@ class RecoveryViewModel @Inject constructor(
             }.onFailure { fallbackError ->
                 Logger.error("Failed to open support links", fallbackError, context = TAG)
                 viewModelScope.launch {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = context.getString(R.string.settings__support__link_error),
-                    )
+                    toaster.error(R.string.common__error, R.string.settings__support__link_error)
                 }
             }
         }
@@ -119,13 +111,9 @@ class RecoveryViewModel @Inject constructor(
     fun wipeWallet() {
         viewModelScope.launch {
             walletRepo.wipeWallet().onFailure { error ->
-                ToastEventBus.send(error)
+                toaster.error(error)
             }.onSuccess {
-                ToastEventBus.send(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.security__wiped_title),
-                    description = context.getString(R.string.security__wiped_message),
-                )
+                toaster.success(R.string.security__wiped_title, R.string.security__wiped_message)
             }
         }
     }

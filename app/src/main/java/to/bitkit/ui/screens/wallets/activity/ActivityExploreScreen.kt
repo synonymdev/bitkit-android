@@ -45,7 +45,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.totalValue
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
@@ -167,7 +167,7 @@ fun ActivityExploreScreen(
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
                         app.toast(
-                            type = Toast.ToastType.SUCCESS,
+                            type = ToastType.SUCCESS,
                             title = toastMessage,
                             description = text.ellipsisMiddle(40),
                         )

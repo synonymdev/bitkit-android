@@ -17,6 +17,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.KEY_DELETE
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.viewmodels.SendUiState
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -28,6 +29,7 @@ class SendFeeViewModelTest : BaseUnitTest() {
     private val currencyRepo: CurrencyRepo = mock()
     private val walletRepo: WalletRepo = mock()
     private val context: Context = mock()
+    private val toaster: Toaster = mock()
 
     private val balance = 100_000uL
     private val fee = 1_000uL
@@ -42,7 +44,7 @@ class SendFeeViewModelTest : BaseUnitTest() {
         whenever(walletRepo.balanceState)
             .thenReturn(MutableStateFlow(BalanceState(totalOnchainSats = balance)))
 
-        sut = SendFeeViewModel(lightningRepo, currencyRepo, walletRepo, context)
+        sut = SendFeeViewModel(lightningRepo, currencyRepo, walletRepo, context, toaster)
     }
 
     @Test

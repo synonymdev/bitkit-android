@@ -27,6 +27,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -41,6 +42,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val backupRepo = mock<BackupRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val migrationService = mock<MigrationService>()
+    private val toaster = mock<Toaster>()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -63,6 +65,7 @@ class WalletViewModelTest : BaseUnitTest() {
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
             migrationService = migrationService,
+            toaster = toaster,
         )
     }
 
@@ -247,6 +250,7 @@ class WalletViewModelTest : BaseUnitTest() {
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
             migrationService = migrationService,
+            toaster = toaster,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -287,6 +291,7 @@ class WalletViewModelTest : BaseUnitTest() {
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
             migrationService = migrationService,
+            toaster = toaster,
         )
 
         // Trigger restore to put state in non-idle

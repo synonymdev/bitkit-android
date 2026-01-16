@@ -26,7 +26,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.mockOrder
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
@@ -91,7 +91,7 @@ fun SpendingAdvancedScreen(
                 is TransferEffect.ToastError -> {
                     isLoading = false
                     app.toast(
-                        type = Toast.ToastType.ERROR,
+                        type = ToastType.ERROR,
                         title = effect.title,
                         description = effect.description,
                     )

@@ -97,6 +97,7 @@ fun BackupSheet(
                     uiState = uiState,
                     onRevealClick = viewModel::onRevealMnemonic,
                     onContinueClick = viewModel::onShowMnemonicContinue,
+                    onMnemonicCopied = viewModel::onMnemonicCopied,
                 )
             }
             composableWithDefaultTransitions<BackupRoute.ShowPassphrase> {

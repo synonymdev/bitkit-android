@@ -16,7 +16,7 @@ import to.bitkit.env.Defaults
 import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -25,6 +25,7 @@ class SendCoinSelectionViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val activityRepo: ActivityRepo,
+    private val toaster: Toaster,
 ) : ViewModel() {
     companion object {
         private const val TAG = "SendCoinSelectionViewModel"
@@ -67,7 +68,7 @@ class SendCoinSelectionViewModel @Inject constructor(
             }
         }.onFailure {
             Logger.error("Failed to load UTXOs for coin selection", it, context = TAG)
-            ToastEventBus.send(Exception("Failed to load UTXOs: ${it.message}"))
+            toaster.error("Failed to load UTXOs: ${it.message}")
         }
     }
 

@@ -18,13 +18,12 @@ import to.bitkit.env.Env
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.Toast
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -41,29 +40,26 @@ class DevSettingsViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val blocktankRepo: BlocktankRepo,
     private val appDb: AppDb,
+    private val toaster: Toaster,
 ) : ViewModel() {
 
     fun openChannel() = viewModelScope.launch {
         val peer = lightningRepo.getPeers()?.firstOrNull()
 
         if (peer == null) {
-            ToastEventBus.send(type = Toast.ToastType.WARNING, title = "No peer connected")
+            toaster.warning("No peer connected")
             return@launch
         }
 
         lightningRepo.openChannel(peer, 50_000u, 25_000u)
-            .onSuccess {
-                ToastEventBus.send(type = Toast.ToastType.INFO, title = "Channel pending")
-            }
-            .onFailure { ToastEventBus.send(it) }
+            .onSuccess { toaster.info("Channel pending") }
+            .onFailure { toaster.error(it) }
     }
 
     fun registerForNotifications() = viewModelScope.launch {
         lightningRepo.registerForNotifications()
-            .onSuccess {
-                ToastEventBus.send(type = Toast.ToastType.INFO, title = "Registered for notifications")
-            }
-            .onFailure { ToastEventBus.send(it) }
+            .onSuccess { toaster.info("Registered for notifications") }
+            .onFailure { toaster.error(it) }
     }
 
     fun testLspNotification() = viewModelScope.launch {
@@ -74,9 +70,9 @@ class DevSettingsViewModel @Inject constructor(
                 notificationType = "incomingHtlc",
                 customUrl = Env.blocktankNotificationApiUrl,
             )
-            ToastEventBus.send(type = Toast.ToastType.INFO, title = "LSP notification sent to this device")
+            toaster.info("LSP notification sent to this device")
         }.onFailure {
-            ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Error testing LSP notification")
+            toaster.warning("Error testing LSP notification")
         }
     }
 
@@ -103,10 +99,9 @@ class DevSettingsViewModel @Inject constructor(
             logsRepo.zipLogsForSharing()
                 .onSuccess { uri -> onReady(uri) }
                 .onFailure {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.lightning__error_logs),
-                        description = context.getString(R.string.lightning__error_logs_description),
+                    toaster.warning(
+                        R.string.lightning__error_logs,
+                        R.string.lightning__error_logs_description,
                     )
                 }
         }

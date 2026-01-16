@@ -14,7 +14,7 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
@@ -78,63 +78,63 @@ fun DevSettingsScreen(
                 title = "Reset Settings State",
                 onClick = {
                     settings.reset()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Settings state reset")
+                    app.toast(type = ToastType.SUCCESS, title = "Settings state reset")
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset All Activities",
                 onClick = {
                     activity.removeAllActivities()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Activities removed")
+                    app.toast(type = ToastType.SUCCESS, title = "Activities removed")
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Backup State",
                 onClick = {
                     viewModel.resetBackupState()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Backup state reset")
+                    app.toast(type = ToastType.SUCCESS, title = "Backup state reset")
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Widgets State",
                 onClick = {
                     viewModel.resetWidgetsState()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Widgets state reset")
+                    app.toast(type = ToastType.SUCCESS, title = "Widgets state reset")
                 }
             )
             SettingsTextButtonRow(
                 title = "Refresh Currency Rates",
                 onClick = {
                     viewModel.refreshCurrencyRates()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
+                    app.toast(type = ToastType.SUCCESS, title = "Currency rates refreshed")
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset App Database",
                 onClick = {
                     viewModel.resetDatabase()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Database state reset")
+                    app.toast(type = ToastType.SUCCESS, title = "Database state reset")
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Blocktank State",
                 onClick = {
                     viewModel.resetBlocktankState()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Blocktank state reset")
+                    app.toast(type = ToastType.SUCCESS, title = "Blocktank state reset")
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Cache Store",
                 onClick = {
                     viewModel.resetCacheStore()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Cache store reset")
+                    app.toast(type = ToastType.SUCCESS, title = "Cache store reset")
                 }
             )
             SettingsTextButtonRow(
                 title = "Wipe App",
                 onClick = {
                     viewModel.wipeWallet()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Wallet wiped")
+                    app.toast(type = ToastType.SUCCESS, title = "Wallet wiped")
                 }
             )
 
@@ -145,14 +145,14 @@ fun DevSettingsScreen(
                 onClick = {
                     val count = 100
                     activity.generateRandomTestData(count)
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Generated $count test activities")
+                    app.toast(type = ToastType.SUCCESS, title = "Generated $count test activities")
                 }
             )
             SettingsTextButtonRow(
                 "Fake New BG Receive",
                 onClick = {
                     viewModel.fakeBgReceive()
-                    app.toast(type = Toast.ToastType.INFO, title = "Restart app to see the payment received sheet")
+                    app.toast(type = ToastType.INFO, title = "Restart app to see the payment received sheet")
                 }
             )
             SettingsTextButtonRow(

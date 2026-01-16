@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
-import to.bitkit.models.Toast
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
@@ -39,7 +38,6 @@ import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -52,7 +50,6 @@ fun ExternalFeeCustomScreen(
     val uiState by viewModel.uiState.collectAsState()
     val currency = currencyViewModel ?: return
     val scope = rememberCoroutineScope()
-
     val context = LocalContext.current
 
     var input by remember {
@@ -88,18 +85,11 @@ fun ExternalFeeCustomScreen(
             }
         },
         onContinue = {
-            val feeRate = input.toUIntOrNull() ?: 0u
-            if (feeRate == 0u) {
-                scope.launch {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = context.getString(R.string.wallet__min_possible_fee_rate),
-                        description = context.getString(R.string.wallet__min_possible_fee_rate_msg),
-                    )
+            scope.launch {
+                if (viewModel.validateCustomFeeRate()) {
+                    onBack()
                 }
-                return@Content
             }
-            onBack()
         },
         onBack = onBack,
     )

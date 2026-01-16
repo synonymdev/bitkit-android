@@ -28,6 +28,7 @@ import to.bitkit.ui.components.KEY_000
 import to.bitkit.ui.components.KEY_DECIMAL
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPadType
+import to.bitkit.ui.shared.toast.Toaster
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
@@ -42,6 +43,7 @@ class AmountInputViewModelTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
     private val clock = mock<Clock>()
+    private val toaster = mock<Toaster>()
 
     @Suppress("SpellCheckingInspection")
     private val testRates = listOf(
@@ -68,6 +70,7 @@ class AmountInputViewModelTest : BaseUnitTest() {
             currencyService = currencyService,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
+            toaster = toaster,
             enablePolling = false,
             clock = clock,
         )
@@ -819,6 +822,7 @@ class AmountInputViewModelTest : BaseUnitTest() {
             currencyService = currencyService,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
+            toaster = toaster,
             enablePolling = false,
             clock = clock,
         )

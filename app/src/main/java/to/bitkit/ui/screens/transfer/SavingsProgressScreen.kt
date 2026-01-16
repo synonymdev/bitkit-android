@@ -26,7 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -71,7 +71,7 @@ fun SavingsProgressScreen(
             if (nonTrustedChannels.isEmpty()) {
                 // All channels are trusted peers - show error and navigate back immediately
                 app.toast(
-                    type = Toast.ToastType.ERROR,
+                    type = ToastType.ERROR,
                     title = context.getString(R.string.lightning__close_error),
                     description = context.getString(R.string.lightning__close_error_msg),
                 )
@@ -82,7 +82,7 @@ fun SavingsProgressScreen(
                     onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
                     onTransferUnavailable = {
                         app.toast(
-                            type = Toast.ToastType.ERROR,
+                            type = ToastType.ERROR,
                             title = context.getString(R.string.lightning__close_error),
                             description = context.getString(R.string.lightning__close_error_msg),
                         )

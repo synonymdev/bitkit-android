@@ -26,7 +26,6 @@ import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
-import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -35,7 +34,7 @@ import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import to.bitkit.utils.isTxSyncTimeout
 import javax.inject.Inject
@@ -54,6 +53,7 @@ class WalletViewModel @Inject constructor(
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
     private val migrationService: MigrationService,
+    private val toaster: Toaster,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -126,8 +126,7 @@ class WalletViewModel @Inject constructor(
             Logger.error("RN migration failed", it, context = TAG)
             migrationService.markMigrationChecked()
             migrationService.setShowingMigrationLoading(false)
-            ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
+            toaster.error(
                 title = "Migration Failed",
                 description = "Please restore your wallet manually using your recovery phrase"
             )
@@ -255,7 +254,7 @@ class WalletViewModel @Inject constructor(
             .onFailure {
                 Logger.error("Node startup error", it, context = TAG)
                 if (it !is RecoveryModeError) {
-                    ToastEventBus.send(it)
+                    toaster.error(it)
                 }
             }
     }
@@ -267,7 +266,7 @@ class WalletViewModel @Inject constructor(
             lightningRepo.stop()
                 .onFailure {
                     Logger.error("Node stop error", it)
-                    ToastEventBus.send(it)
+                    toaster.error(it)
                 }
         }
     }
@@ -277,7 +276,7 @@ class WalletViewModel @Inject constructor(
             .onFailure {
                 Logger.error("Failed to refresh state: ${it.message}", it)
                 if (it is CancellationException || it.isTxSyncTimeout()) return@onFailure
-                ToastEventBus.send(it)
+                toaster.error(it)
             }
     }
 
@@ -301,15 +300,10 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.disconnectPeer(peer)
                 .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = context.getString(R.string.common__success),
-                        description = context.getString(R.string.wallet__peer_disconnected)
-                    )
+                    toaster.info(R.string.common__success, R.string.wallet__peer_disconnected)
                 }
                 .onFailure {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
+                    toaster.error(
                         title = context.getString(R.string.common__error),
                         description = it.message ?: context.getString(R.string.common__error_body)
                     )
@@ -319,8 +313,7 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
         walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
-            ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
+            toaster.error(
                 title = context.getString(R.string.wallet__error_invoice_update),
                 description = error.message ?: context.getString(R.string.common__error_body)
             )
@@ -335,7 +328,7 @@ class WalletViewModel @Inject constructor(
 
     fun wipeWallet() = viewModelScope.launch(bgDispatcher) {
         walletRepo.wipeWallet().onFailure {
-            ToastEventBus.send(it)
+            toaster.error(it)
         }
     }
 
@@ -346,7 +339,7 @@ class WalletViewModel @Inject constructor(
                 backupRepo.scheduleFullBackup()
             }
             .onFailure {
-                ToastEventBus.send(it)
+                toaster.error(it)
             }
     }
 
@@ -358,7 +351,7 @@ class WalletViewModel @Inject constructor(
             mnemonic = mnemonic,
             bip39Passphrase = bip39Passphrase,
         ).onFailure {
-            ToastEventBus.send(it)
+            toaster.error(it)
         }
     }
 
@@ -366,13 +359,13 @@ class WalletViewModel @Inject constructor(
 
     fun addTagToSelected(newTag: String) = viewModelScope.launch {
         walletRepo.addTagToSelected(newTag).onFailure {
-            ToastEventBus.send(it)
+            toaster.error(it)
         }
     }
 
     fun removeTag(tag: String) = viewModelScope.launch {
         walletRepo.removeTag(tag).onFailure {
-            ToastEventBus.send(it)
+            toaster.error(it)
         }
     }
 

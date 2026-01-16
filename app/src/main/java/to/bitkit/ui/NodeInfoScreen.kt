@@ -46,7 +46,7 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.formatToString
 import to.bitkit.ext.uri
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningState
 import to.bitkit.ui.components.BodyM
@@ -92,7 +92,7 @@ fun NodeInfoScreen(
         onDisconnectPeer = { wallet.disconnectPeer(it) },
         onCopy = { text ->
             app.toast(
-                type = Toast.ToastType.SUCCESS,
+                type = ToastType.SUCCESS,
                 title = context.getString(R.string.common__copied),
                 description = text
             )

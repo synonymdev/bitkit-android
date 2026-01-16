@@ -58,7 +58,7 @@ import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -228,7 +228,7 @@ fun ActivityDetailScreen(
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
                             app.toast(
-                                type = Toast.ToastType.SUCCESS,
+                                type = ToastType.SUCCESS,
                                 title = copyToastTitle,
                                 description = text.ellipsisMiddle(40)
                             )
@@ -251,7 +251,7 @@ fun ActivityDetailScreen(
                             item = it,
                             onSuccess = {
                                 app.toast(
-                                    type = Toast.ToastType.SUCCESS,
+                                    type = ToastType.SUCCESS,
                                     title = context.getString(R.string.wallet__boost_success_title),
                                     description = context.getString(R.string.wallet__boost_success_msg),
                                     testTag = "BoostSuccessToast"
@@ -261,7 +261,7 @@ fun ActivityDetailScreen(
                             },
                             onFailure = {
                                 app.toast(
-                                    type = Toast.ToastType.ERROR,
+                                    type = ToastType.ERROR,
                                     title = context.getString(R.string.wallet__boost_error_title),
                                     description = context.getString(R.string.wallet__boost_error_msg),
                                     testTag = "BoostFailureToast"
@@ -270,14 +270,14 @@ fun ActivityDetailScreen(
                             },
                             onMaxFee = {
                                 app.toast(
-                                    type = Toast.ToastType.ERROR,
+                                    type = ToastType.ERROR,
                                     title = context.getString(R.string.wallet__send_fee_error),
                                     description = context.getString(R.string.wallet__send_fee_error_max)
                                 )
                             },
                             onMinFee = {
                                 app.toast(
-                                    type = Toast.ToastType.ERROR,
+                                    type = ToastType.ERROR,
                                     title = context.getString(R.string.wallet__send_fee_error),
                                     description = context.getString(R.string.wallet__send_fee_error_min)
                                 )

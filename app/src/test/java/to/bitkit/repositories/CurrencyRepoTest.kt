@@ -17,6 +17,7 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.services.CurrencyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.Toaster
 import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,6 +34,7 @@ class CurrencyRepoTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
     private val clock = mock<Clock>()
+    private val toaster = mock<Toaster>()
 
     private lateinit var sut: CurrencyRepo
 
@@ -75,6 +77,7 @@ class CurrencyRepoTest : BaseUnitTest() {
             currencyService = currencyService,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
+            toaster = toaster,
             enablePolling = false,
             clock = clock
         )

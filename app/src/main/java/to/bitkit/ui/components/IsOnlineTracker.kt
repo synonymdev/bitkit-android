@@ -8,7 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.viewmodels.AppViewModel
 
@@ -31,7 +31,7 @@ fun IsOnlineTracker(
         when (connectivityState) {
             ConnectivityState.CONNECTED -> {
                 app.toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = context.getString(R.string.other__connection_back_title),
                     description = context.getString(R.string.other__connection_back_msg),
                 )
@@ -39,7 +39,7 @@ fun IsOnlineTracker(
 
             ConnectivityState.DISCONNECTED -> {
                 app.toast(
-                    type = Toast.ToastType.WARNING,
+                    type = ToastType.WARNING,
                     title = context.getString(R.string.other__connection_issue),
                     description = context.getString(R.string.other__connection_issue_explain),
                 )

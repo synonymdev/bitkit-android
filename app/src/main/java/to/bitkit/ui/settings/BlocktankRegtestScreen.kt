@@ -28,7 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
@@ -113,14 +113,14 @@ fun BlocktankRegtestScreen(
                             val txId = viewModel.regtestDeposit(depositAddress, sats)
                             Logger.debug("Deposit successful with txId: $txId")
                             app.toast(
-                                type = Toast.ToastType.SUCCESS,
+                                type = ToastType.SUCCESS,
                                 title = "Success",
                                 description = "Deposit successful. TxID: $txId",
                             )
                         }.onFailure {
                             Logger.error("Deposit failed", it)
                             app.toast(
-                                type = Toast.ToastType.ERROR,
+                                type = ToastType.ERROR,
                                 title = "Failed to deposit",
                                 description = it.message.orEmpty(),
                             )
@@ -159,14 +159,14 @@ fun BlocktankRegtestScreen(
                                 viewModel.regtestMine(count)
                                 Logger.debug("Successfully mined $count blocks")
                                 app.toast(
-                                    type = Toast.ToastType.SUCCESS,
+                                    type = ToastType.SUCCESS,
                                     title = "Success",
                                     description = "Successfully mined $count blocks",
                                 )
                             }.onFailure {
                                 Logger.error("Mining failed", it)
                                 app.toast(
-                                    type = Toast.ToastType.ERROR,
+                                    type = ToastType.ERROR,
                                     title = "Failed to mine",
                                     description = it.message.orEmpty(),
                                 )
@@ -211,14 +211,14 @@ fun BlocktankRegtestScreen(
                             val paymentId = viewModel.regtestPay(paymentInvoice, amount)
                             Logger.debug("Payment successful with ID: $paymentId")
                             app.toast(
-                                type = Toast.ToastType.SUCCESS,
+                                type = ToastType.SUCCESS,
                                 title = "Success",
                                 description = "Payment successful. ID: $paymentId",
                             )
                         }.onFailure {
                             Logger.error("Payment failed", it)
                             app.toast(
-                                type = Toast.ToastType.ERROR,
+                                type = ToastType.ERROR,
                                 title = "Failed to pay invoice from LND",
                                 description = it.message.orEmpty(),
                             )
@@ -278,7 +278,7 @@ fun BlocktankRegtestScreen(
                             )
                             Logger.debug("Channel closed successfully with txId: $closingTxId")
                             app.toast(
-                                type = Toast.ToastType.SUCCESS,
+                                type = ToastType.SUCCESS,
                                 title = "Success",
                                 description = "Channel closed. Closing TxID: $closingTxId"
                             )

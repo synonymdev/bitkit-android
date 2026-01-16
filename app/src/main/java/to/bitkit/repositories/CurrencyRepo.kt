@@ -29,11 +29,10 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.STUB_RATE
-import to.bitkit.models.Toast
 import to.bitkit.models.asBtc
 import to.bitkit.models.formatCurrency
 import to.bitkit.services.CurrencyService
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -53,6 +52,7 @@ class CurrencyRepo @Inject constructor(
     private val cacheStore: CacheStore,
     private val clock: Clock,
     @Named("enablePolling") private val enablePolling: Boolean,
+    private val toaster: Toaster,
 ) : AmountInputHandler {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val _currencyState = MutableStateFlow(CurrencyState())
@@ -92,8 +92,7 @@ class CurrencyRepo @Inject constructor(
                 .distinctUntilChanged()
                 .collect { isStale ->
                     if (isStale) {
-                        ToastEventBus.send(
-                            type = Toast.ToastType.ERROR,
+                        toaster.error(
                             title = "Rates currently unavailable",
                             description = "An error has occurred. Please try again later."
                         )

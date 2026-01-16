@@ -12,8 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.models.Toast
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -21,6 +20,7 @@ import javax.inject.Inject
 class RecoveryMnemonicViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
+    private val toaster: Toaster,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecoveryMnemonicUiState())
@@ -42,11 +42,7 @@ class RecoveryMnemonicViewModel @Inject constructor(
                             isLoading = false,
                         )
                     }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.security__mnemonic_load_error),
-                        description = context.getString(R.string.security__mnemonic_load_error),
-                    )
+                    toaster.error(R.string.security__mnemonic_load_error)
                     return@launch
                 }
 
@@ -66,7 +62,7 @@ class RecoveryMnemonicViewModel @Inject constructor(
                         isLoading = false,
                     )
                 }
-                ToastEventBus.send(e)
+                toaster.error(e)
             }
         }
     }

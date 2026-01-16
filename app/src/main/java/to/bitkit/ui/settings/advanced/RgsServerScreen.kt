@@ -26,7 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
@@ -68,14 +68,14 @@ fun RgsServerScreen(
         uiState.connectionResult?.let { result ->
             if (result.isSuccess) {
                 app.toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = context.getString(R.string.settings__rgs__update_success_title),
                     description = context.getString(R.string.settings__rgs__update_success_description),
                     testTag = "RgsUpdatedToast",
                 )
             } else {
                 app.toast(
-                    type = Toast.ToastType.ERROR,
+                    type = ToastType.ERROR,
                     title = context.getString(R.string.wallet__ldk_start_error_title),
                     description = result.exceptionOrNull()?.message ?: "Unknown error",
                     testTag = "RgsErrorToast",

@@ -32,7 +32,7 @@ import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
@@ -109,7 +109,7 @@ fun SendAmountScreen(
         onClickMax = { maxSats ->
             if (uiState.lnurl == null) {
                 app?.toast(
-                    type = Toast.ToastType.INFO,
+                    type = ToastType.INFO,
                     title = context.getString(R.string.wallet__send_max_spending__title),
                     description = context.getString(R.string.wallet__send_max_spending__description)
                 )

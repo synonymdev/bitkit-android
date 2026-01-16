@@ -59,7 +59,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
@@ -140,7 +140,7 @@ fun SendRecipientScreen(
                 val error = requireNotNull(result.exceptionOrNull())
                 Logger.error("Scan failed", error, context = TAG)
                 app?.toast(
-                    type = Toast.ToastType.ERROR,
+                    type = ToastType.ERROR,
                     title = context.getString(R.string.other__qr_error_header),
                     description = context.getString(R.string.other__qr_error_text),
                 )
@@ -174,7 +174,7 @@ fun SendRecipientScreen(
             }.onFailure {
                 Logger.error("Camera initialization failed", it, context = TAG)
                 app?.toast(
-                    type = Toast.ToastType.ERROR,
+                    type = ToastType.ERROR,
                     title = context.getString(R.string.other__qr_error_header),
                     description = context.getString(R.string.other__camera_init_error)
                         .replace("{message}", it.message.orEmpty())

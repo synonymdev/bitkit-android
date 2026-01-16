@@ -55,7 +55,7 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
@@ -129,7 +129,7 @@ fun ChannelDetailScreen(
         onCopyText = { text ->
             context.setClipboardText(text)
             app.toast(
-                type = Toast.ToastType.SUCCESS,
+                type = ToastType.SUCCESS,
                 title = context.getString(R.string.common__copied),
                 description = text,
             )

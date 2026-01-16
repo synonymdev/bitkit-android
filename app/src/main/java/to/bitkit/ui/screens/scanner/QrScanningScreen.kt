@@ -65,7 +65,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.startActivityAppSettings
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -150,7 +150,7 @@ fun QrScanningScreen(
                 val error = requireNotNull(result.exceptionOrNull())
                 Logger.error("Failed to scan QR code", error)
                 app.toast(
-                    type = Toast.ToastType.ERROR,
+                    type = ToastType.ERROR,
                     title = context.getString(R.string.other__qr_error_header),
                     description = context.getString(R.string.other__qr_error_text),
                 )
@@ -256,7 +256,7 @@ private fun handlePaste(
     val clipboard = context.getClipboardText()?.trim()
     if (clipboard.isNullOrBlank()) {
         app.toast(
-            type = Toast.ToastType.WARNING,
+            type = ToastType.WARNING,
             title = context.getString(R.string.wallet__send_clipboard_empty_title),
             description = context.getString(R.string.wallet__send_clipboard_empty_text),
         )

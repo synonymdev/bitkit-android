@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServerPeer
-import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
@@ -75,7 +75,7 @@ fun ElectrumConfigScreen(
         uiState.connectionResult?.let { result ->
             if (result.isSuccess) {
                 app.toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = context.getString(R.string.settings__es__server_updated_title),
                     description = context.getString(R.string.settings__es__server_updated_message)
                         .replace("{host}", uiState.host)
@@ -84,7 +84,7 @@ fun ElectrumConfigScreen(
                 )
             } else {
                 app.toast(
-                    type = Toast.ToastType.WARNING,
+                    type = ToastType.WARNING,
                     title = context.getString(R.string.settings__es__server_error),
                     description = context.getString(R.string.settings__es__server_error_description),
                     testTag = "ElectrumErrorToast",

@@ -12,16 +12,16 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.ext.of
-import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.Routes
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import javax.inject.Inject
 
 @HiltViewModel
 class LnurlChannelViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
+    private val toaster: Toaster,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LnurlChannelUiState())
@@ -68,10 +68,9 @@ class LnurlChannelViewModel @Inject constructor(
 
             lightningRepo.requestLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
                 .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.other__lnurl_channel_success_title),
-                        description = context.getString(R.string.other__lnurl_channel_success_msg_no_peer),
+                    toaster.success(
+                        R.string.other__lnurl_channel_success_title,
+                        R.string.other__lnurl_channel_success_msg_no_peer,
                     )
                     _uiState.update { it.copy(isConnected = true) }
                 }.onFailure { error ->
@@ -83,8 +82,7 @@ class LnurlChannelViewModel @Inject constructor(
     }
 
     suspend fun errorToast(error: Throwable) {
-        ToastEventBus.send(
-            type = Toast.ToastType.ERROR,
+        toaster.error(
             title = context.getString(R.string.other__lnurl_channel_error),
             description = error.message ?: "Unknown error",
         )

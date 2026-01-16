@@ -42,11 +42,10 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.SettingsBackupV1
-import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.LightningService
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import java.util.concurrent.ConcurrentHashMap
@@ -86,6 +85,7 @@ class BackupRepo @Inject constructor(
     private val lightningService: LightningService,
     private val clock: Clock,
     private val db: AppDb,
+    private val toaster: Toaster,
 ) {
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
 
@@ -373,8 +373,7 @@ class BackupRepo @Inject constructor(
         lastNotificationTime = currentTime
 
         scope.launch {
-            ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
+            toaster.error(
                 title = context.getString(R.string.settings__backup__failed_title),
                 description = context.getString(R.string.settings__backup__failed_message).formatPlural(
                     mapOf("interval" to (BACKUP_CHECK_INTERVAL / MINUTE_IN_MS))

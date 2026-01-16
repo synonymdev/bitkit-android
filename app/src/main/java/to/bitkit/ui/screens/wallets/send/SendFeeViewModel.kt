@@ -12,13 +12,12 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.FeeRate
-import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.components.KEY_DELETE
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.viewmodels.SendUiState
 import javax.inject.Inject
 
@@ -32,6 +31,7 @@ class SendFeeViewModel @Inject constructor(
     private val currencyRepo: CurrencyRepo,
     private val walletRepo: WalletRepo,
     @ApplicationContext private val context: Context,
+    private val toaster: Toaster,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SendFeeUiState())
     val uiState = _uiState.asStateFlow()
@@ -105,20 +105,12 @@ class SendFeeViewModel @Inject constructor(
         // TODO update to use minimum instead of slow when using mempool api
         val minSatsPerVByte = sendUiState.feeRates?.slow ?: 1u
         if (satsPerVByte < minSatsPerVByte) {
-            ToastEventBus.send(
-                type = Toast.ToastType.INFO,
-                title = context.getString(R.string.wallet__min_possible_fee_rate),
-                description = context.getString(R.string.wallet__min_possible_fee_rate_msg)
-            )
+            toaster.info(R.string.wallet__min_possible_fee_rate, R.string.wallet__min_possible_fee_rate_msg)
             return false
         }
 
         if (satsPerVByte > maxSatsPerVByte) {
-            ToastEventBus.send(
-                type = Toast.ToastType.INFO,
-                title = context.getString(R.string.wallet__max_possible_fee_rate),
-                description = context.getString(R.string.wallet__max_possible_fee_rate_msg)
-            )
+            toaster.info(R.string.wallet__max_possible_fee_rate, R.string.wallet__max_possible_fee_rate_msg)
             return false
         }
 

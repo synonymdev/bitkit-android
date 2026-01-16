@@ -1,5 +1,11 @@
 package to.bitkit.models
 
+import androidx.compose.runtime.Stable
+
+@Stable
+enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }
+
+@Stable
 data class Toast(
     val type: ToastType,
     val title: String,
@@ -8,8 +14,6 @@ data class Toast(
     val visibilityTime: Long = VISIBILITY_TIME_DEFAULT,
     val testTag: String? = null,
 ) {
-    enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }
-
     companion object {
         const val VISIBILITY_TIME_DEFAULT = 3000L
     }

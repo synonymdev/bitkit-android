@@ -53,6 +53,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.models.ToastType
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -322,7 +323,7 @@ private fun ToastViewPreview() {
         ) {
             ToastView(
                 toast = Toast(
-                    type = Toast.ToastType.WARNING,
+                    type = ToastType.WARNING,
                     title = "You're still offline",
                     description = "Check your connection to keep using Bitkit.",
                     autoHide = true,
@@ -331,7 +332,7 @@ private fun ToastViewPreview() {
             )
             ToastView(
                 toast = Toast(
-                    type = Toast.ToastType.LIGHTNING,
+                    type = ToastType.LIGHTNING,
                     title = "Instant Payments Ready",
                     description = "You can now pay anyone, anywhere, instantly.",
                     autoHide = true,
@@ -340,7 +341,7 @@ private fun ToastViewPreview() {
             )
             ToastView(
                 toast = Toast(
-                    type = Toast.ToastType.SUCCESS,
+                    type = ToastType.SUCCESS,
                     title = "You're Back Online!",
                     description = "Successfully reconnected to the Internet.",
                     autoHide = true,
@@ -349,7 +350,7 @@ private fun ToastViewPreview() {
             )
             ToastView(
                 toast = Toast(
-                    type = Toast.ToastType.INFO,
+                    type = ToastType.INFO,
                     title = "General Message",
                     description = "Used for neutral content to inform the user.",
                     autoHide = false,
@@ -358,7 +359,7 @@ private fun ToastViewPreview() {
             )
             ToastView(
                 toast = Toast(
-                    type = Toast.ToastType.ERROR,
+                    type = ToastType.ERROR,
                     title = "Error Toast",
                     description = "This is a toast message.",
                     autoHide = true,
@@ -372,9 +373,9 @@ private fun ToastViewPreview() {
 @ReadOnlyComposable
 @Composable
 private fun Toast.tintColor(): Color = when (type) {
-    Toast.ToastType.SUCCESS -> Colors.Green
-    Toast.ToastType.INFO -> Colors.Blue
-    Toast.ToastType.LIGHTNING -> Colors.Purple
-    Toast.ToastType.WARNING -> Colors.Brand
-    Toast.ToastType.ERROR -> Colors.Red
+    ToastType.SUCCESS -> Colors.Green
+    ToastType.INFO -> Colors.Blue
+    ToastType.LIGHTNING -> Colors.Purple
+    ToastType.WARNING -> Colors.Brand
+    ToastType.ERROR -> Colors.Red
 }

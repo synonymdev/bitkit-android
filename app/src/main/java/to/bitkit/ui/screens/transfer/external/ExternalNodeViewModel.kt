@@ -20,7 +20,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.of
 import to.bitkit.ext.watchUntil
-import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.formatToModernDisplay
@@ -28,7 +27,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
-import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -40,6 +39,7 @@ class ExternalNodeViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: to.bitkit.repositories.TransferRepo,
+    private val toaster: Toaster,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
@@ -73,11 +73,7 @@ class ExternalNodeViewModel @Inject constructor(
                 _uiState.update { it.copy(peer = peer) }
                 setEffect(SideEffect.ConnectionSuccess)
             } else {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__error_add_title),
-                    description = context.getString(R.string.lightning__error_add),
-                )
+                toaster.error(R.string.lightning__error_add_title, R.string.lightning__error_add)
             }
         }
     }
@@ -89,10 +85,7 @@ class ExternalNodeViewModel @Inject constructor(
             if (result.isSuccess) {
                 _uiState.update { it.copy(peer = result.getOrNull()) }
             } else {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__error_add_uri),
-                )
+                toaster.error(R.string.lightning__error_add_uri)
             }
         }
     }
@@ -102,8 +95,7 @@ class ExternalNodeViewModel @Inject constructor(
 
         if (sats > maxAmount) {
             viewModelScope.launch {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
+                toaster.error(
                     title = context.getString(R.string.lightning__spending_amount__error_max__title),
                     description = context.getString(R.string.lightning__spending_amount__error_max__description)
                         .replace("{amount}", maxAmount.formatToModernDisplay()),
@@ -132,6 +124,15 @@ class ExternalNodeViewModel @Inject constructor(
     fun onCustomFeeRateChange(feeRate: UInt) {
         _uiState.update { it.copy(customFeeRate = feeRate) }
         updateNetworkFee()
+    }
+
+    suspend fun validateCustomFeeRate(): Boolean {
+        val feeRate = _uiState.value.customFeeRate ?: 0u
+        if (feeRate == 0u) {
+            toaster.info(R.string.wallet__min_possible_fee_rate, R.string.wallet__min_possible_fee_rate_msg)
+            return false
+        }
+        return true
     }
 
     private fun updateNetworkFee() {
@@ -180,8 +181,7 @@ class ExternalNodeViewModel @Inject constructor(
             }.onFailure { e ->
                 val error = e.message.orEmpty()
                 Logger.warn("Error opening channel with peer: '${_uiState.value.peer}': '$error'")
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
+                toaster.error(
                     title = context.getString(R.string.lightning__error_channel_purchase),
                     description = context.getString(R.string.lightning__error_channel_setup_msg)
                         .replace("{raw}", error),
