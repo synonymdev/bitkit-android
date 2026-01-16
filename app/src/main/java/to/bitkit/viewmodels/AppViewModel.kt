@@ -48,7 +48,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlin.time.Duration
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
@@ -125,6 +124,7 @@ import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)

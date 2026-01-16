@@ -6,6 +6,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.CurrencyState
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
@@ -14,7 +15,6 @@ import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-import to.bitkit.ui.shared.toast.Toaster
 
 // Locals
 val LocalBalances = compositionLocalOf { BalanceState() }
