@@ -2,7 +2,7 @@ package to.bitkit.utils
 
 import org.junit.Before
 import org.junit.Test
-import to.bitkit.env.Env.DERIVATION_NAME
+import to.bitkit.env.Env.derivationName
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toBase64
@@ -28,13 +28,13 @@ class CryptoTest {
         val sharedSecret = sut.generateSharedSecret(privateKey, publicKey.toHex())
         assertEquals(33, sharedSecret.size)
 
-        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.toHex(), DERIVATION_NAME)
+        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.toHex(), derivationName)
         assertEquals(32, sharedSecretHash.size)
     }
 
     @Test
     fun `it should decrypt payload it encrypted`() {
-        val derivationName = DERIVATION_NAME
+        val derivationName = derivationName
 
         // Step 1: Client generates a key pair
         val clientKeys = sut.generateKeyPair()
@@ -84,9 +84,12 @@ class CryptoTest {
         val serverPublicKey = "031e9923e689a181a803486b7d8c0d4a5aad360edb70c8bb413a98458d91652213"
         val derivationName = "bitkit-notifications"
 
-        val ciphertext = "l2fInfyw64gO12odo8iipISloQJ45Rc4WjFmpe95brdaAMDq+T/L9ZChcmMCXnR0J6BXd8sSIJe/0bmby8uSZZJuVCzwF76XHfY5oq0Y1/hKzyZTn8nG3dqfiLHnAPy1tZFQfm5ALgjwWnViYJLXoGFpXs7kLMA=".fromBase64()
+        @Suppress("MaxLineLength")
+        val ciphertext = ("l2fInfyw64gO12odo8iipISloQJ45Rc4WjFmpe95brdaAMDq+T/L9ZChcmMCXnR0J6BXd8sSIJe/0bmby8uSZZJuVCzwF76XHfY5oq0Y1/hKzyZTn8nG3dqfiLHnAPy1tZFQfm5ALgjwWnViYJLXoGFpXs7kLMA=").fromBase64()
         val iv = "2b8ed77fd2198e3ed88cfaa794a246e8"
         val tag = "caddd13746d6a6aed16176734964d3a3"
+
+        @Suppress("MaxLineLength")
         val decryptedPayload = """{"source":"blocktank","type":"incomingHtlc","payload":{"secretMessage":"hello"},"createdAt":"2024-09-18T13:33:52.555Z"}"""
 
         // Without derivationName

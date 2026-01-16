@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package to.bitkit.ui.components
 
 import androidx.compose.material3.MaterialTheme

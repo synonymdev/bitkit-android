@@ -4,6 +4,8 @@ import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.env.Env
 
+const val MAX_VALID_PORT = 65535
+
 @Serializable
 data class ElectrumServer(
     val host: String,
@@ -24,8 +26,6 @@ data class ElectrumServer(
     }
 
     companion object {
-        const val MAX_VALID_PORT = 65535
-
         fun parse(url: String): ElectrumServer {
             val url = url.trim()
             require(url.isNotBlank()) { "URL cannot be blank" }
@@ -91,6 +91,7 @@ data class ElectrumServerPeer(
     val protocol: ElectrumProtocol,
 )
 
+@Suppress("MagicNumber")
 fun ElectrumProtocol.getDefaultPort(): Int {
     val network = Env.network
 

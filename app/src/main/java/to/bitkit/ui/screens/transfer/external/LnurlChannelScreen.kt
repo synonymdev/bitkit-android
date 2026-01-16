@@ -173,7 +173,7 @@ private fun InfoRow(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            uiState = LnurlChannelUiState(peer = Peers.staging),
+            uiState = LnurlChannelUiState(peer = Peers.stag),
         )
     }
 }

@@ -42,6 +42,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun BlocktankRegtestScreen(
     navController: NavController,
@@ -50,7 +51,7 @@ fun BlocktankRegtestScreen(
     val coroutineScope = rememberCoroutineScope()
     val wallet = walletViewModel ?: return
     val app = appViewModel ?: return
-    val uiState by wallet.uiState.collectAsStateWithLifecycle()
+    val walletState by wallet.walletState.collectAsStateWithLifecycle()
 
     ScreenColumn {
         AppTopBar(
@@ -65,7 +66,7 @@ fun BlocktankRegtestScreen(
                 .verticalScroll(rememberScrollState())
                 .imePadding()
         ) {
-            var depositAddress by remember { mutableStateOf(uiState.onchainAddress) }
+            var depositAddress by remember { mutableStateOf(walletState.onchainAddress) }
             var depositAmount by remember { mutableStateOf("100000") }
             var mineBlockCount by remember { mutableStateOf("1") }
             var paymentInvoice by remember { mutableStateOf("") }
@@ -107,7 +108,7 @@ fun BlocktankRegtestScreen(
                     coroutineScope.launch {
                         Logger.debug("Initiating regtest deposit with address: $depositAddress, amount: $depositAmount")
                         isDepositing = true
-                        try {
+                        runCatching {
                             val sats = depositAmount.toULongOrNull() ?: error("Invalid deposit amount: $depositAmount")
                             val txId = viewModel.regtestDeposit(depositAddress, sats)
                             Logger.debug("Deposit successful with txId: $txId")
@@ -116,17 +117,17 @@ fun BlocktankRegtestScreen(
                                 title = "Success",
                                 description = "Deposit successful. TxID: $txId",
                             )
-                        } catch (e: Exception) {
-                            Logger.error("Deposit failed", e)
+                        }.onFailure {
+                            Logger.error("Deposit failed", it)
                             app.toast(
                                 type = Toast.ToastType.ERROR,
                                 title = "Failed to deposit",
-                                description = e.message.orEmpty(),
+                                description = it.message.orEmpty(),
                             )
-                        } finally {
-                            isDepositing = false
-                            wallet.refreshState()
                         }
+
+                        isDepositing = false
+                        wallet.refreshState()
                     }
                 },
                 enabled = depositAddress.isNotEmpty() && !isDepositing,
@@ -152,7 +153,7 @@ fun BlocktankRegtestScreen(
                         coroutineScope.launch {
                             Logger.debug("Starting regtest mining with block count: $mineBlockCount")
                             isMining = true
-                            try {
+                            runCatching {
                                 val count =
                                     mineBlockCount.toUIntOrNull() ?: error("Invalid block count: $mineBlockCount")
                                 viewModel.regtestMine(count)
@@ -162,17 +163,16 @@ fun BlocktankRegtestScreen(
                                     title = "Success",
                                     description = "Successfully mined $count blocks",
                                 )
-                            } catch (e: Exception) {
-                                Logger.error("Mining failed", e)
+                            }.onFailure {
+                                Logger.error("Mining failed", it)
                                 app.toast(
                                     type = Toast.ToastType.ERROR,
                                     title = "Failed to mine",
-                                    description = e.message.orEmpty(),
+                                    description = it.message.orEmpty(),
                                 )
-                            } finally {
-                                isMining = false
-                                wallet.refreshState()
                             }
+                            isMining = false
+                            wallet.refreshState()
                         }
                     },
                     enabled = !isMining,
@@ -206,7 +206,7 @@ fun BlocktankRegtestScreen(
                 onClick = {
                     coroutineScope.launch {
                         Logger.debug("Initiating regtest payment with invoice: $paymentInvoice, amount: $paymentAmount")
-                        try {
+                        runCatching {
                             val amount = if (paymentAmount.isEmpty()) null else paymentAmount.toULongOrNull()
                             val paymentId = viewModel.regtestPay(paymentInvoice, amount)
                             Logger.debug("Payment successful with ID: $paymentId")
@@ -215,12 +215,12 @@ fun BlocktankRegtestScreen(
                                 title = "Success",
                                 description = "Payment successful. ID: $paymentId",
                             )
-                        } catch (e: Exception) {
-                            Logger.error("Payment failed", e)
+                        }.onFailure {
+                            Logger.error("Payment failed", it)
                             app.toast(
                                 type = Toast.ToastType.ERROR,
                                 title = "Failed to pay invoice from LND",
-                                description = e.message.orEmpty(),
+                                description = it.message.orEmpty(),
                             )
                         }
                     }
@@ -262,9 +262,12 @@ fun BlocktankRegtestScreen(
                 onClick = {
                     coroutineScope.launch {
                         Logger.debug(
-                            "Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter"
+                            "Initiating channel close with " +
+                                "fundingTxId: '$fundingTxId', " +
+                                "vout: '$vout', " +
+                                "forceCloseAfter: '$forceCloseAfter'."
                         )
-                        try {
+                        runCatching {
                             val voutNum = vout.toUIntOrNull() ?: error("Invalid Vout: $vout")
                             val closeAfter =
                                 forceCloseAfter.toULongOrNull() ?: error("Invalid Force Close After: $forceCloseAfter")
@@ -279,9 +282,9 @@ fun BlocktankRegtestScreen(
                                 title = "Success",
                                 description = "Channel closed. Closing TxID: $closingTxId"
                             )
-                        } catch (e: Exception) {
-                            Logger.error("Channel close failed", e)
-                            app.toast(e)
+                        }.onFailure {
+                            Logger.error("Channel close failed", it)
+                            app.toast(it)
                         }
                     }
                 },

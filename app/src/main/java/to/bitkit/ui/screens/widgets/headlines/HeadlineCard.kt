@@ -46,7 +46,7 @@ fun HeadlineCard(
     time: String,
     headline: String,
     source: String,
-    link: String
+    link: String,
 ) {
     val context = LocalContext.current
 
@@ -131,35 +131,36 @@ fun HeadlineCard(
 private fun Preview() {
     AppThemeSurface {
         Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp)
         ) {
+            @Suppress("SpellCheckingInspection")
             HeadlineCard(
                 time = "21 minutes ago",
-                headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
+                headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooow",
                 source = "bitcoinmagazine.com",
                 link = ""
             )
             HeadlineCard(
                 showWidgetTitle = false,
                 time = "21 minutes ago",
-                headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
+                headline = "How Bitcoin changed El Salvador in more ways a big headline",
                 source = "bitcoinmagazine.com",
                 link = ""
             )
             HeadlineCard(
                 showTime = false,
                 time = "21 minutes ago",
-                headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
+                headline = "How Bitcoin changed El Salvador in more ways a big headline",
                 source = "bitcoinmagazine.com",
                 link = ""
             )
             HeadlineCard(
                 showSource = false,
                 time = "21 minutes ago",
-                headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
+                headline = "How Bitcoin changed El Salvador in more ways a big headline",
                 source = "bitcoinmagazine.com",
                 link = ""
             )
@@ -168,7 +169,7 @@ private fun Preview() {
                 showTime = false,
                 showSource = false,
                 time = "21 minutes ago",
-                headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
+                headline = "How Bitcoin changed El Salvador in more ways a big headline",
                 source = "bitcoinmagazine.com",
                 link = ""
             )

@@ -34,12 +34,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-sealed class SettingsButtonValue {
-    data class BooleanValue(val checked: Boolean) : SettingsButtonValue()
-    data class StringValue(val value: String) : SettingsButtonValue()
-    data object None : SettingsButtonValue()
-}
-
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun SettingsButtonRow(
     title: String,
@@ -156,6 +151,12 @@ fun SettingsButtonRow(
             )
         }
     }
+}
+
+sealed class SettingsButtonValue {
+    data class BooleanValue(val checked: Boolean) : SettingsButtonValue()
+    data class StringValue(val value: String) : SettingsButtonValue()
+    data object None : SettingsButtonValue()
 }
 
 @Preview

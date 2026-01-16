@@ -44,8 +44,8 @@ console-reports:
 output-reports:
   active: true
   exclude:
-  - 'TxtOutputReport'
-  - 'MdOutputReport'
+    - 'TxtOutputReport'
+    - 'MdOutputReport'
   # - 'XmlOutputReport'
   # - 'HtmlOutputReport'
   # - 'SarifOutputReport'
@@ -628,7 +628,43 @@ style:
   MagicNumber:
     active: true
     excludes: [ '**/test/**', '**/androidTest/**', '**/commonTest/**', '**/jvmTest/**', '**/androidUnitTest/**', '**/androidInstrumentedTest/**', '**/jsTest/**', '**/iosTest/**', '**/*.kts' ]
-    ignoreNumbers: [ '-1', '0', '0.25', '0.5', '1', '2', '3', '4', '5', '10', '20', '25', '30', '40', '50', '100', '250', '500', '1000', '2500', '5000', '10000', '25000', '50000', '100000' ]
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '0.25'
+      - '0.5'
+      - '1'
+      - '2'
+      - '3'
+      - '4'
+      - '5'
+      - '8'
+      - '10'
+      - '12'
+      - '20'
+      - '25'
+      - '30'
+      - '32'
+      - '40'
+      - '50'
+      - '64'
+      - '100'
+      - '128'
+      - '250'
+      - '256'
+      - '300'
+      - '500'
+      - '512'
+      - '1000'
+      - '1024'
+      - '2048'
+      - '2500'
+      - '4096'
+      - '5000'
+      - '10000'
+      - '25000'
+      - '50000'
+      - '100000'
     ignoreHashCodeFunction: true
     ignorePropertyDeclaration: true
     ignoreLocalVariableDeclaration: true

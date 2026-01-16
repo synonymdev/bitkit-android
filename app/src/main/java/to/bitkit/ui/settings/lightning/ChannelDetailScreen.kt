@@ -97,8 +97,7 @@ fun ChannelDetailScreen(
     val paidOrders by viewModel.blocktankRepo.blocktankState.collectAsStateWithLifecycle()
 
     val isClosedChannel = uiState.closedChannels.any { it.details.channelId == channel.details.channelId }
-    val txDetails by viewModel.txDetails.collectAsStateWithLifecycle()
-    val walletState by wallet.uiState.collectAsStateWithLifecycle()
+    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
 
     // Fetch transaction details for funding transaction if available
     LaunchedEffect(channel.details.fundingTxo?.txid) {
@@ -140,7 +139,7 @@ fun ChannelDetailScreen(
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
             context.startActivity(intent)
         },
-        onSupport = { order -> contactSupport(order, channel, walletState.nodeId, context) },
+        onSupport = { order -> contactSupport(order, channel, lightningState.nodeId, context) },
         onCloseConnection = { navController.navigate(Routes.CloseConnection) },
     )
 }
@@ -499,6 +498,7 @@ private fun SectionTitle(text: String) {
     VerticalSpacer(8.dp)
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun SectionRow(
     name: String,

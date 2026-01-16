@@ -54,8 +54,8 @@ fun SavingsConfirmScreen(
     val transfer = transferViewModel ?: return
     val wallet = walletViewModel ?: return
 
-    val walletState by wallet.uiState.collectAsStateWithLifecycle()
-    val openChannels = walletState.channels.filterOpen()
+    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val openChannels = lightningState.channels.filterOpen()
 
     val hasMultiple = openChannels.size > 1
 
@@ -85,6 +85,7 @@ fun SavingsConfirmScreen(
     )
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun SavingsConfirmContent(
     amount: ULong,

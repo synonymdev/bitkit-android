@@ -27,7 +27,8 @@ fun LightningBalance.channelId(): String {
 fun LightningBalance.balanceUiText(): String {
     return when (this) {
         is LightningBalance.ClaimableOnChannelClose -> "Claimable on Channel Close"
-        is LightningBalance.ClaimableAwaitingConfirmations -> "Claimable Awaiting Confirmations (Height: $confirmationHeight)"
+        is LightningBalance.ClaimableAwaitingConfirmations ->
+            "Claimable Awaiting Confirmations (Height: $confirmationHeight)"
         is LightningBalance.ContentiousClaimable -> "Contentious Claimable"
         is LightningBalance.MaybeTimeoutClaimableHtlc -> "Maybe Timeout Claimable HTLC"
         is LightningBalance.MaybePreimageClaimableHtlc -> "Maybe Preimage Claimable HTLC"

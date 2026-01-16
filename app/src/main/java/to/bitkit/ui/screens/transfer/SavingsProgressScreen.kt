@@ -44,8 +44,6 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
-enum class SavingsProgressState { PROGRESS, SUCCESS, INTERRUPTED }
-
 @Composable
 fun SavingsProgressScreen(
     app: AppViewModel,
@@ -204,6 +202,8 @@ private fun Content(
         }
     }
 }
+
+enum class SavingsProgressState { PROGRESS, SUCCESS, INTERRUPTED }
 
 @Preview(showSystemUi = true)
 @Composable

@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package to.bitkit.ui
 
 import android.content.Intent
@@ -13,7 +15,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
@@ -207,6 +209,7 @@ fun ContentView(
     transferViewModel: TransferViewModel,
     settingsViewModel: SettingsViewModel,
     backupsViewModel: BackupsViewModel,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -281,7 +284,6 @@ fun ContentView(
 
     val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
     val isRestoringFromRNRemoteBackup by walletViewModel.isRestoringFromRNRemoteBackup.collectAsStateWithLifecycle()
-    var restoreRetryCount by remember { mutableIntStateOf(0) }
 
     // React to nodeLifecycleState changes
     LaunchedEffect(nodeLifecycleState, restoreState, isRestoringFromRNRemoteBackup) {
@@ -307,21 +309,15 @@ fun ContentView(
     }
 
     if (walletIsInitializing) {
-        // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
             WalletRestoreErrorView(
-                retryCount = restoreRetryCount,
-                onRetry = {
-                    restoreRetryCount++
-                    walletViewModel.setInitNodeLifecycleState()
-                    walletViewModel.start()
-                },
+                retryCount = restoreState.retryCount(),
+                hazeState = hazeState,
+                onRetry = walletViewModel::onRestoreRetry,
                 onProceedWithoutRestore = {
-                    walletViewModel.proceedWithoutRestore(
-                        onDone = {
-                            walletIsInitializing = false
-                        }
-                    )
+                    walletViewModel.onProceedWithoutRestore {
+                        walletIsInitializing = false
+                    }
                 },
             )
         } else {
@@ -392,9 +388,9 @@ fun ContentView(
                         }
 
                         is Sheet.Receive -> {
-                            val walletUiState by walletViewModel.uiState.collectAsState()
+                            val walletState by walletViewModel.walletState.collectAsState()
                             ReceiveSheet(
-                                walletState = walletUiState,
+                                walletState = walletState,
                                 navigateToExternalConnection = {
                                     navController.navigate(ExternalConnection())
                                     appViewModel.hideSheet()
@@ -415,6 +411,7 @@ fun ContentView(
                             },
                             onCancel = { appViewModel.hideSheet() },
                         )
+
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
@@ -770,7 +767,7 @@ private fun RootNavHost(
 }
 
 // region destinations
-@Suppress("LongParameterList")
+@Suppress("LongMethod", "LongParameterList")
 private fun NavGraphBuilder.home(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
@@ -780,7 +777,7 @@ private fun NavGraphBuilder.home(
     drawerState: DrawerState,
 ) {
     composable<Routes.Home> {
-        val uiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+        val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
         val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
         val hazeState = rememberHazeState()
 
@@ -796,7 +793,7 @@ private fun NavGraphBuilder.home(
                 .hazeSource(hazeState)
         ) {
             HomeScreen(
-                mainUiState = uiState,
+                isRefreshing = isRefreshing,
                 drawerState = drawerState,
                 rootNavController = navController,
                 walletNavController = navController,
@@ -836,11 +833,11 @@ private fun NavGraphBuilder.home(
         exitTransition = { Transitions.slideOutHorizontally },
     ) {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
-        val uiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+        val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
-            uiState = uiState,
+            channels = lightningState.channels,
             lightningActivities = lightningActivities.orEmpty(),
             onAllActivityButtonClick = { navController.navigateToAllActivity() },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
@@ -880,6 +877,7 @@ private fun NavGraphBuilder.settings(
     composableWithDefaultTransitions<Routes.Settings> {
         SettingsScreen(navController)
     }
+    @Suppress("ForbiddenComment")
     // TODO: display as sheet
     composableWithDefaultTransitions<Routes.QuickPayIntro> {
         QuickPayIntroScreen(
@@ -1371,6 +1369,7 @@ private fun NavGraphBuilder.support(
     }
 }
 
+@Suppress("LongMethod")
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,

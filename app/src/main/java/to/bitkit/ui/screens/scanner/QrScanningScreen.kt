@@ -83,6 +83,8 @@ import java.util.concurrent.Executors
 const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
 const val SCAN_RESULT_KEY = "SCAN_RESULT"
 
+private const val TAG = "QrScanningScreen"
+
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
@@ -374,9 +376,9 @@ private fun processImageFromGallery(
     context: Context,
     uri: Uri,
     onScanSuccess: (String) -> Unit,
-    onError: (Exception) -> Unit,
+    onError: (Throwable) -> Unit,
 ) {
-    try {
+    runCatching {
         val image = InputImage.fromFilePath(context, uri)
         val options = BarcodeScannerOptions.Builder()
             .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
@@ -399,8 +401,8 @@ private fun processImageFromGallery(
                 Logger.error("Failed to scan QR code from gallery", e)
                 onError(e)
             }
-    } catch (e: Exception) {
-        Logger.error("Failed to process image from gallery", e)
-        onError(e)
+    }.onFailure {
+        Logger.error("Failed to process image from gallery", it, context = TAG)
+        onError(it)
     }
 }

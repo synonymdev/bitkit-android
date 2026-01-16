@@ -67,6 +67,7 @@ fun AuthCheckView(
     )
 }
 
+@Suppress("ComplexCondition")
 @Composable
 private fun AuthCheckViewContent(
     isBiometricsEnabled: Boolean,

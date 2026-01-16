@@ -10,36 +10,36 @@ import java.time.format.DateTimeParseException
 import java.util.Locale
 import kotlin.time.ExperimentalTime
 
+private const val TAG = "ArticleModel"
+
 @Serializable
 data class ArticleModel(
     val title: String,
     val timeAgo: String,
     val link: String,
-    val publisher: String,
+    val publisher: String
 )
 
 fun ArticleDTO.toArticleModel() = ArticleModel(
     title = this.title,
     timeAgo = timeAgo(this.publishedDate),
     link = this.link,
-    publisher = this.publisher.title,
+    publisher = this.publisher.title
 )
-
-private const val TAG = "ArticleModel"
 
 @OptIn(ExperimentalTime::class)
 private fun timeAgo(dateString: String): String {
     return runCatching {
         val formatters = listOf(
-            DateTimeFormatter.RFC_1123_DATE_TIME,
-            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
+            DateTimeFormatter.RFC_1123_DATE_TIME, // Handles "EEE, dd MMM yyyy HH:mm:ss zzz" (like GMT)
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH) // Handles "+0000"
         )
 
         var parsedDateTime: OffsetDateTime? = null
         for (formatter in formatters) {
             try {
                 parsedDateTime = OffsetDateTime.parse(dateString, formatter)
-                break
+                break // Successfully parsed, stop trying other formatters
             } catch (_: DateTimeParseException) {
                 // Continue to the next formatter
             }

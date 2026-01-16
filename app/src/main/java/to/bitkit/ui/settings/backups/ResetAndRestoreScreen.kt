@@ -38,13 +38,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 
-object ResetAndRestoreTestTags {
-    const val SCREEN = "restore_screen"
-    const val BACKUP_BUTTON = "restore_backup_button"
-    const val RESET_BUTTON = "restore_reset_button"
-    const val RESET_DIALOG = "restore_reset_button"
-}
-
 @Composable
 fun ResetAndRestoreScreen(
     navController: NavController,
@@ -137,7 +130,14 @@ private fun Content(
     }
 }
 
-@Preview
+object ResetAndRestoreTestTags {
+    const val SCREEN = "restore_screen"
+    const val BACKUP_BUTTON = "restore_backup_button"
+    const val RESET_BUTTON = "restore_reset_button"
+    const val RESET_DIALOG = "restore_reset_button"
+}
+
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -152,9 +152,9 @@ private fun Preview() {
     }
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
-private fun Preview2() {
+private fun PreviewDialog() {
     AppThemeSurface {
         Content(
             showConfirmDialog = true,

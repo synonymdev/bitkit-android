@@ -19,7 +19,8 @@ const val FIAT_GROUPING_SEPARATOR = ','
 const val DECIMAL_SEPARATOR = '.'
 const val CLASSIC_DECIMALS = 8
 const val FIAT_DECIMALS = 2
-const val EUR_CURRENCY = "EUR"
+const val EUR = "EUR"
+const val USD = "USD"
 
 @Serializable
 data class FxRateResponse(

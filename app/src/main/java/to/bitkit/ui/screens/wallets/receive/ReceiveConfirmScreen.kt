@@ -36,26 +36,15 @@ import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
-
-// TODO replace with direct use of the now serializable IcJitEntry
-@Serializable
-data class CjitEntryDetails(
-    val networkFeeSat: Long,
-    val serviceFeeSat: Long,
-    val channelSizeSat: Long,
-    val feeSat: Long,
-    val receiveAmountSats: Long,
-    val invoice: String,
-)
 
 @Composable
 fun ReceiveConfirmScreen(
@@ -107,9 +96,7 @@ fun ReceiveConfirmScreen(
         receiveAmountFormatted = receiveAmountFormatted,
         onLearnMoreClick = onLearnMore,
         isAdditional = isAdditional,
-        onSystemSettingsClick = {
-            NotificationUtils.openNotificationSettings(context)
-        },
+        onSystemSettingsClick = { context.openNotificationSettings() },
         hasNotificationPermission = notificationsGranted,
         onContinueClick = { onContinue(entry.invoice) },
         onBackClick = onBack,
@@ -196,6 +183,17 @@ private fun Content(
         }
     }
 }
+
+// TODO replace with direct use of the now serializable IcJitEntry
+@Serializable
+data class CjitEntryDetails(
+    val networkFeeSat: Long,
+    val serviceFeeSat: Long,
+    val channelSizeSat: Long,
+    val feeSat: Long,
+    val receiveAmountSats: Long,
+    val invoice: String,
+)
 
 @Preview(showSystemUi = true)
 @Composable

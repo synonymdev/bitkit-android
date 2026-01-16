@@ -19,7 +19,8 @@ class VssStoreIdProvider @Inject constructor(
         synchronized(this) {
             cacheMap[walletIndex]?.let { return it }
 
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw ServiceError.MnemonicNotFound()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val storeId = vssDeriveStoreId(

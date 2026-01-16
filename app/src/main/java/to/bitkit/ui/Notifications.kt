@@ -1,6 +1,6 @@
 package to.bitkit.ui
 
-import android.Manifest
+import android.Manifest.permission
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -9,10 +9,14 @@ import android.app.PendingIntent.FLAG_ONE_SHOT
 import android.content.Context
 import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+import android.content.pm.PackageManager
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import to.bitkit.R
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat
@@ -44,7 +48,7 @@ internal fun Context.notificationBuilder(
         extra?.let { putExtras(it) }
     }
     val flags = FLAG_IMMUTABLE or FLAG_ONE_SHOT
-    // TODO: review if needed:
+
     val pendingIntent = PendingIntent.getActivity(this, 0, intent, flags)
 
     return NotificationCompat.Builder(this, channelId)
@@ -66,7 +70,7 @@ internal fun Context.pushNotification(
 
     // Only check permission if running on Android 13+ (SDK 33+)
     val needsPermissionGrant = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-        requiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+        requiresPermission(permission.POST_NOTIFICATIONS)
 
     if (!needsPermissionGrant) {
         val builder = notificationBuilder(extras)
@@ -86,5 +90,21 @@ internal fun Context.pushNotification(
         return ID_NOTIFICATION_SKIPPED
     }
 }
+
+fun Context.openNotificationSettings() {
+    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { startActivity(intent) }
+        .onFailure { Logger.error("Failed to open notification settings", e = it, context = TAG) }
+}
+
+fun Context.areNotificationsEnabled(): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(this, permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    } else {
+        NotificationManagerCompat.from(this).areNotificationsEnabled()
+    }
 
 private const val TAG = "Notifications"

@@ -18,7 +18,7 @@ import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.WatchResult
-import to.bitkit.ext.parse
+import to.bitkit.ext.of
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -84,7 +84,7 @@ class ExternalNodeViewModel @Inject constructor(
 
     fun parseNodeUri(uriString: String) {
         viewModelScope.launch {
-            val result = runCatching { PeerDetails.parse(uriString) }
+            val result = runCatching { PeerDetails.of(uriString) }
 
             if (result.isSuccess) {
                 _uiState.update { it.copy(peer = result.getOrNull()) }
@@ -159,6 +159,7 @@ class ExternalNodeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
+            @Suppress("ForbiddenComment")
             // TODO: pass customFeeRate to ldk-node when supported
             lightningRepo.openChannel(
                 peer = requireNotNull(_uiState.value.peer),

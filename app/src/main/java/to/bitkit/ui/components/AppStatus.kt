@@ -120,6 +120,7 @@ fun rememberHealthState(): HealthState {
     return healthState.app
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun rememberRotationEasing(): Easing {
     val bezierEasing = remember { CubicBezierEasing(0.4f, 0f, 0.2f, 1f) }

@@ -1,5 +1,3 @@
-@file:Suppress("TooManyFunctions")
-
 package to.bitkit.ext
 
 import android.icu.text.DateFormat
@@ -35,6 +33,9 @@ import kotlin.time.Instant as KInstant
 
 @OptIn(ExperimentalTime::class)
 fun nowMillis(clock: Clock = Clock.System): Long = clock.now().toEpochMilliseconds()
+
+@OptIn(ExperimentalTime::class)
+fun Clock.nowMs(): Long = now().toEpochMilliseconds()
 
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
@@ -110,7 +111,6 @@ fun Long.toRelativeTimeString(
 
 fun getDaysInMonth(month: LocalDate): List<LocalDate?> {
     val firstDayOfMonth = LocalDate(month.year, month.month, Constants.FIRST_DAY_OF_MONTH)
-    // FIXME fix month.number
     val daysInMonth = month.month.toJavaMonth().length(isLeapYear(month.year))
 
     // Get the day of week for the first day (1 = Monday, 7 = Sunday)

@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.env.TransactionDefaults
+import to.bitkit.env.Defaults
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
@@ -87,7 +87,7 @@ private fun Content(
 
     fun isDisabled(speed: TransactionSpeed): Boolean {
         val fee = getFee(speed).toULong()
-        return fee + TransactionDefaults.dustLimit > totalBalance
+        return fee + Defaults.dustLimit > totalBalance
     }
 
     ScreenColumn {
