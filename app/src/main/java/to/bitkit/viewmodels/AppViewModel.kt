@@ -729,9 +729,11 @@ class AppViewModel @Inject constructor(
         if (invoice.amountSatoshis > 0uL) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
+                val shortfall = invoice.amountSatoshis - maxSendLightning
                 showAddressValidationError(
                     titleRes = R.string.other__pay_insufficient_spending,
-                    descriptionRes = R.string.other__pay_insufficient_spending_description,
+                    descriptionRes = R.string.other__pay_insufficient_spending_amount_description,
+                    descriptionArgs = mapOf("amount" to shortfall.toString()),
                 )
                 return
             }
@@ -762,9 +764,11 @@ class AppViewModel @Inject constructor(
         }
 
         if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+            val shortfall = invoice.amountSatoshis - maxSendOnchain
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
-                descriptionRes = R.string.other__pay_insufficient_savings_description,
+                descriptionRes = R.string.other__pay_insufficient_savings_amount_description,
+                descriptionArgs = mapOf("amount" to shortfall.toString()),
             )
             return
         }
@@ -775,12 +779,17 @@ class AppViewModel @Inject constructor(
     private fun showAddressValidationError(
         @StringRes titleRes: Int,
         @StringRes descriptionRes: Int,
+        descriptionArgs: Map<String, String> = emptyMap(),
     ) {
         _sendUiState.update { it.copy(isAddressInputValid = false) }
+        var description = context.getString(descriptionRes)
+        descriptionArgs.forEach { (key, value) ->
+            description = description.replace("{$key}", value)
+        }
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(titleRes),
-            description = context.getString(descriptionRes),
+            description = description,
         )
     }
 
@@ -982,7 +991,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
         // Check network mismatch
         val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
@@ -1047,6 +1056,17 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        // Check on-chain balance before proceeding to amount screen
+        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
+        if (maxSendOnchain == 0uL) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+                description = context.getString(R.string.other__pay_insufficient_savings_description),
+            )
+            return
+        }
+
         Logger.info(
             when (invoice.amountSatoshis > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
@@ -1076,10 +1096,13 @@ class AppViewModel @Inject constructor(
         if (quickPayHandled) return
 
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
+            val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
+            val shortfall = invoice.amountSatoshis - maxSendLightning
             toast(
                 type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.wallet__error_insufficient_funds_title),
-                description = context.getString(R.string.wallet__error_insufficient_funds_msg)
+                title = context.getString(R.string.other__pay_insufficient_spending),
+                description = context.getString(R.string.other__pay_insufficient_spending_amount_description)
+                    .replace("{amount}", shortfall.toString()),
             )
             return
         }
