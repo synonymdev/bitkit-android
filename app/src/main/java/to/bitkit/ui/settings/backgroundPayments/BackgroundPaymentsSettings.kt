@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -24,55 +25,51 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsSwitchRow
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.viewmodels.SettingsViewModel
 
 @Composable
 fun BackgroundPaymentsSettings(
-    onBack: () -> Unit,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
+    onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
     val showNotificationDetails by settingsViewModel.showNotificationDetails.collectAsStateWithLifecycle()
 
     RequestNotificationPermissions(
-        onPermissionChange = { granted ->
-            settingsViewModel.setNotificationPreference(granted)
-        },
-        showPermissionDialog = false
+        onPermissionChange = settingsViewModel::setNotificationPreference,
+        showPermissionDialog = false,
     )
 
     Content(
-        onBack = onBack,
-        onSystemSettingsClick = {
-            NotificationUtils.openNotificationSettings(context)
-        },
         hasPermission = notificationsGranted,
         showDetails = showNotificationDetails,
+        onBack = onBack,
+        onSystemSettingsClick = context::openNotificationSettings,
         toggleNotificationDetails = settingsViewModel::toggleNotificationDetails,
     )
 }
 
 @Composable
 private fun Content(
+    hasPermission: Boolean,
+    showDetails: Boolean,
     onBack: () -> Unit,
     onSystemSettingsClick: () -> Unit,
     toggleNotificationDetails: () -> Unit,
-    hasPermission: Boolean,
-    showDetails: Boolean,
 ) {
     Column(
         modifier = Modifier.screen()
     ) {
         AppTopBar(
-            titleText = "Background Payments",
+            titleText = stringResource(R.string.settings__bg__title),
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
@@ -85,15 +82,14 @@ private fun Content(
             VerticalSpacer(16.dp)
 
             SettingsSwitchRow(
-                title = "Get paid when Bitkit is closed",
+                title = stringResource(R.string.settings__bg__switch_title),
                 isChecked = hasPermission,
-                onClick = onSystemSettingsClick
+                onClick = onSystemSettingsClick,
             )
 
             if (hasPermission) {
-                @Suppress("MaxLineLength") // TODO transifex
                 BodyM(
-                    text = "Background payments are enabled. You can receive funds even when the app is closed (if your device is connected to the internet).",
+                    text = stringResource(R.string.settings__bg__enabled),
                     color = Colors.White64,
                     modifier = Modifier.padding(vertical = 16.dp),
                 )
@@ -104,14 +100,14 @@ private fun Content(
                 modifier = Modifier.padding(vertical = 16.dp)
             ) {
                 BodyMB(
-                    text = "Background payments are disabled, because you have denied notifications.",
+                    text = stringResource(R.string.settings__bg__disabled),
                     color = Colors.Red,
                 )
             }
 
             NotificationPreview(
                 enabled = hasPermission,
-                title = "Payment Received",
+                title = stringResource(R.string.notification__received__title),
                 description = "₿ 21 000",
                 showDetails = showDetails,
                 modifier = Modifier.fillMaxWidth()
@@ -120,12 +116,12 @@ private fun Content(
             VerticalSpacer(32.dp)
 
             Text13Up(
-                text = "Privacy",
+                text = stringResource(R.string.settings__bg__privacy_header),
                 color = Colors.White64
             )
 
             SettingsButtonRow(
-                "Include amount in notifications",
+                stringResource(R.string.settings__bg__include_amount),
                 value = SettingsButtonValue.BooleanValue(showDetails),
                 onClick = toggleNotificationDetails,
             )
@@ -133,18 +129,16 @@ private fun Content(
             VerticalSpacer(32.dp)
 
             Text13Up(
-                text = "Notifications",
+                text = stringResource(R.string.settings__bg__notifications_header),
                 color = Colors.White64
             )
 
             VerticalSpacer(16.dp)
 
             SecondaryButton(
-                "Customize in Android Bitkit Settings",
-                icon = {
-                    Image(painter = painterResource(R.drawable.ic_bell), contentDescription = null)
-                },
-                onClick = onSystemSettingsClick
+                stringResource(R.string.settings__bg__customize),
+                icon = { Image(painter = painterResource(R.drawable.ic_bell), contentDescription = null) },
+                onClick = onSystemSettingsClick,
             )
         }
     }
@@ -155,11 +149,11 @@ private fun Content(
 private fun Preview1() {
     AppThemeSurface {
         Content(
+            hasPermission = true,
+            showDetails = true,
             onBack = {},
             onSystemSettingsClick = {},
             toggleNotificationDetails = {},
-            hasPermission = true,
-            showDetails = true,
         )
     }
 }
@@ -169,11 +163,11 @@ private fun Preview1() {
 private fun Preview2() {
     AppThemeSurface {
         Content(
+            hasPermission = false,
+            showDetails = false,
             onBack = {},
             onSystemSettingsClick = {},
             toggleNotificationDetails = {},
-            hasPermission = false,
-            showDetails = false,
         )
     }
 }

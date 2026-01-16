@@ -82,7 +82,7 @@ fun SavingsWalletScreen(
         ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__savings__title),
-                icon = painterResource(R.drawable.ic_btc_circle),
+                icon = R.drawable.ic_btc_circle,
                 onBackClick = onBackClick,
                 actions = {
                     DrawerNavIcon()
@@ -112,7 +112,7 @@ fun SavingsWalletScreen(
                     if (canTransfer) {
                         SecondaryButton(
                             onClick = onTransferToSpendingClick,
-                            text = "Transfer To Spending", // TODO add missing localized text
+                            text = stringResource(R.string.wallet__transfer_to_spending),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),

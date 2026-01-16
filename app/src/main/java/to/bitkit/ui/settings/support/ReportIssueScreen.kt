@@ -29,18 +29,6 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-object ReportIssueTestTags {
-    const val SCREEN = "report_issue_screen"
-    const val TITLE = "report_issue_title"
-    const val DESCRIPTION = "report_issue_description"
-    const val EMAIL_LABEL = "report_issue_email_label"
-    const val EMAIL_INPUT = "report_issue_email_input"
-    const val MESSAGE_LABEL = "report_issue_message_label"
-    const val MESSAGE_INPUT = "report_issue_message_input"
-    const val SEND_BUTTON = "report_issue_send_button"
-    const val CLOSE_BUTTON = "report_issue_close_button"
-}
-
 @Composable
 fun ReportIssueScreen(
     viewModel: ReportIssueViewModel = hiltViewModel(),
@@ -156,6 +144,18 @@ fun ReportIssueContent(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+}
+
+object ReportIssueTestTags {
+    const val SCREEN = "report_issue_screen"
+    const val TITLE = "report_issue_title"
+    const val DESCRIPTION = "report_issue_description"
+    const val EMAIL_LABEL = "report_issue_email_label"
+    const val EMAIL_INPUT = "report_issue_email_input"
+    const val MESSAGE_LABEL = "report_issue_message_label"
+    const val MESSAGE_INPUT = "report_issue_message_input"
+    const val SEND_BUTTON = "report_issue_send_button"
+    const val CLOSE_BUTTON = "report_issue_close_button"
 }
 
 @Preview(showBackground = true)

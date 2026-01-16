@@ -17,19 +17,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.WalletState
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.AmountInputViewModel
-import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SettingsViewModel
 
 @Composable
 fun ReceiveSheet(
     navigateToExternalConnection: () -> Unit,
-    walletState: MainUiState,
+    walletState: WalletState,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -67,6 +67,7 @@ fun ReceiveSheet(
                 ReceiveQrScreen(
                     cjitInvoice = cjitInvoice.value,
                     walletState = walletState,
+                    lightningState = lightningState,
                     onClickReceiveCjit = {
                         if (lightningState.isGeoBlocked) {
                             navController.navigate(ReceiveRoute.GeoBlock)
@@ -130,9 +131,7 @@ fun ReceiveSheet(
                         onContinue = { navController.popBackStack() },
                         onBack = { navController.popBackStack() },
                         hasNotificationPermission = notificationsGranted,
-                        onSwitchClick = {
-                            NotificationUtils.openNotificationSettings(context)
-                        },
+                        onSwitchClick = { context.openNotificationSettings() },
                     )
                 }
             }
@@ -147,9 +146,7 @@ fun ReceiveSheet(
                         isAdditional = true,
                         onBack = { navController.popBackStack() },
                         hasNotificationPermission = notificationsGranted,
-                        onSwitchClick = {
-                            NotificationUtils.openNotificationSettings(context)
-                        },
+                        onSwitchClick = { context.openNotificationSettings() },
                     )
                 }
             }

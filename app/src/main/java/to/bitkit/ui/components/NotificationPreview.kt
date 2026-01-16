@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -50,7 +51,10 @@ fun NotificationPreview(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 BodySSB(text = title, color = Colors.Black)
-                val textDescription = if (showDetails) description else "Open Bitkit to see details" // TODO Transifex
+                val textDescription = when (showDetails) {
+                    true -> description
+                    else -> stringResource(R.string.notification__received__body_hidden)
+                }
                 AnimatedContent(targetState = textDescription) { text ->
                     Footnote(text = text, color = Colors.Gray3)
                 }

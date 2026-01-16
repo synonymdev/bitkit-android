@@ -1,5 +1,3 @@
-@file:Suppress("TooManyFunctions")
-
 package to.bitkit.ext
 
 import android.icu.text.DateFormat
@@ -36,6 +34,9 @@ import kotlin.time.Instant as KInstant
 @OptIn(ExperimentalTime::class)
 fun nowMillis(clock: Clock = Clock.System): Long = clock.now().toEpochMilliseconds()
 
+@OptIn(ExperimentalTime::class)
+fun Clock.nowMs(): Long = now().toEpochMilliseconds()
+
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
 fun Instant.formatted(pattern: String = DatePattern.DATE_TIME): String {
@@ -60,11 +61,11 @@ fun Long.toDateUTC(): String {
     return dateTime.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 }
 
-fun Long.toLocalizedTimestamp(): String {
-    val uLocale = ULocale.forLocale(Locale.US)
-    val formatter = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT, uLocale)
-        ?: return SimpleDateFormat("MMMM d, yyyy 'at' h:mm a", Locale.US).format(Date(this))
-    return formatter.format(Date(this))
+fun Long.toLocalizedTimestamp(locale: Locale = Locale.US): String {
+    val date = Date(this)
+    val formatter = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT, ULocale.forLocale(locale))
+        ?: return SimpleDateFormat("MMMM d, yyyy 'at' h:mm a", locale).format(date)
+    return formatter.format(date)
 }
 
 @Suppress("LongMethod")
@@ -72,6 +73,8 @@ fun Long.toLocalizedTimestamp(): String {
 fun Long.toRelativeTimeString(
     locale: Locale = Locale.getDefault(),
     clock: Clock = Clock.System,
+    style: RelativeDateTimeFormatter.Style = RelativeDateTimeFormatter.Style.LONG,
+    capitalizationContext: DisplayContext = DisplayContext.CAPITALIZATION_FOR_MIDDLE_OF_SENTENCE,
 ): String {
     val now = nowMillis(clock)
     val diffMillis = now - this
@@ -82,9 +85,9 @@ fun Long.toRelativeTimeString(
     val formatter = RelativeDateTimeFormatter.getInstance(
         uLocale,
         numberFormat,
-        RelativeDateTimeFormatter.Style.LONG,
-        DisplayContext.CAPITALIZATION_FOR_MIDDLE_OF_SENTENCE,
-    ) ?: return toLocalizedTimestamp()
+        style,
+        capitalizationContext,
+    ) ?: return toLocalizedTimestamp(locale)
 
     val seconds = diffMillis / Factor.MILLIS_TO_SECONDS
     val minutes = seconds / Factor.SECONDS_TO_MINUTES
@@ -108,7 +111,6 @@ fun Long.toRelativeTimeString(
 
 fun getDaysInMonth(month: LocalDate): List<LocalDate?> {
     val firstDayOfMonth = LocalDate(month.year, month.month, Constants.FIRST_DAY_OF_MONTH)
-    // FIXME fix month.number
     val daysInMonth = month.month.toJavaMonth().length(isLeapYear(month.year))
 
     // Get the day of week for the first day (1 = Monday, 7 = Sunday)

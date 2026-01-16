@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package to.bitkit.ext
 
 import android.app.Activity
@@ -16,10 +14,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import to.bitkit.R
-import to.bitkit.utils.Logger
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import java.io.InputStream
 
 // System Services
@@ -41,24 +35,6 @@ fun Context.requiresPermission(permission: String): Boolean =
 // File System
 fun Context.readAsset(path: String) = assets.open(path).use(InputStream::readBytes)
 
-fun Context.copyAssetToStorage(asset: String, dest: String) {
-    val destFile = File(dest)
-
-    try {
-        this.assets.open(asset).use { inputStream ->
-            FileOutputStream(destFile).use { outputStream ->
-                val buffer = ByteArray(1024)
-                var length: Int
-                while (inputStream.read(buffer).also { length = it } > 0) {
-                    outputStream.write(buffer, 0, length)
-                }
-            }
-        }
-    } catch (e: IOException) {
-        Logger.error("Failed to copy asset file: $asset", e)
-    }
-}
-
 // Clipboard
 fun Context.setClipboardText(text: String, label: String = getString(R.string.app_name)) {
     this.clipboardManager.setPrimaryClip(
@@ -72,12 +48,11 @@ fun Context.getClipboardText(): String? {
 
 // Other
 
-fun Context.findActivity(): Activity? =
-    when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> null
-    }
+fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 fun Context.startActivityAppSettings() {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {

@@ -5,34 +5,25 @@ package to.bitkit.utils
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.NodeException
 
-// TODO add cause as inner exception
-open class AppError(override val message: String? = null) : Exception(message) {
-    companion object {
-        @Suppress("ConstPropertyName")
-        private const val serialVersionUID = 1L
-    }
-
-    constructor(cause: Throwable) : this("${cause::class.simpleName}='${cause.message}'")
-
-    fun readResolve(): Any {
-        // Return a new instance of the class, or handle it if needed
-        return this
-    }
+open class AppError(
+    override val message: String? = null,
+    cause: Throwable? = null,
+) : Exception(message, cause) {
+    constructor(cause: Throwable) : this(cause.message, cause)
 }
 
 sealed class ServiceError(message: String) : AppError(message) {
-    data object NodeNotSetup : ServiceError("Node is not setup")
-    data object NodeNotStarted : ServiceError("Node is not started")
-    data object NodeStartTimeout : ServiceError("Node took too long to start")
-    class LdkNodeSqliteAlreadyExists(path: String) : ServiceError("LDK-node SQLite file already exists at $path")
-    data object LdkToLdkNodeMigration : ServiceError("LDK to LDK-node migration issue")
-    data object MnemonicNotFound : ServiceError("Mnemonic not found")
-    data object NodeStillRunning : ServiceError("Node is still running")
-    data object InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
-    data object CurrencyRateUnavailable : ServiceError("Currency rate unavailable")
-    data object BlocktankInfoUnavailable : ServiceError("Blocktank info not available")
-    data object GeoBlocked : ServiceError("Geo blocked user")
+    class NodeNotSetup : ServiceError("Node is not setup")
+    class NodeNotStarted : ServiceError("Node is not started")
+    class MnemonicNotFound : ServiceError("Mnemonic not found")
+    class NodeStillRunning : ServiceError("Node is still running")
+    class InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
+    class CurrencyRateUnavailable : ServiceError("Currency rate unavailable")
+    class BlocktankInfoUnavailable : ServiceError("Blocktank info not available")
+    class GeoBlocked : ServiceError("Geo blocked user")
 }
+
+class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)
 
 // region ldk
 class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
@@ -129,6 +120,4 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
 }
 // endregion
 
-/** Check if the throwable is a TxSyncTimeout exception. */
-fun Throwable.isTxSyncTimeout(): Boolean =
-    this is NodeException.TxSyncTimeout || cause is NodeException.TxSyncTimeout
+fun Throwable.isTxSyncTimeout(): Boolean = this is NodeException.TxSyncTimeout || cause is NodeException.TxSyncTimeout

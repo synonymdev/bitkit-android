@@ -8,7 +8,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
 import org.lightningdevkit.ldknode.LogRecord
@@ -23,6 +22,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.Date
 import java.util.Locale
+import kotlin.time.measureTime
 import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
 
 private const val APP = "APP"
@@ -34,9 +34,11 @@ enum class LogLevel { PERF, VERBOSE, GOSSIP, TRACE, DEBUG, INFO, WARN, ERROR; }
 
 val Logger = AppLogger()
 
-class AppLogger(
-    private val source: LogSource = LogSource.Bitkit,
-) {
+class AppLogger(private val source: LogSource = LogSource.Bitkit) {
+    companion object {
+        private const val TAG = "Logger"
+    }
+
     private var delegate: LoggerImpl? = null
 
     init {
@@ -49,7 +51,7 @@ class AppLogger(
     }
 
     fun reset() {
-        warn("Wiping entire logs directory...")
+        warn("Wiping entire logs directory…", context = TAG)
         runCatching { Env.logDir.deleteRecursively() }
         delegate = runCatching { createDelegate() }.getOrNull()
     }
@@ -146,7 +148,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val errMsg = e?.let { errLogOf(it) }.orEmpty()
+        val errMsg = e?.let { errorLogOf(it) }.orEmpty()
         val message = formatLog(LogLevel.WARN, "$msg $errMsg", context, path, line)
         if (compact) Log.w(tag, message) else Log.w(tag, message, e)
         saver.save(message)
@@ -159,7 +161,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val errMsg = e?.let { errLogOf(it) }.orEmpty()
+        val errMsg = e?.let { errorLogOf(it) }.orEmpty()
         val message = formatLog(LogLevel.ERROR, "$msg $errMsg", context, path, line)
         if (compact) Log.e(tag, message) else Log.e(tag, message, e)
         saver.save(message)
@@ -355,4 +357,17 @@ inline fun <reified T : Any> jsonLogOf(value: T): String {
     }.toString()
 }
 
-fun errLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"
+fun errorLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"
+
+internal inline fun <T> measured(
+    label: String,
+    context: String,
+    block: () -> T,
+): T {
+    var result: T
+    val elapsed = measureTime {
+        result = block()
+    }
+    Logger.perf("$label took $elapsed", context = context)
+    return result
+}

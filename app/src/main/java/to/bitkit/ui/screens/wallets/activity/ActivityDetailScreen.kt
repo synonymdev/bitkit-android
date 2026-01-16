@@ -57,7 +57,7 @@ import to.bitkit.ext.timestamp
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
-import to.bitkit.models.FeeRate
+import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -436,7 +436,7 @@ private fun ActivityDetailContent(
                         text = when {
                             isTransferToSpending -> stringResource(R.string.wallet__activity_transfer_to_spending)
                             isTransferFromSpending -> stringResource(R.string.wallet__activity_transfer_to_savings)
-                            isSelfSend -> "Sent to myself" // TODO add missing localized text
+                            isSelfSend -> stringResource(R.string.wallet__activity_sent_self)
                             else -> stringResource(R.string.wallet__activity_payment)
                         },
                         color = Colors.White64,
@@ -568,6 +568,7 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                @Suppress("ForbiddenComment")
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_assign),
                     size = ButtonSize.Small,
@@ -739,8 +740,8 @@ private fun StatusSection(
                     var statusTestTag: String? = null
 
                     if (item.v1.isTransfer) {
-                        val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
-                            .removeEstimationSymbol()
+                        val context = LocalContext.current
+                        val duration = context.getFeeShortDescription(item.v1.feeRate, feeRates)
                         statusText = stringResource(R.string.wallet__activity_transfer_pending)
                             .replace("{duration}", duration)
                         statusTestTag = "StatusTransfer"
@@ -953,6 +954,3 @@ private fun isBoostCompleted(
         return activity.boostTxIds.any { boostTxDoesExist[it] == true }
     }
 }
-
-// TODO remove this method after transifex update
-private fun String.removeEstimationSymbol() = this.replace("±", "")

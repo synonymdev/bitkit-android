@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.BalanceState
@@ -43,11 +44,10 @@ import to.bitkit.ui.screens.wallets.activity.utils.previewLightningActivityItems
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.MainUiState
 
 @Composable
 fun SpendingWalletScreen(
-    uiState: MainUiState,
+    channels: List<ChannelDetails>,
     lightningActivities: List<Activity>,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
@@ -61,9 +61,9 @@ fun SpendingWalletScreen(
         val hasActivity = lightningActivities.isNotEmpty()
         mutableStateOf(hasLnFunds && !hasActivity)
     }
-    val canTransfer by remember(balances.totalLightningSats, uiState.channels.size) {
+    val canTransfer by remember(balances.totalLightningSats, channels.size) {
         val hasLnBalance = balances.totalLightningSats > 0uL
-        val hasChannels = uiState.channels.isNotEmpty()
+        val hasChannels = channels.isNotEmpty()
         mutableStateOf(hasLnBalance && hasChannels)
     }
 
@@ -84,7 +84,7 @@ fun SpendingWalletScreen(
         ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__spending__title),
-                icon = painterResource(R.drawable.ic_ln_circle),
+                icon = R.drawable.ic_ln_circle,
                 onBackClick = onBackClick,
                 actions = {
                     DrawerNavIcon()
@@ -114,7 +114,7 @@ fun SpendingWalletScreen(
                     if (canTransfer) {
                         SecondaryButton(
                             onClick = onTransferToSavingsClick,
-                            text = "Transfer To Savings", // TODO add missing localized text
+                            text = stringResource(R.string.wallet__transfer_to_savings),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
@@ -153,9 +153,7 @@ private fun Preview() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                uiState = MainUiState(
-                    channels = listOf(createChannelDetails())
-                ),
+                channels = listOf(createChannelDetails()),
                 lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
@@ -175,9 +173,7 @@ private fun PreviewTransfer() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                uiState = MainUiState(
-                    channels = listOf(createChannelDetails())
-                ),
+                channels = listOf(createChannelDetails()),
                 lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
@@ -200,9 +196,7 @@ private fun PreviewNoActivity() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                uiState = MainUiState(
-                    channels = listOf(createChannelDetails())
-                ),
+                channels = listOf(createChannelDetails()),
                 lightningActivities = emptyList(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
@@ -222,7 +216,7 @@ private fun PreviewEmpty() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                uiState = MainUiState(),
+                channels = emptyList(),
                 lightningActivities = emptyList(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},

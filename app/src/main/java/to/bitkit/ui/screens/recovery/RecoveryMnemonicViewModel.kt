@@ -1,13 +1,16 @@
 package to.bitkit.ui.screens.recovery
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.Toast
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -16,6 +19,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class RecoveryMnemonicViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val keychain: Keychain,
 ) : ViewModel() {
 
@@ -40,8 +44,8 @@ class RecoveryMnemonicViewModel @Inject constructor(
                     }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
-                        title = "Failed to load mnemonic",
-                        description = "Failed to load mnemonic",
+                        title = context.getString(R.string.security__mnemonic_load_error),
+                        description = context.getString(R.string.security__mnemonic_load_error),
                     )
                     return@launch
                 }

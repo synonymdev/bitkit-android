@@ -35,9 +35,9 @@ import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.flow.filterNotNull
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
-import to.bitkit.ext.from
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.host
+import to.bitkit.ext.of
 import to.bitkit.ext.port
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
@@ -220,7 +220,7 @@ private fun ExternalConnectionContent(
                 )
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
-                    onClick = { onContinueClick(PeerDetails.from(nodeId = nodeId, host = host, port = port)) },
+                    onClick = { onContinueClick(PeerDetails.of(nodeId = nodeId, host = host, port = port)) },
                     enabled = isValid,
                     isLoading = uiState.isLoading,
                     modifier = Modifier

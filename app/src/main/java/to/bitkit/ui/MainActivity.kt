@@ -30,6 +30,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
@@ -71,15 +72,15 @@ class MainActivity : FragmentActivity() {
     private val settingsViewModel by viewModels<SettingsViewModel>()
     private val backupsViewModel by viewModels<BackupsViewModel>()
 
+    @Suppress("LongMethod")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         initNotificationChannel()
         initNotificationChannel(
-            // TODO Transifex
             id = CHANNEL_ID_NODE,
-            name = "Lightning node notification",
-            desc = "Channel for LightningNodeService",
+            name = getString(R.string.notification__channel_node__name),
+            desc = getString(R.string.notification__channel_node__body),
             importance = NotificationManager.IMPORTANCE_LOW
         )
         appViewModel.handleDeeplinkIntent(intent)
@@ -136,7 +137,8 @@ class MainActivity : FragmentActivity() {
                         transferViewModel = transferViewModel,
                         settingsViewModel = settingsViewModel,
                         backupsViewModel = backupsViewModel,
-                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f)
+                        hazeState = hazeState,
+                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
                     )
 
                     AnimatedVisibility(

@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
-import to.bitkit.ext.parse
+import to.bitkit.ext.of
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.Routes
@@ -38,7 +38,7 @@ class LnurlChannelViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.fetchLnurlChannelInfo(params.uri)
                 .onSuccess { channelInfo ->
-                    val peer = runCatching { PeerDetails.parse(channelInfo.uri) }.getOrElse {
+                    val peer = runCatching { PeerDetails.of(channelInfo.uri) }.getOrElse {
                         errorToast(it)
                         return@onSuccess
                     }

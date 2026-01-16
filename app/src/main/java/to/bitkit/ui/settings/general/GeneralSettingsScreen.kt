@@ -109,7 +109,7 @@ private fun GeneralSettingsContent(
                 .verticalScroll(rememberScrollState())
         ) {
             SettingsButtonRow(
-                title = "Language",
+                title = stringResource(R.string.settings__language_title),
                 value = SettingsButtonValue.StringValue(selectedLanguage),
                 onClick = onLanguageSettingsClick,
                 modifier = Modifier.testTag("LanguageSettings")
@@ -155,9 +155,11 @@ private fun GeneralSettingsContent(
                 modifier = Modifier.testTag("QuickpaySettings")
             )
             SettingsButtonRow(
-                title = "Background Payments", // TODO Transifex
+                title = stringResource(R.string.settings__bg__title),
                 onClick = onBgPaymentsClick,
-                value = SettingsButtonValue.StringValue(if (notificationsGranted) "On" else "Off"),
+                value = SettingsButtonValue.StringValue(
+                    stringResource(if (notificationsGranted) R.string.settings__bg__on else R.string.settings__bg__off)
+                ),
                 modifier = Modifier.testTag("BackgroundPaymentSettings")
             )
         }

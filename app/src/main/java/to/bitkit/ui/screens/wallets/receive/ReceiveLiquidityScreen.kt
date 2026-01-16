@@ -90,7 +90,11 @@ private fun Content(
     ) {
         SheetTopBar(
             stringResource(
-                if (isAdditional) R.string.wallet__receive_liquidity__nav_title_additional else R.string.wallet__receive_liquidity__nav_title
+                if (isAdditional) {
+                    R.string.wallet__receive_liquidity__nav_title_additional
+                } else {
+                    R.string.wallet__receive_liquidity__nav_title
+                }
             ),
             onBack = onBack
         )
@@ -104,7 +108,11 @@ private fun Content(
         ) {
             BodyM(
                 text = stringResource(
-                    if (isAdditional) R.string.wallet__receive_liquidity__text_additional else R.string.wallet__receive_liquidity__text
+                    if (isAdditional) {
+                        R.string.wallet__receive_liquidity__text_additional
+                    } else {
+                        R.string.wallet__receive_liquidity__text
+                    }
                 ),
                 color = Colors.White64
             )
@@ -113,7 +121,11 @@ private fun Content(
 
             BodyMB(
                 text = stringResource(
-                    if (isAdditional) R.string.wallet__receive_liquidity__label_additional else R.string.wallet__receive_liquidity__label
+                    if (isAdditional) {
+                        R.string.wallet__receive_liquidity__label_additional
+                    } else {
+                        R.string.wallet__receive_liquidity__label
+                    }
                 )
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -131,14 +143,14 @@ private fun Content(
             FillHeight()
 
             BodyM(
-                text = "Enable background setup to safely exit Bitkit while your balance is being configured.",
+                text = stringResource(R.string.wallet__receive_liquidity__bg_setup_desc),
                 color = Colors.White64
             )
 
             VerticalSpacer(15.dp)
 
             SettingsSwitchRow(
-                title = "Set up in background",
+                title = stringResource(R.string.wallet__receive_liquidity__bg_setup_switch),
                 isChecked = hasNotificationPermission,
                 colors = AppSwitchDefaults.colorsPurple,
                 onClick = onSwitchClick,

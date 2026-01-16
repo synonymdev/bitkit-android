@@ -57,6 +57,7 @@ fun BiometricPrompt(
     }
 }
 
+@Suppress("LongParameterList")
 fun verifyBiometric(
     activity: Context,
     title: String,
@@ -93,6 +94,7 @@ fun rememberBiometricAuthSupported(context: Context = LocalContext.current): Boo
     return remember(context) { isBiometricAuthSupported(context) }
 }
 
+@Suppress("TooGenericExceptionCaught", "LongParameterList")
 private fun launchBiometricPrompt(
     activity: Context,
     title: String,

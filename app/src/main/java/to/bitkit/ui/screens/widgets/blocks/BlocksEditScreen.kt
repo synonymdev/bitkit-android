@@ -114,7 +114,7 @@ fun BlocksEditContent(
 
             // Block number toggle
             BlockEditOptionRow(
-                label = "Block",
+                label = stringResource(R.string.widgets__blocks__field__block),
                 value = block.height,
                 isEnabled = blocksPreferences.showBlock,
                 onClick = onClickShowBlock,
@@ -123,7 +123,7 @@ fun BlocksEditContent(
 
             // Time toggle
             BlockEditOptionRow(
-                label = "Time",
+                label = stringResource(R.string.widgets__blocks__field__time),
                 value = block.time,
                 isEnabled = blocksPreferences.showTime,
                 onClick = onClickShowTime,
@@ -132,7 +132,7 @@ fun BlocksEditContent(
 
             // Date toggle
             BlockEditOptionRow(
-                label = "Date",
+                label = stringResource(R.string.widgets__blocks__field__date),
                 value = block.date,
                 isEnabled = blocksPreferences.showDate,
                 onClick = onClickShowDate,
@@ -141,7 +141,7 @@ fun BlocksEditContent(
 
             // Transactions toggle
             BlockEditOptionRow(
-                label = "Transactions",
+                label = stringResource(R.string.widgets__blocks__field__transactions),
                 value = block.transactionCount,
                 isEnabled = blocksPreferences.showTransactions,
                 onClick = onClickShowTransactions,
@@ -150,7 +150,7 @@ fun BlocksEditContent(
 
             // Size toggle
             BlockEditOptionRow(
-                label = "Size",
+                label = stringResource(R.string.widgets__blocks__field__size),
                 value = block.size,
                 isEnabled = blocksPreferences.showSize,
                 onClick = onClickShowSize,
@@ -186,7 +186,9 @@ fun BlocksEditContent(
 
             PrimaryButton(
                 text = stringResource(R.string.common__preview),
-                enabled = blocksPreferences.run { showBlock || showTime || showDate || showTransactions || showSize || showSource },
+                enabled = blocksPreferences.run {
+                    showBlock || showTime || showDate || showTransactions || showSize || showSource
+                },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("WidgetEditPreview"),

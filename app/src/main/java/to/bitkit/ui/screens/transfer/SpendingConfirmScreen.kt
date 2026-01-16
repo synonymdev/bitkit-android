@@ -53,13 +53,13 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.NotificationUtils
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
@@ -99,17 +99,16 @@ fun SpendingConfirmScreen(
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
         onConfirm = onConfirm,
-        onUseDefaultLspBalanceClick = { viewModel.onUseDefaultLspBalanceClick() },
-        onTransferToSpendingConfirm = { order -> viewModel.onTransferToSpendingConfirm(order) },
+        onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
+        onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
         order = order,
         hasNotificationPermission = notificationsGranted,
-        onSwitchClick = {
-            NotificationUtils.openNotificationSettings(context)
-        },
-        isAdvanced = isAdvanced
+        onSwitchClick = { context.openNotificationSettings() },
+        isAdvanced = isAdvanced,
     )
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun Content(
     onBackClick: () -> Unit,
@@ -140,7 +139,7 @@ private fun Content(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 60.dp)
-                        .align(alignment = Alignment.BottomCenter)
+                        .align(Alignment.BottomCenter)
                         .padding(bottom = 76.dp)
                 )
             }
@@ -158,10 +157,7 @@ private fun Content(
                 val lspBalance = order.lspBalanceSat
 
                 VerticalSpacer(32.dp)
-                Display(
-                    text = stringResource(R.string.lightning__transfer__confirm)
-                        .withAccent(accentColor = Colors.Purple)
-                )
+                Display(stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
                 VerticalSpacer(8.dp)
 
                 Row(
@@ -206,7 +202,7 @@ private fun Content(
                 }
 
                 SettingsSwitchRow(
-                    title = "Set up in background",
+                    title = stringResource(R.string.settings__bg__setup),
                     isChecked = hasNotificationPermission,
                     colors = AppSwitchDefaults.colorsPurple,
                     onClick = onSwitchClick,

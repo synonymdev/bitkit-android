@@ -61,8 +61,8 @@ import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.env.Defaults
 import to.bitkit.env.Env
-import to.bitkit.env.TransactionDefaults
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.getClipboardText
@@ -122,7 +122,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@Suppress("LongParameterList")
+@Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @HiltViewModel
 class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
@@ -619,6 +619,7 @@ class AppViewModel @Inject constructor(
 
     // region send
 
+    @Suppress("CyclomaticComplexMethod")
     private fun observeSendEvents() {
         viewModelScope.launch {
             sendEvents.collect {
@@ -920,7 +921,7 @@ class AppViewModel @Inject constructor(
                 }
             }
 
-            SendMethod.ONCHAIN -> amount > TransactionDefaults.dustLimit.toULong()
+            SendMethod.ONCHAIN -> amount > Defaults.dustLimit.toULong()
         }
     }
 
@@ -953,7 +954,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleScan(result: String) = withContext(bgDispatcher) {
         // always reset state on new scan
         resetSendState()
-        resetQuickPayData()
+        resetQuickPay()
 
         @Suppress("ForbiddenComment") // TODO: wrap `decode` from bindings in a `CoreService` method and call that one
         val scan = runCatching { decode(result) }
@@ -981,6 +982,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod")
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
         // Check network mismatch
         val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
@@ -1076,8 +1078,8 @@ class AppViewModel @Inject constructor(
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
             toast(
                 type = Toast.ToastType.ERROR,
-                title = "Insufficient Funds",
-                description = "You do not have enough funds to send this payment."
+                title = context.getString(R.string.wallet__error_insufficient_funds_title),
+                description = context.getString(R.string.wallet__error_insufficient_funds_msg)
             )
             return
         }
@@ -1336,6 +1338,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun handleSanityChecks(amountSats: ULong) {
         if (_sendUiState.value.showSanityWarningDialog != null) return
 
@@ -1404,6 +1407,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod")
     private suspend fun proceedWithPayment() {
         delay(SCREEN_TRANSITION_DELAY_MS) // wait for screen transitions when applicable
 
@@ -1422,7 +1426,7 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                toast(Exception("Error fetching lnurl invoice"))
+                toast(Exception(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
                 hideSheet()
                 return
             }
@@ -1435,7 +1439,7 @@ class AppViewModel @Inject constructor(
                 val validatedAddress = runCatching { validateBitcoinAddress(address) }
                     .getOrElse { e ->
                         Logger.error("Invalid bitcoin send address: '$address'", e, context = TAG)
-                        toast(Exception("Invalid bitcoin send address"))
+                        toast(Exception(context.getString(R.string.wallet__error_invalid_bitcoin_address)))
                         hideSheet()
                         return
                     }
@@ -1459,8 +1463,8 @@ class AppViewModel @Inject constructor(
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
                         toast(
                             type = Toast.ToastType.ERROR,
-                            title = "Error Sending",
-                            description = e.message ?: "Unknown error"
+                            title = context.getString(R.string.wallet__error_sending_title),
+                            description = e.message ?: context.getString(R.string.common__error_body)
                         )
                         hideSheet()
                     }
@@ -1669,7 +1673,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun resetQuickPayData() = _quickPayData.update { null }
+    fun resetQuickPay() = _quickPayData.update { null }
 
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded() {
@@ -1689,13 +1693,11 @@ class AppViewModel @Inject constructor(
                     .mapCatching { satsPerVByte ->
                         lightningRepo.determineUtxosToSpend(
                             sats = currentState.amount,
-                            satsPerVByte = satsPerVByte.toUInt(),
+                            satsPerVByte = satsPerVByte,
                         )
                     }
                     .onSuccess { utxos ->
-                        _sendUiState.update {
-                            it.copy(selectedUtxos = utxos)
-                        }
+                        _sendUiState.update { it.copy(selectedUtxos = utxos) }
                     }
             }
             refreshFeeEstimates()
@@ -1916,7 +1918,11 @@ class AppViewModel @Inject constructor(
     }
 
     fun toast(error: Throwable) {
-        toast(type = Toast.ToastType.ERROR, title = "Error", description = error.message ?: "Unknown error")
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.common__error),
+            description = error.message ?: context.getString(R.string.common__error_body)
+        )
     }
 
     fun toast(toast: Toast) {

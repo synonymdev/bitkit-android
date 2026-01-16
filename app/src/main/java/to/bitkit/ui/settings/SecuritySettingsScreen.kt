@@ -159,7 +159,11 @@ private fun Content(
                 title = stringResource(R.string.settings__security__pin),
                 value = SettingsButtonValue.StringValue(
                     stringResource(
-                        if (isPinEnabled) R.string.settings__security__pin_enabled else R.string.settings__security__pin_disabled
+                        if (isPinEnabled) {
+                            R.string.settings__security__pin_enabled
+                        } else {
+                            R.string.settings__security__pin_disabled
+                        }
                     )
                 ),
                 onClick = onPinClick,

@@ -16,6 +16,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
@@ -34,12 +37,15 @@ fun WalletRestoreErrorView(
     retryCount: Int,
     onRetry: () -> Unit,
     onProceedWithoutRestore: () -> Unit,
+    hazeState: HazeState = rememberHazeState(),
     modifier: Modifier = Modifier,
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
     ScreenColumn(
-        modifier = modifier.padding(horizontal = 32.dp)
+        modifier = modifier
+            .hazeSource(hazeState)
+            .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 

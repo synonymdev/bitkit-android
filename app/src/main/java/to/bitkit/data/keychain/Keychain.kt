@@ -33,12 +33,15 @@ class Keychain @Inject constructor(
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : BaseCoroutineScope(dispatcher) {
     private val keyStore by lazy { AndroidKeyStore(alias = "keychain") }
+
+    @Suppress("MemberNameEqualsClassName")
     private val keychain = context.keychainDataStore
 
     val snapshot get() = runBlocking(this.coroutineContext) { keychain.data.first() }
 
     fun loadString(key: String): String? = load(key)?.decodeToString()
 
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
     fun load(key: String): ByteArray? {
         try {
             return snapshot[key.indexed]?.fromBase64()?.let {
@@ -51,6 +54,7 @@ class Keychain @Inject constructor(
 
     suspend fun saveString(key: String, value: String) = save(key, value.toByteArray())
 
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
     suspend fun save(key: String, value: ByteArray) {
         if (exists(key)) throw KeychainError.FailedToSaveAlreadyExists(key)
 
@@ -64,6 +68,7 @@ class Keychain @Inject constructor(
     }
 
     /** Inserts or replaces a string value associated with a given key in the keychain. */
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
     suspend fun upsertString(key: String, value: String) {
         try {
             val encryptedValue = keyStore.encrypt(value.toByteArray())
@@ -74,6 +79,7 @@ class Keychain @Inject constructor(
         Logger.info("Upsert in keychain: $key")
     }
 
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
     suspend fun delete(key: String) {
         try {
             keychain.edit { it.remove(key.indexed) }

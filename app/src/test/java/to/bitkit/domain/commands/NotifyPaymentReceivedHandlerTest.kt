@@ -39,7 +39,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(context.getString(R.string.notification_received_title)).thenReturn("Payment Received")
+        whenever(context.getString(R.string.notification__received__title)).thenReturn("Payment Received")
         whenever(context.getString(any(), any())).thenReturn("Received amount")
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(showNotificationDetails = true)))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(

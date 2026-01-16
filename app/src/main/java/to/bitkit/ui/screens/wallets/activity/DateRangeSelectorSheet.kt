@@ -255,7 +255,7 @@ private fun Content(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Previous month",
+                        contentDescription = stringResource(R.string.wallet__activity_previous_month),
                         tint = Colors.Brand
                     )
                 }
@@ -268,7 +268,7 @@ private fun Content(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next month",
+                        contentDescription = stringResource(R.string.wallet__activity_next_month),
                         tint = Colors.Brand
                     )
                 }

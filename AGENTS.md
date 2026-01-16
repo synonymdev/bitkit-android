@@ -162,11 +162,12 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS run `./gradlew detekt` after code changes to check for new lint issues and fix accordingly
 - ALWAYS ask clarifying questions to ensure an optimal plan when encountering functional or technical uncertainties in requests
 - ALWAYS when fixing lint or test failures prefer to do the minimal amount of changes to fix the issues
-- USE single-line commit messages under 50 chars; use template format: `feat: add something new`
+- USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
+- ALWAYS run `git status` to check ALL uncommitted changes after completing any code edits, then provide exactly 3 commit message suggestions covering the ENTIRE uncommitted diff
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
-- ALWAYS consider applying YAGNI (You Aren't Gonna Need It) principle for new code
+- ALWAYS consider applying YAGNI (You Ain't Gonna Need It) principle for new code
 - ALWAYS reuse existing constants
 - ALWAYS ensure a method exist before calling it
 - ALWAYS remove unused code after refactors
@@ -175,6 +176,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
+- ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
 - PREFER to use `it` instead of explicit named parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
@@ -182,7 +184,9 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
 - ALWAYS use `remember` for expensive Compose computations
-- ALWAYS add modifiers to the last place in the argument list when calling `@Composable` functions
+- ALWAYS add modifiers to the last place in the argument list when calling composable functions
+- NEVER add parameters with default values BEFORE the `modifier` parameter in composable functions - modifier must be the FIRST optional parameter
+- ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
 - ALWAYS create data classes for state AFTER viewModel class in same file
 - ALWAYS return early where applicable, PREFER guard-like `if` conditions like `if (condition) return`
@@ -195,18 +199,17 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
-- ALWAYS list 3 suggested commit messages after implementation work for the entire set of uncommitted changes
 - NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
-- ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking { }`
+- ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking {}`
 - ALWAYS add business logic to Repository layer via methods returning `Result<T>` and use it in ViewModels
-- ALWAYS use services to wrap RUST code exposed via bindings
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice-versa for downstream
 - ALWAYS add new localizable string string resources in alphabetical order in `strings.xml`
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
-- PREFER to use one-liners with `run { }` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
+- PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
+- PREFER to place `@Suppress()` annotations at the narrowest possible scope
 
 ### Architecture Guidelines
 
@@ -214,3 +217,5 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use `LightningService` to wrap node's RUST APIs and manage the inner lifecycle of the node
 - Use `LightningRepo` to defining the business logic for the node operations, usually delegating to `LightningService`
 - Use `WakeNodeWorker` to manage the handling of remote notifications received via cloud messages
+- Use `*Services` to wrap rust library code exposed via bindings
+- Use CQRS pattern of Command + Handler like it's done in the `NotifyPaymentReceived` + `NotifyPaymentReceivedHandler` setup 

@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -15,7 +16,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsStore
-import to.bitkit.ext.from
+import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -33,6 +34,7 @@ import to.bitkit.viewmodels.WalletViewModel
 class WalletViewModelTest : BaseUnitTest() {
     private lateinit var sut: WalletViewModel
 
+    private val context = mock<Context>()
     private val walletRepo = mock<WalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val settingsStore = mock<SettingsStore>()
@@ -47,11 +49,13 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
+        whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
 
         sut = WalletViewModel(
+            context = context,
             bgDispatcher = testDispatcher,
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
@@ -93,7 +97,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `disconnectPeer should call lightningRepo disconnectPeer`() = test {
-        val testPeer = PeerDetails.from("nodeId", "host", "9735")
+        val testPeer = PeerDetails.of("nodeId", "host", "9735")
         val testError = Exception("Test error")
         whenever(lightningRepo.disconnectPeer(testPeer)).thenReturn(Result.failure(testError))
 
@@ -189,14 +193,14 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `proceedWithoutRestore should exit restore flow`() = test {
+    fun `onProceedWithoutRestore should exit restore flow`() = test {
         val testError = Exception("Test error")
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
         assertEquals(RestoreState.Completed, sut.restoreState.value)
 
-        sut.proceedWithoutRestore(onDone = {})
+        sut.onProceedWithoutRestore(onDone = {})
         advanceUntilIdle()
         assertEquals(RestoreState.Settled, sut.restoreState.value)
     }
@@ -235,6 +239,7 @@ class WalletViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
 
         val testSut = WalletViewModel(
+            context = context,
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
@@ -274,6 +279,7 @@ class WalletViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
 
         val testSut = WalletViewModel(
+            context = context,
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
