@@ -25,6 +25,10 @@ class LogsViewModel @Inject constructor(
     private val application: Application,
     private val logsRepo: LogsRepo,
 ) : AndroidViewModel(application) {
+    companion object {
+        private const val TAG = "LogsViewModel"
+    }
+
     private val _logs = MutableStateFlow<List<LogFile>>(emptyList())
     val logs: StateFlow<List<LogFile>> = _logs.asStateFlow()
 
@@ -46,14 +50,14 @@ class LogsViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _selectedLogContent.update { listOf("Log file not found") }
-                    Logger.error("Failed to load log content", e)
+                    Logger.error("Failed to load log content", e, context = TAG)
                 }
         }
     }
 
     fun prepareLogForSharing(logFile: LogFile, onReady: (Uri) -> Unit) {
         viewModelScope.launch {
-            try {
+            runCatching {
                 withContext(Dispatchers.IO) {
                     val tempDir = application.externalCacheDir?.resolve("logs")?.apply { mkdirs() }
                         ?: error("External cache dir is not available")
@@ -71,8 +75,8 @@ class LogsViewModel @Inject constructor(
                         onReady(contentUri)
                     }
                 }
-            } catch (e: Exception) {
-                Logger.error("Error preparing file for sharing", e)
+            }.onFailure {
+                Logger.error("Error preparing file for sharing", it, context = TAG)
             }
         }
     }

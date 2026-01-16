@@ -23,6 +23,7 @@ import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.typeConverters.StringListConverter
+import to.bitkit.env.Env
 
 @Database(
     entities = [
@@ -53,7 +54,6 @@ abstract class AppDb : RoomDatabase() {
         private fun buildDatabase(context: Context): AppDb {
             return Room.databaseBuilder(context, AppDb::class.java, DB_NAME)
                 .setJournalMode(JournalMode.TRUNCATE)
-                .fallbackToDestructiveMigration() // TODO remove in prod
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
@@ -65,6 +65,9 @@ abstract class AppDb : RoomDatabase() {
                         }
                     }
                 })
+                .apply {
+                    if (Env.isDebug) fallbackToDestructiveMigration(dropAllTables = true)
+                }
                 .build()
         }
     }

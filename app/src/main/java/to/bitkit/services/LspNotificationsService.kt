@@ -7,7 +7,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Env.DERIVATION_NAME
+import to.bitkit.env.Env.derivationName
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
 import to.bitkit.utils.Crypto
@@ -24,12 +24,12 @@ class LspNotificationsService @Inject constructor(
     private val crypto: Crypto,
 ) {
     suspend fun registerDevice(deviceToken: String) = withContext(bgDispatcher) {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
 
         Logger.debug("Registering device for notifications…")
 
         val timestamp = nowTimestamp()
-        val messageToSign = "$DERIVATION_NAME$deviceToken$timestamp"
+        val messageToSign = "$derivationName$deviceToken$timestamp"
 
         val signature = lightningService.sign(messageToSign)
 

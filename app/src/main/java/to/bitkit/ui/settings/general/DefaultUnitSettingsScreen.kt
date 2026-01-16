@@ -16,6 +16,7 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
@@ -31,8 +32,11 @@ import to.bitkit.viewmodels.CurrencyViewModel
 fun DefaultUnitSettingsScreen(
     currencyViewModel: CurrencyViewModel,
     navController: NavController,
+    currencies: CurrencyState = LocalCurrencies.current,
 ) {
-    val (_, _, _, selectedCurrency, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+    val selectedCurrency = currencies.selectedCurrency
+    val displayUnit = currencies.displayUnit
+    val primaryDisplay = currencies.primaryDisplay
 
     DefaultUnitSettingsScreenContent(
         selectedCurrency = selectedCurrency,

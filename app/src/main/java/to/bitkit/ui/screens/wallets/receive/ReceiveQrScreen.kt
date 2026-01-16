@@ -56,6 +56,8 @@ import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.truncate
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.WalletState
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
@@ -77,14 +79,14 @@ import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.MainUiState
 
 @Suppress("CyclomaticComplexMethod")
 @OptIn(FlowPreview::class)
 @Composable
 fun ReceiveQrScreen(
     cjitInvoice: String?,
-    walletState: MainUiState,
+    walletState: WalletState,
+    lightningState: LightningState,
     onClickEditInvoice: () -> Unit,
     onClickReceiveCjit: () -> Unit,
     modifier: Modifier = Modifier,
@@ -93,7 +95,7 @@ fun ReceiveQrScreen(
     SetMaxBrightness()
 
     val haptic = LocalHapticFeedback.current
-    val hasUsableChannels = walletState.channels.any { it.isChannelReady }
+    val hasUsableChannels = lightningState.channels.any { it.isChannelReady }
 
     var showDetails by remember { mutableStateOf(false) }
 
@@ -113,7 +115,7 @@ fun ReceiveQrScreen(
         walletState.bolt11,
         walletState.onchainAddress,
         cjitInvoice,
-        walletState.nodeLifecycleState
+        lightningState.nodeLifecycleState
     ) {
         visibleTabs.associateWith { tab ->
             getInvoiceForTab(
@@ -121,7 +123,7 @@ fun ReceiveQrScreen(
                 bip21 = walletState.bip21,
                 bolt11 = walletState.bolt11,
                 cjitInvoice = cjitInvoice,
-                isNodeRunning = walletState.nodeLifecycleState.isRunning(),
+                isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                 onchainAddress = walletState.onchainAddress
             )
         }
@@ -174,9 +176,9 @@ fun ReceiveQrScreen(
         }
     }
 
-    val showingCjitOnboarding = remember(walletState, cjitInvoice, hasUsableChannels) {
+    val showingCjitOnboarding = remember(lightningState, cjitInvoice, hasUsableChannels) {
         !hasUsableChannels &&
-            walletState.nodeLifecycleState.isRunning() &&
+            lightningState.nodeLifecycleState.isRunning() &&
             cjitInvoice.isNullOrEmpty()
     }
 
@@ -273,7 +275,7 @@ fun ReceiveQrScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            AnimatedVisibility(visible = walletState.nodeLifecycleState.isRunning()) {
+            AnimatedVisibility(visible = lightningState.nodeLifecycleState.isRunning()) {
                 val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
                 PrimaryButton(
                     text = stringResource(
@@ -467,7 +469,7 @@ fun CjitOnBoardingView(modifier: Modifier = Modifier) {
 @Composable
 private fun ReceiveDetailsView(
     tab: ReceiveTab,
-    walletState: MainUiState,
+    walletState: WalletState,
     cjitInvoice: String?,
     onClickEditInvoice: () -> Unit,
     modifier: Modifier = Modifier,
@@ -639,9 +641,11 @@ private fun PreviewSavingsMode() {
         BottomSheetPreview {
             ReceiveQrScreen(
                 cjitInvoice = null,
-                walletState = MainUiState(
-                    nodeLifecycleState = NodeLifecycleState.Running,
+                walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
+                ),
+                lightningState = LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
                     channels = emptyList()
                 ),
                 onClickEditInvoice = {},
@@ -703,15 +707,17 @@ private fun PreviewAutoMode() {
         BottomSheetPreview {
             ReceiveQrScreen(
                 cjitInvoice = null,
-                walletState = MainUiState(
-                    nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel),
+                walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq",
                     bip21 = "bitcoin:bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l?lightning=" +
                         "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq",
+                ),
+                lightningState = LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                    channels = listOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -771,11 +777,13 @@ private fun PreviewSpendingMode() {
         BottomSheetPreview {
             ReceiveQrScreen(
                 cjitInvoice = null,
-                walletState = MainUiState(
-                    nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel),
+                walletState = WalletState(
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
+                ),
+                lightningState = LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                    channels = listOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -793,7 +801,8 @@ private fun PreviewNodeNotReady() {
         BottomSheetPreview {
             ReceiveQrScreen(
                 cjitInvoice = null,
-                walletState = MainUiState(
+                walletState = WalletState(),
+                lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Starting,
                 ),
                 onClickReceiveCjit = {},
@@ -811,7 +820,8 @@ private fun PreviewSmall() {
         BottomSheetPreview {
             ReceiveQrScreen(
                 cjitInvoice = null,
-                walletState = MainUiState(
+                walletState = WalletState(),
+                lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
                 ),
                 onClickEditInvoice = {},
@@ -835,7 +845,7 @@ private fun PreviewDetailsMode() {
         ) {
             ReceiveDetailsView(
                 tab = ReceiveTab.AUTO,
-                walletState = MainUiState(
+                walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
                 ),

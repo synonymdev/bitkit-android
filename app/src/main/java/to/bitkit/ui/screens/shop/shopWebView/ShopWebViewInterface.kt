@@ -26,6 +26,7 @@ class ShopWebViewInterface(
      *
      * @param message JSON string containing the message data
      */
+    @Suppress("NestedBlockDepth")
     @JavascriptInterface
     fun postMessage(message: String) {
         if (message.isBlank()) {
@@ -33,7 +34,7 @@ class ShopWebViewInterface(
             return
         }
 
-        try {
+        runCatching {
             val data = json.decodeFromString<WebViewMessage>(message)
             when (data.event) {
                 "payment_intent" -> {
@@ -51,8 +52,8 @@ class ShopWebViewInterface(
                     Logger.debug("Unknown event type: ${data.event}", context = "WebView")
                 }
             }
-        } catch (e: Exception) {
-            Logger.error("Error parsing message: $message", e)
+        }.onFailure {
+            Logger.error("Error parsing message: $message", it, context = "WebView")
         }
     }
 
@@ -61,6 +62,7 @@ class ShopWebViewInterface(
      *
      * @return true if the interface is initialized and ready
      */
+    @Suppress("FunctionOnlyReturningConstant")
     @JavascriptInterface
     fun isReady(): Boolean {
         return true

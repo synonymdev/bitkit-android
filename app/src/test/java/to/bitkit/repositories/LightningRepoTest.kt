@@ -32,7 +32,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
-import to.bitkit.ext.from
+import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NodeLifecycleState
@@ -206,7 +206,7 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `openChannel should fail when node is not running`() = test {
-        val testPeer = PeerDetails.from("nodeId", "host", "9735")
+        val testPeer = PeerDetails.of("nodeId", "host", "9735")
         val result = sut.openChannel(testPeer, 100000uL)
         assertTrue(result.isFailure)
     }
@@ -214,7 +214,7 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `openChannel should succeed when node is running`() = test {
         startNodeForTesting()
-        val peer = PeerDetails.from("nodeId", "host", "9735")
+        val peer = PeerDetails.of("nodeId", "host", "9735")
         val userChannelId = "testChannelId"
         val channelAmountSats = 100_000uL
         whenever(lightningService.openChannel(peer, channelAmountSats, null, null))
@@ -350,7 +350,7 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `disconnectPeer should fail when node is not running`() = test {
-        val testPeer = PeerDetails.from("nodeId", "host", "9735")
+        val testPeer = PeerDetails.of("nodeId", "host", "9735")
         val result = sut.disconnectPeer(testPeer)
         assertTrue(result.isFailure)
     }
@@ -358,8 +358,8 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `disconnectPeer should succeed when node is running`() = test {
         startNodeForTesting()
-        val testPeer = PeerDetails.from("nodeId", "host", "9735")
-        whenever(lightningService.disconnectPeer(any())).thenReturn(Unit)
+        val testPeer = PeerDetails.of("nodeId", "host", "9735")
+        whenever(lightningService.disconnectPeer(any())).thenReturn(Result.success(Unit))
 
         val result = sut.disconnectPeer(testPeer)
         assertTrue(result.isSuccess)

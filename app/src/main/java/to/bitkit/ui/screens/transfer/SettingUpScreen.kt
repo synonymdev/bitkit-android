@@ -42,6 +42,8 @@ import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
 
+private const val TAG = "SettingUpScreen"
+
 @Composable
 fun SettingUpScreen(
     viewModel: TransferViewModel,
@@ -57,12 +59,12 @@ fun SettingUpScreen(
         if (Env.network == Network.REGTEST) {
             delay(5000)
 
-            try {
-                Logger.debug("Auto-mining a block", context = "SettingUpScreen")
+            runCatching {
+                Logger.debug("Auto-mining a block", context = TAG)
                 regtestMine(1u)
-                Logger.debug("Successfully mined a block", context = "SettingUpScreen")
-            } catch (e: Throwable) {
-                Logger.error("Failed to mine block: $e", context = "SettingUpScreen")
+                Logger.debug("Successfully mined a block", context = TAG)
+            }.onFailure {
+                Logger.error("Failed to mine block", it, context = TAG)
             }
         }
     }

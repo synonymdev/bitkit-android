@@ -1,11 +1,13 @@
 package to.bitkit.ui.sheets
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -16,8 +18,10 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.ext.BoostType
 import to.bitkit.ext.boostType
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
@@ -26,9 +30,11 @@ import javax.inject.Inject
 
 @HiltViewModel
 class BoostTransactionViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
     private val activityRepo: ActivityRepo,
+    private val blocktankRepo: BlocktankRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
@@ -37,7 +43,7 @@ class BoostTransactionViewModel @Inject constructor(
     private val _boostTransactionEffect = MutableSharedFlow<BoostTransactionEffects>(extraBufferCapacity = 1)
     val boostTransactionEffect = _boostTransactionEffect.asSharedFlow()
 
-    private companion object {
+    companion object {
         const val TAG = "BoostTransactionViewModel"
         const val MAX_FEE_PERCENTAGE = 0.5
         const val MAX_FEE_RATE = 100UL
@@ -67,7 +73,7 @@ class BoostTransactionViewModel @Inject constructor(
 
     private fun initializeFeeEstimates() {
         viewModelScope.launch {
-            try {
+            runCatching {
                 val activityContent = activity?.v1 ?: run {
                     handleError("Activity value is null")
                     return@launch
@@ -123,8 +129,8 @@ class BoostTransactionViewModel @Inject constructor(
                         handleError("Failed to get fee estimates: ${error?.message}", error)
                     }
                 }
-            } catch (e: Exception) {
-                handleError("Unexpected error during fee estimation", e)
+            }.onFailure {
+                handleError("Unexpected error during fee estimation", it)
             }
         }
     }
@@ -133,6 +139,8 @@ class BoostTransactionViewModel @Inject constructor(
         val currentFee = activity?.v1?.fee ?: 0u
         val isIncreaseEnabled = totalFee < maxTotalFee && feeRate < MAX_FEE_RATE
         val isDecreaseEnabled = totalFee > currentFee && feeRate > minFeeRate
+        val feeRates = blocktankRepo.blocktankState.value.info?.onchain?.feeRates
+        val estimateTime = context.getFeeShortDescription(feeRate, feeRates)
 
         _uiState.update {
             it.copy(
@@ -141,6 +149,7 @@ class BoostTransactionViewModel @Inject constructor(
                 increaseEnabled = isIncreaseEnabled,
                 decreaseEnabled = isDecreaseEnabled,
                 loading = false,
+                estimateTime = estimateTime,
             )
         }
     }
@@ -167,20 +176,20 @@ class BoostTransactionViewModel @Inject constructor(
         _uiState.update { it.copy(boosting = true) }
 
         viewModelScope.launch {
-            try {
+            runCatching {
                 when (currentActivity.v1.txType) {
                     PaymentType.SENT -> handleRbfBoost(currentActivity)
                     PaymentType.RECEIVED -> handleCpfpBoost(currentActivity)
                 }
-            } catch (e: Exception) {
-                handleError("Unexpected error during boost", e)
+            }.onFailure {
+                handleError("Unexpected error during boost", it)
             }
         }
     }
 
     private suspend fun handleRbfBoost(activity: Activity.Onchain) {
         lightningRepo.bumpFeeByRbf(
-            satsPerVByte = _uiState.value.feeRate.toUInt(),
+            satsPerVByte = _uiState.value.feeRate,
             originalTxId = activity.v1.txId
         ).fold(
             onSuccess = { newTxId ->
@@ -194,7 +203,7 @@ class BoostTransactionViewModel @Inject constructor(
 
     private suspend fun handleCpfpBoost(activity: Activity.Onchain) {
         lightningRepo.accelerateByCpfp(
-            satsPerVByte = _uiState.value.feeRate.toUInt(),
+            satsPerVByte = _uiState.value.feeRate,
             originalTxId = activity.v1.txId,
             destinationAddress = walletRepo.getOnchainAddress(),
         ).fold(
@@ -370,6 +379,6 @@ data class BoostTransactionUiState(
     val increaseEnabled: Boolean = true,
     val boosting: Boolean = false,
     val loading: Boolean = false,
-    val estimateTime: String = "±10-20 minutes", // TODO: Implement dynamic time estimation
+    val estimateTime: String = "",
     val isRbf: Boolean = false,
 )

@@ -37,5 +37,5 @@ class AppUpdaterService @Inject constructor(
 }
 
 sealed class AppUpdaterError(message: String) : AppError(message) {
-    data class InvalidResponse(override val message: String) : AppUpdaterError(message)
+    class InvalidResponse(override val message: String) : AppUpdaterError(message)
 }

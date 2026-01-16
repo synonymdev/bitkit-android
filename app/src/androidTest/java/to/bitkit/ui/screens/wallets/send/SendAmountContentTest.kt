@@ -7,9 +7,6 @@ import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.PrimaryDisplay
-import to.bitkit.repositories.CurrencyState
-import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.previewAmountInputViewModel
@@ -19,22 +16,20 @@ class SendAmountContentTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private val testUiState = SendUiState(
+    private val uiState = SendUiState(
         payMethod = SendMethod.LIGHTNING,
         amount = 100u,
         isUnified = true
     )
 
-    private val testWalletState = MainUiState(
-        nodeLifecycleState = NodeLifecycleState.Running
-    )
+    private val nodeLifecycleState = NodeLifecycleState.Running
 
     @Test
     fun whenScreenLoaded_shouldShowAllComponents() {
         composeTestRule.setContent {
             SendAmountContent(
-                walletUiState = testWalletState,
-                uiState = testUiState,
+                nodeLifecycleState = nodeLifecycleState,
+                uiState = uiState,
                 amountInputViewModel = previewAmountInputViewModel(),
             )
         }
@@ -51,10 +46,8 @@ class SendAmountContentTest {
     fun whenNodeNotRunning_shouldShowSyncView() {
         composeTestRule.setContent {
             SendAmountContent(
-                walletUiState = MainUiState(
-                    nodeLifecycleState = NodeLifecycleState.Initializing
-                ),
-                uiState = testUiState,
+                nodeLifecycleState = NodeLifecycleState.Initializing,
+                uiState = uiState,
                 amountInputViewModel = previewAmountInputViewModel(),
             )
         }
@@ -68,15 +61,14 @@ class SendAmountContentTest {
         var eventTriggered = false
         composeTestRule.setContent {
             SendAmountContent(
-                walletUiState = testWalletState,
-                uiState = testUiState,
+                nodeLifecycleState = nodeLifecycleState,
+                uiState = uiState,
                 amountInputViewModel = previewAmountInputViewModel(),
                 onClickPayMethod = { eventTriggered = true }
             )
         }
 
-        composeTestRule.onNodeWithTag("AssetButton-switch")
-            .performClick()
+        composeTestRule.onNodeWithTag("AssetButton-switch").performClick()
 
         assert(eventTriggered)
     }
@@ -86,8 +78,8 @@ class SendAmountContentTest {
         var eventTriggered = false
         composeTestRule.setContent {
             SendAmountContent(
-                walletUiState = testWalletState,
-                uiState = testUiState,
+                nodeLifecycleState = nodeLifecycleState,
+                uiState = uiState,
                 amountInputViewModel = previewAmountInputViewModel(),
                 onContinue = { eventTriggered = true }
             )
@@ -103,8 +95,8 @@ class SendAmountContentTest {
     fun whenAmountInvalid_continueButtonShouldBeDisabled() {
         composeTestRule.setContent {
             SendAmountContent(
-                walletUiState = testWalletState,
-                uiState = testUiState.copy(amount = 0u),
+                nodeLifecycleState = nodeLifecycleState,
+                uiState = uiState.copy(amount = 0u),
                 amountInputViewModel = previewAmountInputViewModel(),
             )
         }

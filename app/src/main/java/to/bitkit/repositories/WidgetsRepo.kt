@@ -33,6 +33,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Suppress("TooManyFunctions", "LongParameterList")
 @Singleton
 class WidgetsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -60,6 +61,7 @@ class WidgetsRepo @Inject constructor(
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
     )
+
     val refreshStates: StateFlow<Map<WidgetType, Boolean>> = _refreshStates.asStateFlow()
 
     init {

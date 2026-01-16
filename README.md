@@ -17,9 +17,9 @@ This repository contains a **new native Android app** which is **not ready for p
 
 #### 1. Firebase Configuration
 
-Download `google-services.json` from the Firebase Console for each build flavor:
-- **Dev/Testnet**: Place in `app/` (default location)
-- **Mainnet**: Place in `app/src/mainnet/google-services.json`
+Download `google-services.json` from the Firebase Console for each of the following build flavor groups,:
+- dev/tnet/mainnetDebug: Place in `app/google-services.json`
+- mainnetRelease: Place in `app/src/mainnetRelease/google-services.json`
 
 > **Note**: Each flavor requires its own Firebase project configuration. The mainnet flavor will fail to build without its dedicated `google-services.json` file.
 
@@ -43,23 +43,24 @@ See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
 - [vss-rust-client-ffi android bindings](https://github.com/synonymdev/vss-rust-client-ffi/tree/master/bindings/android#installation)
 
-### Related Repositories
+### References
 
-- [bitkit-ios](https://github.com/synonymdev/bitkit-ios) - Native iOS Bitkit app
-- [bitkit-core](https://github.com/synonymdev/bitkit-core) - Shared Core Rust library with FFI bindings
-- [ldk-node](https://github.com/synonymdev/ldk-node) - Fork of ldk-node
-- [vss-server](https://github.com/synonymdev/vss-server) - Versioned Storage Service backend
-- [vss-rust-client-ffi](https://github.com/synonymdev/vss-rust-client-ffi) - FFI bindings for vss-rust-client 
-- [bitkit-e2e-tests](https://github.com/synonymdev/bitkit-e2e-tests) - End-to-end tests (WebdriverIO + Appium)
-- [bitkit-docker](https://github.com/synonymdev/bitkit-docker) - Docker setup for LNURL dev testing and local backend for integrations development
+- For LNURL dev testing see [bitkit-docker](https://github.com/synonymdev/bitkit-docker)
 
 ### Lint
 
 This project uses detekt with default ktlint and compose-rules for android code linting.
 
-Recommended Android Studio plugins:
-- EditorConfig
-- Detekt
+### IDE Plugins
+The following IDE plugins are recommended for development with Android Studio or IntelliJ IDEA:
+- [Compose Color Preview](https://plugins.jetbrains.com/plugin/21298-compose-color-preview)
+- [Compose Stability Analyzer](https://plugins.jetbrains.com/plugin/28767-compose-stability-analyzer)
+- [detekt](https://plugins.jetbrains.com/plugin/10761-detekt)
+  <details>
+  <summary>See screenshot on how to setup the Detekt plugin after installation.</summary>
+  
+  ![Detekt plugin setup][img_detekt]
+  </details>
 
 **Commands** 
 ```sh
@@ -112,16 +113,31 @@ The build config supports building 3 different apps for the 3 bitcoin networks (
 - `mainnet` flavour = mainnet
 - `tnet` flavour = testnet
 
-### Build for Mainnet
+### Build for Internal Testing
 
-To build the mainnet flavor:
+**Prerequisites**  
+Setup the signing config:
+- Add the keystore file to root dir (i.e. `internal.keystore`)
+- Setup `keystore.properties` file in root dir (`cp keystore.properties.template keystore.properties`)
 
+**Routine**
+
+Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
-./gradlew assembleMainnetDebug   # debug build
-./gradlew assembleMainnetRelease # release build (requires signing config)
+./gradlew assembleDevRelease
+# ./gradlew assembleRelease # for all flavors
 ```
 
-> **Important**: Ensure `app/src/mainnet/google-services.json` exists before building. See [Firebase Configuration](#1-firebase-configuration).
+APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet').
+Example for dev: `app/build/outputs/apk/dev/release`
+
+### Build for Release
+
+To build the mainnet flavor for release run:
+
+```sh
+./gradlew assembleMainnetRelease
+```
 
 ### Build for E2E Testing
 
@@ -151,24 +167,6 @@ By default, geoblocking checks via API are enabled. To disable at build time, us
 ```sh
 GEO=false E2E=true ./gradlew assembleDevRelease
 ```
-
-### Build for Release
-
-**Prerequisites**  
-Setup the signing config:
-- Add the keystore file to root dir (i.e. `release.keystore`)
-- Setup `keystore.properties` file in root dir (`cp keystore.properties.template keystore.properties`)
-
-**Routine**
-
-Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
-```sh
-./gradlew assembleDevRelease
-# ./gradlew assembleRelease # for all flavors
-```
-
-APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet').
-Example for dev: `app/build/outputs/apk/dev/release`
 
 ## Contributing
 
@@ -223,3 +221,5 @@ Destructive operations like `rm -rf`, `git commit`, and `git push` still require
 
 This project is licensed under the MIT License.
 See the [LICENSE](./LICENSE) file for more details.
+
+[img_detekt]: .github/img/detekt.png

@@ -48,6 +48,7 @@ import to.bitkit.ext.uri
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.repositories.LightningState
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.ChannelStatusUi
@@ -66,7 +67,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.MainUiState
 import kotlin.time.Clock.System.now
 import kotlin.time.ExperimentalTime
 
@@ -79,14 +79,14 @@ fun NodeInfoScreen(
     val settings = settingsViewModel ?: return
     val context = LocalContext.current
 
-    val uiState by wallet.uiState.collectAsStateWithLifecycle()
+    val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
 
     Content(
-        uiState = uiState,
+        lightningState = lightningState,
+        isRefreshing = isRefreshing,
         isDevModeEnabled = isDevModeEnabled,
-        balanceDetails = lightningState.balances,
         onBack = { navController.popBackStack() },
         onRefresh = { wallet.onPullToRefresh() },
         onDisconnectPeer = { wallet.disconnectPeer(it) },
@@ -103,9 +103,9 @@ fun NodeInfoScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Content(
-    uiState: MainUiState,
+    lightningState: LightningState,
+    isRefreshing: Boolean = false,
     isDevModeEnabled: Boolean,
-    balanceDetails: BalanceDetails? = null,
     onBack: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onDisconnectPeer: (PeerDetails) -> Unit = {},
@@ -118,7 +118,7 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
         PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
+            isRefreshing = isRefreshing,
             onRefresh = onRefresh,
         ) {
             Column(
@@ -127,17 +127,17 @@ private fun Content(
                     .verticalScroll(rememberScrollState())
             ) {
                 NodeIdSection(
-                    nodeId = uiState.nodeId,
+                    nodeId = lightningState.nodeId,
                     onCopy = onCopy,
                 )
 
                 if (isDevModeEnabled) {
                     NodeStateSection(
-                        nodeLifecycleState = uiState.nodeLifecycleState,
-                        nodeStatus = uiState.nodeStatus,
+                        nodeLifecycleState = lightningState.nodeLifecycleState,
+                        nodeStatus = lightningState.nodeStatus,
                     )
 
-                    balanceDetails?.let { details ->
+                    lightningState.balances?.let { details ->
                         WalletBalancesSection(balanceDetails = details)
 
                         if (details.lightningBalances.isNotEmpty()) {
@@ -145,16 +145,16 @@ private fun Content(
                         }
                     }
 
-                    if (uiState.channels.isNotEmpty()) {
+                    if (lightningState.channels.isNotEmpty()) {
                         ChannelsSection(
-                            channels = uiState.channels,
+                            channels = lightningState.channels,
                             onCopy = onCopy,
                         )
                     }
 
-                    if (uiState.peers.isNotEmpty()) {
+                    if (lightningState.peers.isNotEmpty()) {
                         PeersSection(
-                            peers = uiState.peers,
+                            peers = lightningState.peers,
                             onDisconnectPeer = onDisconnectPeer,
                             onCopy = onCopy,
                         )
@@ -458,7 +458,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             isDevModeEnabled = false,
-            uiState = MainUiState(
+            lightningState = LightningState(
                 nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
             ),
         )
@@ -473,7 +473,7 @@ private fun PreviewDevMode() {
         val syncTime = now().epochSeconds.toULong()
         Content(
             isDevModeEnabled = true,
-            uiState = MainUiState(
+            lightningState = LightningState(
                 nodeLifecycleState = NodeLifecycleState.Running,
                 nodeStatus = NodeStatus(
                     isRunning = true,
@@ -490,7 +490,7 @@ private fun PreviewDevMode() {
                     latestPathfindingScoresSyncTimestamp = null,
                 ),
                 nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                peers = listOf(Peers.staging),
+                peers = listOf(Peers.stag),
                 channels = listOf(
                     createChannelDetails().copy(
                         channelId = "abc123def456789012345678901234567890123456789012345678901234567890",
@@ -520,40 +520,40 @@ private fun PreviewDevMode() {
                         inboundHtlcMaximumMsat = 200000000UL,
                     ),
                 ),
-            ),
-            balanceDetails = BalanceDetails(
-                totalOnchainBalanceSats = 1000000UL,
-                spendableOnchainBalanceSats = 900000UL,
-                totalAnchorChannelsReserveSats = 50000UL,
-                totalLightningBalanceSats = 500000UL,
-                lightningBalances = listOf(
-                    LightningBalance.ClaimableOnChannelClose(
-                        channelId = "abc123def456789012345678901234567890123456789012345678901234567890",
-                        counterpartyNodeId = "0248a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                        amountSatoshis = 250000UL,
-                        transactionFeeSatoshis = 1000UL,
-                        outboundPaymentHtlcRoundedMsat = 0UL,
-                        outboundForwardedHtlcRoundedMsat = 0UL,
-                        inboundClaimingHtlcRoundedMsat = 0UL,
-                        inboundHtlcRoundedMsat = 0UL,
+                balances = BalanceDetails(
+                    totalOnchainBalanceSats = 1000000UL,
+                    spendableOnchainBalanceSats = 900000UL,
+                    totalAnchorChannelsReserveSats = 50000UL,
+                    totalLightningBalanceSats = 500000UL,
+                    lightningBalances = listOf(
+                        LightningBalance.ClaimableOnChannelClose(
+                            channelId = "abc123def456789012345678901234567890123456789012345678901234567890",
+                            counterpartyNodeId = "0248a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+                            amountSatoshis = 250000UL,
+                            transactionFeeSatoshis = 1000UL,
+                            outboundPaymentHtlcRoundedMsat = 0UL,
+                            outboundForwardedHtlcRoundedMsat = 0UL,
+                            inboundClaimingHtlcRoundedMsat = 0UL,
+                            inboundHtlcRoundedMsat = 0UL,
+                        ),
+                        LightningBalance.ClaimableAwaitingConfirmations(
+                            channelId = "def456789012345678901234567890123456789012345678901234567890abc123",
+                            counterpartyNodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+                            amountSatoshis = 150000UL,
+                            confirmationHeight = 850005U,
+                            source = BalanceSource.COUNTERPARTY_FORCE_CLOSED,
+                        ),
+                        LightningBalance.MaybeTimeoutClaimableHtlc(
+                            channelId = "789012345678901234567890123456789012345678901234567890abc123def456",
+                            counterpartyNodeId = "0448a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+                            amountSatoshis = 100000UL,
+                            claimableHeight = 850010U,
+                            paymentHash = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                            outboundPayment = true,
+                        ),
                     ),
-                    LightningBalance.ClaimableAwaitingConfirmations(
-                        channelId = "def456789012345678901234567890123456789012345678901234567890abc123",
-                        counterpartyNodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                        amountSatoshis = 150000UL,
-                        confirmationHeight = 850005U,
-                        source = BalanceSource.COUNTERPARTY_FORCE_CLOSED,
-                    ),
-                    LightningBalance.MaybeTimeoutClaimableHtlc(
-                        channelId = "789012345678901234567890123456789012345678901234567890abc123def456",
-                        counterpartyNodeId = "0448a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                        amountSatoshis = 100000UL,
-                        claimableHeight = 850010U,
-                        paymentHash = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-                        outboundPayment = true,
-                    ),
+                    pendingBalancesFromChannelClosures = listOf(),
                 ),
-                pendingBalancesFromChannelClosures = listOf(),
             ),
         )
     }

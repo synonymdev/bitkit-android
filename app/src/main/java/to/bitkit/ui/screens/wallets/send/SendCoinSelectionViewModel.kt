@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.TransactionDefaults
+import to.bitkit.env.Defaults
 import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
@@ -26,6 +26,9 @@ class SendCoinSelectionViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "SendCoinSelectionViewModel"
+    }
 
     private val _uiState = MutableStateFlow(CoinSelectionUiState())
     val uiState = _uiState.asStateFlow()
@@ -39,34 +42,32 @@ class SendCoinSelectionViewModel @Inject constructor(
         this.onchainActivities = onchainActivities
     }
 
-    fun loadUtxos(requiredAmount: ULong, address: String) {
-        viewModelScope.launch {
-            try {
-                val sortedUtxos = lightningRepo.listSpendableOutputs().getOrThrow()
-                    .sortedByDescending { it.valueSats }
+    fun loadUtxos(requiredAmount: ULong, address: String) = viewModelScope.launch {
+        runCatching {
+            val sortedUtxos = lightningRepo.listSpendableOutputs().getOrThrow()
+                .sortedByDescending { it.valueSats }
 
-                val totalRequired = calculateTotalRequired(
-                    address = address,
-                    amountSats = requiredAmount,
-                    utxosToSpend = sortedUtxos,
+            val totalRequired = calculateTotalRequired(
+                address = address,
+                amountSats = requiredAmount,
+                utxosToSpend = sortedUtxos,
+            )
+
+            val totalSelected = sortedUtxos.sumOf { it.valueSats }
+
+            _uiState.update { state ->
+                state.copy(
+                    availableUtxos = sortedUtxos,
+                    selectedUtxos = sortedUtxos,
+                    autoSelectCoinsOn = true,
+                    totalRequiredSat = totalRequired,
+                    totalSelectedSat = totalSelected,
+                    isSelectionValid = validateCoinSelection(totalSelected, totalRequired),
                 )
-
-                val totalSelected = sortedUtxos.sumOf { it.valueSats }
-
-                _uiState.update { state ->
-                    state.copy(
-                        availableUtxos = sortedUtxos,
-                        selectedUtxos = sortedUtxos,
-                        autoSelectCoinsOn = true,
-                        totalRequiredSat = totalRequired,
-                        totalSelectedSat = totalSelected,
-                        isSelectionValid = validateCoinSelection(totalSelected, totalRequired),
-                    )
-                }
-            } catch (e: Throwable) {
-                Logger.error("Failed to load UTXOs for coin selection", e)
-                ToastEventBus.send(Exception("Failed to load UTXOs: ${e.message}"))
             }
+        }.onFailure {
+            Logger.error("Failed to load UTXOs for coin selection", it, context = TAG)
+            ToastEventBus.send(Exception("Failed to load UTXOs: ${it.message}"))
         }
     }
 
@@ -84,8 +85,8 @@ class SendCoinSelectionViewModel @Inject constructor(
                             _tagsByTxId.update { currentMap -> currentMap + (txId to tags) }
                         }
                     }
-                    .onFailure { e ->
-                        Logger.error("Failed to load tags for utxo $txId", e)
+                    .onFailure {
+                        Logger.error("Failed to load tags for utxo $txId", it, context = TAG)
                     }
             }
         }
@@ -133,8 +134,8 @@ class SendCoinSelectionViewModel @Inject constructor(
     }
 
     private fun validateCoinSelection(totalSelectedSat: ULong, totalRequiredSat: ULong): Boolean {
-        return totalSelectedSat > TransactionDefaults.dustLimit &&
-            totalRequiredSat > TransactionDefaults.dustLimit &&
+        return totalSelectedSat > Defaults.dustLimit &&
+            totalRequiredSat > Defaults.dustLimit &&
             totalSelectedSat >= totalRequiredSat
     }
 

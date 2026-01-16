@@ -484,6 +484,7 @@
     <string name="other__scan_err_decoding">Decoding Error</string>
     <string name="other__scan_err_interpret_title">Unable To Interpret Provided Data</string>
     <string name="other__scan_err_not_payable_msg">This QR code does not appear to contain payment data.</string>
+    <string name="other__share_qr">Share QR Code Via</string>
     <string name="other__shop__discover__esims__description">Go borderless</string>
     <string name="other__shop__discover__esims__title">ESims</string>
     <string name="other__shop__discover__gift_cards__description">Shop with Bitcoin</string>

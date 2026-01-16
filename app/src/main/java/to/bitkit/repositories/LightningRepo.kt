@@ -63,7 +63,6 @@ import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import to.bitkit.utils.errLogOf
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -74,7 +73,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
 class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
@@ -118,7 +117,7 @@ class LightningRepo @Inject constructor(
         waitTimeout: Duration = 1.minutes,
         operation: suspend () -> Result<T>,
     ): Result<T> = withContext(bgDispatcher) {
-        Logger.verbose("Operation called: $operationName", context = TAG)
+        Logger.verbose("Operation called: '$operationName'", context = TAG)
 
         val nodeLifecycleState = _lightningState.value.nodeLifecycleState
         if (nodeLifecycleState.isRunning()) {
@@ -128,14 +127,12 @@ class LightningRepo @Inject constructor(
         // If node is not in a state that can become running, fail fast
         if (!nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                Exception("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
+                AppError("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
             )
         }
 
         val nodeRunning = withTimeoutOrNull(waitTimeout) {
-            if (nodeLifecycleState.isRunning()) {
-                return@withTimeoutOrNull true
-            }
+            if (nodeLifecycleState.isRunning()) return@withTimeoutOrNull true
 
             // Otherwise, wait for it to transition to running state
             Logger.verbose("Waiting for node to run before executing '$operationName'", context = TAG)
@@ -144,7 +141,7 @@ class LightningRepo @Inject constructor(
             true
         } ?: false
 
-        if (!nodeRunning) return@withContext Result.failure(NodeRunTimeoutException(operationName))
+        if (!nodeRunning) return@withContext Result.failure(NodeRunTimeoutError(operationName))
 
         return@withContext executeOperation(operationName, operation)
     }
@@ -152,16 +149,13 @@ class LightningRepo @Inject constructor(
     private suspend fun <T> executeOperation(
         operationName: String,
         operation: suspend () -> Result<T>,
-    ): Result<T> {
-        return try {
-            operation()
-        } catch (e: CancellationException) {
-            // Cancellation is expected during pull-to-refresh, rethrow per Kotlin best practices
-            throw e
-        } catch (e: Throwable) {
-            Logger.error("Error executing '$operationName'", e, context = TAG)
-            Result.failure(e)
-        }
+    ): Result<T> = runCatching {
+        operation().getOrThrow()
+    }.onFailure {
+        // Cancellation is expected during pull-to-refresh, rethrow per Kotlin best practices
+        if (it is CancellationException) throw it
+
+        Logger.error("Error executing '$operationName'", it, context = TAG)
     }
 
     private suspend fun setup(
@@ -170,24 +164,28 @@ class LightningRepo @Inject constructor(
         customRgsServerUrl: String? = null,
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
-        return@withContext try {
-            val trustedPeers = getTrustedPeersFromBlocktank()
-            lightningService.setup(walletIndex, customServerUrl, customRgsServerUrl, trustedPeers, channelMigration)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Node setup error", e, context = TAG)
-            Result.failure(e)
+        runCatching {
+            val trustedPeers = fetchTrustedPeers()
+            lightningService.setup(
+                walletIndex,
+                customServerUrl,
+                customRgsServerUrl,
+                trustedPeers,
+                channelMigration,
+            )
+        }.onFailure {
+            Logger.error("Node setup error", it, context = TAG)
         }
     }
 
-    private suspend fun getTrustedPeersFromBlocktank(): List<PeerDetails>? = runCatching {
+    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runCatching {
         val info = coreService.blocktank.info(refresh = false)
             ?: coreService.blocktank.info(refresh = true)
         info?.nodes?.toPeerDetailsList()?.also {
-            Logger.info("Loaded ${it.size} trusted peers from blocktank", context = TAG)
+            Logger.info("Fetched ${it.size} trusted peers from remote", context = TAG)
         }
     }.onFailure {
-        Logger.warn("Failed to get trusted peers from blocktank", e = it, context = TAG)
+        Logger.warn("fetchTrustedPeers error", it, context = TAG)
     }.getOrNull()
 
     @Suppress("LongMethod", "LongParameterList")
@@ -201,7 +199,7 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
-            return@withContext Result.failure(RecoveryModeException())
+            return@withContext Result.failure(RecoveryModeError())
         }
 
         eventHandler?.let { _eventHandlers.add(it) }
@@ -212,7 +210,7 @@ class LightningRepo @Inject constructor(
             return@withContext Result.success(Unit)
         }
 
-        try {
+        runCatching {
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
 
             // Setup if needed
@@ -222,7 +220,7 @@ class LightningRepo @Inject constructor(
                     _lightningState.update {
                         it.copy(
                             nodeLifecycleState = NodeLifecycleState.ErrorStarting(
-                                setupResult.exceptionOrNull() ?: Exception("Unknown setup error")
+                                setupResult.exceptionOrNull() ?: NodeSetupError()
                             )
                         )
                     }
@@ -247,20 +245,20 @@ class LightningRepo @Inject constructor(
             updateGeoBlockState()
             refreshChannelCache()
 
-            // Post-startup tasks
-            connectToTrustedPeers().onFailure { e ->
-                Logger.error("Failed to connect to trusted peers", e)
+            // Post-startup tasks (non-blocking)
+            connectToTrustedPeers().onFailure {
+                Logger.error("Failed to connect to trusted peers", it, context = TAG)
             }
-            sync()
-            registerForNotifications()
-
-            Result.success(Unit)
-        } catch (e: Throwable) {
+            sync().getOrThrow().also {
+                scope.launch { registerForNotifications() }
+            }
+        }.onFailure { e ->
             if (shouldRetry) {
-                Logger.warn("Start error, retrying after two seconds...", e = e, context = TAG)
+                val retryDelay = 2.seconds
+                Logger.warn("Start error, retrying after $retryDelay...", e, context = TAG)
                 _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
 
-                delay(2.seconds)
+                delay(retryDelay)
                 return@withContext start(
                     walletIndex = walletIndex,
                     timeout = timeout,
@@ -270,24 +268,22 @@ class LightningRepo @Inject constructor(
                     channelMigration = channelMigration,
                 )
             } else {
-                Logger.error("Node start error", e, context = TAG)
                 _lightningState.update {
                     it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
                 }
-                Result.failure(e)
             }
         }
     }
 
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
-        _eventHandlers.toList().forEach { it.invoke(event) }
+        _eventHandlers.toList().forEach {
+            runCatching { it.invoke(event) }
+        }
         _nodeEvents.emit(event)
     }
 
-    fun setRecoveryMode(enabled: Boolean) {
-        _isRecoveryMode.value = enabled
-    }
+    fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
         _lightningState.update {
@@ -304,28 +300,13 @@ class LightningRepo @Inject constructor(
             return@withContext Result.success(Unit)
         }
 
-        try {
+        runCatching {
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
             lightningService.stop()
             _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Node stop error", e, context = TAG)
-            Result.failure(e)
+        }.onFailure {
+            Logger.error("Node stop error", it, context = TAG)
         }
-    }
-
-    suspend fun restart(): Result<Unit> = withContext(bgDispatcher) {
-        stop().onFailure {
-            Logger.error("Failed to stop node during restart", it, context = TAG)
-            return@withContext Result.failure(it)
-        }
-        delay(500)
-        start(shouldRetry = false).onFailure {
-            Logger.error("Failed to start node during restart", it, context = TAG)
-            return@withContext Result.failure(it)
-        }
-        Result.success(Unit)
     }
 
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("sync") {
@@ -343,7 +324,7 @@ class LightningRepo @Inject constructor(
                 lightningService.sync()
                 refreshChannelCache()
                 syncState()
-                if (syncPending.get()) delay(SYNC_LOOP_DEBOUNCE_MS)
+                if (syncPending.get()) delay(MS_SYNC_LOOP_DEBOUNCE)
             } while (syncPending.getAndSet(false))
         } finally {
             _lightningState.update { it.copy(isSyncingWallet = false) }
@@ -354,60 +335,46 @@ class LightningRepo @Inject constructor(
     }
 
     fun syncAsync() = scope.launch {
-        sync().onFailure { error ->
-            Logger.warn("Sync failed", e = error, context = TAG)
+        sync().onFailure {
+            Logger.warn("Sync failed", it, context = TAG)
         }
     }
 
     /** Clear pending sync flag. Called when manual pull-to-refresh takes priority. */
-    fun clearPendingSync() {
-        syncPending.set(false)
-    }
+    fun clearPendingSync() = syncPending.set(false)
 
     private suspend fun refreshChannelCache() = withContext(bgDispatcher) {
-        val channels = lightningService.channels ?: return@withContext
-        channels.forEach { channel ->
-            channelCache[channel.channelId] = channel
+        lightningService.channels?.forEach {
+            channelCache[it.channelId] = it
         }
     }
 
     private fun handleLdkEvent(event: Event) {
         when (event) {
-            is Event.ChannelPending,
-            is Event.ChannelReady,
-            -> scope.launch {
-                refreshChannelCache()
-            }
-
-            is Event.ChannelClosed -> scope.launch {
-                registerClosedChannel(
-                    channelId = event.channelId,
-                    reason = event.reason,
-                )
-            }
-
-            else -> Unit // Other events don't need special handling
+            is Event.ChannelPending, is Event.ChannelReady -> scope.launch { refreshChannelCache() }
+            is Event.ChannelClosed -> scope.launch { registerClosedChannel(event.channelId, event.reason) }
+            else -> Unit
         }
     }
 
     private suspend fun registerClosedChannel(channelId: String, reason: ClosureReason?) = withContext(bgDispatcher) {
-        try {
+        runCatching {
             val channel = channelCache[channelId] ?: run {
-                Logger.error("Could not find channel details for closed channel: channelId=$channelId", context = TAG)
+                Logger.error("Could not find details for closed channel: channelId='$channelId'", context = TAG)
                 return@withContext
             }
 
             val fundingTxo = channel.fundingTxo
             if (fundingTxo == null) {
                 Logger.error(
-                    "Channel has no funding transaction, cannot persist closed channel: channelId=$channelId",
-                    context = TAG
+                    "Channel has no funding transaction, cannot persist closed channel: channelId='$channelId'",
+                    context = TAG,
                 )
                 return@withContext
             }
 
             val channelName = channel.inboundScidAlias?.toString()
-                ?: (channel.channelId.take(CHANNEL_ID_PREVIEW_LENGTH) + "…")
+                ?: (channel.channelId.take(LENGTH_CHANNEL_ID_PREVIEW) + "…")
 
             val closedAt = (System.currentTimeMillis() / 1000L).toULong()
 
@@ -433,114 +400,104 @@ class LightningRepo @Inject constructor(
             channelCache.remove(channelId)
 
             Logger.info("Registered closed channel: ${channel.userChannelId}", context = TAG)
-        } catch (e: Throwable) {
-            Logger.error("Failed to register closed channel: $e", e, context = TAG)
+        }.onFailure {
+            Logger.error("Failed to register closed channel", it, context = TAG)
         }
     }
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
-        stop().onSuccess {
-            return@withContext try {
-                Logger.debug("node stopped, calling wipeStorage", context = TAG)
-                lightningService.wipeStorage(walletIndex)
-                _lightningState.update {
-                    LightningState(
-                        nodeStatus = it.nodeStatus,
-                        nodeLifecycleState = it.nodeLifecycleState,
-                    )
-                }
-                setRecoveryMode(false)
-                Result.success(Unit)
-            } catch (e: Throwable) {
-                Logger.error("Wipe storage error", e, context = TAG)
-                Result.failure(e)
+        stop().mapCatching {
+            Logger.debug("node stopped, calling wipeStorage", context = TAG)
+            lightningService.wipeStorage(walletIndex)
+            _lightningState.update {
+                LightningState(
+                    nodeStatus = it.nodeStatus,
+                    nodeLifecycleState = it.nodeLifecycleState,
+                )
             }
-        }.onFailure { e ->
-            return@withContext Result.failure(e)
+            setRecoveryMode(false)
+        }.onFailure {
+            Logger.error("wipeStorage error", it, context = TAG)
         }
     }
 
     suspend fun restartWithElectrumServer(newServerUrl: String): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Changing ldk-node electrum server to: '$newServerUrl'")
+        Logger.info("Changing ldk-node electrum server to: '$newServerUrl'", context = TAG)
 
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
         stop().onFailure {
-            Logger.error("Failed to stop node during electrum server change", it)
+            Logger.error("Failed to stop node during electrum server change", it, context = TAG)
             return@withContext Result.failure(it)
         }
 
-        Logger.debug("Starting node with new electrum server: '$newServerUrl'")
+        Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
 
         start(
             shouldRetry = false,
             customServerUrl = newServerUrl,
-        ).onFailure { startError ->
-            Logger.warn("Failed ldk-node config change, attempting recovery…")
+        ).onFailure {
+            Logger.warn("Failed ldk-node config change, attempting recovery…", context = TAG)
             restartWithPreviousConfig()
-            return@withContext Result.failure(startError)
         }.onSuccess {
             settingsStore.update { it.copy(electrumServer = newServerUrl) }
 
-            Logger.info("Successfully changed electrum server")
-            return@withContext Result.success(Unit)
+            Logger.info("Successfully changed electrum server", context = TAG)
         }
     }
 
     suspend fun restartWithRgsServer(newRgsUrl: String): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Changing ldk-node RGS server to: '$newRgsUrl'")
+        Logger.info("Changing ldk-node RGS server to: '$newRgsUrl'", context = TAG)
 
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
         stop().onFailure {
-            Logger.error("Failed to stop node during RGS server change", it)
+            Logger.error("Failed to stop node during RGS server change", it, context = TAG)
             return@withContext Result.failure(it)
         }
 
-        Logger.debug("Starting node with new RGS server: '$newRgsUrl'")
+        Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
 
         start(
             shouldRetry = false,
             customRgsServerUrl = newRgsUrl,
-        ).onFailure { startError ->
-            Logger.warn("Failed ldk-node config change, attempting recovery…")
+        ).onFailure {
+            Logger.warn("Failed ldk-node config change, attempting recovery…", context = TAG)
             restartWithPreviousConfig()
-            return@withContext Result.failure(startError)
         }.onSuccess {
             settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
 
-            Logger.info("Successfully changed RGS server")
-            return@withContext Result.success(Unit)
+            Logger.info("Successfully changed RGS server", context = TAG)
         }
     }
 
     private suspend fun restartWithPreviousConfig(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("Stopping node for recovery attempt")
+        Logger.debug("Stopping node for recovery attempt", context = TAG)
 
         stop().onFailure { e ->
-            Logger.error("Failed to stop node during recovery", e)
+            Logger.error("Failed to stop node during recovery", e, context = TAG)
             return@withContext Result.failure(e)
         }
 
-        Logger.debug("Starting node with previous config for recovery")
+        Logger.debug("Starting node with previous config for recovery", context = TAG)
 
         start(
             shouldRetry = false,
         ).onSuccess {
-            Logger.debug("Successfully started node with previous config")
-        }.onFailure { e ->
-            Logger.error("Failed starting node with previous config", e)
+            Logger.debug("Successfully started node with previous config", context = TAG)
+        }.onFailure {
+            Logger.error("Failed starting node with previous config", it, context = TAG)
         }
     }
 
     private suspend fun waitForNodeToStop(): Result<Unit> = withContext(bgDispatcher) {
         if (_lightningState.value.nodeLifecycleState == NodeLifecycleState.Stopping) {
-            Logger.debug("Waiting for node to stop…")
+            Logger.debug("Waiting for node to stop…", context = TAG)
             val stopped = withTimeoutOrNull(30.seconds) {
                 _lightningState.first { it.nodeLifecycleState == NodeLifecycleState.Stopped }
             }
             if (stopped == null) {
-                val error = NodeStopTimeoutException()
-                Logger.warn(error.message)
+                val error = NodeStopTimeoutError()
+                Logger.warn(error.message, context = TAG)
                 return@withContext Result.failure(error)
             }
         }
@@ -548,27 +505,23 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        lightningService.connectToTrustedPeers()
-        Result.success(Unit)
+        runCatching { lightningService.connectToTrustedPeers() }
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("connectPeer") {
-        lightningService.connectPeer(peer).onFailure { e ->
-            return@executeWhenNodeRunning Result.failure(e)
+        lightningService.connectPeer(peer).map {
+            syncState()
         }
-        syncState()
-        Result.success(Unit)
     }
 
     suspend fun disconnectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("disconnectPeer") {
-        lightningService.disconnectPeer(peer)
-        syncState()
-        Result.success(Unit)
+        lightningService.disconnectPeer(peer).map {
+            syncState()
+        }
     }
 
     suspend fun newAddress(): Result<String> = executeWhenNodeRunning("newAddress") {
-        val address = lightningService.newAddress()
-        Result.success(address)
+        runCatching { lightningService.newAddress() }
     }
 
     suspend fun createInvoice(
@@ -577,10 +530,10 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = 86_400u,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
         updateGeoBlockState()
-        val invoice = lightningService.receive(amountSats, description, expirySeconds)
-        Result.success(invoice)
+        runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
+    @Suppress("ForbiddenComment")
     suspend fun fetchLnurlInvoice(
         callbackUrl: String,
         amountSats: ULong,
@@ -592,7 +545,11 @@ class LightningRepo @Inject constructor(
             val decoded = (decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
-            Logger.error("Error fetching lnurl invoice, url: $callbackUrl, amount: $amountSats, comment: $comment", it)
+            Logger.error(
+                "fetchLnurlInvoice error, url: $callbackUrl, amount: $amountSats, comment: $comment",
+                it,
+                context = TAG,
+            )
         }
     }
 
@@ -601,8 +558,8 @@ class LightningRepo @Inject constructor(
         callback: String,
         paymentRequest: String,
     ): Result<LnurlWithdrawResponse> = executeWhenNodeRunning("requestLnurlWithdraw") {
-        val callbackUrl = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
-        Logger.debug("handleLnurlWithdraw callbackUrl generated: '$callbackUrl'")
+        val callbackUrl = createWithdrawCallbackUrl(k1, callback, paymentRequest)
+        Logger.debug("handleLnurlWithdraw callbackUrl generated: '$callbackUrl'", context = TAG)
         lnurlService.requestLnurlWithdraw(callbackUrl)
     }
 
@@ -628,32 +585,30 @@ class LightningRepo @Inject constructor(
         callback: String,
         domain: String,
     ): Result<String> = runCatching {
-        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
-        val result = lnurlAuth(
+        lnurlAuth(
             k1 = k1,
             callback = callback,
             domain = domain,
             network = Env.network.toCoreNetwork(),
             bip32Mnemonic = mnemonic,
             bip39Passphrase = passphrase,
-        )
-
-        Logger.debug("LNURL auth result: '$result'")
-
-        return@runCatching result
+        ).also {
+            Logger.debug("LNURL auth result: '$it'", context = TAG)
+        }
     }.onFailure {
-        Logger.error("Error requesting lnurl auth, k1: $k1, callback: $callback, domain: $domain", it)
+        Logger.error("requestLnurlAuth error, k1: $k1, callback: $callback, domain: $domain", it, context = TAG)
     }
 
     suspend fun payInvoice(
         bolt11: String,
         sats: ULong? = null,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
-        val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
-        syncState()
-        Result.success(paymentId)
+        runCatching { lightningService.send(bolt11, sats) }.also {
+            syncState()
+        }
     }
 
     @Suppress("LongParameterList")
@@ -671,23 +626,14 @@ class LightningRepo @Inject constructor(
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
         val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
-        val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow().toUInt()
+        val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
 
-        // if utxos are manually specified, use them, otherwise run auto coin select if enabled
-        val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
-            sats = sats,
-            satsPerVByte = satsPerVByte,
-        )
+        // use passed utxos if specified, otherwise run auto coin select if enabled
+        val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(sats, satsPerVByte)
 
         Logger.debug("UTXOs selected to spend: $finalUtxosToSpend", context = TAG)
 
-        val txId = lightningService.send(
-            address = address,
-            sats = sats,
-            satsPerVByte = satsPerVByte,
-            utxosToSpend = finalUtxosToSpend,
-            isMaxAmount = isMaxAmount
-        )
+        val txId = lightningService.send(address, sats, satsPerVByte, finalUtxosToSpend, isMaxAmount)
 
         val preActivityMetadata = PreActivityMetadata(
             paymentId = txId,
@@ -697,7 +643,7 @@ class LightningRepo @Inject constructor(
             txId = txId,
             address = address,
             isReceive = false,
-            feeRate = satsPerVByte.toULong(),
+            feeRate = satsPerVByte,
             isTransfer = isTransfer,
             channelId = channelId ?: "",
         )
@@ -709,13 +655,12 @@ class LightningRepo @Inject constructor(
 
     suspend fun determineUtxosToSpend(
         sats: ULong,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
     ): List<SpendableUtxo>? = withContext(bgDispatcher) {
         return@withContext runCatching {
             val settings = settingsStore.data.first()
             if (settings.coinSelectAuto) {
                 val coinSelectionPreference = settings.coinSelectPreference
-
                 val allSpendableUtxos = lightningService.listSpendableOutputs().getOrThrow()
 
                 if (coinSelectionPreference == CoinSelectionPreference.Consolidate) {
@@ -743,8 +688,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("getPayments") {
-        val payments = lightningService.payments
-            ?: return@executeWhenNodeRunning Result.failure(GetPaymentsException())
+        val payments = lightningService.payments ?: return@executeWhenNodeRunning Result.failure(GetPaymentsError())
         Result.success(payments)
     }
 
@@ -765,10 +709,9 @@ class LightningRepo @Inject constructor(
         utxosToSpend: List<SpendableUtxo>? = null,
         feeRates: FeeRates? = null,
     ): Result<ULong> = withContext(bgDispatcher) {
-        return@withContext try {
+        runCatching {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
-            val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow().toUInt()
-
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
             val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
 
             val fee = lightningService.calculateTotalFee(
@@ -777,13 +720,12 @@ class LightningRepo @Inject constructor(
                 satsPerVByte = satsPerVByte,
                 utxosToSpend = utxosToSpend,
             )
-            Result.success(fee)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
+            return@runCatching fee
+        }.recoverCatching {
+            if (it is CancellationException) throw it
             val fallbackFee = 1000uL
-            Logger.warn("Error calculating fee, using fallback of $fallbackFee ${errLogOf(e)}", context = TAG)
-            Result.success(fallbackFee)
+            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", e = it, context = TAG)
+            return@recoverCatching fallbackFee
         }
     }
 
@@ -791,13 +733,13 @@ class LightningRepo @Inject constructor(
         speed: TransactionSpeed,
         feeRates: FeeRates? = null,
     ): Result<ULong> = withContext(bgDispatcher) {
-        return@withContext runCatching {
+        runCatching {
             val fees = feeRates ?: coreService.blocktank.getFees().getOrThrow()
             val satsPerVByte = fees.getSatsPerVByteFor(speed)
             satsPerVByte.toULong()
-        }.onFailure { e ->
-            if (e !is CancellationException) {
-                Logger.error("Error getFeeRateForSpeed. speed:$speed", e, context = TAG)
+        }.onFailure {
+            if (it !is CancellationException) {
+                Logger.error("getFeeRateForSpeed error: speed: '$speed'", it, context = TAG)
             }
         }
     }
@@ -805,7 +747,7 @@ class LightningRepo @Inject constructor(
     suspend fun calculateCpfpFeeRate(
         parentTxId: Txid,
     ): Result<ULong> = executeWhenNodeRunning("calculateCpfpFeeRate") {
-        Result.success(lightningService.calculateCpfpFeeRate(parentTxid = parentTxId).toSatPerVbCeil())
+        Result.success(lightningService.calculateCpfpFeeRate(parentTxId).toSatPerVbCeil())
     }
 
     suspend fun openChannel(
@@ -814,9 +756,9 @@ class LightningRepo @Inject constructor(
         pushToCounterpartySats: ULong? = null,
         channelConfig: ChannelConfig? = null,
     ): Result<OpenChannelResult> = executeWhenNodeRunning("openChannel") {
-        val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig)
-        syncState()
-        result
+        lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig).also {
+            syncState()
+        }
     }
 
     suspend fun closeChannel(
@@ -824,13 +766,9 @@ class LightningRepo @Inject constructor(
         force: Boolean = false,
         forceCloseReason: String? = null,
     ): Result<Unit> = executeWhenNodeRunning("closeChannel") {
-        lightningService.closeChannel(
-            channel,
-            force,
-            forceCloseReason,
-        )
-        syncState()
-        Result.success(Unit)
+        runCatching { lightningService.closeChannel(channel, force, forceCloseReason) }.also {
+            syncState()
+        }
     }
 
     fun syncState() {
@@ -881,27 +819,23 @@ class LightningRepo @Inject constructor(
         return isRunning && lightningService.canReceive()
     }
 
-    fun separateTrustedChannels(
-        channels: List<ChannelDetails>,
-    ): Pair<List<ChannelDetails>, List<ChannelDetails>> = lightningService.separateTrustedChannels(channels)
+    fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
 
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
-        return@executeWhenNodeRunning try {
+        runCatching {
             val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
 
             require(token.isNotEmpty()) { "FCM token is empty or null" }
 
             if (cachedToken == token) {
-                Logger.debug("Skipped registering for notifications, current device token already registered")
+                Logger.debug("registerForNotifications skipped, device token already registered")
                 return@executeWhenNodeRunning Result.success(Unit)
             }
 
             lspNotificationsService.registerDevice(token)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Register for notifications error", e)
-            Result.failure(e)
+        }.onFailure {
+            Logger.error("registerForNotifications error", it, context = TAG)
         }
     }
 
@@ -909,108 +843,85 @@ class LightningRepo @Inject constructor(
 
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
     ): Result<Txid> = executeWhenNodeRunning("bumpFeeByRbf") {
-        try {
-            if (originalTxId.isBlank()) {
-                return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException(
-                        "originalTxId is null or empty: $originalTxId"
-                    )
-                )
-            }
-
-            if (satsPerVByte <= 0u) {
-                return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException(
-                        "satsPerVByte invalid: $satsPerVByte"
-                    )
-                )
-            }
+        runCatching {
+            require(!originalTxId.isBlank()) { "originalTxId is null or empty: $originalTxId" }
+            require(satsPerVByte > 0u) { "satsPerVByte invalid: $satsPerVByte" }
 
             val replacementTxId = lightningService.bumpFeeByRbf(
                 txid = originalTxId,
                 satsPerVByte = satsPerVByte,
             )
             Logger.debug(
-                "bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte"
+                "bumpFeeByRbf success, " +
+                    "replacementTxId: $replacementTxId " +
+                    "originalTxId: $originalTxId, " +
+                    "satsPerVByte: $satsPerVByte",
+                context = TAG,
             )
-            Result.success(replacementTxId)
-        } catch (e: Throwable) {
+            return@runCatching replacementTxId
+        }.onFailure {
             Logger.error(
                 "bumpFeeByRbf error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte",
-                e,
-                context = TAG
+                it,
+                context = TAG,
             )
-            Result.failure(e)
         }
     }
 
     suspend fun accelerateByCpfp(
         originalTxId: Txid,
-        satsPerVByte: UInt,
+        satsPerVByte: ULong,
         destinationAddress: Address,
     ): Result<Txid> = executeWhenNodeRunning("accelerateByCpfp") {
-        try {
-            if (originalTxId.isBlank()) {
-                return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException("originalTxId is null or empty: $originalTxId")
-                )
-            }
-
-            if (destinationAddress.isBlank()) {
-                return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException("destinationAddress is null or empty: $destinationAddress")
-                )
-            }
-
-            if (satsPerVByte <= 0u) {
-                return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException("satsPerVByte invalid: $satsPerVByte")
-                )
-            }
+        runCatching {
+            require(!originalTxId.isBlank()) { "originalTxId is null or empty: $originalTxId" }
+            require(!destinationAddress.isBlank()) { "destinationAddress is null or empty: $destinationAddress" }
+            require(satsPerVByte > 0u) { "satsPerVByte invalid: $satsPerVByte" }
 
             val newDestinationTxId = lightningService.accelerateByCpfp(
                 txid = originalTxId,
                 satsPerVByte = satsPerVByte,
-                destinationAddress = destinationAddress,
+                toAddress = destinationAddress,
             )
             Logger.debug(
-                "accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"
+                "accelerateByCpfp success, " +
+                    "newDestinationTxId: $newDestinationTxId " +
+                    "originalTxId: $originalTxId, " +
+                    "satsPerVByte: $satsPerVByte " +
+                    "destinationAddress: $destinationAddress"
             )
-            Result.success(newDestinationTxId)
-        } catch (e: Throwable) {
+            return@runCatching newDestinationTxId
+        }.onFailure {
             Logger.error(
-                "accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress",
-                e,
-                context = TAG
+                "accelerateByCpfp error: " +
+                    "originalTxId: $originalTxId, " +
+                    "satsPerVByte: $satsPerVByte, " +
+                    "destinationAddress: $destinationAddress",
+                it,
+                context = TAG,
             )
-            Result.failure(e)
         }
     }
 
-    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> =
-        executeWhenNodeRunning("estimateRoutingFees") {
-            Logger.info("Estimating routing fees for bolt11: $bolt11")
-            lightningService.estimateRoutingFees(bolt11)
-                .onSuccess {
-                    Logger.info("Routing fees estimated: $it")
-                }
-                .onFailure {
-                    Logger.error("Routing fees estimation failed", it)
-                }
+    suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
+        Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
+        lightningService.estimateRoutingFees(bolt11).onSuccess {
+            Logger.info("Routing fees estimated: '$it'", context = TAG)
+        }.onFailure {
+            Logger.error("estimateRoutingFees error", it, context = TAG)
         }
+    }
 
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
-            Logger.info("Estimating routing fees for amount: $amountSats")
-            lightningService.estimateRoutingFeesForAmount(bolt11, amountSats)
-                .onSuccess {
-                    Logger.info("Routing fees estimated: $it")
-                }
-                .onFailure {
-                    Logger.error("Routing fees estimation failed", it)
-                }
+            Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
+            lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
+                Logger.info("Routing fees estimated: '$it'", context = TAG)
+            }.onFailure {
+                Logger.error("estimateRoutingFeesForAmount error", it, context = TAG)
+            }
         }
 
     // region debug
@@ -1020,9 +931,10 @@ class LightningRepo @Inject constructor(
         executeWhenNodeRunning("exportNetworkGraphToFile") {
             lightningService.exportNetworkGraphToFile(outputDir)
         }
+    // endregion
 
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Restarting LDK node", context = TAG)
+        Logger.info("Restarting node", context = TAG)
         stop().onFailure {
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
@@ -1030,23 +942,23 @@ class LightningRepo @Inject constructor(
         start(shouldRetry = false).onFailure {
             Logger.error("Failed to start node during restart", it, context = TAG)
             return@withContext Result.failure(it)
+        }.onSuccess {
+            Logger.info("Node restarted successfully", context = TAG)
         }
-        Logger.info("LDK node restarted successfully", context = TAG)
-        Result.success(Unit)
     }
-    // endregion
 
     companion object {
         private const val TAG = "LightningRepo"
-        private const val CHANNEL_ID_PREVIEW_LENGTH = 10
-        private const val SYNC_LOOP_DEBOUNCE_MS = 500L
+        private const val LENGTH_CHANNEL_ID_PREVIEW = 10
+        private const val MS_SYNC_LOOP_DEBOUNCE = 500L
     }
 }
 
-class RecoveryModeException : AppError("App in recovery mode, skipping node start")
-class NodeStopTimeoutException : AppError("Timeout waiting for node to stop")
-class NodeRunTimeoutException(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
-class GetPaymentsException : AppError("It wasn't possible get the payments")
+class RecoveryModeError : AppError("App in recovery mode, skipping node start")
+class NodeSetupError : AppError("Unknown node setup error")
+class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
+class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
+class GetPaymentsError : AppError("It wasn't possible get the payments")
 
 data class LightningState(
     val nodeId: String = "",

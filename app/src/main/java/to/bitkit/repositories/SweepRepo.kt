@@ -32,7 +32,7 @@ class SweepRepo @Inject constructor(
     suspend fun checkSweepableBalances(): Result<SweepableBalances> = withContext(bgDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw ServiceError.MnemonicNotFound
+                ?: throw ServiceError.MnemonicNotFound()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             Logger.debug("Checking sweepable balances...", context = TAG)
@@ -56,7 +56,7 @@ class SweepRepo @Inject constructor(
     ): Result<SweepTransactionPreview> = withContext(bgDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw ServiceError.MnemonicNotFound
+                ?: throw ServiceError.MnemonicNotFound()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             Logger.debug("Preparing sweep transaction...", context = TAG)
@@ -79,7 +79,7 @@ class SweepRepo @Inject constructor(
     suspend fun broadcastSweepTransaction(psbt: String): Result<SweepResult> = withContext(bgDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw ServiceError.MnemonicNotFound
+                ?: throw ServiceError.MnemonicNotFound()
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             Logger.debug("Broadcasting sweep transaction...", context = TAG)

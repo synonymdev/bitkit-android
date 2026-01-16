@@ -72,6 +72,7 @@ class MainActivity : FragmentActivity() {
     private val settingsViewModel by viewModels<SettingsViewModel>()
     private val backupsViewModel by viewModels<BackupsViewModel>()
 
+    @Suppress("LongMethod")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -136,7 +137,8 @@ class MainActivity : FragmentActivity() {
                         transferViewModel = transferViewModel,
                         settingsViewModel = settingsViewModel,
                         backupsViewModel = backupsViewModel,
-                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f)
+                        hazeState = hazeState,
+                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
                     )
 
                     AnimatedVisibility(

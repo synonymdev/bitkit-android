@@ -32,10 +32,7 @@ fun SuccessScreen(
     onBack: () -> Unit,
 ) {
     SuccessContent(
-        onContinue = {
-            // TODO: verify backup
-            onContinue()
-        },
+        onContinue = onContinue,
         onBack = onBack,
     )
 }
