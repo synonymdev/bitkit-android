@@ -55,6 +55,7 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -130,8 +131,8 @@ fun ChannelDetailScreen(
             context.setClipboardText(text)
             app.toast(
                 type = ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
-                body = text,
+                title = ToastText.Resource(R.string.common__copied),
+                body = ToastText.Literal(text),
             )
         },
         onOpenUrl = { txId ->

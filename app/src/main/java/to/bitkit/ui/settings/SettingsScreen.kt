@@ -16,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -54,7 +53,6 @@ fun SettingsScreen(
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     var enableDevModeTapCount by remember { mutableIntStateOf(0) }
     val haptic = LocalHapticFeedback.current
-    val context = LocalContext.current
 
     SettingsScreenContent(
         isDevModeEnabled = isDevModeEnabled,
@@ -75,22 +73,20 @@ fun SettingsScreen(
                 settings.setIsDevModeEnabled(newValue)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
+                val titleRes = if (newValue) {
+                    R.string.settings__dev_enabled_title
+                } else {
+                    R.string.settings__dev_disabled_title
+                }
+                val bodyRes = if (newValue) {
+                    R.string.settings__dev_enabled_message
+                } else {
+                    R.string.settings__dev_disabled_message
+                }
                 app.toast(
                     type = ToastType.SUCCESS,
-                    title = context.getString(
-                        if (newValue) {
-                            R.string.settings__dev_enabled_title
-                        } else {
-                            R.string.settings__dev_disabled_title
-                        }
-                    ),
-                    body = context.getString(
-                        if (newValue) {
-                            R.string.settings__dev_enabled_message
-                        } else {
-                            R.string.settings__dev_disabled_message
-                        }
-                    ),
+                    titleRes = titleRes,
+                    bodyRes = bodyRes,
                 )
                 enableDevModeTapCount = 0
             }

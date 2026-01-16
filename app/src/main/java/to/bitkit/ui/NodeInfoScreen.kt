@@ -46,6 +46,7 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.formatToString
 import to.bitkit.ext.uri
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningState
@@ -77,7 +78,6 @@ fun NodeInfoScreen(
     val wallet = walletViewModel ?: return
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
-    val context = LocalContext.current
 
     val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
@@ -93,8 +93,8 @@ fun NodeInfoScreen(
         onCopy = { text ->
             app.toast(
                 type = ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
-                body = text
+                title = ToastText.Resource(R.string.common__copied),
+                body = ToastText.Literal(text),
             )
         },
     )

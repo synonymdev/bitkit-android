@@ -30,6 +30,7 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.AddressModel
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.appViewModel
@@ -79,8 +80,8 @@ fun AddressViewerScreen(
             context.setClipboardText(text)
             app.toast(
                 type = ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
-                body = text,
+                title = ToastText.Resource(R.string.common__copied),
+                body = ToastText.Literal(text),
             )
         }
     )

@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServerPeer
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
@@ -76,17 +77,19 @@ fun ElectrumConfigScreen(
             if (result.isSuccess) {
                 app.toast(
                     type = ToastType.SUCCESS,
-                    title = context.getString(R.string.settings__es__server_updated_title),
-                    body = context.getString(R.string.settings__es__server_updated_message)
-                        .replace("{host}", uiState.host)
-                        .replace("{port}", uiState.port),
+                    title = ToastText.Resource(R.string.settings__es__server_updated_title),
+                    body = ToastText.Literal(
+                        context.getString(R.string.settings__es__server_updated_message)
+                            .replace("{host}", uiState.host)
+                            .replace("{port}", uiState.port)
+                    ),
                     testTag = "ElectrumUpdatedToast",
                 )
             } else {
                 app.toast(
                     type = ToastType.WARNING,
-                    title = context.getString(R.string.settings__es__server_error),
-                    body = context.getString(R.string.settings__es__server_error_description),
+                    titleRes = R.string.settings__es__server_error,
+                    bodyRes = R.string.settings__es__server_error_description,
                     testTag = "ElectrumErrorToast",
                 )
             }

@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -52,7 +51,6 @@ fun SavingsProgressScreen(
     onContinueClick: () -> Unit = {},
     onTransferUnavailable: () -> Unit = {},
 ) {
-    val context = LocalContext.current
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
 
     // Effect to close channels & update UI
@@ -72,8 +70,8 @@ fun SavingsProgressScreen(
                 // All channels are trusted peers - show error and navigate back immediately
                 app.toast(
                     type = ToastType.ERROR,
-                    title = context.getString(R.string.lightning__close_error),
-                    body = context.getString(R.string.lightning__close_error_msg),
+                    titleRes = R.string.lightning__close_error,
+                    bodyRes = R.string.lightning__close_error_msg,
                 )
                 onTransferUnavailable()
             } else {
@@ -83,8 +81,8 @@ fun SavingsProgressScreen(
                     onTransferUnavailable = {
                         app.toast(
                             type = ToastType.ERROR,
-                            title = context.getString(R.string.lightning__close_error),
-                            body = context.getString(R.string.lightning__close_error_msg),
+                            titleRes = R.string.lightning__close_error,
+                            bodyRes = R.string.lightning__close_error_msg,
                         )
                         onTransferUnavailable()
                     },

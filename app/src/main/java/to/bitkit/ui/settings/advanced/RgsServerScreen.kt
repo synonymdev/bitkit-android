@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -26,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
+import to.bitkit.models.ToastText
 import to.bitkit.models.ToastType
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
@@ -51,7 +51,6 @@ fun RgsServerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
-    val context = LocalContext.current
 
     // Handle result from Scanner
     LaunchedEffect(savedStateHandle) {
@@ -69,15 +68,15 @@ fun RgsServerScreen(
             if (result.isSuccess) {
                 app.toast(
                     type = ToastType.SUCCESS,
-                    title = context.getString(R.string.settings__rgs__update_success_title),
-                    body = context.getString(R.string.settings__rgs__update_success_description),
+                    titleRes = R.string.settings__rgs__update_success_title,
+                    bodyRes = R.string.settings__rgs__update_success_description,
                     testTag = "RgsUpdatedToast",
                 )
             } else {
                 app.toast(
                     type = ToastType.ERROR,
-                    title = context.getString(R.string.wallet__ldk_start_error_title),
-                    body = result.exceptionOrNull()?.message ?: "Unknown error",
+                    title = ToastText.Resource(R.string.wallet__ldk_start_error_title),
+                    body = ToastText.Literal(result.exceptionOrNull()?.message ?: "Unknown error"),
                     testTag = "RgsErrorToast",
                 )
             }

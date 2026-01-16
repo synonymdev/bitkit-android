@@ -5,7 +5,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.repositories.ConnectivityState
@@ -16,7 +15,6 @@ import to.bitkit.viewmodels.AppViewModel
 fun IsOnlineTracker(
     app: AppViewModel,
 ) {
-    val context = LocalContext.current
     val toaster = toaster ?: return
     val connectivityState by app.isOnline.collectAsStateWithLifecycle(initialValue = ConnectivityState.CONNECTED)
 
@@ -32,15 +30,15 @@ fun IsOnlineTracker(
         when (connectivityState) {
             ConnectivityState.CONNECTED -> {
                 toaster.success(
-                    title = context.getString(R.string.other__connection_back_title),
-                    body = context.getString(R.string.other__connection_back_msg),
+                    titleRes = R.string.other__connection_back_title,
+                    bodyRes = R.string.other__connection_back_msg,
                 )
             }
 
             ConnectivityState.DISCONNECTED -> {
                 toaster.warning(
-                    title = context.getString(R.string.other__connection_issue),
-                    body = context.getString(R.string.other__connection_issue_explain),
+                    titleRes = R.string.other__connection_issue,
+                    bodyRes = R.string.other__connection_issue_explain,
                 )
             }
 
