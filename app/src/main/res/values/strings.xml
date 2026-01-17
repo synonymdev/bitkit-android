@@ -84,6 +84,8 @@
     <string name="common__usable">Usable</string>
     <string name="common__yes">Yes</string>
     <string name="common__yes_proceed">Yes, Proceed</string>
+    <string name="currency__rates_error_body">An error has occurred. Please try again later.</string>
+    <string name="currency__rates_error_title">Rates currently unavailable</string>
     <string name="fee__custom__description">Depends on the fee</string>
     <string name="fee__custom__shortDescription">Depends on the fee</string>
     <string name="fee__custom__shortRange">Depends on the fee</string>

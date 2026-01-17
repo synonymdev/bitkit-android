@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -94,8 +95,8 @@ class CurrencyRepo @Inject constructor(
                 .collect { isStale ->
                     if (isStale) {
                         toaster.error(
-                            title = ToastText("Rates currently unavailable"),
-                            body = ToastText("An error has occurred. Please try again later.")
+                            title = ToastText(R.string.currency__rates_error_title),
+                            body = ToastText(R.string.currency__rates_error_body),
                         )
                     }
                 }
