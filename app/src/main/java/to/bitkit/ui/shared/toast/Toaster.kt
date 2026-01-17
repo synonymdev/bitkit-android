@@ -19,7 +19,7 @@ class Toaster @Inject constructor() {
     val events: SharedFlow<Toast> = _events.asSharedFlow()
 
     @Suppress("LongParameterList")
-    private suspend fun emit(
+    private fun emit(
         type: ToastType,
         title: ToastText,
         body: ToastText? = null,
@@ -27,7 +27,7 @@ class Toaster @Inject constructor() {
         duration: Duration = Toast.DURATION_DEFAULT,
         testTag: String? = null,
     ) {
-        _events.emit(
+        _events.tryEmit(
             Toast(
                 type = type,
                 title = title,
@@ -40,7 +40,7 @@ class Toaster @Inject constructor() {
     }
 
     // region @StringRes overloads
-    suspend fun success(
+    fun success(
         @StringRes title: Int,
         @StringRes body: Int? = null,
         testTag: String? = null,
@@ -51,7 +51,7 @@ class Toaster @Inject constructor() {
         testTag = testTag
     )
 
-    suspend fun info(
+    fun info(
         @StringRes title: Int,
         @StringRes body: Int? = null,
         testTag: String? = null,
@@ -62,7 +62,7 @@ class Toaster @Inject constructor() {
         testTag = testTag,
     )
 
-    suspend fun lightning(
+    fun lightning(
         @StringRes title: Int,
         @StringRes body: Int? = null,
         testTag: String? = null,
@@ -73,7 +73,7 @@ class Toaster @Inject constructor() {
         testTag = testTag
     )
 
-    suspend fun warn(
+    fun warn(
         @StringRes title: Int,
         @StringRes body: Int? = null,
         testTag: String? = null,
@@ -84,7 +84,7 @@ class Toaster @Inject constructor() {
         testTag = testTag
     )
 
-    suspend fun error(
+    fun error(
         @StringRes title: Int,
         @StringRes body: Int? = null,
         testTag: String? = null,
@@ -97,31 +97,31 @@ class Toaster @Inject constructor() {
     // endregion
 
     // region ToastText overloads
-    suspend fun success(
+    fun success(
         title: ToastText,
         body: ToastText? = null,
         testTag: String? = null,
     ) = emit(ToastType.SUCCESS, title, body, testTag = testTag)
 
-    suspend fun info(
+    fun info(
         title: ToastText,
         body: ToastText? = null,
         testTag: String? = null,
     ) = emit(ToastType.INFO, title, body, testTag = testTag)
 
-    suspend fun lightning(
+    fun lightning(
         title: ToastText,
         body: ToastText? = null,
         testTag: String? = null,
     ) = emit(ToastType.LIGHTNING, title, body, testTag = testTag)
 
-    suspend fun warn(
+    fun warn(
         title: ToastText,
         body: ToastText? = null,
         testTag: String? = null,
     ) = emit(ToastType.WARNING, title, body, testTag = testTag)
 
-    suspend fun error(
+    fun error(
         title: ToastText,
         body: ToastText? = null,
         testTag: String? = null,
@@ -129,7 +129,7 @@ class Toaster @Inject constructor() {
     // endregion
 
     // region String literal overloads
-    suspend fun success(
+    fun success(
         title: String,
         body: String? = null,
         testTag: String? = null,
@@ -140,7 +140,7 @@ class Toaster @Inject constructor() {
         testTag = testTag,
     )
 
-    suspend fun info(
+    fun info(
         title: String,
         body: String? = null,
         testTag: String? = null,
@@ -151,7 +151,7 @@ class Toaster @Inject constructor() {
         testTag = testTag,
     )
 
-    suspend fun lightning(
+    fun lightning(
         title: String,
         body: String? = null,
         testTag: String? = null,
@@ -162,7 +162,7 @@ class Toaster @Inject constructor() {
         testTag = testTag,
     )
 
-    suspend fun warn(
+    fun warn(
         title: String,
         body: String? = null,
         testTag: String? = null,
@@ -173,7 +173,7 @@ class Toaster @Inject constructor() {
         testTag = testTag,
     )
 
-    suspend fun error(
+    fun error(
         title: String,
         body: String? = null,
         testTag: String? = null,
@@ -184,7 +184,7 @@ class Toaster @Inject constructor() {
         testTag = testTag,
     )
 
-    suspend fun error(throwable: Throwable) = emit(
+    fun error(throwable: Throwable) = emit(
         type = ToastType.ERROR,
         title = ToastText(R.string.common__error),
         body = throwable.message?.let { ToastText(it) }
