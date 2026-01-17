@@ -65,8 +65,6 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.startActivityAppSettings
-import to.bitkit.models.ToastType
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
@@ -74,10 +72,11 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.utils.Logger
-import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
 const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
@@ -93,7 +92,7 @@ fun QrScanningScreen(
     onBack: () -> Unit = { navController.popBackStack() },
     onScanSuccess: (String) -> Unit,
 ) {
-    val app = appViewModel ?: return
+    val toaster = toaster
 
     val (scanResult, setScanResult) = remember { mutableStateOf<String?>(null) }
 
@@ -140,7 +139,7 @@ fun QrScanningScreen(
     val context = LocalContext.current
     val previewView = remember { PreviewView(context) }
     val preview = remember { Preview.Builder().build() }
-    val analyzer = remember {
+    val analyzer = remember(toaster) {
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
                 val qrCode = result.getOrThrow()
@@ -149,8 +148,7 @@ fun QrScanningScreen(
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
                 Logger.error("Failed to scan QR code", error)
-                app.toast(
-                    type = ToastType.ERROR,
+                toaster.error(
                     title = R.string.other__qr_error_header,
                     body = R.string.other__qr_error_text,
                 )
@@ -166,12 +164,12 @@ fun QrScanningScreen(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
-            uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> app.toast(e) }) }
+            uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> toaster.error(e) }) }
         }
     )
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> app.toast(e) }) }
+        uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> toaster.error(e) }) }
     }
 
     LaunchedEffect(lensFacing) {
@@ -210,7 +208,7 @@ fun QrScanningScreen(
                     context.startActivityAppSettings()
                 },
                 onClickRetry = cameraPermissionState::launchPermissionRequest,
-                onClickPaste = handlePaste(context, app, setScanResult),
+                onClickPaste = handlePaste(context, toaster, setScanResult),
                 onBack = onBack,
             )
         },
@@ -239,7 +237,7 @@ fun QrScanningScreen(
                             galleryLauncher.launch("image/*")
                         }
                     },
-                    onPasteFromClipboard = handlePaste(context, app, setScanResult),
+                    onPasteFromClipboard = handlePaste(context, toaster, setScanResult),
                     onSubmitDebug = setScanResult,
                 )
             }
@@ -250,13 +248,12 @@ fun QrScanningScreen(
 @Composable
 private fun handlePaste(
     context: Context,
-    app: AppViewModel,
+    toaster: Toaster,
     setScanResult: (String?) -> Unit,
 ): () -> Unit = {
     val clipboard = context.getClipboardText()?.trim()
     if (clipboard.isNullOrBlank()) {
-        app.toast(
-            type = ToastType.WARNING,
+        toaster.warn(
             title = R.string.wallet__send_clipboard_empty_title,
             body = R.string.wallet__send_clipboard_empty_text,
         )

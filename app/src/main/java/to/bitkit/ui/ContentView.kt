@@ -46,7 +46,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.ToastType
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
@@ -626,10 +625,9 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
-                    toastException = { appViewModel.toast(it) },
+                    toastException = { appViewModel.toaster.error(it) },
                     toast = { title, body ->
-                        appViewModel.toast(
-                            type = ToastType.ERROR,
+                        appViewModel.toaster.error(
                             title = title,
                             body = body
                         )

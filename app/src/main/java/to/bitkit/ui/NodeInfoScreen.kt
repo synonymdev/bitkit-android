@@ -47,7 +47,6 @@ import to.bitkit.ext.formatToString
 import to.bitkit.ext.uri
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.ToastText
-import to.bitkit.models.ToastType
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningState
 import to.bitkit.ui.components.BodyM
@@ -76,7 +75,7 @@ fun NodeInfoScreen(
     navController: NavController,
 ) {
     val wallet = walletViewModel ?: return
-    val app = appViewModel ?: return
+    val toaster = toaster
     val settings = settingsViewModel ?: return
 
     val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()
@@ -91,8 +90,7 @@ fun NodeInfoScreen(
         onRefresh = { wallet.onPullToRefresh() },
         onDisconnectPeer = { wallet.disconnectPeer(it) },
         onCopy = { text ->
-            app.toast(
-                type = ToastType.SUCCESS,
+            toaster.success(
                 title = ToastText(R.string.common__copied),
                 body = ToastText(text),
             )

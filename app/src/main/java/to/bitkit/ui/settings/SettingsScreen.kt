@@ -25,9 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.navigateToAboutSettings
 import to.bitkit.ui.navigateToAdvancedSettings
@@ -41,6 +39,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.toaster
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
 
@@ -48,7 +47,7 @@ private const val DEV_MODE_TAP_THRESHOLD = 5
 fun SettingsScreen(
     navController: NavController,
 ) {
-    val app = appViewModel ?: return
+    val toaster = toaster
     val settings = settingsViewModel ?: return
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     var enableDevModeTapCount by remember { mutableIntStateOf(0) }
@@ -83,8 +82,7 @@ fun SettingsScreen(
                 } else {
                     R.string.settings__dev_disabled_message
                 }
-                app.toast(
-                    type = ToastType.SUCCESS,
+                toaster.success(
                     title = titleRes,
                     body = bodyRes,
                 )

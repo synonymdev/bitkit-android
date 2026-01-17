@@ -31,7 +31,6 @@ import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
@@ -49,6 +48,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AmountInputViewModel
@@ -62,7 +62,7 @@ fun ReceiveAmountScreen(
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
-    val app = appViewModel ?: return
+    val toaster = toaster
     val wallet = walletViewModel ?: return
     val blocktank = blocktankViewModel ?: return
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
@@ -106,7 +106,7 @@ fun ReceiveAmountScreen(
                         )
                     )
                 }.onFailure { e ->
-                    app.toast(e)
+                    toaster.error(e)
                     Logger.error("Failed to create CJIT", e)
                 }
                 isCreatingInvoice = false

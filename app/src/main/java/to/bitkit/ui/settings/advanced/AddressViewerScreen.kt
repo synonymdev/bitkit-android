@@ -31,9 +31,7 @@ import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.AddressModel
 import to.bitkit.models.ToastText
-import to.bitkit.models.ToastType
 import to.bitkit.models.formatToModernDisplay
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
@@ -50,6 +48,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.BlockExplorerType
 import to.bitkit.ui.utils.getBlockExplorerUrl
 
@@ -58,8 +57,8 @@ fun AddressViewerScreen(
     navController: NavController,
     viewModel: AddressViewerViewModel = hiltViewModel(),
 ) {
-    val app = appViewModel ?: return
     val context = LocalContext.current
+    val toaster = toaster
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -78,8 +77,7 @@ fun AddressViewerScreen(
         onGenerateMoreAddresses = viewModel::loadMoreAddresses,
         onCopy = { text ->
             context.setClipboardText(text)
-            app.toast(
-                type = ToastType.SUCCESS,
+            toaster.success(
                 title = ToastText(R.string.common__copied),
                 body = ToastText(text),
             )

@@ -26,10 +26,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.mockOrder
-import to.bitkit.models.ToastType
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
@@ -45,6 +43,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.TransferEffect
@@ -63,7 +62,7 @@ fun SpendingAdvancedScreen(
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
     val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
-    val app = appViewModel ?: return
+    val toaster = toaster
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
@@ -85,13 +84,12 @@ fun SpendingAdvancedScreen(
                 TransferEffect.OnOrderCreated -> currentOnOrderCreated()
                 is TransferEffect.ToastException -> {
                     isLoading = false
-                    app.toast(effect.e)
+                    toaster.error(effect.e)
                 }
 
                 is TransferEffect.ToastError -> {
                     isLoading = false
-                    app.toast(
-                        type = ToastType.ERROR,
+                    toaster.error(
                         title = effect.title,
                         body = effect.body,
                     )

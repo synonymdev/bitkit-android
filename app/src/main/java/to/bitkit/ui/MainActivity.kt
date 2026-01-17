@@ -265,7 +265,7 @@ private fun OnboardingNav(
                             walletViewModel.setInitNodeLifecycleState()
                             walletViewModel.createWallet(bip39Passphrase = null)
                         }.onFailure {
-                            appViewModel.toast(it)
+                            appViewModel.toaster.error(it)
                         }
                     }
                 },
@@ -295,7 +295,7 @@ private fun OnboardingNav(
                             appViewModel.resetIsAuthenticatedState()
                             walletViewModel.restoreWallet(mnemonic, passphrase)
                         }.onFailure {
-                            appViewModel.toast(it)
+                            appViewModel.toaster.error(it)
                         }
                     }
                 }
@@ -310,7 +310,7 @@ private fun OnboardingNav(
                             appViewModel.resetIsAuthenticatedState()
                             walletViewModel.createWallet(bip39Passphrase = passphrase)
                         }.onFailure {
-                            appViewModel.toast(it)
+                            appViewModel.toaster.error(it)
                         }
                     }
                 },

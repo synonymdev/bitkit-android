@@ -58,9 +58,7 @@ import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
-import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
@@ -81,6 +79,7 @@ import to.bitkit.ui.sheets.BoostTransactionSheet
 import to.bitkit.ui.sheets.ComingSoonSheet
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityDetailViewModel
@@ -163,7 +162,7 @@ fun ActivityDetailScreen(
 
             is ActivityDetailViewModel.ActivityLoadState.Success -> {
                 val item = loadState.activity
-                val app = appViewModel ?: return@Box
+                val toaster = toaster
                 val copyToastTitle = stringResource(R.string.common__copied)
 
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
@@ -226,8 +225,7 @@ fun ActivityDetailScreen(
                         isCpfpChild = isCpfpChild,
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
-                            app.toast(
-                                type = ToastType.SUCCESS,
+                            toaster.success(
                                 title = copyToastTitle,
                                 body = text.ellipsisMiddle(40)
                             )
@@ -249,8 +247,7 @@ fun ActivityDetailScreen(
                             onDismiss = detailViewModel::onDismissBoostSheet,
                             item = it,
                             onSuccess = {
-                                app.toast(
-                                    type = ToastType.SUCCESS,
+                                toaster.success(
                                     title = R.string.wallet__boost_success_title,
                                     body = R.string.wallet__boost_success_msg,
                                     testTag = "BoostSuccessToast"
@@ -259,8 +256,7 @@ fun ActivityDetailScreen(
                                 onCloseClick()
                             },
                             onFailure = {
-                                app.toast(
-                                    type = ToastType.ERROR,
+                                toaster.error(
                                     title = R.string.wallet__boost_error_title,
                                     body = R.string.wallet__boost_error_msg,
                                     testTag = "BoostFailureToast"
@@ -268,15 +264,13 @@ fun ActivityDetailScreen(
                                 detailViewModel.onDismissBoostSheet()
                             },
                             onMaxFee = {
-                                app.toast(
-                                    type = ToastType.ERROR,
+                                toaster.error(
                                     title = R.string.wallet__send_fee_error,
                                     body = R.string.wallet__send_fee_error_max,
                                 )
                             },
                             onMinFee = {
-                                app.toast(
-                                    type = ToastType.ERROR,
+                                toaster.error(
                                     title = R.string.wallet__send_fee_error,
                                     body = R.string.wallet__send_fee_error_min,
                                 )

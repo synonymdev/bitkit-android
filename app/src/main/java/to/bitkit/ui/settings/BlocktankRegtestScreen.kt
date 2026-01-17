@@ -28,8 +28,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.models.ToastType
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
@@ -39,6 +37,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
@@ -50,7 +49,7 @@ fun BlocktankRegtestScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val wallet = walletViewModel ?: return
-    val app = appViewModel ?: return
+    val toaster = toaster
     val walletState by wallet.walletState.collectAsStateWithLifecycle()
 
     ScreenColumn {
@@ -112,15 +111,13 @@ fun BlocktankRegtestScreen(
                             val sats = depositAmount.toULongOrNull() ?: error("Invalid deposit amount: $depositAmount")
                             val txId = viewModel.regtestDeposit(depositAddress, sats)
                             Logger.debug("Deposit successful with txId: $txId")
-                            app.toast(
-                                type = ToastType.SUCCESS,
+                            toaster.success(
                                 title = "Success",
                                 body = "Deposit successful. TxID: $txId",
                             )
                         }.onFailure {
                             Logger.error("Deposit failed", it)
-                            app.toast(
-                                type = ToastType.ERROR,
+                            toaster.error(
                                 title = "Failed to deposit",
                                 body = it.message.orEmpty(),
                             )
@@ -158,15 +155,13 @@ fun BlocktankRegtestScreen(
                                     mineBlockCount.toUIntOrNull() ?: error("Invalid block count: $mineBlockCount")
                                 viewModel.regtestMine(count)
                                 Logger.debug("Successfully mined $count blocks")
-                                app.toast(
-                                    type = ToastType.SUCCESS,
+                                toaster.success(
                                     title = "Success",
                                     body = "Successfully mined $count blocks",
                                 )
                             }.onFailure {
                                 Logger.error("Mining failed", it)
-                                app.toast(
-                                    type = ToastType.ERROR,
+                                toaster.error(
                                     title = "Failed to mine",
                                     body = it.message.orEmpty(),
                                 )
@@ -210,15 +205,13 @@ fun BlocktankRegtestScreen(
                             val amount = if (paymentAmount.isEmpty()) null else paymentAmount.toULongOrNull()
                             val paymentId = viewModel.regtestPay(paymentInvoice, amount)
                             Logger.debug("Payment successful with ID: $paymentId")
-                            app.toast(
-                                type = ToastType.SUCCESS,
+                            toaster.success(
                                 title = "Success",
                                 body = "Payment successful. ID: $paymentId",
                             )
                         }.onFailure {
                             Logger.error("Payment failed", it)
-                            app.toast(
-                                type = ToastType.ERROR,
+                            toaster.error(
                                 title = "Failed to pay invoice from LND",
                                 body = it.message.orEmpty(),
                             )
@@ -277,14 +270,13 @@ fun BlocktankRegtestScreen(
                                 forceCloseAfterS = closeAfter,
                             )
                             Logger.debug("Channel closed successfully with txId: $closingTxId")
-                            app.toast(
-                                type = ToastType.SUCCESS,
+                            toaster.success(
                                 title = "Success",
                                 body = "Channel closed. Closing TxID: $closingTxId"
                             )
                         }.onFailure {
                             Logger.error("Channel close failed", it)
-                            app.toast(it)
+                            toaster.error(it)
                         }
                     }
                 },

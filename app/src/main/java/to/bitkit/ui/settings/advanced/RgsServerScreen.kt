@@ -26,8 +26,6 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.models.ToastText
-import to.bitkit.models.ToastType
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
@@ -42,6 +40,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 
 @Composable
 fun RgsServerScreen(
@@ -50,7 +49,7 @@ fun RgsServerScreen(
     viewModel: RgsServerViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val app = appViewModel ?: return
+    val toaster = toaster
 
     // Handle result from Scanner
     LaunchedEffect(savedStateHandle) {
@@ -66,15 +65,13 @@ fun RgsServerScreen(
     LaunchedEffect(uiState.connectionResult) {
         uiState.connectionResult?.let { result ->
             if (result.isSuccess) {
-                app.toast(
-                    type = ToastType.SUCCESS,
+                toaster.success(
                     title = R.string.settings__rgs__update_success_title,
                     body = R.string.settings__rgs__update_success_description,
                     testTag = "RgsUpdatedToast",
                 )
             } else {
-                app.toast(
-                    type = ToastType.ERROR,
+                toaster.error(
                     title = ToastText(R.string.wallet__ldk_start_error_title),
                     body = ToastText(result.exceptionOrNull()?.message ?: "Unknown error"),
                     testTag = "RgsErrorToast",

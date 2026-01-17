@@ -56,9 +56,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.ToastText
-import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.ChannelStatusUi
@@ -75,6 +73,7 @@ import to.bitkit.ui.settings.lightning.components.ChannelStatusView
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.walletViewModel
 import java.time.Instant
@@ -88,7 +87,7 @@ fun ChannelDetailScreen(
     viewModel: LightningConnectionsViewModel,
 ) {
     val context = LocalContext.current
-    val app = appViewModel ?: return
+    val toaster = toaster
     val wallet = walletViewModel ?: return
 
     val selectedChannel by viewModel.selectedChannel.collectAsStateWithLifecycle()
@@ -129,8 +128,7 @@ fun ChannelDetailScreen(
         },
         onCopyText = { text ->
             context.setClipboardText(text)
-            app.toast(
-                type = ToastType.SUCCESS,
+            toaster.success(
                 title = ToastText(R.string.common__copied),
                 body = ToastText(text),
             )

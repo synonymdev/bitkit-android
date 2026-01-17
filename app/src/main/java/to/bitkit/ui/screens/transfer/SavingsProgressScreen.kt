@@ -25,7 +25,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
-import to.bitkit.models.ToastType
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -36,6 +35,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
@@ -51,6 +51,7 @@ fun SavingsProgressScreen(
     onContinueClick: () -> Unit = {},
     onTransferUnavailable: () -> Unit = {},
 ) {
+    val toaster = toaster
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
 
     // Effect to close channels & update UI
@@ -68,8 +69,7 @@ fun SavingsProgressScreen(
 
             if (nonTrustedChannels.isEmpty()) {
                 // All channels are trusted peers - show error and navigate back immediately
-                app.toast(
-                    type = ToastType.ERROR,
+                toaster.error(
                     title = R.string.lightning__close_error,
                     body = R.string.lightning__close_error_msg,
                 )
@@ -79,8 +79,7 @@ fun SavingsProgressScreen(
                     channels = nonTrustedChannels,
                     onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
                     onTransferUnavailable = {
-                        app.toast(
-                            type = ToastType.ERROR,
+                        toaster.error(
                             title = R.string.lightning__close_error,
                             body = R.string.lightning__close_error_msg,
                         )

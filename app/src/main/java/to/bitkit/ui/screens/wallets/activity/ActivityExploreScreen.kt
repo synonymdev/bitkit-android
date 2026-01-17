@@ -45,9 +45,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.totalValue
-import to.bitkit.models.ToastType
 import to.bitkit.ui.Routes
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
@@ -59,6 +57,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.getScreenTitleRes
@@ -131,7 +130,7 @@ fun ActivityExploreScreen(
 
             is ActivityDetailViewModel.ActivityLoadState.Success -> {
                 val item = loadState.activity
-                val app = appViewModel ?: return@ScreenColumn
+                val toaster = toaster
                 val context = LocalContext.current
 
                 val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
@@ -166,8 +165,7 @@ fun ActivityExploreScreen(
                     txDetails = txDetails,
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
-                        app.toast(
-                            type = ToastType.SUCCESS,
+                        toaster.success(
                             title = toastMessage,
                             body = text.ellipsisMiddle(40),
                         )

@@ -32,8 +32,6 @@ import to.bitkit.R
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServerPeer
 import to.bitkit.models.ToastText
-import to.bitkit.models.ToastType
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
@@ -50,6 +48,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 
 @Composable
 fun ElectrumConfigScreen(
@@ -58,8 +57,8 @@ fun ElectrumConfigScreen(
     viewModel: ElectrumConfigViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val app = appViewModel ?: return
     val context = LocalContext.current
+    val toaster = toaster
 
     // Handle result from Scanner
     LaunchedEffect(savedStateHandle) {
@@ -75,8 +74,7 @@ fun ElectrumConfigScreen(
     LaunchedEffect(uiState.connectionResult) {
         uiState.connectionResult?.let { result ->
             if (result.isSuccess) {
-                app.toast(
-                    type = ToastType.SUCCESS,
+                toaster.success(
                     title = ToastText(R.string.settings__es__server_updated_title),
                     body = ToastText(
                         context.getString(R.string.settings__es__server_updated_message)
@@ -86,8 +84,7 @@ fun ElectrumConfigScreen(
                     testTag = "ElectrumUpdatedToast",
                 )
             } else {
-                app.toast(
-                    type = ToastType.WARNING,
+                toaster.warn(
                     title = R.string.settings__es__server_error,
                     body = R.string.settings__es__server_error_description,
                     testTag = "ElectrumErrorToast",
