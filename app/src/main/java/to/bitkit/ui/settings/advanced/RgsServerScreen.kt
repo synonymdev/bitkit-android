@@ -74,7 +74,9 @@ fun RgsServerScreen(
             } else {
                 toaster.error(
                     title = ToastText(R.string.wallet__ldk_start_error_title),
-                    body = ToastText(result.exceptionOrNull()?.message ?: "Unknown error"),
+                    body = result.exceptionOrNull()?.message
+                        ?.let { ToastText(it) }
+                        ?: ToastText(R.string.common__error_body),
                     testTag = "RgsErrorToast",
                 )
             }
@@ -133,7 +135,9 @@ private fun Content(
                 value = uiState.rgsUrl,
                 onValueChange = onChangeUrl,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                modifier = Modifier.fillMaxWidth().testTag("RGSUrl")
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("RGSUrl")
             )
 
             FillHeight()
