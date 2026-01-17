@@ -84,8 +84,8 @@ class LnurlChannelViewModel @Inject constructor(
 
     suspend fun errorToast(error: Throwable) {
         toaster.error(
-            title = ToastText.Resource(R.string.other__lnurl_channel_error),
-            body = ToastText.Literal(error.message ?: context.getString(R.string.common__error_body)),
+            title = ToastText(R.string.other__lnurl_channel_error),
+            body = ToastText(error.message ?: context.getString(R.string.common__error_body)),
         )
     }
 }

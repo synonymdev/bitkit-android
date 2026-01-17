@@ -77,8 +77,8 @@ fun ElectrumConfigScreen(
             if (result.isSuccess) {
                 app.toast(
                     type = ToastType.SUCCESS,
-                    title = ToastText.Resource(R.string.settings__es__server_updated_title),
-                    body = ToastText.Literal(
+                    title = ToastText(R.string.settings__es__server_updated_title),
+                    body = ToastText(
                         context.getString(R.string.settings__es__server_updated_message)
                             .replace("{host}", uiState.host)
                             .replace("{port}", uiState.port)

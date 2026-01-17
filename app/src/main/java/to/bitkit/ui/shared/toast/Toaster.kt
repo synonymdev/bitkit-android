@@ -46,8 +46,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.SUCCESS,
-        ToastText.Resource(title),
-        body?.let { ToastText.Resource(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag
     )
 
@@ -57,8 +57,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.INFO,
-        ToastText.Resource(title),
-        body?.let { ToastText.Resource(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag,
     )
 
@@ -68,8 +68,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.LIGHTNING,
-        ToastText.Resource(title),
-        body?.let { ToastText.Resource(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag
     )
 
@@ -79,8 +79,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.WARNING,
-        ToastText.Resource(title),
-        body?.let { ToastText.Resource(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag
     )
 
@@ -90,8 +90,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.ERROR,
-        ToastText.Resource(title),
-        body?.let { ToastText.Resource(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag,
     )
     // endregion
@@ -135,8 +135,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.SUCCESS,
-        ToastText.Literal(title),
-        body?.let { ToastText.Literal(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag,
     )
 
@@ -146,8 +146,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.INFO,
-        ToastText.Literal(title),
-        body?.let { ToastText.Literal(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag,
     )
 
@@ -157,8 +157,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.LIGHTNING,
-        ToastText.Literal(title),
-        body?.let { ToastText.Literal(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag,
     )
 
@@ -168,8 +168,8 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.WARNING,
-        ToastText.Literal(title),
-        body?.let { ToastText.Literal(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag,
     )
 
@@ -179,16 +179,16 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(
         ToastType.ERROR,
-        ToastText.Literal(title),
-        body?.let { ToastText.Literal(it) },
+        ToastText(title),
+        body?.let { ToastText(it) },
         testTag = testTag,
     )
 
     suspend fun error(throwable: Throwable) = emit(
         type = ToastType.ERROR,
-        title = ToastText.Resource(R.string.common__error),
-        body = throwable.message?.let { ToastText.Literal(it) }
-            ?: ToastText.Resource(R.string.common__error_body),
+        title = ToastText(R.string.common__error),
+        body = throwable.message?.let { ToastText(it) }
+            ?: ToastText(R.string.common__error_body),
     )
     // endregion
 }

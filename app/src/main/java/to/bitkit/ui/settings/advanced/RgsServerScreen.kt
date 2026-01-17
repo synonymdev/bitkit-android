@@ -75,8 +75,8 @@ fun RgsServerScreen(
             } else {
                 app.toast(
                     type = ToastType.ERROR,
-                    title = ToastText.Resource(R.string.wallet__ldk_start_error_title),
-                    body = ToastText.Literal(result.exceptionOrNull()?.message ?: "Unknown error"),
+                    title = ToastText(R.string.wallet__ldk_start_error_title),
+                    body = ToastText(result.exceptionOrNull()?.message ?: "Unknown error"),
                     testTag = "RgsErrorToast",
                 )
             }

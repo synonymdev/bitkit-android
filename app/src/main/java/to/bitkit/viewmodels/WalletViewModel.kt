@@ -308,8 +308,8 @@ class WalletViewModel @Inject constructor(
                 }
                 .onFailure {
                     toaster.error(
-                        title = ToastText.Resource(R.string.common__error),
-                        body = ToastText.Literal(it.message ?: context.getString(R.string.common__error_body)),
+                        title = ToastText(R.string.common__error),
+                        body = ToastText(it.message ?: context.getString(R.string.common__error_body)),
                     )
                 }
         }
@@ -318,8 +318,8 @@ class WalletViewModel @Inject constructor(
     fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
         walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
             toaster.error(
-                title = ToastText.Resource(R.string.wallet__error_invoice_update),
-                body = ToastText.Literal(error.message ?: context.getString(R.string.common__error_body)),
+                title = ToastText(R.string.wallet__error_invoice_update),
+                body = ToastText(error.message ?: context.getString(R.string.common__error_body)),
             )
         }
     }

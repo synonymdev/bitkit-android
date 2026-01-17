@@ -309,8 +309,8 @@ private fun Preview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.WARNING,
-                    title = ToastText.Literal("You're still offline"),
-                    body = ToastText.Literal("Check your connection to keep using Bitkit."),
+                    title = ToastText("You're still offline"),
+                    body = ToastText("Check your connection to keep using Bitkit."),
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -318,8 +318,8 @@ private fun Preview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.LIGHTNING,
-                    title = ToastText.Literal("Instant Payments Ready"),
-                    body = ToastText.Literal("You can now pay anyone, anywhere, instantly."),
+                    title = ToastText("Instant Payments Ready"),
+                    body = ToastText("You can now pay anyone, anywhere, instantly."),
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -327,8 +327,8 @@ private fun Preview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.SUCCESS,
-                    title = ToastText.Literal("You're Back Online!"),
-                    body = ToastText.Literal("Successfully reconnected to the Internet."),
+                    title = ToastText("You're Back Online!"),
+                    body = ToastText("Successfully reconnected to the Internet."),
                     autoHide = true,
                 ),
                 onDismiss = {},
@@ -336,8 +336,8 @@ private fun Preview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.INFO,
-                    title = ToastText.Literal("General Message"),
-                    body = ToastText.Literal("Used for neutral content to inform the user."),
+                    title = ToastText("General Message"),
+                    body = ToastText("Used for neutral content to inform the user."),
                     autoHide = false,
                 ),
                 onDismiss = {},
@@ -345,8 +345,8 @@ private fun Preview() {
             ToastContent(
                 toast = Toast(
                     type = ToastType.ERROR,
-                    title = ToastText.Literal("Error Toast"),
-                    body = ToastText.Literal("This is a toast message."),
+                    title = ToastText("Error Toast"),
+                    body = ToastText("This is a toast message."),
                     autoHide = true,
                 ),
                 onDismiss = {},

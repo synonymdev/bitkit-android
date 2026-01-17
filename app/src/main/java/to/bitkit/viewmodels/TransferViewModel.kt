@@ -484,8 +484,8 @@ class TransferViewModel @Inject constructor(
                 val skippedMsg = context.getString(R.string.lightning__force_channels_skipped)
                 val bodyText = if (trustedChannels.isNotEmpty()) "$initMsg $skippedMsg" else initMsg
                 toaster.lightning(
-                    title = ToastText.Resource(R.string.lightning__force_init_title),
-                    body = ToastText.Literal(bodyText),
+                    title = ToastText(R.string.lightning__force_init_title),
+                    body = ToastText(bodyText),
                 )
             } else {
                 Logger.error("Force close failed for ${failedChannels.size} channels", context = TAG)

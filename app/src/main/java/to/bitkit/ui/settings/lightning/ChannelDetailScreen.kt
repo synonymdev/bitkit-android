@@ -131,8 +131,8 @@ fun ChannelDetailScreen(
             context.setClipboardText(text)
             app.toast(
                 type = ToastType.SUCCESS,
-                title = ToastText.Resource(R.string.common__copied),
-                body = ToastText.Literal(text),
+                title = ToastText(R.string.common__copied),
+                body = ToastText(text),
             )
         },
         onOpenUrl = { txId ->

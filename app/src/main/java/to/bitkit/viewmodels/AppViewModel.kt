@@ -2011,8 +2011,8 @@ class AppViewModel @Inject constructor(
         testTag: String? = null,
     ) = toast(
         type = type,
-        title = ToastText.Resource(title),
-        body = body?.let { ToastText.Resource(it) },
+        title = ToastText(title),
+        body = body?.let { ToastText(it) },
         autoHide = autoHide,
         duration = duration,
         testTag = testTag,
@@ -2027,8 +2027,8 @@ class AppViewModel @Inject constructor(
         testTag: String? = null,
     ) = toast(
         type = type,
-        title = ToastText.Literal(title),
-        body = body?.let { ToastText.Literal(it) },
+        title = ToastText(title),
+        body = body?.let { ToastText(it) },
         autoHide = autoHide,
         duration = duration,
         testTag = testTag,
@@ -2037,9 +2037,9 @@ class AppViewModel @Inject constructor(
     fun toast(error: Throwable) {
         toast(
             type = ToastType.ERROR,
-            title = ToastText.Resource(R.string.common__error),
-            body = error.message?.let { ToastText.Literal(it) }
-                ?: ToastText.Resource(R.string.common__error_body)
+            title = ToastText(R.string.common__error),
+            body = error.message?.let { ToastText(it) }
+                ?: ToastText(R.string.common__error_body)
         )
     }
 
