@@ -456,8 +456,8 @@ class AppViewModel @Inject constructor(
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
         toaster.error(
-            title = ToastText("Migration Warning"),
-            body = ToastText("Migration completed but node restart failed. Please restart the app.")
+            title = ToastText(R.string.wallet__migration_restart_failed_title),
+            body = ToastText(R.string.wallet__migration_restart_failed_body),
         )
     }
 

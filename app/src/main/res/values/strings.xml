@@ -1116,6 +1116,8 @@
     <string name="wallet__max_possible_fee_rate_msg">Lower the custom fee and try again.</string>
     <string name="wallet__migration_error_body">Please restore your wallet manually using your recovery phrase</string>
     <string name="wallet__migration_error_title">Migration Failed</string>
+    <string name="wallet__migration_restart_failed_body">Migration completed but node restart failed. Please restart the app.</string>
+    <string name="wallet__migration_restart_failed_title">Migration Warning</string>
     <string name="wallet__min_possible_fee_rate">Fee Below Minimum Limit</string>
     <string name="wallet__min_possible_fee_rate_msg">Increase the custom fee and try again.</string>
     <string name="wallet__minimum">MINIMUM</string>
