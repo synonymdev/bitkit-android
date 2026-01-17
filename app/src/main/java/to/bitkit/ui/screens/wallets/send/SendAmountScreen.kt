@@ -16,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -32,12 +31,10 @@ import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.ToastType
 import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
@@ -57,6 +54,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.toaster
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.LnurlParams
@@ -76,8 +74,7 @@ fun SendAmountScreen(
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
-    val app = appViewModel
-    val context = LocalContext.current
+    val toaster = toaster
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
 
@@ -108,10 +105,9 @@ fun SendAmountScreen(
         }.takeIf { canGoBack },
         onClickMax = { maxSats ->
             if (uiState.lnurl == null) {
-                app?.toast(
-                    type = ToastType.INFO,
-                    title = context.getString(R.string.wallet__send_max_spending__title),
-                    body = context.getString(R.string.wallet__send_max_spending__description)
+                toaster.info(
+                    title = R.string.wallet__send_max_spending__title,
+                    body = R.string.wallet__send_max_spending__description,
                 )
             }
             amountInputViewModel.setSats(maxSats, currencies)

@@ -84,8 +84,6 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
-import to.bitkit.models.ToastText
-import to.bitkit.models.ToastType
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
@@ -125,7 +123,6 @@ import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
@@ -1970,69 +1967,6 @@ class AppViewModel @Inject constructor(
     // region Toasts
     private val toastQueue = toastQueueProvider(Dispatchers.Main.immediate)
     val currentToast: StateFlow<Toast?> = toastQueue.currentToast
-
-    fun toast(
-        type: ToastType,
-        title: ToastText,
-        body: ToastText? = null,
-        autoHide: Boolean = true,
-        duration: Duration = Toast.DURATION_DEFAULT,
-        testTag: String? = null,
-    ) {
-        toastQueue.enqueue(
-            Toast(
-                type = type,
-                title = title,
-                body = body,
-                autoHide = autoHide,
-                duration = duration,
-                testTag = testTag,
-            )
-        )
-    }
-
-    fun toast(
-        type: ToastType,
-        @StringRes title: Int,
-        @StringRes body: Int? = null,
-        autoHide: Boolean = true,
-        duration: Duration = Toast.DURATION_DEFAULT,
-        testTag: String? = null,
-    ) = toast(
-        type = type,
-        title = ToastText(title),
-        body = body?.let { ToastText(it) },
-        autoHide = autoHide,
-        duration = duration,
-        testTag = testTag,
-    )
-
-    fun toast(
-        type: ToastType,
-        title: String,
-        body: String? = null,
-        autoHide: Boolean = true,
-        duration: Duration = Toast.DURATION_DEFAULT,
-        testTag: String? = null,
-    ) = toast(
-        type = type,
-        title = ToastText(title),
-        body = body?.let { ToastText(it) },
-        autoHide = autoHide,
-        duration = duration,
-        testTag = testTag,
-    )
-
-    fun toast(error: Throwable) {
-        toast(
-            type = ToastType.ERROR,
-            title = ToastText(R.string.common__error),
-            body = error.message?.let { ToastText(it) }
-                ?: ToastText(R.string.common__error_body)
-        )
-    }
-
-    fun toast(toast: Toast) = toastQueue.enqueue(toast)
 
     fun hideToast() = toastQueue.dismissCurrentToast()
 

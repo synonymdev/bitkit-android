@@ -59,8 +59,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
-import to.bitkit.models.ToastType
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetPreview
@@ -76,6 +74,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -91,7 +90,7 @@ fun SendRecipientScreen(
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val app = appViewModel
+    val toaster = toaster
 
     // Context & lifecycle
     val context = LocalContext.current
@@ -139,10 +138,9 @@ fun SendRecipientScreen(
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
                 Logger.error("Scan failed", error, context = TAG)
-                app?.toast(
-                    type = ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    body = context.getString(R.string.other__qr_error_text),
+                toaster.error(
+                    title = R.string.other__qr_error_header,
+                    body = R.string.other__qr_error_text,
                 )
             }
         }
@@ -173,11 +171,10 @@ fun SendRecipientScreen(
                 isCameraInitialized = true
             }.onFailure {
                 Logger.error("Camera initialization failed", it, context = TAG)
-                app?.toast(
-                    type = ToastType.ERROR,
+                toaster.error(
                     title = context.getString(R.string.other__qr_error_header),
                     body = context.getString(R.string.other__camera_init_error)
-                        .replace("{message}", it.message.orEmpty())
+                        .replace("{message}", it.message.orEmpty()),
                 )
                 isCameraInitialized = false
             }
@@ -206,7 +203,7 @@ fun SendRecipientScreen(
         onEvent(SendEvent.AddressContinue(qrCode))
     }
 
-    val handleGalleryError: (Throwable) -> Unit = { app?.toast(it) }
+    val handleGalleryError: (Throwable) -> Unit = { toaster.error(it) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
