@@ -1,13 +1,11 @@
 package to.bitkit.viewmodels
 
-import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.testNotification
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import to.bitkit.R
@@ -31,7 +29,6 @@ import javax.inject.Inject
 @Suppress("TooManyFunctions", "LongParameterList")
 @HiltViewModel
 class DevSettingsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val firebaseMessaging: FirebaseMessaging,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
@@ -87,13 +84,9 @@ class DevSettingsViewModel @Inject constructor(
         )
     }
 
-    fun resetWidgetsState() = viewModelScope.launch {
-        widgetsStore.reset()
-    }
+    fun resetWidgetsState() = viewModelScope.launch { widgetsStore.reset() }
 
-    fun refreshCurrencyRates() = viewModelScope.launch {
-        currencyRepo.triggerRefresh()
-    }
+    fun refreshCurrencyRates() = viewModelScope.launch { currencyRepo.triggerRefresh() }
 
     fun zipLogsForSharing(onReady: (Uri) -> Unit) {
         viewModelScope.launch {
@@ -108,25 +101,15 @@ class DevSettingsViewModel @Inject constructor(
         }
     }
 
-    fun resetBackupState() = viewModelScope.launch {
-        cacheStore.update { it.copy(backupStatuses = mapOf()) }
-    }
+    fun resetBackupState() = viewModelScope.launch { cacheStore.update { it.copy(backupStatuses = mapOf()) } }
 
-    fun wipeWallet() = viewModelScope.launch {
-        walletRepo.wipeWallet()
-    }
+    fun wipeWallet() = viewModelScope.launch { walletRepo.wipeWallet() }
 
-    fun resetCacheStore() = viewModelScope.launch {
-        cacheStore.reset()
-    }
+    fun resetCacheStore() = viewModelScope.launch { cacheStore.reset() }
 
-    fun resetDatabase() = viewModelScope.launch {
-        appDb.clearAllTables()
-    }
+    fun resetDatabase() = viewModelScope.launch { appDb.clearAllTables() }
 
-    fun resetBlocktankState() = viewModelScope.launch {
-        blocktankRepo.resetState()
-    }
+    fun resetBlocktankState() = viewModelScope.launch { blocktankRepo.resetState() }
 
     fun wipeLogs() = Logger.reset()
 }

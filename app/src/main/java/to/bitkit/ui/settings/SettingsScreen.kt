@@ -67,23 +67,26 @@ fun SettingsScreen(
         onBackClick = { navController.popBackStack() },
         onCogTap = {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-            enableDevModeTapCount = enableDevModeTapCount + 1
+            enableDevModeTapCount += 1
 
             if (enableDevModeTapCount >= DEV_MODE_TAP_THRESHOLD) {
                 val newValue = !isDevModeEnabled
                 settings.setIsDevModeEnabled(newValue)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                val titleRes = if (newValue) {
-                    R.string.settings__dev_enabled_title
-                } else {
-                    R.string.settings__dev_disabled_title
-                }
-                val bodyRes = if (newValue) {
-                    R.string.settings__dev_enabled_message
-                } else {
-                    R.string.settings__dev_disabled_message
-                }
-                toaster.success(title = ToastText(titleRes), body = ToastText(bodyRes))
+                toaster.success(
+                    title = ToastText(
+                        when (newValue) {
+                            true -> R.string.settings__dev_enabled_title
+                            else -> R.string.settings__dev_disabled_title
+                        }
+                    ),
+                    body = ToastText(
+                        when (newValue) {
+                            true -> R.string.settings__dev_enabled_message
+                            else -> R.string.settings__dev_disabled_message
+                        }
+                    )
+                )
                 enableDevModeTapCount = 0
             }
         },

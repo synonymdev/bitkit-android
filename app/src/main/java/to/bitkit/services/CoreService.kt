@@ -647,12 +647,7 @@ class ActivityService(
             }
         }
 
-        if (existingActivity != null &&
-            existingActivity is Activity.Onchain &&
-            ((existingActivity as Activity.Onchain).v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
-        ) {
-            return
-        }
+        if (((existingActivity as? Activity.Onchain)?.v1?.updatedAt ?: 0u) > payment.latestUpdateTimestamp) return
 
         var resolvedChannelId = channelId
 
@@ -673,7 +668,7 @@ class ActivityService(
         val ldkValue = payment.amountSats ?: 0u
         val onChain = if (existingActivity is Activity.Onchain) {
             buildUpdatedOnchainActivity(
-                existingActivity = existingActivity as Activity.Onchain,
+                existingActivity = existingActivity,
                 confirmationData = confirmationData,
                 ldkValue = ldkValue,
                 channelId = resolvedChannelId,
@@ -693,9 +688,8 @@ class ActivityService(
             return
         }
 
-        if (existingActivity != null && existingActivity is Activity.Onchain) {
-            val existingOnchain = existingActivity.v1
-            updateActivity(existingOnchain.id, Activity.Onchain(onChain))
+        if (existingActivity is Activity.Onchain) {
+            updateActivity(existingActivity.v1.id, Activity.Onchain(onChain))
         } else {
             upsertActivity(Activity.Onchain(onChain))
         }

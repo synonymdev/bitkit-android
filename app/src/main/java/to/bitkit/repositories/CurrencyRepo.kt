@@ -45,7 +45,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 @Singleton
 class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -108,18 +108,18 @@ class CurrencyRepo @Inject constructor(
             combine(
                 settingsStore.data.distinctUntilChanged(),
                 cacheStore.data.distinctUntilChanged()
-            ) { settings, cachedData ->
-                val selectedRate = cachedData.cachedRates.firstOrNull { rate ->
+            ) { settings, cache ->
+                val selectedRate = cache.cachedRates.firstOrNull { rate ->
                     rate.quote == settings.selectedCurrency
                 }
                 _currencyState.value.copy(
-                    rates = cachedData.cachedRates,
+                    rates = cache.cachedRates,
                     selectedCurrency = settings.selectedCurrency,
                     displayUnit = settings.displayUnit,
                     primaryDisplay = settings.primaryDisplay,
                     currencySymbol = selectedRate?.currencySymbol ?: "$",
                     error = null,
-                    hasStaleData = false
+                    hasStaleData = false,
                 )
             }.collect { newState ->
                 _currencyState.update { newState }

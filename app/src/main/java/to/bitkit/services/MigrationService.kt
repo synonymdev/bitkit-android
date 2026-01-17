@@ -1443,9 +1443,9 @@ class MigrationService @Inject constructor(
             wasUpdated = true
         }
 
-        item.feeRate?.let { feeRate ->
-            if (feeRate > 0 && updated.feeRate != feeRate.toULong()) {
-                updated = updated.copy(feeRate = feeRate.toULong())
+        item.feeRate?.toULong()?.let { feeRate ->
+            if (feeRate > 0u && updated.feeRate != feeRate) {
+                updated = updated.copy(feeRate = feeRate)
                 wasUpdated = true
             }
         }
@@ -1487,12 +1487,8 @@ class MigrationService @Inject constructor(
                 updateOnchainActivityMetadata(item, onchain)?.let { updated ->
                     activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
                         .onSuccess { updatedCount++ }
-                        .onFailure { e ->
-                            Logger.error(
-                                "Failed to update onchain activity metadata for $txId: $e",
-                                e,
-                                context = TAG
-                            )
+                        .onFailure {
+                            Logger.error("Failed to update onchain activity metadata for $txId", it, context = TAG)
                         }
                 }
             } else {
@@ -1531,11 +1527,11 @@ class MigrationService @Inject constructor(
                             applyBoostedParents(parents, txId)
                         }
                     }
-                    .onFailure { e ->
+                    .onFailure {
                         Logger.error(
-                            "Failed to create onchain activity for unsupported address $txId: $e",
-                            e,
-                            context = TAG
+                            "Failed to create onchain activity for unsupported address $txId",
+                            it,
+                            context = TAG,
                         )
                     }
             }
@@ -1544,7 +1540,7 @@ class MigrationService @Inject constructor(
         if (updatedCount > 0 || createdCount > 0) {
             Logger.info(
                 "Applied metadata to $updatedCount onchain activities, created $createdCount for unsupported addresses",
-                context = TAG
+                context = TAG,
             )
         }
     }
