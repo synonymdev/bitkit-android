@@ -88,8 +88,8 @@ fun ElectrumConfigScreen(
             } else {
                 app.toast(
                     type = ToastType.WARNING,
-                    titleRes = R.string.settings__es__server_error,
-                    bodyRes = R.string.settings__es__server_error_description,
+                    title = R.string.settings__es__server_error,
+                    body = R.string.settings__es__server_error_description,
                     testTag = "ElectrumErrorToast",
                 )
             }

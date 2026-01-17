@@ -2004,15 +2004,15 @@ class AppViewModel @Inject constructor(
 
     fun toast(
         type: ToastType,
-        @StringRes titleRes: Int,
-        @StringRes bodyRes: Int? = null,
+        @StringRes title: Int,
+        @StringRes body: Int? = null,
         autoHide: Boolean = true,
         duration: Duration = Toast.DURATION_DEFAULT,
         testTag: String? = null,
     ) = toast(
         type = type,
-        title = ToastText.Resource(titleRes),
-        body = bodyRes?.let { ToastText.Resource(it) },
+        title = ToastText.Resource(title),
+        body = body?.let { ToastText.Resource(it) },
         autoHide = autoHide,
         duration = duration,
         testTag = testTag,

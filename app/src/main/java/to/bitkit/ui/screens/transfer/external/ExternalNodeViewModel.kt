@@ -75,8 +75,8 @@ class ExternalNodeViewModel @Inject constructor(
                 setEffect(SideEffect.ConnectionSuccess)
             } else {
                 toaster.error(
-                    titleRes = R.string.lightning__error_add_title,
-                    bodyRes = R.string.lightning__error_add,
+                    title = R.string.lightning__error_add_title,
+                    body = R.string.lightning__error_add,
                 )
             }
         }
@@ -89,7 +89,7 @@ class ExternalNodeViewModel @Inject constructor(
             if (result.isSuccess) {
                 _uiState.update { it.copy(peer = result.getOrNull()) }
             } else {
-                toaster.error(titleRes = R.string.lightning__error_add_uri)
+                toaster.error(title = R.string.lightning__error_add_uri)
             }
         }
     }
@@ -136,8 +136,8 @@ class ExternalNodeViewModel @Inject constructor(
         val feeRate = _uiState.value.customFeeRate ?: 0u
         if (feeRate == 0u) {
             toaster.info(
-                titleRes = R.string.wallet__min_possible_fee_rate,
-                bodyRes = R.string.wallet__min_possible_fee_rate_msg,
+                title = R.string.wallet__min_possible_fee_rate,
+                body = R.string.wallet__min_possible_fee_rate_msg,
             )
             return false
         }

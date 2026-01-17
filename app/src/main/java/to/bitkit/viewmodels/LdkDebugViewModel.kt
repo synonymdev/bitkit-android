@@ -43,7 +43,7 @@ class LdkDebugViewModel @Inject constructor(
     fun addPeer() {
         val uri = _uiState.value.nodeUri.trim()
         if (uri.isEmpty()) {
-            viewModelScope.launch { toaster.warning("Please enter a node URI") }
+            viewModelScope.launch { toaster.warn("Please enter a node URI") }
             return
         }
         connectPeer(uri)
@@ -55,7 +55,7 @@ class LdkDebugViewModel @Inject constructor(
         val pastedUri = clipData?.getItemAt(0)?.text?.toString()?.trim()
 
         if (pastedUri.isNullOrEmpty()) {
-            viewModelScope.launch { toaster.warning("Clipboard is empty") }
+            viewModelScope.launch { toaster.warn("Clipboard is empty") }
             return
         }
 
@@ -99,7 +99,7 @@ class LdkDebugViewModel @Inject constructor(
                 _uiState.update { it.copy(networkGraphInfo = info) }
                 toaster.info("Network graph info logged")
             } else {
-                toaster.warning("Failed to get network graph info")
+                toaster.warn("Failed to get network graph info")
             }
         }
     }
@@ -162,7 +162,7 @@ class LdkDebugViewModel @Inject constructor(
                         }
                         toaster.info("Deleted key: $key")
                     } else {
-                        toaster.warning("Key not found: $key")
+                        toaster.warn("Key not found: $key")
                     }
                 }
                 .onFailure { e ->

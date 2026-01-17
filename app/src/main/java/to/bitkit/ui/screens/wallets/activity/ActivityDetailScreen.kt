@@ -251,8 +251,8 @@ fun ActivityDetailScreen(
                             onSuccess = {
                                 app.toast(
                                     type = ToastType.SUCCESS,
-                                    titleRes = R.string.wallet__boost_success_title,
-                                    bodyRes = R.string.wallet__boost_success_msg,
+                                    title = R.string.wallet__boost_success_title,
+                                    body = R.string.wallet__boost_success_msg,
                                     testTag = "BoostSuccessToast"
                                 )
                                 listViewModel.resync()
@@ -261,8 +261,8 @@ fun ActivityDetailScreen(
                             onFailure = {
                                 app.toast(
                                     type = ToastType.ERROR,
-                                    titleRes = R.string.wallet__boost_error_title,
-                                    bodyRes = R.string.wallet__boost_error_msg,
+                                    title = R.string.wallet__boost_error_title,
+                                    body = R.string.wallet__boost_error_msg,
                                     testTag = "BoostFailureToast"
                                 )
                                 detailViewModel.onDismissBoostSheet()
@@ -270,15 +270,15 @@ fun ActivityDetailScreen(
                             onMaxFee = {
                                 app.toast(
                                     type = ToastType.ERROR,
-                                    titleRes = R.string.wallet__send_fee_error,
-                                    bodyRes = R.string.wallet__send_fee_error_max,
+                                    title = R.string.wallet__send_fee_error,
+                                    body = R.string.wallet__send_fee_error_max,
                                 )
                             },
                             onMinFee = {
                                 app.toast(
                                     type = ToastType.ERROR,
-                                    titleRes = R.string.wallet__send_fee_error,
-                                    bodyRes = R.string.wallet__send_fee_error_min,
+                                    title = R.string.wallet__send_fee_error,
+                                    body = R.string.wallet__send_fee_error_min,
                                 )
                             }
                         )

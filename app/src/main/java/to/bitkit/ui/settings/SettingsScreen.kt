@@ -85,8 +85,8 @@ fun SettingsScreen(
                 }
                 app.toast(
                     type = ToastType.SUCCESS,
-                    titleRes = titleRes,
-                    bodyRes = bodyRes,
+                    title = titleRes,
+                    body = bodyRes,
                 )
                 enableDevModeTapCount = 0
             }

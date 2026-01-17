@@ -106,16 +106,16 @@ class SendFeeViewModel @Inject constructor(
         val minSatsPerVByte = sendUiState.feeRates?.slow ?: 1u
         if (satsPerVByte < minSatsPerVByte) {
             toaster.info(
-                titleRes = R.string.wallet__min_possible_fee_rate,
-                bodyRes = R.string.wallet__min_possible_fee_rate_msg,
+                title = R.string.wallet__min_possible_fee_rate,
+                body = R.string.wallet__min_possible_fee_rate_msg,
             )
             return false
         }
 
         if (satsPerVByte > maxSatsPerVByte) {
             toaster.info(
-                titleRes = R.string.wallet__max_possible_fee_rate,
-                bodyRes = R.string.wallet__max_possible_fee_rate_msg,
+                title = R.string.wallet__max_possible_fee_rate,
+                body = R.string.wallet__max_possible_fee_rate_msg,
             )
             return false
         }

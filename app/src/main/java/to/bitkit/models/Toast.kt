@@ -18,5 +18,4 @@ data class Toast(
     }
 }
 
-@Stable
 enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }

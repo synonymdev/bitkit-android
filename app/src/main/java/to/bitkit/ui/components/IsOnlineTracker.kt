@@ -30,15 +30,15 @@ fun IsOnlineTracker(
         when (connectivityState) {
             ConnectivityState.CONNECTED -> {
                 toaster.success(
-                    titleRes = R.string.other__connection_back_title,
-                    bodyRes = R.string.other__connection_back_msg,
+                    title = R.string.other__connection_back_title,
+                    body = R.string.other__connection_back_msg,
                 )
             }
 
             ConnectivityState.DISCONNECTED -> {
-                toaster.warning(
-                    titleRes = R.string.other__connection_issue,
-                    bodyRes = R.string.other__connection_issue_explain,
+                toaster.warn(
+                    title = R.string.other__connection_issue,
+                    body = R.string.other__connection_issue_explain,
                 )
             }
 

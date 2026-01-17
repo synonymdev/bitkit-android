@@ -41,57 +41,57 @@ class Toaster @Inject constructor() {
 
     // region @StringRes overloads
     suspend fun success(
-        @StringRes titleRes: Int,
-        @StringRes bodyRes: Int? = null,
+        @StringRes title: Int,
+        @StringRes body: Int? = null,
         testTag: String? = null,
     ) = emit(
         ToastType.SUCCESS,
-        ToastText.Resource(titleRes),
-        bodyRes?.let { ToastText.Resource(it) },
+        ToastText.Resource(title),
+        body?.let { ToastText.Resource(it) },
         testTag = testTag
     )
 
     suspend fun info(
-        @StringRes titleRes: Int,
-        @StringRes bodyRes: Int? = null,
+        @StringRes title: Int,
+        @StringRes body: Int? = null,
         testTag: String? = null,
     ) = emit(
         ToastType.INFO,
-        ToastText.Resource(titleRes),
-        bodyRes?.let { ToastText.Resource(it) },
+        ToastText.Resource(title),
+        body?.let { ToastText.Resource(it) },
         testTag = testTag,
     )
 
     suspend fun lightning(
-        @StringRes titleRes: Int,
-        @StringRes bodyRes: Int? = null,
+        @StringRes title: Int,
+        @StringRes body: Int? = null,
         testTag: String? = null,
     ) = emit(
         ToastType.LIGHTNING,
-        ToastText.Resource(titleRes),
-        bodyRes?.let { ToastText.Resource(it) },
+        ToastText.Resource(title),
+        body?.let { ToastText.Resource(it) },
         testTag = testTag
     )
 
-    suspend fun warning(
-        @StringRes titleRes: Int,
-        @StringRes bodyRes: Int? = null,
+    suspend fun warn(
+        @StringRes title: Int,
+        @StringRes body: Int? = null,
         testTag: String? = null,
     ) = emit(
         ToastType.WARNING,
-        ToastText.Resource(titleRes),
-        bodyRes?.let { ToastText.Resource(it) },
+        ToastText.Resource(title),
+        body?.let { ToastText.Resource(it) },
         testTag = testTag
     )
 
     suspend fun error(
-        @StringRes titleRes: Int,
-        @StringRes bodyRes: Int? = null,
+        @StringRes title: Int,
+        @StringRes body: Int? = null,
         testTag: String? = null,
     ) = emit(
         ToastType.ERROR,
-        ToastText.Resource(titleRes),
-        bodyRes?.let { ToastText.Resource(it) },
+        ToastText.Resource(title),
+        body?.let { ToastText.Resource(it) },
         testTag = testTag,
     )
     // endregion
@@ -115,7 +115,7 @@ class Toaster @Inject constructor() {
         testTag: String? = null,
     ) = emit(ToastType.LIGHTNING, title, body, testTag = testTag)
 
-    suspend fun warning(
+    suspend fun warn(
         title: ToastText,
         body: ToastText? = null,
         testTag: String? = null,
@@ -162,7 +162,7 @@ class Toaster @Inject constructor() {
         testTag = testTag,
     )
 
-    suspend fun warning(
+    suspend fun warn(
         title: String,
         body: String? = null,
         testTag: String? = null,

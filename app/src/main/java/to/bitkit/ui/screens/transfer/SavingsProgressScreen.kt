@@ -70,8 +70,8 @@ fun SavingsProgressScreen(
                 // All channels are trusted peers - show error and navigate back immediately
                 app.toast(
                     type = ToastType.ERROR,
-                    titleRes = R.string.lightning__close_error,
-                    bodyRes = R.string.lightning__close_error_msg,
+                    title = R.string.lightning__close_error,
+                    body = R.string.lightning__close_error_msg,
                 )
                 onTransferUnavailable()
             } else {
@@ -81,8 +81,8 @@ fun SavingsProgressScreen(
                     onTransferUnavailable = {
                         app.toast(
                             type = ToastType.ERROR,
-                            titleRes = R.string.lightning__close_error,
-                            bodyRes = R.string.lightning__close_error_msg,
+                            title = R.string.lightning__close_error,
+                            body = R.string.lightning__close_error_msg,
                         )
                         onTransferUnavailable()
                     },

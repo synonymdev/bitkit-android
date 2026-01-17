@@ -9,12 +9,15 @@ import androidx.compose.ui.res.stringResource
 @Stable
 sealed interface ToastText {
     @JvmInline
-    @Stable
     value class Resource(@StringRes val resId: Int) : ToastText
 
     @JvmInline
-    @Stable
     value class Literal(val value: String) : ToastText
+
+    companion object {
+        operator fun invoke(value: String): ToastText = Literal(value)
+        operator fun invoke(@StringRes resId: Int): ToastText = Resource(resId)
+    }
 }
 
 @Composable

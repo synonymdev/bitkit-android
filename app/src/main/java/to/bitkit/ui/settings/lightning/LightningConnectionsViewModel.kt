@@ -339,9 +339,9 @@ class LightningConnectionsViewModel @Inject constructor(
             logsRepo.zipLogsForSharing()
                 .onSuccess { uri -> onReady(uri) }
                 .onFailure {
-                    toaster.warning(
-                        titleRes = R.string.lightning__error_logs,
-                        bodyRes = R.string.lightning__error_logs_description,
+                    toaster.warn(
+                        title = R.string.lightning__error_logs,
+                        body = R.string.lightning__error_logs_description,
                     )
                 }
         }
@@ -454,8 +454,8 @@ class LightningConnectionsViewModel @Inject constructor(
                     walletRepo.syncNodeAndWallet()
 
                     toaster.success(
-                        titleRes = R.string.lightning__close_success_title,
-                        bodyRes = R.string.lightning__close_success_msg,
+                        title = R.string.lightning__close_success_title,
+                        body = R.string.lightning__close_success_msg,
                     )
 
                     _closeConnectionUiState.update {
@@ -468,9 +468,9 @@ class LightningConnectionsViewModel @Inject constructor(
                 onFailure = { error ->
                     Logger.error("Failed to close channel", e = error, context = TAG)
 
-                    toaster.warning(
-                        titleRes = R.string.lightning__close_error,
-                        bodyRes = R.string.lightning__close_error_msg,
+                    toaster.warn(
+                        title = R.string.lightning__close_error,
+                        body = R.string.lightning__close_error_msg,
                     )
 
                     _closeConnectionUiState.update { it.copy(isLoading = false) }

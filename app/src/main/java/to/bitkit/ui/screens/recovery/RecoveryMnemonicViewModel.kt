@@ -42,7 +42,7 @@ class RecoveryMnemonicViewModel @Inject constructor(
                             isLoading = false,
                         )
                     }
-                    toaster.error(titleRes = R.string.security__mnemonic_load_error)
+                    toaster.error(title = R.string.security__mnemonic_load_error)
                     return@launch
                 }
 

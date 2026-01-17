@@ -86,9 +86,9 @@ class BackupNavSheetViewModel @Inject constructor(
             }
         }.onFailure {
             Logger.error("Error loading mnemonic", it, context = TAG)
-            toaster.warning(
-                titleRes = R.string.security__mnemonic_error,
-                bodyRes = R.string.security__mnemonic_error_description,
+            toaster.warn(
+                title = R.string.security__mnemonic_error,
+                body = R.string.security__mnemonic_error_description,
             )
         }
     }
@@ -157,8 +157,8 @@ class BackupNavSheetViewModel @Inject constructor(
     fun onMnemonicCopied() {
         viewModelScope.launch {
             toaster.success(
-                titleRes = R.string.common__copied,
-                bodyRes = R.string.security__mnemonic_copied,
+                title = R.string.common__copied,
+                body = R.string.security__mnemonic_copied,
             )
         }
     }

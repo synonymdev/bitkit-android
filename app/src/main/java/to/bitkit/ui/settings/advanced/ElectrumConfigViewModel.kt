@@ -247,7 +247,7 @@ class ElectrumConfigViewModel @Inject constructor(
         viewModelScope.launch {
             val validationError = validateInput()
             if (validationError != null) {
-                toaster.warning(
+                toaster.warn(
                     title = ToastText.Resource(R.string.settings__es__error_peer),
                     body = ToastText.Literal(validationError),
                 )
@@ -268,7 +268,7 @@ class ElectrumConfigViewModel @Inject constructor(
 
             val validationError = validateInput(host, port)
             if (validationError != null) {
-                toaster.warning(
+                toaster.warn(
                     title = ToastText.Resource(R.string.settings__es__error_peer),
                     body = ToastText.Literal(validationError),
                 )

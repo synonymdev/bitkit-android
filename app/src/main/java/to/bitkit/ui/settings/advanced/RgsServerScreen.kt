@@ -68,8 +68,8 @@ fun RgsServerScreen(
             if (result.isSuccess) {
                 app.toast(
                     type = ToastType.SUCCESS,
-                    titleRes = R.string.settings__rgs__update_success_title,
-                    bodyRes = R.string.settings__rgs__update_success_description,
+                    title = R.string.settings__rgs__update_success_title,
+                    body = R.string.settings__rgs__update_success_description,
                     testTag = "RgsUpdatedToast",
                 )
             } else {

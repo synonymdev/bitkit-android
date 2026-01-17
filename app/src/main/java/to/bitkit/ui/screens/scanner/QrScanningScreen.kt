@@ -151,8 +151,8 @@ fun QrScanningScreen(
                 Logger.error("Failed to scan QR code", error)
                 app.toast(
                     type = ToastType.ERROR,
-                    titleRes = R.string.other__qr_error_header,
-                    bodyRes = R.string.other__qr_error_text,
+                    title = R.string.other__qr_error_header,
+                    body = R.string.other__qr_error_text,
                 )
             }
         }
@@ -257,8 +257,8 @@ private fun handlePaste(
     if (clipboard.isNullOrBlank()) {
         app.toast(
             type = ToastType.WARNING,
-            titleRes = R.string.wallet__send_clipboard_empty_title,
-            bodyRes = R.string.wallet__send_clipboard_empty_text,
+            title = R.string.wallet__send_clipboard_empty_title,
+            body = R.string.wallet__send_clipboard_empty_text,
         )
     }
     setScanResult(clipboard)

@@ -47,7 +47,7 @@ class DevSettingsViewModel @Inject constructor(
         val peer = lightningRepo.getPeers()?.firstOrNull()
 
         if (peer == null) {
-            toaster.warning("No peer connected")
+            toaster.warn("No peer connected")
             return@launch
         }
 
@@ -72,7 +72,7 @@ class DevSettingsViewModel @Inject constructor(
             )
             toaster.info("LSP notification sent to this device")
         }.onFailure {
-            toaster.warning("Error testing LSP notification")
+            toaster.warn("Error testing LSP notification")
         }
     }
 
@@ -99,7 +99,7 @@ class DevSettingsViewModel @Inject constructor(
             logsRepo.zipLogsForSharing()
                 .onSuccess { uri -> onReady(uri) }
                 .onFailure {
-                    toaster.warning(
+                    toaster.warn(
                         context.getString(R.string.lightning__error_logs),
                         context.getString(R.string.lightning__error_logs_description),
                     )
