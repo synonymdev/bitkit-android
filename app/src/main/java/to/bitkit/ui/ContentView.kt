@@ -626,13 +626,6 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
-                    toastException = { appViewModel.toaster.error(it) },
-                    toast = { title, body ->
-                        appViewModel.toaster.error(
-                            title = ToastText(title),
-                            body = ToastText(body)
-                        )
-                    },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {

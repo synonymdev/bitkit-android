@@ -12,7 +12,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -21,8 +20,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.ToastText
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.LocalToaster
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
@@ -54,15 +56,13 @@ fun SpendingAmountScreen(
     viewModel: TransferViewModel,
     onBackClick: () -> Unit = {},
     onOrderCreated: () -> Unit = {},
-    toastException: (Throwable) -> Unit,
-    toast: (title: String, description: String) -> Unit,
+    toaster: Toaster = LocalToaster.current,
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val isNodeRunning by viewModel.isNodeRunning.collectAsStateWithLifecycle()
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.updateLimits()
@@ -72,8 +72,11 @@ fun SpendingAmountScreen(
         viewModel.transferEffects.collect { effect ->
             when (effect) {
                 TransferEffect.OnOrderCreated -> onOrderCreated()
-                is TransferEffect.ToastError -> toast(effect.title, effect.body)
-                is TransferEffect.ToastException -> toastException(effect.e)
+                is TransferEffect.ToastError -> toaster.error(
+                    title = ToastText(effect.title),
+                    body = ToastText(effect.body),
+                )
+                is TransferEffect.ToastException -> toaster.error(effect.e)
             }
         }
     }
@@ -88,10 +91,12 @@ fun SpendingAmountScreen(
             val quarter = uiState.balanceAfterFeeQuarter()
             val max = uiState.maxAllowedToSend
             if (quarter > max) {
-                toast(
-                    context.getString(R.string.lightning__spending_amount__error_max__title),
-                    context.getString(R.string.lightning__spending_amount__error_max__description)
-                        .replace("{amount}", "$max"),
+                toaster.error(
+                    title = ToastText(R.string.lightning__spending_amount__error_max__title),
+                    body = ToastText(
+                        R.string.lightning__spending_amount__error_max__description,
+                        mapOf("amount" to "$max"),
+                    ),
                 )
             }
             val cappedQuarter = min(quarter, max)
