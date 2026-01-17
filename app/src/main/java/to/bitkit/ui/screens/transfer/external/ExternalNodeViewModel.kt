@@ -1,10 +1,8 @@
 package to.bitkit.ui.screens.transfer.external
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -35,7 +33,6 @@ import javax.inject.Inject
 @Suppress("LongParameterList")
 @HiltViewModel
 class ExternalNodeViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
@@ -98,15 +95,13 @@ class ExternalNodeViewModel @Inject constructor(
         val maxAmount = _uiState.value.amount.max
 
         if (sats > maxAmount) {
-            viewModelScope.launch {
-                toaster.error(
-                    title = ToastText(R.string.lightning__spending_amount__error_max__title),
-                    body = ToastText(
-                        context.getString(R.string.lightning__spending_amount__error_max__description)
-                            .replace("{amount}", maxAmount.formatToModernDisplay())
-                    ),
-                )
-            }
+            toaster.error(
+                title = ToastText(R.string.lightning__spending_amount__error_max__title),
+                body = ToastText(
+                    R.string.lightning__spending_amount__error_max__description,
+                    mapOf("amount" to maxAmount.formatToModernDisplay()),
+                ),
+            )
             return
         }
 
@@ -193,8 +188,8 @@ class ExternalNodeViewModel @Inject constructor(
                 toaster.error(
                     title = ToastText(R.string.lightning__error_channel_purchase),
                     body = ToastText(
-                        context.getString(R.string.lightning__error_channel_setup_msg)
-                            .replace("{raw}", error)
+                        R.string.lightning__error_channel_setup_msg,
+                        mapOf("raw" to error),
                     ),
                 )
             }
