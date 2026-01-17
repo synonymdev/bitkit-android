@@ -458,8 +458,7 @@ class AppViewModel @Inject constructor(
         migrationService.setShowingMigrationLoading(false)
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
-        toast(
-            type = ToastType.ERROR,
+        toaster.error(
             title = "Migration Warning",
             body = "Migration completed but node restart failed. Please restart the app."
         )
@@ -542,20 +541,18 @@ class AppViewModel @Inject constructor(
             activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
             return
         }
-        toast(
-            type = ToastType.LIGHTNING,
-            title = context.getString(R.string.lightning__channel_opened_title),
-            body = context.getString(R.string.lightning__channel_opened_msg),
+        toaster.lightning(
+            title = R.string.lightning__channel_opened_title,
+            body = R.string.lightning__channel_opened_msg,
             testTag = "SpendingBalanceReadyToast",
         )
     }
 
     private suspend fun notifyTransactionRemoved(event: Event.OnchainTransactionEvicted) {
         if (activityRepo.wasTransactionReplaced(event.txid)) return
-        toast(
-            type = ToastType.WARNING,
-            title = context.getString(R.string.wallet__toast_transaction_removed_title),
-            body = context.getString(R.string.wallet__toast_transaction_removed_description),
+        toaster.warn(
+            title = R.string.wallet__toast_transaction_removed_title,
+            body = R.string.wallet__toast_transaction_removed_description,
             testTag = "TransactionRemovedToast",
         )
     }
@@ -567,25 +564,27 @@ class AppViewModel @Inject constructor(
         showTransactionSheet(result.sheet)
     }
 
-    private fun notifyTransactionUnconfirmed() = toast(
-        type = ToastType.WARNING,
-        title = context.getString(R.string.wallet__toast_transaction_unconfirmed_title),
-        body = context.getString(R.string.wallet__toast_transaction_unconfirmed_description),
+    private fun notifyTransactionUnconfirmed() = toaster.warn(
+        title = R.string.wallet__toast_transaction_unconfirmed_title,
+        body = R.string.wallet__toast_transaction_unconfirmed_description,
         testTag = "TransactionUnconfirmedToast",
     )
 
     private suspend fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) {
         val isReceive = activityRepo.isReceivedTransaction(event.txid)
-        toast(
-            type = ToastType.INFO,
-            title = when (isReceive) {
-                true -> R.string.wallet__toast_received_transaction_replaced_title
-                else -> R.string.wallet__toast_transaction_replaced_title
-            }.let { context.getString(it) },
-            body = when (isReceive) {
-                true -> R.string.wallet__toast_received_transaction_replaced_description
-                else -> R.string.wallet__toast_transaction_replaced_description
-            }.let { context.getString(it) },
+        toaster.info(
+            title = context.getString(
+                when (isReceive) {
+                    true -> R.string.wallet__toast_received_transaction_replaced_title
+                    else -> R.string.wallet__toast_transaction_replaced_title
+                }
+            ),
+            body = context.getString(
+                when (isReceive) {
+                    true -> R.string.wallet__toast_received_transaction_replaced_description
+                    else -> R.string.wallet__toast_transaction_replaced_description
+                }
+            ),
             testTag = when (isReceive) {
                 true -> "ReceivedTransactionReplacedToast"
                 else -> "TransactionReplacedToast"
@@ -593,10 +592,9 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun notifyPaymentFailed() = toast(
-        type = ToastType.ERROR,
-        title = context.getString(R.string.wallet__toast_payment_failed_title),
-        body = context.getString(R.string.wallet__toast_payment_failed_description),
+    private fun notifyPaymentFailed() = toaster.error(
+        title = R.string.wallet__toast_payment_failed_title,
+        body = R.string.wallet__toast_payment_failed_description,
         testTag = "PaymentFailedToast",
     )
 
@@ -916,8 +914,7 @@ class AppViewModel @Inject constructor(
         if (lnurl is LnurlParams.LnurlPay) {
             val minSendable = lnurl.data.minSendableSat()
             if (_sendUiState.value.amount < minSendable) {
-                toast(
-                    type = ToastType.ERROR,
+                toaster.error(
                     title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
                     body = context.getString(R.string.wallet__lnurl_pay__error_min__description)
                         .replace("{amount}", formatMoneyValue(minSendable)),
@@ -971,10 +968,9 @@ class AppViewModel @Inject constructor(
     private fun onPasteClick() {
         val data = context.getClipboardText()?.trim()
         if (data.isNullOrBlank()) {
-            toast(
-                type = ToastType.WARNING,
-                title = context.getString(R.string.wallet__send_clipboard_empty_title),
-                body = context.getString(R.string.wallet__send_clipboard_empty_text),
+            toaster.warn(
+                title = R.string.wallet__send_clipboard_empty_title,
+                body = R.string.wallet__send_clipboard_empty_text,
             )
             return
         }
@@ -1027,10 +1023,9 @@ class AppViewModel @Inject constructor(
             is Scanner.Gift -> onScanGift(scan.code, scan.amount)
             else -> {
                 Logger.warn("Unhandled scan data: $scan", context = TAG)
-                toast(
-                    type = ToastType.WARNING,
-                    title = context.getString(R.string.other__scan_err_decoding),
-                    body = context.getString(R.string.other__scan_err_interpret_title),
+                toaster.warn(
+                    title = R.string.other__scan_err_decoding,
+                    body = R.string.other__scan_err_interpret_title,
                 )
             }
         }
@@ -1153,10 +1148,9 @@ class AppViewModel @Inject constructor(
 
     private suspend fun onScanLightning(invoice: LightningInvoice, scanResult: String) {
         if (invoice.isExpired) {
-            toast(
-                type = ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                body = context.getString(R.string.other__scan__error__expired),
+            toaster.error(
+                title = ToastText(R.string.other__scan_err_decoding),
+                body = ToastText(R.string.other__scan__error__expired),
                 testTag = "ExpiredLightningToast",
             )
             return
@@ -1168,11 +1162,12 @@ class AppViewModel @Inject constructor(
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
-            toast(
-                type = ToastType.ERROR,
-                title = context.getString(R.string.other__pay_insufficient_spending),
-                body = context.getString(R.string.other__pay_insufficient_spending_amount_description)
-                    .replace("{amount}", formatMoneyValue(shortfall)),
+            toaster.error(
+                title = ToastText(R.string.other__pay_insufficient_spending),
+                body = ToastText(
+                    R.string.other__pay_insufficient_spending_amount_description,
+                    mapOf("amount" to formatMoneyValue(shortfall)),
+                ),
                 testTag = "InsufficientSpendingToast",
             )
             return
@@ -1214,10 +1209,9 @@ class AppViewModel @Inject constructor(
         val maxSendable = data.maxSendableSat()
 
         if (!lightningRepo.canSend(minSendable)) {
-            toast(
-                type = ToastType.WARNING,
-                title = context.getString(R.string.other__lnurl_pay_error),
-                body = context.getString(R.string.other__lnurl_pay_error_no_capacity),
+            toaster.warn(
+                title = R.string.other__lnurl_pay_error,
+                body = R.string.other__lnurl_pay_error_no_capacity,
             )
             return
         }
@@ -1262,10 +1256,9 @@ class AppViewModel @Inject constructor(
         val maxWithdrawable = data.maxWithdrawableSat()
 
         if (minWithdrawable > maxWithdrawable) {
-            toast(
-                type = ToastType.WARNING,
-                title = context.getString(R.string.other__lnurl_withdr_error),
-                body = context.getString(R.string.other__lnurl_withdr_error_minmax)
+            toaster.warn(
+                title = R.string.other__lnurl_withdr_error,
+                body = R.string.other__lnurl_withdr_error_minmax,
             )
             return
         }
@@ -1311,15 +1304,13 @@ class AppViewModel @Inject constructor(
                 k1 = k1,
                 domain = domain,
             ).onFailure {
-                toast(
-                    type = ToastType.WARNING,
+                toaster.warn(
                     title = context.getString(R.string.other__lnurl_auth_error),
                     body = context.getString(R.string.other__lnurl_auth_error_msg)
                         .replace("{raw}", it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName),
                 )
             }.onSuccess {
-                toast(
-                    type = ToastType.SUCCESS,
+                toaster.success(
                     title = context.getString(R.string.other__lnurl_auth_success_title),
                     body = when (domain.isNotBlank()) {
                         true -> context.getString(R.string.other__lnurl_auth_success_msg_domain)
@@ -1520,7 +1511,7 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                toast(Exception(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
+                toaster.error(Exception(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
                 hideSheet()
                 return
             }
@@ -1546,10 +1537,9 @@ class AppViewModel @Inject constructor(
                         activityRepo.syncActivities()
                     }.onFailure { e ->
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
-                        toast(
-                            type = ToastType.ERROR,
+                        toaster.error(
                             title = context.getString(R.string.wallet__error_sending_title),
-                            body = e.message ?: context.getString(R.string.common__error_body)
+                            body = e.message ?: context.getString(R.string.common__error_body),
                         )
                         hideSheet()
                     }
@@ -1597,7 +1587,7 @@ class AppViewModel @Inject constructor(
                         preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
                     }
                     Logger.error("Error sending lightning payment", e, context = TAG)
-                    toast(e)
+                    toaster.error(e)
                     hideSheet()
                 }
             }
@@ -1638,10 +1628,9 @@ class AppViewModel @Inject constructor(
                 callback = lnurl.data.callback,
                 paymentRequest = invoice
             ).onSuccess {
-                toast(
-                    type = ToastType.SUCCESS,
-                    title = context.getString(R.string.other__lnurl_withdr_success_title),
-                    body = context.getString(R.string.other__lnurl_withdr_success_msg),
+                toaster.success(
+                    title = R.string.other__lnurl_withdr_success_title,
+                    body = R.string.other__lnurl_withdr_success_msg,
                 )
                 hideSheet()
                 _sendUiState.update { it.copy(isLoading = false) }
@@ -1671,7 +1660,7 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
-                toast(e)
+                toaster.error(e)
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
             }
         }
@@ -1695,7 +1684,7 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
-                toast(e)
+                toaster.error(e)
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
             }
         }
@@ -2081,10 +2070,9 @@ class AppViewModel @Inject constructor(
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
 
             if (newAttempts <= 0) {
-                toast(
-                    type = ToastType.SUCCESS,
-                    title = context.getString(R.string.security__wiped_title),
-                    body = context.getString(R.string.security__wiped_message),
+                toaster.success(
+                    title = R.string.security__wiped_title,
+                    body = R.string.security__wiped_message,
                 )
                 delay(250) // small delay for UI feedback
                 mainScreenEffect(MainScreenEffect.WipeWallet)
