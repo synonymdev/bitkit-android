@@ -16,8 +16,8 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.di.BgDispatcher
-import to.bitkit.models.ToastText
 import to.bitkit.ext.of
+import to.bitkit.models.ToastText
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.ui.shared.toast.Toaster
@@ -115,7 +115,10 @@ class LdkDebugViewModel @Inject constructor(
                 onFileReady(file)
             }.onFailure { e ->
                 Logger.error("Failed to export network graph", e, context = TAG)
-                toaster.error(title = ToastText("Failed to export network graph"), body = e.message?.let { ToastText(it) })
+                toaster.error(
+                    title = ToastText("Failed to export network graph"),
+                    body = e.message?.let { ToastText(it) }
+                )
             }
             _uiState.update { it.copy(isLoading = false) }
         }

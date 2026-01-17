@@ -60,9 +60,12 @@ import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+    @Inject lateinit var toaster: to.bitkit.ui.shared.toast.Toaster
+
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
@@ -123,6 +126,7 @@ class MainActivity : FragmentActivity() {
                         scope = scope,
                         appViewModel = appViewModel,
                         walletViewModel = walletViewModel,
+                        toaster = toaster,
                     )
                 } else {
                     val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
@@ -137,6 +141,7 @@ class MainActivity : FragmentActivity() {
                         transferViewModel = transferViewModel,
                         settingsViewModel = settingsViewModel,
                         backupsViewModel = backupsViewModel,
+                        toaster = toaster,
                         hazeState = hazeState,
                         modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
                     )
@@ -229,6 +234,7 @@ private fun OnboardingNav(
     scope: CoroutineScope,
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    toaster: to.bitkit.ui.shared.toast.Toaster,
 ) {
     NavHost(
         navController = startupNavController,
@@ -265,7 +271,7 @@ private fun OnboardingNav(
                             walletViewModel.setInitNodeLifecycleState()
                             walletViewModel.createWallet(bip39Passphrase = null)
                         }.onFailure {
-                            appViewModel.toaster.error(it)
+                            toaster.error(it)
                         }
                     }
                 },
@@ -295,7 +301,7 @@ private fun OnboardingNav(
                             appViewModel.resetIsAuthenticatedState()
                             walletViewModel.restoreWallet(mnemonic, passphrase)
                         }.onFailure {
-                            appViewModel.toaster.error(it)
+                            toaster.error(it)
                         }
                     }
                 }
@@ -310,7 +316,7 @@ private fun OnboardingNav(
                             appViewModel.resetIsAuthenticatedState()
                             walletViewModel.createWallet(bip39Passphrase = passphrase)
                         }.onFailure {
-                            appViewModel.toaster.error(it)
+                            toaster.error(it)
                         }
                     }
                 },

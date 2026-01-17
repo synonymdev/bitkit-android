@@ -34,7 +34,6 @@ import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
-import to.bitkit.ext.formatPlural
 import to.bitkit.ext.nowMillis
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory

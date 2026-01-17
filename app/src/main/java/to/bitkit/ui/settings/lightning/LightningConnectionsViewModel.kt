@@ -26,12 +26,12 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
-import to.bitkit.models.ToastText
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
+import to.bitkit.models.ToastText
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo

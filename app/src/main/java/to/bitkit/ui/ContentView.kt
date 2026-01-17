@@ -46,7 +46,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.ToastText
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
@@ -167,6 +166,7 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
@@ -209,6 +209,7 @@ fun ContentView(
     transferViewModel: TransferViewModel,
     settingsViewModel: SettingsViewModel,
     backupsViewModel: BackupsViewModel,
+    toaster: Toaster,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
@@ -360,7 +361,7 @@ fun ContentView(
         LocalTransferViewModel provides transferViewModel,
         LocalSettingsViewModel provides settingsViewModel,
         LocalBackupsViewModel provides backupsViewModel,
-        LocalToaster provides appViewModel.toaster,
+        LocalToaster provides toaster,
         LocalDrawerState provides drawerState,
         LocalBalances provides balance,
         LocalCurrencies provides currencies,
