@@ -66,8 +66,8 @@ fun RgsServerScreen(
         uiState.connectionResult?.let { result ->
             if (result.isSuccess) {
                 toaster.success(
-                    title = R.string.settings__rgs__update_success_title,
-                    body = R.string.settings__rgs__update_success_description,
+                    title = ToastText(R.string.settings__rgs__update_success_title),
+                    body = ToastText(R.string.settings__rgs__update_success_description),
                     testTag = "RgsUpdatedToast",
                 )
             } else {

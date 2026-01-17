@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.ToastText
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
@@ -112,14 +113,14 @@ fun BlocktankRegtestScreen(
                             val txId = viewModel.regtestDeposit(depositAddress, sats)
                             Logger.debug("Deposit successful with txId: $txId")
                             toaster.success(
-                                title = "Success",
-                                body = "Deposit successful. TxID: $txId",
+                                title = ToastText("Success"),
+                                body = ToastText("Deposit successful. TxID: $txId"),
                             )
                         }.onFailure {
                             Logger.error("Deposit failed", it)
                             toaster.error(
-                                title = "Failed to deposit",
-                                body = it.message.orEmpty(),
+                                title = ToastText("Failed to deposit"),
+                                body = ToastText(it.message.orEmpty()),
                             )
                         }
 
@@ -156,14 +157,14 @@ fun BlocktankRegtestScreen(
                                 viewModel.regtestMine(count)
                                 Logger.debug("Successfully mined $count blocks")
                                 toaster.success(
-                                    title = "Success",
-                                    body = "Successfully mined $count blocks",
+                                    title = ToastText("Success"),
+                                    body = ToastText("Successfully mined $count blocks"),
                                 )
                             }.onFailure {
                                 Logger.error("Mining failed", it)
                                 toaster.error(
-                                    title = "Failed to mine",
-                                    body = it.message.orEmpty(),
+                                    title = ToastText("Failed to mine"),
+                                    body = ToastText(it.message.orEmpty()),
                                 )
                             }
                             isMining = false
@@ -206,14 +207,14 @@ fun BlocktankRegtestScreen(
                             val paymentId = viewModel.regtestPay(paymentInvoice, amount)
                             Logger.debug("Payment successful with ID: $paymentId")
                             toaster.success(
-                                title = "Success",
-                                body = "Payment successful. ID: $paymentId",
+                                title = ToastText("Success"),
+                                body = ToastText("Payment successful. ID: $paymentId"),
                             )
                         }.onFailure {
                             Logger.error("Payment failed", it)
                             toaster.error(
-                                title = "Failed to pay invoice from LND",
-                                body = it.message.orEmpty(),
+                                title = ToastText("Failed to pay invoice from LND"),
+                                body = ToastText(it.message.orEmpty()),
                             )
                         }
                     }
@@ -271,8 +272,8 @@ fun BlocktankRegtestScreen(
                             )
                             Logger.debug("Channel closed successfully with txId: $closingTxId")
                             toaster.success(
-                                title = "Success",
-                                body = "Channel closed. Closing TxID: $closingTxId"
+                                title = ToastText("Success"),
+                                body = ToastText("Channel closed. Closing TxID: $closingTxId")
                             )
                         }.onFailure {
                             Logger.error("Channel close failed", it)

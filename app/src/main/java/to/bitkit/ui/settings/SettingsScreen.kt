@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.models.ToastText
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.navigateToAboutSettings
@@ -83,8 +84,8 @@ fun SettingsScreen(
                     R.string.settings__dev_disabled_message
                 }
                 toaster.success(
-                    title = titleRes,
-                    body = bodyRes,
+                    title = ToastText(titleRes),
+                    body = ToastText(bodyRes),
                 )
                 enableDevModeTapCount = 0
             }

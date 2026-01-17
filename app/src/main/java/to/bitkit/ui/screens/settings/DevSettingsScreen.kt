@@ -14,6 +14,7 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.models.ToastText
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.settings.SectionHeader
@@ -77,63 +78,63 @@ fun DevSettingsScreen(
                 title = "Reset Settings State",
                 onClick = {
                     settings.reset()
-                    toaster.success(title = "Settings state reset")
+                    toaster.success(title = ToastText("Settings state reset"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset All Activities",
                 onClick = {
                     activity.removeAllActivities()
-                    toaster.success(title = "Activities removed")
+                    toaster.success(title = ToastText("Activities removed"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Backup State",
                 onClick = {
                     viewModel.resetBackupState()
-                    toaster.success(title = "Backup state reset")
+                    toaster.success(title = ToastText("Backup state reset"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Widgets State",
                 onClick = {
                     viewModel.resetWidgetsState()
-                    toaster.success(title = "Widgets state reset")
+                    toaster.success(title = ToastText("Widgets state reset"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Refresh Currency Rates",
                 onClick = {
                     viewModel.refreshCurrencyRates()
-                    toaster.success(title = "Currency rates refreshed")
+                    toaster.success(title = ToastText("Currency rates refreshed"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset App Database",
                 onClick = {
                     viewModel.resetDatabase()
-                    toaster.success(title = "Database state reset")
+                    toaster.success(title = ToastText("Database state reset"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Blocktank State",
                 onClick = {
                     viewModel.resetBlocktankState()
-                    toaster.success(title = "Blocktank state reset")
+                    toaster.success(title = ToastText("Blocktank state reset"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Reset Cache Store",
                 onClick = {
                     viewModel.resetCacheStore()
-                    toaster.success(title = "Cache store reset")
+                    toaster.success(title = ToastText("Cache store reset"))
                 }
             )
             SettingsTextButtonRow(
                 title = "Wipe App",
                 onClick = {
                     viewModel.wipeWallet()
-                    toaster.success(title = "Wallet wiped")
+                    toaster.success(title = ToastText("Wallet wiped"))
                 }
             )
 
@@ -144,14 +145,14 @@ fun DevSettingsScreen(
                 onClick = {
                     val count = 100
                     activity.generateRandomTestData(count)
-                    toaster.success(title = "Generated $count test activities")
+                    toaster.success(title = ToastText("Generated $count test activities"))
                 }
             )
             SettingsTextButtonRow(
                 "Fake New BG Receive",
                 onClick = {
                     viewModel.fakeBgReceive()
-                    toaster.info(title = "Restart app to see the payment received sheet")
+                    toaster.info(title = ToastText("Restart app to see the payment received sheet"))
                 }
             )
             SettingsTextButtonRow(

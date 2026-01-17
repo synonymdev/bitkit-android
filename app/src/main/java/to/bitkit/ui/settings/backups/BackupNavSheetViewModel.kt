@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.CacheStore
+import to.bitkit.models.ToastText
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.BackupCategory
@@ -87,8 +88,8 @@ class BackupNavSheetViewModel @Inject constructor(
         }.onFailure {
             Logger.error("Error loading mnemonic", it, context = TAG)
             toaster.warn(
-                title = R.string.security__mnemonic_error,
-                body = R.string.security__mnemonic_error_description,
+                title = ToastText(R.string.security__mnemonic_error),
+                body = ToastText(R.string.security__mnemonic_error_description),
             )
         }
     }
@@ -157,8 +158,8 @@ class BackupNavSheetViewModel @Inject constructor(
     fun onMnemonicCopied() {
         viewModelScope.launch {
             toaster.success(
-                title = R.string.common__copied,
-                body = R.string.security__mnemonic_copied,
+                title = ToastText(R.string.common__copied),
+                body = ToastText(R.string.security__mnemonic_copied),
             )
         }
     }

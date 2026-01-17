@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.FeeRate
+import to.bitkit.models.ToastText
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
@@ -106,16 +107,16 @@ class SendFeeViewModel @Inject constructor(
         val minSatsPerVByte = sendUiState.feeRates?.slow ?: 1u
         if (satsPerVByte < minSatsPerVByte) {
             toaster.info(
-                title = R.string.wallet__min_possible_fee_rate,
-                body = R.string.wallet__min_possible_fee_rate_msg,
+                title = ToastText(R.string.wallet__min_possible_fee_rate),
+                body = ToastText(R.string.wallet__min_possible_fee_rate_msg),
             )
             return false
         }
 
         if (satsPerVByte > maxSatsPerVByte) {
             toaster.info(
-                title = R.string.wallet__max_possible_fee_rate,
-                body = R.string.wallet__max_possible_fee_rate_msg,
+                title = ToastText(R.string.wallet__max_possible_fee_rate),
+                body = ToastText(R.string.wallet__max_possible_fee_rate_msg),
             )
             return false
         }

@@ -16,6 +16,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
+import to.bitkit.models.ToastText
 import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
@@ -73,8 +74,10 @@ class SendCoinSelectionViewModel @Inject constructor(
         }.onFailure {
             Logger.error("Failed to load UTXOs for coin selection", it, context = TAG)
             toaster.error(
-                context.getString(R.string.wallet__error_utxo_load)
-                    .replace("{raw}", it.message.orEmpty())
+                title = ToastText(
+                    R.string.wallet__error_utxo_load,
+                    mapOf("raw" to it.message.orEmpty())
+                )
             )
         }
     }

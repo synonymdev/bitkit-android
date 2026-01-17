@@ -42,6 +42,7 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.SettingsBackupV1
+import to.bitkit.models.ToastText
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.LightningService
@@ -374,9 +375,10 @@ class BackupRepo @Inject constructor(
 
         scope.launch {
             toaster.error(
-                title = context.getString(R.string.settings__backup__failed_title),
-                body = context.getString(R.string.settings__backup__failed_message).formatPlural(
-                    mapOf("interval" to (BACKUP_CHECK_INTERVAL / MINUTE_IN_MS))
+                title = ToastText(R.string.settings__backup__failed_title),
+                body = ToastText(
+                    R.string.settings__backup__failed_message,
+                    mapOf("interval" to (BACKUP_CHECK_INTERVAL / MINUTE_IN_MS).toString())
                 ),
             )
         }

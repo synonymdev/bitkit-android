@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.ToastText
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
@@ -628,8 +629,8 @@ private fun RootNavHost(
                     toastException = { appViewModel.toaster.error(it) },
                     toast = { title, body ->
                         appViewModel.toaster.error(
-                            title = title,
-                            body = body
+                            title = ToastText(title),
+                            body = ToastText(body)
                         )
                     },
                 )

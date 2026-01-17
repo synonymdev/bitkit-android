@@ -9,7 +9,7 @@ data class Toast(
     val type: ToastType,
     val title: ToastText,
     val body: ToastText? = null,
-    val autoHide: Boolean,
+    val autoHide: Boolean = true,
     val duration: Duration = DURATION_DEFAULT,
     val testTag: String? = null,
 ) {

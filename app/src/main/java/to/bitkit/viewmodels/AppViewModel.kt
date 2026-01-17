@@ -84,6 +84,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.ToastText
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
@@ -456,8 +457,8 @@ class AppViewModel @Inject constructor(
         delay(MIGRATION_AUTH_RESET_DELAY_MS)
         resetIsAuthenticatedStateInternal()
         toaster.error(
-            title = "Migration Warning",
-            body = "Migration completed but node restart failed. Please restart the app."
+            title = ToastText("Migration Warning"),
+            body = ToastText("Migration completed but node restart failed. Please restart the app.")
         )
     }
 
@@ -539,8 +540,8 @@ class AppViewModel @Inject constructor(
             return
         }
         toaster.lightning(
-            title = R.string.lightning__channel_opened_title,
-            body = R.string.lightning__channel_opened_msg,
+            title = ToastText(R.string.lightning__channel_opened_title),
+            body = ToastText(R.string.lightning__channel_opened_msg),
             testTag = "SpendingBalanceReadyToast",
         )
     }
@@ -548,8 +549,8 @@ class AppViewModel @Inject constructor(
     private suspend fun notifyTransactionRemoved(event: Event.OnchainTransactionEvicted) {
         if (activityRepo.wasTransactionReplaced(event.txid)) return
         toaster.warn(
-            title = R.string.wallet__toast_transaction_removed_title,
-            body = R.string.wallet__toast_transaction_removed_description,
+            title = ToastText(R.string.wallet__toast_transaction_removed_title),
+            body = ToastText(R.string.wallet__toast_transaction_removed_description),
             testTag = "TransactionRemovedToast",
         )
     }
@@ -562,21 +563,21 @@ class AppViewModel @Inject constructor(
     }
 
     private fun notifyTransactionUnconfirmed() = toaster.warn(
-        title = R.string.wallet__toast_transaction_unconfirmed_title,
-        body = R.string.wallet__toast_transaction_unconfirmed_description,
+        title = ToastText(R.string.wallet__toast_transaction_unconfirmed_title),
+        body = ToastText(R.string.wallet__toast_transaction_unconfirmed_description),
         testTag = "TransactionUnconfirmedToast",
     )
 
     private suspend fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) {
         val isReceive = activityRepo.isReceivedTransaction(event.txid)
         toaster.info(
-            title = context.getString(
+            title = ToastText(
                 when (isReceive) {
                     true -> R.string.wallet__toast_received_transaction_replaced_title
                     else -> R.string.wallet__toast_transaction_replaced_title
                 }
             ),
-            body = context.getString(
+            body = ToastText(
                 when (isReceive) {
                     true -> R.string.wallet__toast_received_transaction_replaced_description
                     else -> R.string.wallet__toast_transaction_replaced_description
@@ -590,8 +591,8 @@ class AppViewModel @Inject constructor(
     }
 
     private fun notifyPaymentFailed() = toaster.error(
-        title = R.string.wallet__toast_payment_failed_title,
-        body = R.string.wallet__toast_payment_failed_description,
+        title = ToastText(R.string.wallet__toast_payment_failed_title),
+        body = ToastText(R.string.wallet__toast_payment_failed_description),
         testTag = "PaymentFailedToast",
     )
 
@@ -912,9 +913,11 @@ class AppViewModel @Inject constructor(
             val minSendable = lnurl.data.minSendableSat()
             if (_sendUiState.value.amount < minSendable) {
                 toaster.error(
-                    title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
-                    body = context.getString(R.string.wallet__lnurl_pay__error_min__description)
-                        .replace("{amount}", formatMoneyValue(minSendable)),
+                    title = ToastText(R.string.wallet__lnurl_pay__error_min__title),
+                    body = ToastText(
+                        R.string.wallet__lnurl_pay__error_min__description,
+                        mapOf("amount" to formatMoneyValue(minSendable)),
+                    ),
                     testTag = "LnurlPayAmountTooLowToast",
                 )
                 return
@@ -966,8 +969,8 @@ class AppViewModel @Inject constructor(
         val data = context.getClipboardText()?.trim()
         if (data.isNullOrBlank()) {
             toaster.warn(
-                title = R.string.wallet__send_clipboard_empty_title,
-                body = R.string.wallet__send_clipboard_empty_text,
+                title = ToastText(R.string.wallet__send_clipboard_empty_title),
+                body = ToastText(R.string.wallet__send_clipboard_empty_text),
             )
             return
         }
@@ -1021,8 +1024,8 @@ class AppViewModel @Inject constructor(
             else -> {
                 Logger.warn("Unhandled scan data: $scan", context = TAG)
                 toaster.warn(
-                    title = R.string.other__scan_err_decoding,
-                    body = R.string.other__scan_err_interpret_title,
+                    title = ToastText(R.string.other__scan_err_decoding),
+                    body = ToastText(R.string.other__scan_err_interpret_title),
                 )
             }
         }
@@ -1207,8 +1210,8 @@ class AppViewModel @Inject constructor(
 
         if (!lightningRepo.canSend(minSendable)) {
             toaster.warn(
-                title = R.string.other__lnurl_pay_error,
-                body = R.string.other__lnurl_pay_error_no_capacity,
+                title = ToastText(R.string.other__lnurl_pay_error),
+                body = ToastText(R.string.other__lnurl_pay_error_no_capacity),
             )
             return
         }
@@ -1254,8 +1257,8 @@ class AppViewModel @Inject constructor(
 
         if (minWithdrawable > maxWithdrawable) {
             toaster.warn(
-                title = R.string.other__lnurl_withdr_error,
-                body = R.string.other__lnurl_withdr_error_minmax,
+                title = ToastText(R.string.other__lnurl_withdr_error),
+                body = ToastText(R.string.other__lnurl_withdr_error_minmax),
             )
             return
         }
@@ -1302,18 +1305,22 @@ class AppViewModel @Inject constructor(
                 domain = domain,
             ).onFailure {
                 toaster.warn(
-                    title = context.getString(R.string.other__lnurl_auth_error),
-                    body = context.getString(R.string.other__lnurl_auth_error_msg)
-                        .replace("{raw}", it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName),
+                    title = ToastText(R.string.other__lnurl_auth_error),
+                    body = ToastText(
+                        R.string.other__lnurl_auth_error_msg,
+                        mapOf("raw" to (it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName))
+                    ),
                 )
             }.onSuccess {
                 toaster.success(
-                    title = context.getString(R.string.other__lnurl_auth_success_title),
+                    title = ToastText(R.string.other__lnurl_auth_success_title),
                     body = when (domain.isNotBlank()) {
-                        true -> context.getString(R.string.other__lnurl_auth_success_msg_domain)
-                            .replace("{domain}", domain)
+                        true -> ToastText(
+                            R.string.other__lnurl_auth_success_msg_domain,
+                            mapOf("domain" to domain)
+                        )
 
-                        else -> context.getString(R.string.other__lnurl_auth_success_msg_no_domain)
+                        else -> ToastText(R.string.other__lnurl_auth_success_msg_no_domain)
                     },
                 )
             }
@@ -1535,8 +1542,8 @@ class AppViewModel @Inject constructor(
                     }.onFailure { e ->
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
                         toaster.error(
-                            title = context.getString(R.string.wallet__error_sending_title),
-                            body = e.message ?: context.getString(R.string.common__error_body),
+                            title = ToastText(R.string.wallet__error_sending_title),
+                            body = ToastText(e.message ?: context.getString(R.string.common__error_body)),
                         )
                         hideSheet()
                     }
@@ -1626,8 +1633,8 @@ class AppViewModel @Inject constructor(
                 paymentRequest = invoice
             ).onSuccess {
                 toaster.success(
-                    title = R.string.other__lnurl_withdr_success_title,
-                    body = R.string.other__lnurl_withdr_success_msg,
+                    title = ToastText(R.string.other__lnurl_withdr_success_title),
+                    body = ToastText(R.string.other__lnurl_withdr_success_msg),
                 )
                 hideSheet()
                 _sendUiState.update { it.copy(isLoading = false) }
@@ -2005,8 +2012,8 @@ class AppViewModel @Inject constructor(
 
             if (newAttempts <= 0) {
                 toaster.success(
-                    title = R.string.security__wiped_title,
-                    body = R.string.security__wiped_message,
+                    title = ToastText(R.string.security__wiped_title),
+                    body = ToastText(R.string.security__wiped_message),
                 )
                 delay(250) // small delay for UI feedback
                 mainScreenEffect(MainScreenEffect.WipeWallet)

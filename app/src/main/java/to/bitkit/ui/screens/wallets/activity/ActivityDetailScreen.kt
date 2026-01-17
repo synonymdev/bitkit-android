@@ -50,6 +50,7 @@ import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.models.ToastText
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
@@ -226,8 +227,8 @@ fun ActivityDetailScreen(
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
                             toaster.success(
-                                title = copyToastTitle,
-                                body = text.ellipsisMiddle(40)
+                                title = ToastText(copyToastTitle),
+                                body = ToastText(text.ellipsisMiddle(40))
                             )
                         },
                         feeRates = feeRates,
@@ -248,8 +249,8 @@ fun ActivityDetailScreen(
                             item = it,
                             onSuccess = {
                                 toaster.success(
-                                    title = R.string.wallet__boost_success_title,
-                                    body = R.string.wallet__boost_success_msg,
+                                    title = ToastText(R.string.wallet__boost_success_title),
+                                    body = ToastText(R.string.wallet__boost_success_msg),
                                     testTag = "BoostSuccessToast"
                                 )
                                 listViewModel.resync()
@@ -257,22 +258,22 @@ fun ActivityDetailScreen(
                             },
                             onFailure = {
                                 toaster.error(
-                                    title = R.string.wallet__boost_error_title,
-                                    body = R.string.wallet__boost_error_msg,
+                                    title = ToastText(R.string.wallet__boost_error_title),
+                                    body = ToastText(R.string.wallet__boost_error_msg),
                                     testTag = "BoostFailureToast"
                                 )
                                 detailViewModel.onDismissBoostSheet()
                             },
                             onMaxFee = {
                                 toaster.error(
-                                    title = R.string.wallet__send_fee_error,
-                                    body = R.string.wallet__send_fee_error_max,
+                                    title = ToastText(R.string.wallet__send_fee_error),
+                                    body = ToastText(R.string.wallet__send_fee_error_max),
                                 )
                             },
                             onMinFee = {
                                 toaster.error(
-                                    title = R.string.wallet__send_fee_error,
-                                    body = R.string.wallet__send_fee_error_min,
+                                    title = ToastText(R.string.wallet__send_fee_error),
+                                    body = ToastText(R.string.wallet__send_fee_error_min),
                                 )
                             }
                         )

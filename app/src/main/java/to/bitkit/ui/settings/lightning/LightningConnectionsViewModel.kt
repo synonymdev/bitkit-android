@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.ToastText
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.createChannelDetails
@@ -340,8 +341,8 @@ class LightningConnectionsViewModel @Inject constructor(
                 .onSuccess { uri -> onReady(uri) }
                 .onFailure {
                     toaster.warn(
-                        title = R.string.lightning__error_logs,
-                        body = R.string.lightning__error_logs_description,
+                        title = ToastText(R.string.lightning__error_logs),
+                        body = ToastText(R.string.lightning__error_logs_description),
                     )
                 }
         }
@@ -454,8 +455,8 @@ class LightningConnectionsViewModel @Inject constructor(
                     walletRepo.syncNodeAndWallet()
 
                     toaster.success(
-                        title = R.string.lightning__close_success_title,
-                        body = R.string.lightning__close_success_msg,
+                        title = ToastText(R.string.lightning__close_success_title),
+                        body = ToastText(R.string.lightning__close_success_msg),
                     )
 
                     _closeConnectionUiState.update {
@@ -469,8 +470,8 @@ class LightningConnectionsViewModel @Inject constructor(
                     Logger.error("Failed to close channel", e = error, context = TAG)
 
                     toaster.warn(
-                        title = R.string.lightning__close_error,
-                        body = R.string.lightning__close_error_msg,
+                        title = ToastText(R.string.lightning__close_error),
+                        body = ToastText(R.string.lightning__close_error_msg),
                     )
 
                     _closeConnectionUiState.update { it.copy(isLoading = false) }

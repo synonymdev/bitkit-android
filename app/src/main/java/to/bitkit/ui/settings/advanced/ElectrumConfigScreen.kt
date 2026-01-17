@@ -85,8 +85,8 @@ fun ElectrumConfigScreen(
                 )
             } else {
                 toaster.warn(
-                    title = R.string.settings__es__server_error,
-                    body = R.string.settings__es__server_error_description,
+                    title = ToastText(R.string.settings__es__server_error),
+                    body = ToastText(R.string.settings__es__server_error_description),
                     testTag = "ElectrumErrorToast",
                 )
             }

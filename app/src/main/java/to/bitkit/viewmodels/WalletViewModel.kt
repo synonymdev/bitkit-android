@@ -128,8 +128,8 @@ class WalletViewModel @Inject constructor(
             migrationService.markMigrationChecked()
             migrationService.setShowingMigrationLoading(false)
             toaster.error(
-                title = R.string.wallet__migration_error_title,
-                body = R.string.wallet__migration_error_body,
+                title = ToastText(R.string.wallet__migration_error_title),
+                body = ToastText(R.string.wallet__migration_error_body),
             )
         }
     }
@@ -302,8 +302,8 @@ class WalletViewModel @Inject constructor(
             lightningRepo.disconnectPeer(peer)
                 .onSuccess {
                     toaster.info(
-                        title = R.string.common__success,
-                        body = R.string.wallet__peer_disconnected,
+                        title = ToastText(R.string.common__success),
+                        body = ToastText(R.string.wallet__peer_disconnected),
                     )
                 }
                 .onFailure {

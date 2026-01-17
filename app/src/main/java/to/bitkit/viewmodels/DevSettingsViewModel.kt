@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import to.bitkit.R
 import to.bitkit.data.AppDb
+import to.bitkit.models.ToastText
 import to.bitkit.data.CacheStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.env.Env
@@ -47,18 +48,18 @@ class DevSettingsViewModel @Inject constructor(
         val peer = lightningRepo.getPeers()?.firstOrNull()
 
         if (peer == null) {
-            toaster.warn("No peer connected")
+            toaster.warn(title = ToastText("No peer connected"))
             return@launch
         }
 
         lightningRepo.openChannel(peer, 50_000u, 25_000u)
-            .onSuccess { toaster.info("Channel pending") }
+            .onSuccess { toaster.info(title = ToastText("Channel pending")) }
             .onFailure { toaster.error(it) }
     }
 
     fun registerForNotifications() = viewModelScope.launch {
         lightningRepo.registerForNotifications()
-            .onSuccess { toaster.info("Registered for notifications") }
+            .onSuccess { toaster.info(title = ToastText("Registered for notifications")) }
             .onFailure { toaster.error(it) }
     }
 
@@ -70,9 +71,9 @@ class DevSettingsViewModel @Inject constructor(
                 notificationType = "incomingHtlc",
                 customUrl = Env.blocktankNotificationApiUrl,
             )
-            toaster.info("LSP notification sent to this device")
+            toaster.info(title = ToastText("LSP notification sent to this device"))
         }.onFailure {
-            toaster.warn("Error testing LSP notification")
+            toaster.warn(title = ToastText("Error testing LSP notification"))
         }
     }
 
@@ -100,8 +101,8 @@ class DevSettingsViewModel @Inject constructor(
                 .onSuccess { uri -> onReady(uri) }
                 .onFailure {
                     toaster.warn(
-                        context.getString(R.string.lightning__error_logs),
-                        context.getString(R.string.lightning__error_logs_description),
+                        title = ToastText(R.string.lightning__error_logs),
+                        body = ToastText(R.string.lightning__error_logs_description),
                     )
                 }
         }

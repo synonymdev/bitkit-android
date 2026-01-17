@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.ToastText
 import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -42,7 +43,7 @@ class RecoveryMnemonicViewModel @Inject constructor(
                             isLoading = false,
                         )
                     }
-                    toaster.error(title = R.string.security__mnemonic_load_error)
+                    toaster.error(title = ToastText(R.string.security__mnemonic_load_error))
                     return@launch
                 }
 

@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.models.ToastText
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
@@ -74,8 +75,8 @@ class RecoveryViewModel @Inject constructor(
                         )
                     }
                     toaster.error(
-                        title = R.string.common__error,
-                        body = R.string.other__logs_export_error,
+                        title = ToastText(R.string.common__error),
+                        body = ToastText(R.string.other__logs_export_error),
                     )
                 }
             )
@@ -98,8 +99,8 @@ class RecoveryViewModel @Inject constructor(
                 Logger.error("Failed to open support links", fallbackError, context = TAG)
                 viewModelScope.launch {
                     toaster.error(
-                        title = R.string.common__error,
-                        body = R.string.settings__support__link_error,
+                        title = ToastText(R.string.common__error),
+                        body = ToastText(R.string.settings__support__link_error),
                     )
                 }
             }
@@ -120,8 +121,8 @@ class RecoveryViewModel @Inject constructor(
                 toaster.error(error)
             }.onSuccess {
                 toaster.success(
-                    title = R.string.security__wiped_title,
-                    body = R.string.security__wiped_message,
+                    title = ToastText(R.string.security__wiped_title),
+                    body = ToastText(R.string.security__wiped_message),
                 )
             }
         }

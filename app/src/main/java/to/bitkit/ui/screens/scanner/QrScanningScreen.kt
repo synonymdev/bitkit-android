@@ -65,6 +65,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.startActivityAppSettings
+import to.bitkit.models.ToastText
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
@@ -149,8 +150,8 @@ fun QrScanningScreen(
                 val error = requireNotNull(result.exceptionOrNull())
                 Logger.error("Failed to scan QR code", error)
                 toaster.error(
-                    title = R.string.other__qr_error_header,
-                    body = R.string.other__qr_error_text,
+                    title = ToastText(R.string.other__qr_error_header),
+                    body = ToastText(R.string.other__qr_error_text),
                 )
             }
         }
@@ -254,8 +255,8 @@ private fun handlePaste(
     val clipboard = context.getClipboardText()?.trim()
     if (clipboard.isNullOrBlank()) {
         toaster.warn(
-            title = R.string.wallet__send_clipboard_empty_title,
-            body = R.string.wallet__send_clipboard_empty_text,
+            title = ToastText(R.string.wallet__send_clipboard_empty_title),
+            body = ToastText(R.string.wallet__send_clipboard_empty_text),
         )
     }
     setScanResult(clipboard)

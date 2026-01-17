@@ -42,6 +42,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TransactionDetails
 import to.bitkit.R
 import to.bitkit.ext.create
+import to.bitkit.models.ToastText
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.totalValue
@@ -166,8 +167,8 @@ fun ActivityExploreScreen(
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
                         toaster.success(
-                            title = toastMessage,
-                            body = text.ellipsisMiddle(40),
+                            title = ToastText(toastMessage),
+                            body = ToastText(text.ellipsisMiddle(40)),
                         )
                     },
                     onClickExplore = { txid ->

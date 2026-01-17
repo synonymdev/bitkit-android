@@ -70,8 +70,8 @@ class LnurlChannelViewModel @Inject constructor(
             lightningRepo.requestLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
                 .onSuccess {
                     toaster.success(
-                        title = R.string.other__lnurl_channel_success_title,
-                        body = R.string.other__lnurl_channel_success_msg_no_peer,
+                        title = ToastText(R.string.other__lnurl_channel_success_title),
+                        body = ToastText(R.string.other__lnurl_channel_success_msg_no_peer),
                     )
                     _uiState.update { it.copy(isConnected = true) }
                 }.onFailure { error ->

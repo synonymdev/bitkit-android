@@ -29,6 +29,7 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.STUB_RATE
+import to.bitkit.models.ToastText
 import to.bitkit.models.asBtc
 import to.bitkit.models.formatCurrency
 import to.bitkit.services.CurrencyService
@@ -93,8 +94,8 @@ class CurrencyRepo @Inject constructor(
                 .collect { isStale ->
                     if (isStale) {
                         toaster.error(
-                            title = "Rates currently unavailable",
-                            body = "An error has occurred. Please try again later."
+                            title = ToastText("Rates currently unavailable"),
+                            body = ToastText("An error has occurred. Please try again later.")
                         )
                     }
                 }

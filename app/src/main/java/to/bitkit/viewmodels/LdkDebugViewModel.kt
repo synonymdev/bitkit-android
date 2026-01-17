@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.ToastText
 import to.bitkit.ext.of
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.NetworkGraphInfo
@@ -43,7 +44,7 @@ class LdkDebugViewModel @Inject constructor(
     fun addPeer() {
         val uri = _uiState.value.nodeUri.trim()
         if (uri.isEmpty()) {
-            viewModelScope.launch { toaster.warn("Please enter a node URI") }
+            viewModelScope.launch { toaster.warn(title = ToastText("Please enter a node URI")) }
             return
         }
         connectPeer(uri)
@@ -55,7 +56,7 @@ class LdkDebugViewModel @Inject constructor(
         val pastedUri = clipData?.getItemAt(0)?.text?.toString()?.trim()
 
         if (pastedUri.isNullOrEmpty()) {
-            viewModelScope.launch { toaster.warn("Clipboard is empty") }
+            viewModelScope.launch { toaster.warn(title = ToastText("Clipboard is empty")) }
             return
         }
 
@@ -71,15 +72,15 @@ class LdkDebugViewModel @Inject constructor(
                 lightningRepo.connectPeer(peer)
             }.onSuccess { result ->
                 result.onSuccess {
-                    toaster.info("Peer connected")
+                    toaster.info(title = ToastText("Peer connected"))
                     _uiState.update { it.copy(nodeUri = "") }
                 }.onFailure { e ->
                     Logger.error("Failed to connect peer", e, context = TAG)
-                    toaster.error("Failed to connect peer", e.message)
+                    toaster.error(title = ToastText("Failed to connect peer"), body = e.message?.let { ToastText(it) })
                 }
             }.onFailure { e ->
                 Logger.error("Failed to parse peer URI", e, context = TAG)
-                toaster.error("Invalid node URI format", e.message)
+                toaster.error(title = ToastText("Invalid node URI format"), body = e.message?.let { ToastText(it) })
             }
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -97,9 +98,9 @@ class LdkDebugViewModel @Inject constructor(
                     context = TAG
                 )
                 _uiState.update { it.copy(networkGraphInfo = info) }
-                toaster.info("Network graph info logged")
+                toaster.info(title = ToastText("Network graph info logged"))
             } else {
-                toaster.warn("Failed to get network graph info")
+                toaster.warn(title = ToastText("Failed to get network graph info"))
             }
         }
     }
@@ -110,11 +111,11 @@ class LdkDebugViewModel @Inject constructor(
             val outputDir = context.cacheDir.absolutePath
             lightningRepo.exportNetworkGraphToFile(outputDir).onSuccess { file ->
                 Logger.info("Network graph exported to: ${file.absolutePath}", context = TAG)
-                toaster.info("Network graph exported")
+                toaster.info(title = ToastText("Network graph exported"))
                 onFileReady(file)
             }.onFailure { e ->
                 Logger.error("Failed to export network graph", e, context = TAG)
-                toaster.error("Failed to export network graph", e.message)
+                toaster.error(title = ToastText("Failed to export network graph"), body = e.message?.let { ToastText(it) })
             }
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -126,10 +127,10 @@ class LdkDebugViewModel @Inject constructor(
             vssBackupClient.listKeys().onSuccess { keys ->
                 Logger.info("VSS keys: ${keys.size}", context = TAG)
                 _uiState.update { it.copy(vssKeys = keys) }
-                toaster.info("Found ${keys.size} VSS key(s)")
+                toaster.info(title = ToastText("Found ${keys.size} VSS key(s)"))
             }.onFailure { e ->
                 Logger.error("Failed to list VSS keys", e, context = TAG)
-                toaster.error("Failed to list VSS keys", e.message)
+                toaster.error(title = ToastText("Failed to list VSS keys"), body = e.message?.let { ToastText(it) })
             }
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -141,10 +142,10 @@ class LdkDebugViewModel @Inject constructor(
             vssBackupClient.deleteAllKeys().onSuccess { deletedCount ->
                 Logger.info("Deleted $deletedCount VSS keys", context = TAG)
                 _uiState.update { it.copy(vssKeys = emptyList()) }
-                toaster.info("Deleted $deletedCount VSS key(s)")
+                toaster.info(title = ToastText("Deleted $deletedCount VSS key(s)"))
             }.onFailure { e ->
                 Logger.error("Failed to delete VSS keys", e, context = TAG)
-                toaster.error("Failed to delete VSS keys", e.message)
+                toaster.error(title = ToastText("Failed to delete VSS keys"), body = e.message?.let { ToastText(it) })
             }
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -160,14 +161,14 @@ class LdkDebugViewModel @Inject constructor(
                         _uiState.update { state ->
                             state.copy(vssKeys = state.vssKeys.filter { it.key != key })
                         }
-                        toaster.info("Deleted key: $key")
+                        toaster.info(title = ToastText("Deleted key: $key"))
                     } else {
-                        toaster.warn("Key not found: $key")
+                        toaster.warn(title = ToastText("Key not found: $key"))
                     }
                 }
                 .onFailure { e ->
                     Logger.error("Failed to delete VSS key: $key", e, context = TAG)
-                    toaster.error("Failed to delete key", e.message)
+                    toaster.error(title = ToastText("Failed to delete key"), body = e.message?.let { ToastText(it) })
                 }
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -179,11 +180,11 @@ class LdkDebugViewModel @Inject constructor(
             lightningRepo.restartNode()
                 .onSuccess {
                     Logger.info("Node restarted successfully", context = TAG)
-                    toaster.info("Node restarted")
+                    toaster.info(title = ToastText("Node restarted"))
                 }
                 .onFailure { e ->
                     Logger.error("Failed to restart node", e, context = TAG)
-                    toaster.error("Failed to restart node", e.message)
+                    toaster.error(title = ToastText("Failed to restart node"), body = e.message?.let { ToastText(it) })
                 }
             _uiState.update { it.copy(isLoading = false) }
         }

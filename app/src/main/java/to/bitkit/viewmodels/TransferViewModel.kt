@@ -460,8 +460,8 @@ class TransferViewModel @Inject constructor(
                 channelsToClose = emptyList()
                 Logger.error("Cannot force close channels with trusted peer", context = TAG)
                 toaster.error(
-                    title = R.string.lightning__force_failed_title,
-                    body = R.string.lightning__force_failed_msg,
+                    title = ToastText(R.string.lightning__force_failed_title),
+                    body = ToastText(R.string.lightning__force_failed_msg),
                 )
                 return@runCatching
             }
@@ -490,15 +490,15 @@ class TransferViewModel @Inject constructor(
             } else {
                 Logger.error("Force close failed for ${failedChannels.size} channels", context = TAG)
                 toaster.error(
-                    title = R.string.lightning__force_failed_title,
-                    body = R.string.lightning__force_failed_msg,
+                    title = ToastText(R.string.lightning__force_failed_title),
+                    body = ToastText(R.string.lightning__force_failed_msg),
                 )
             }
         }.onFailure {
             Logger.error("Force close failed", e = it, context = TAG)
             toaster.error(
-                title = R.string.lightning__force_failed_title,
-                body = R.string.lightning__force_failed_msg,
+                title = ToastText(R.string.lightning__force_failed_title),
+                body = ToastText(R.string.lightning__force_failed_msg),
             )
         }
         _isForceTransferLoading.value = false
