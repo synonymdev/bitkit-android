@@ -45,6 +45,7 @@ import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
 import to.bitkit.ui.screens.MigrationLoadingScreen
 import to.bitkit.ui.screens.SplashScreen
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -64,7 +65,7 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
-    @Inject lateinit var toaster: to.bitkit.ui.shared.toast.Toaster
+    @Inject lateinit var toaster: Toaster
 
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
@@ -234,7 +235,7 @@ private fun OnboardingNav(
     scope: CoroutineScope,
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
-    toaster: to.bitkit.ui.shared.toast.Toaster,
+    toaster: Toaster,
 ) {
     NavHost(
         navController = startupNavController,

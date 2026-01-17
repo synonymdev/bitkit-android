@@ -91,13 +91,9 @@ class TransferViewModel @Inject constructor(
     fun onConfirmAmount(satsAmount: Long) {
         val values = blocktankRepo.calculateLiquidityOptions(satsAmount.toULong()).getOrNull()
         if (values == null || values.maxLspBalanceSat == 0uL) {
-            setTransferEffect(
-                TransferEffect.ToastError(
-                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
-                    body = context.getString(
-                        R.string.lightning__spending_amount__error_max__description_zero
-                    ),
-                )
+            toaster.error(
+                title = ToastText(R.string.lightning__spending_amount__error_max__title),
+                body = ToastText(R.string.lightning__spending_amount__error_max__description_zero),
             )
             return
         }
@@ -121,7 +117,7 @@ class TransferViewModel @Inject constructor(
                     delay(1.seconds) // Give time to settle the UI
                     _spendingUiState.update { it.copy(isLoading = false) }
                 }.onFailure { e ->
-                    setTransferEffect(TransferEffect.ToastException(e))
+                    toaster.error(e)
                     delay(1.seconds) // Give time to settle the UI
                     _spendingUiState.update { it.copy(isLoading = false) }
                 }
@@ -170,6 +166,7 @@ class TransferViewModel @Inject constructor(
 
     fun onSpendingAdvancedContinue(receivingAmountSats: Long) {
         viewModelScope.launch {
+            _spendingUiState.update { it.copy(isLoading = true) }
             runCatching {
                 val oldOrder = _spendingUiState.value.order ?: return@launch
                 val newOrder = blocktankRepo.createOrder(
@@ -181,11 +178,13 @@ class TransferViewModel @Inject constructor(
                         order = newOrder,
                         defaultOrder = oldOrder,
                         isAdvanced = true,
+                        isLoading = false,
                     )
                 }
                 setTransferEffect(TransferEffect.OnOrderCreated)
             }.onFailure { e ->
-                setTransferEffect(TransferEffect.ToastException(e))
+                _spendingUiState.update { it.copy(isLoading = false) }
+                toaster.error(e)
             }
         }
     }
@@ -322,7 +321,7 @@ class TransferViewModel @Inject constructor(
             }.onFailure { exception ->
                 _spendingUiState.update { it.copy(isLoading = false) }
                 Logger.error("Failure", exception)
-                setTransferEffect(TransferEffect.ToastException(exception))
+                toaster.error(exception)
             }
         }
     }
@@ -566,7 +565,5 @@ data class TransferValues(
 
 sealed interface TransferEffect {
     data object OnOrderCreated : TransferEffect
-    data class ToastException(val e: Throwable) : TransferEffect
-    data class ToastError(val title: String, val body: String) : TransferEffect
 }
 // endregion

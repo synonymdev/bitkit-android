@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -59,7 +58,6 @@ fun ElectrumConfigScreen(
     toaster: Toaster = LocalToaster.current,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     // Handle result from Scanner
     LaunchedEffect(savedStateHandle) {
@@ -78,9 +76,8 @@ fun ElectrumConfigScreen(
                 toaster.success(
                     title = ToastText(R.string.settings__es__server_updated_title),
                     body = ToastText(
-                        context.getString(R.string.settings__es__server_updated_message)
-                            .replace("{host}", uiState.host)
-                            .replace("{port}", uiState.port)
+                        R.string.settings__es__server_updated_message,
+                        mapOf("host" to uiState.host, "port" to uiState.port),
                     ),
                     testTag = "ElectrumUpdatedToast",
                 )

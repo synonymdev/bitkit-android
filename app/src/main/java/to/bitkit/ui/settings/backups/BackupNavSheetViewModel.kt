@@ -156,12 +156,10 @@ class BackupNavSheetViewModel @Inject constructor(
     }
 
     fun onMnemonicCopied() {
-        viewModelScope.launch {
-            toaster.success(
-                title = ToastText(R.string.common__copied),
-                body = ToastText(R.string.security__mnemonic_copied),
-            )
-        }
+        toaster.success(
+            title = ToastText(R.string.common__copied),
+            body = ToastText(R.string.security__mnemonic_copied),
+        )
     }
 }
 

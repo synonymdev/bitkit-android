@@ -73,7 +73,6 @@ fun SettingsScreen(
                 val newValue = !isDevModeEnabled
                 settings.setIsDevModeEnabled(newValue)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-
                 val titleRes = if (newValue) {
                     R.string.settings__dev_enabled_title
                 } else {
@@ -84,10 +83,7 @@ fun SettingsScreen(
                 } else {
                     R.string.settings__dev_disabled_message
                 }
-                toaster.success(
-                    title = ToastText(titleRes),
-                    body = ToastText(bodyRes),
-                )
+                toaster.success(title = ToastText(titleRes), body = ToastText(bodyRes))
                 enableDevModeTapCount = 0
             }
         },

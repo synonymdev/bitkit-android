@@ -2,10 +2,10 @@ package to.bitkit.ui.shared.toast
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Before
 import org.junit.Test
 import to.bitkit.models.Toast
 import to.bitkit.models.ToastText
@@ -17,13 +17,13 @@ import kotlin.time.Duration.Companion.seconds
 class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
     private lateinit var sut: ToastQueue
 
-    @Before
-    fun setUp() {
-        sut = ToastQueue(testDispatcher)
+    private fun testQueue(block: suspend TestScope.() -> Unit): Unit = test {
+        sut = ToastQueue(this)
+        block()
     }
 
     @Test
-    fun `enqueue shows toast immediately when queue empty`() = test {
+    fun `enqueue shows toast immediately when queue empty`() = testQueue {
         val toast = createToast()
 
         sut.enqueue(toast)
@@ -32,7 +32,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `enqueue queues toast when another is displayed`() = test {
+    fun `enqueue queues toast when another is displayed`() = testQueue {
         val toast1 = createToast(title = "First")
         val toast2 = createToast(title = "Second")
 
@@ -43,7 +43,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `dismiss advances to next toast in queue`() = test {
+    fun `dismiss advances to next toast in queue`() = testQueue {
         val toast1 = createToast(title = "First", autoHide = false)
         val toast2 = createToast(title = "Second", autoHide = false)
 
@@ -52,13 +52,13 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(ToastText.Literal("Second"), sut.currentToast.value?.title)
 
-        sut.dismissCurrentToast()
+        sut.dismiss()
 
         assertNull(sut.currentToast.value)
     }
 
     @Test
-    fun `auto-hide timer dismisses toast after duration`() = test {
+    fun `auto-hide timer dismisses toast after duration`() = testQueue {
         val toast = createToast(autoHide = true)
 
         sut.enqueue(toast)
@@ -71,26 +71,26 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `pause stops auto-hide timer`() = test {
+    fun `pause stops auto-hide timer`() = testQueue {
         val toast = createToast(autoHide = true)
 
         sut.enqueue(toast)
         advanceTimeBy(1000)
-        sut.pauseCurrentToast()
+        sut.pause()
         advanceTimeBy(5000)
 
         assertEquals(toast, sut.currentToast.value)
     }
 
     @Test
-    fun `resume restarts auto-hide timer`() = test {
+    fun `resume restarts auto-hide timer`() = testQueue {
         val toast = createToast(autoHide = true)
 
         sut.enqueue(toast)
         advanceTimeBy(1000)
-        sut.pauseCurrentToast()
+        sut.pause()
         advanceTimeBy(5000)
-        sut.resumeCurrentToast()
+        sut.resume()
         advanceTimeBy(2000)
 
         assertEquals(toast, sut.currentToast.value)
@@ -101,7 +101,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `max queue size drops oldest when exceeded`() = test {
+    fun `max queue size drops oldest when exceeded`() = testQueue {
         val toasts = (1..6).map { createToast(title = "Toast $it") }
 
         toasts.forEach { sut.enqueue(it) }
@@ -110,7 +110,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `clear removes all toasts and hides current`() = test {
+    fun `clear removes all toasts and hides current`() = testQueue {
         val toast1 = createToast(title = "First", autoHide = false)
         val toast2 = createToast(title = "Second", autoHide = false)
 
@@ -122,7 +122,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `non-auto-hide toast stays until dismissed`() = test {
+    fun `non-auto-hide toast stays until dismissed`() = testQueue {
         val toast = createToast(autoHide = false)
 
         sut.enqueue(toast)
@@ -130,7 +130,7 @@ class ToastQueueTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(toast, sut.currentToast.value)
 
-        sut.dismissCurrentToast()
+        sut.dismiss()
 
         assertNull(sut.currentToast.value)
     }

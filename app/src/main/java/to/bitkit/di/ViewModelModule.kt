@@ -17,5 +17,5 @@ object ViewModelModule {
     fun provideFirebaseMessaging(): FirebaseMessaging = FirebaseMessaging.getInstance()
 
     @Provides
-    fun provideToastQueueProvider(): (CoroutineScope) -> ToastQueue = { ToastQueue(it) }
+    fun provideToastQueueProvider(): (CoroutineScope) -> ToastQueue = ::ToastQueue
 }

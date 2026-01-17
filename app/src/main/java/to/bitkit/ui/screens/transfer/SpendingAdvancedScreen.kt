@@ -11,10 +11,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -26,10 +23,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.mockOrder
-import to.bitkit.models.ToastText
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
@@ -43,7 +38,6 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -62,13 +56,11 @@ fun SpendingAdvancedScreen(
     onOrderCreated: () -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
-    toaster: Toaster = LocalToaster.current,
 ) {
     val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    var isLoading by remember { mutableStateOf(false) }
 
     val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
 
@@ -84,18 +76,6 @@ fun SpendingAdvancedScreen(
         viewModel.transferEffects.collect { effect ->
             when (effect) {
                 TransferEffect.OnOrderCreated -> currentOnOrderCreated()
-                is TransferEffect.ToastException -> {
-                    isLoading = false
-                    toaster.error(effect.e)
-                }
-
-                is TransferEffect.ToastError -> {
-                    isLoading = false
-                    toaster.error(
-                        title = ToastText(effect.title),
-                        body = ToastText(effect.body),
-                    )
-                }
             }
         }
     }
@@ -109,14 +89,11 @@ fun SpendingAdvancedScreen(
         uiState = state,
         transferValues = transferValues,
         isValid = isValid,
-        isLoading = isLoading,
+        isLoading = state.isLoading,
         amountInputViewModel = amountInputViewModel,
         currencies = currencies,
         onBack = onBackClick,
-        onContinue = {
-            isLoading = true
-            viewModel.onSpendingAdvancedContinue(amountUiState.sats)
-        },
+        onContinue = { viewModel.onSpendingAdvancedContinue(amountUiState.sats) },
     )
 }
 

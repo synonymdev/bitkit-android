@@ -111,6 +111,7 @@ import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
@@ -1515,7 +1516,7 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                toaster.error(Exception(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
+                toaster.error(AppError(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
                 hideSheet()
                 return
             }
@@ -1975,11 +1976,11 @@ class AppViewModel @Inject constructor(
     private val toastQueue = toastQueueProvider(viewModelScope)
     val currentToast: StateFlow<Toast?> = toastQueue.currentToast
 
-    fun hideToast() = toastQueue.dismissCurrentToast()
+    fun hideToast() = toastQueue.dismiss()
 
-    fun pauseToast() = toastQueue.pauseCurrentToast()
+    fun pauseToast() = toastQueue.pause()
 
-    fun resumeToast() = toastQueue.resumeCurrentToast()
+    fun resumeToast() = toastQueue.resume()
     // endregion
 
     // region security

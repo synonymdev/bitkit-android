@@ -50,13 +50,13 @@ class ToastQueue(private val scope: CoroutineScope) {
             }
             newQueue
         }
-        dismissCurrentToast()
+        dismiss()
     }
 
     /**
      * Dismiss current toast and advance to next in queue.
      */
-    fun dismissCurrentToast() {
+    fun dismiss() {
         cancelTimer()
         _currentToast.value = null
         isPaused = false
@@ -67,7 +67,7 @@ class ToastQueue(private val scope: CoroutineScope) {
     /**
      * Pause current toast timer (called on drag start).
      */
-    fun pauseCurrentToast() {
+    fun pause() {
         if (_currentToast.value?.autoHide == true) {
             isPaused = true
             cancelTimer()
@@ -77,7 +77,7 @@ class ToastQueue(private val scope: CoroutineScope) {
     /**
      * Resume current toast timer with FULL duration (called on drag end).
      */
-    fun resumeCurrentToast() {
+    fun resume() {
         val toast = _currentToast.value
         if (isPaused && toast != null) {
             isPaused = false

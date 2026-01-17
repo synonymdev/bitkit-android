@@ -44,7 +44,7 @@ class LdkDebugViewModel @Inject constructor(
     fun addPeer() {
         val uri = _uiState.value.nodeUri.trim()
         if (uri.isEmpty()) {
-            viewModelScope.launch { toaster.warn(title = ToastText("Please enter a node URI")) }
+            toaster.warn(title = ToastText("Please enter a node URI"))
             return
         }
         connectPeer(uri)
@@ -56,7 +56,7 @@ class LdkDebugViewModel @Inject constructor(
         val pastedUri = clipData?.getItemAt(0)?.text?.toString()?.trim()
 
         if (pastedUri.isNullOrEmpty()) {
-            viewModelScope.launch { toaster.warn(title = ToastText("Clipboard is empty")) }
+            toaster.warn(title = ToastText("Clipboard is empty"))
             return
         }
 
