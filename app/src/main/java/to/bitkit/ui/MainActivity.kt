@@ -132,7 +132,7 @@ class MainActivity : FragmentActivity() {
                 } else {
                     val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
 
-                    IsOnlineTracker(appViewModel)
+                    IsOnlineTracker(appViewModel, toaster)
                     ContentView(
                         appViewModel = appViewModel,
                         walletViewModel = walletViewModel,
