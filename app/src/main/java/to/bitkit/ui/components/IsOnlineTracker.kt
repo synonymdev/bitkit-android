@@ -9,14 +9,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.ToastText
 import to.bitkit.repositories.ConnectivityState
-import to.bitkit.ui.toaster
+import to.bitkit.ui.LocalToaster
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.viewmodels.AppViewModel
 
 @Composable
 fun IsOnlineTracker(
     app: AppViewModel,
+    toaster: Toaster = LocalToaster.current,
 ) {
-    val toaster = toaster ?: return
     val connectivityState by app.isOnline.collectAsStateWithLifecycle(initialValue = ConnectivityState.CONNECTED)
 
     val (isFirstEmission, setIsFirstEmission) = remember { mutableStateOf(true) }

@@ -32,6 +32,7 @@ import to.bitkit.ext.setClipboardText
 import to.bitkit.models.AddressModel
 import to.bitkit.models.ToastText
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
@@ -45,10 +46,10 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.BlockExplorerType
 import to.bitkit.ui.utils.getBlockExplorerUrl
 
@@ -56,9 +57,9 @@ import to.bitkit.ui.utils.getBlockExplorerUrl
 fun AddressViewerScreen(
     navController: NavController,
     viewModel: AddressViewerViewModel = hiltViewModel(),
+    toaster: Toaster = LocalToaster.current,
 ) {
     val context = LocalContext.current
-    val toaster = toaster
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 

@@ -32,6 +32,7 @@ import to.bitkit.R
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServerPeer
 import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
@@ -46,19 +47,19 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScanNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 
 @Composable
 fun ElectrumConfigScreen(
     savedStateHandle: SavedStateHandle,
     navController: NavController,
     viewModel: ElectrumConfigViewModel = hiltViewModel(),
+    toaster: Toaster = LocalToaster.current,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val toaster = toaster
 
     // Handle result from Scanner
     LaunchedEffect(savedStateHandle) {

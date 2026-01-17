@@ -58,8 +58,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.models.ToastText
 import to.bitkit.ext.startActivityAppSettings
+import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetPreview
@@ -70,12 +71,12 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrCodeAnalyzer
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
-import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -90,9 +91,8 @@ private const val TAG = "SendRecipientScreen"
 fun SendRecipientScreen(
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
+    toaster: Toaster = LocalToaster.current,
 ) {
-    val toaster = toaster
-
     // Context & lifecycle
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current

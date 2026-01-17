@@ -15,6 +15,7 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.settings.SectionHeader
@@ -24,16 +25,16 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.shared.util.shareZipFile
-import to.bitkit.ui.toaster
 import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable
 fun DevSettingsScreen(
     navController: NavController,
     viewModel: DevSettingsViewModel = hiltViewModel(),
+    toaster: Toaster = LocalToaster.current,
 ) {
-    val toaster = toaster
     val activity = activityListViewModel ?: return
     val settings = settingsViewModel ?: return
     val context = LocalContext.current

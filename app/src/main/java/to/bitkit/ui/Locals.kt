@@ -58,6 +58,3 @@ val backupsViewModel: BackupsViewModel?
 
 val drawerState: DrawerState?
     @Composable get() = LocalDrawerState.current
-
-val toaster: Toaster
-    @Composable get() = LocalToaster.current

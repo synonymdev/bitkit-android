@@ -42,10 +42,11 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TransactionDetails
 import to.bitkit.R
 import to.bitkit.ext.create
-import to.bitkit.models.ToastText
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.totalValue
+import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
@@ -58,7 +59,6 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.getScreenTitleRes
@@ -131,7 +131,7 @@ fun ActivityExploreScreen(
 
             is ActivityDetailViewModel.ActivityLoadState.Success -> {
                 val item = loadState.activity
-                val toaster = toaster
+                val toaster = LocalToaster.current
                 val context = LocalContext.current
 
                 val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()

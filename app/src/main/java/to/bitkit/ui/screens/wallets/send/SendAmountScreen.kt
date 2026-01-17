@@ -36,6 +36,7 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
@@ -52,10 +53,10 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.LnurlParams
@@ -74,8 +75,8 @@ fun SendAmountScreen(
     onEvent: (SendEvent) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
+    toaster: Toaster = LocalToaster.current,
 ) {
-    val toaster = toaster
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
 

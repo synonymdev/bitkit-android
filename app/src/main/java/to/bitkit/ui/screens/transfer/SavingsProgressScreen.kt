@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -34,9 +35,9 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
@@ -51,8 +52,8 @@ fun SavingsProgressScreen(
     wallet: WalletViewModel,
     onContinueClick: () -> Unit = {},
     onTransferUnavailable: () -> Unit = {},
+    toaster: Toaster = LocalToaster.current,
 ) {
-    val toaster = toaster
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
 
     // Effect to close channels & update UI

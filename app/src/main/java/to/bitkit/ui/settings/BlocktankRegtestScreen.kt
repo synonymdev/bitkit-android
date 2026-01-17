@@ -29,6 +29,7 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
@@ -37,8 +38,8 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
@@ -47,10 +48,10 @@ import to.bitkit.utils.Logger
 fun BlocktankRegtestScreen(
     navController: NavController,
     viewModel: BlocktankRegtestViewModel = hiltViewModel(),
+    toaster: Toaster = LocalToaster.current,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val wallet = walletViewModel ?: return
-    val toaster = toaster
     val walletState by wallet.walletState.collectAsStateWithLifecycle()
 
     ScreenColumn {

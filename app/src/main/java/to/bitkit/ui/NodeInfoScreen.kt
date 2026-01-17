@@ -63,6 +63,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
@@ -73,9 +74,9 @@ import kotlin.time.ExperimentalTime
 @Composable
 fun NodeInfoScreen(
     navController: NavController,
+    toaster: Toaster = LocalToaster.current,
 ) {
     val wallet = walletViewModel ?: return
-    val toaster = toaster
     val settings = settingsViewModel ?: return
 
     val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()

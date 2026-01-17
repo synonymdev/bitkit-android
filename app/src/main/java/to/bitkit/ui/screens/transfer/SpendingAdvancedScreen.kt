@@ -29,6 +29,7 @@ import to.bitkit.ext.mockOrder
 import to.bitkit.models.ToastText
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
@@ -42,9 +43,9 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.TransferEffect
@@ -61,9 +62,9 @@ fun SpendingAdvancedScreen(
     onOrderCreated: () -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
+    toaster: Toaster = LocalToaster.current,
 ) {
     val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
-    val toaster = toaster
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()

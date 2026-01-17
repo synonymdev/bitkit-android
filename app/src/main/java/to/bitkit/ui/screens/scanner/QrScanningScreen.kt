@@ -66,6 +66,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
@@ -76,7 +77,6 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
@@ -91,10 +91,9 @@ fun QrScanningScreen(
     navController: NavController,
     inSheet: Boolean = false,
     onBack: () -> Unit = { navController.popBackStack() },
+    toaster: Toaster = LocalToaster.current,
     onScanSuccess: (String) -> Unit,
 ) {
-    val toaster = toaster
-
     val (scanResult, setScanResult) = remember { mutableStateOf<String?>(null) }
 
     // Handle scan result

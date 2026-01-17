@@ -56,6 +56,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
@@ -71,9 +72,9 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settings.lightning.components.ChannelStatusView
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.toast.Toaster
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.walletViewModel
 import java.time.Instant
@@ -85,9 +86,9 @@ import java.util.Locale
 fun ChannelDetailScreen(
     navController: NavController,
     viewModel: LightningConnectionsViewModel,
+    toaster: Toaster = LocalToaster.current,
 ) {
     val context = LocalContext.current
-    val toaster = toaster
     val wallet = walletViewModel ?: return
 
     val selectedChannel by viewModel.selectedChannel.collectAsStateWithLifecycle()

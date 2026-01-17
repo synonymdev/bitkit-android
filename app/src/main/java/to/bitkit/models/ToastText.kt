@@ -22,7 +22,10 @@ sealed interface ToastText {
     companion object {
         operator fun invoke(value: String): ToastText = Literal(value)
         operator fun invoke(@StringRes resId: Int): ToastText = Resource(resId)
-        operator fun invoke(@StringRes resId: Int, params: Map<String, String>): ToastText = Parameterized(resId, params)
+        operator fun invoke(
+            @StringRes resId: Int,
+            params: Map<String, String>,
+        ): ToastText = Parameterized(resId, params)
     }
 }
 

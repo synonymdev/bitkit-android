@@ -50,7 +50,6 @@ import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.models.ToastText
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
@@ -59,6 +58,8 @@ import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
+import to.bitkit.models.ToastText
+import to.bitkit.ui.LocalToaster
 import to.bitkit.ui.Routes
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BalanceHeaderView
@@ -80,7 +81,6 @@ import to.bitkit.ui.sheets.BoostTransactionSheet
 import to.bitkit.ui.sheets.ComingSoonSheet
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.toaster
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityDetailViewModel
@@ -163,7 +163,7 @@ fun ActivityDetailScreen(
 
             is ActivityDetailViewModel.ActivityLoadState.Success -> {
                 val item = loadState.activity
-                val toaster = toaster
+                val toaster = LocalToaster.current
                 val copyToastTitle = stringResource(R.string.common__copied)
 
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
