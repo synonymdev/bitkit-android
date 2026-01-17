@@ -133,6 +133,7 @@ class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
     healthRepo: HealthRepo,
     timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
+    toastQueueProvider: @JvmSuppressWildcards (CoroutineScope) -> ToastQueue,
     private val toaster: Toaster,
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -1971,7 +1972,7 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    private val toastQueue = ToastQueue(viewModelScope)
+    private val toastQueue = toastQueueProvider(viewModelScope)
     val currentToast: StateFlow<Toast?> = toastQueue.currentToast
 
     fun hideToast() = toastQueue.dismissCurrentToast()
