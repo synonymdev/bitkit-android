@@ -132,7 +132,6 @@ import kotlin.time.ExperimentalTime
 class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
     healthRepo: HealthRepo,
-    toastQueueProvider: @JvmSuppressWildcards (CoroutineDispatcher) -> ToastQueue,
     timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
     val toaster: Toaster,
     @ApplicationContext private val context: Context,
@@ -1972,7 +1971,7 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    private val toastQueue = toastQueueProvider(Dispatchers.Main.immediate)
+    private val toastQueue = ToastQueue(viewModelScope)
     val currentToast: StateFlow<Toast?> = toastQueue.currentToast
 
     fun hideToast() = toastQueue.dismissCurrentToast()

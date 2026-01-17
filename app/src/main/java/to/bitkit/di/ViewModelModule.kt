@@ -5,8 +5,6 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.ui.shared.toast.ToastQueue
 import javax.inject.Singleton
 
 @Module
@@ -16,10 +14,5 @@ object ViewModelModule {
     @Provides
     fun provideFirebaseMessaging(): FirebaseMessaging {
         return FirebaseMessaging.getInstance()
-    }
-
-    @Provides
-    fun provideToastQueueProvider(): (CoroutineDispatcher) -> ToastQueue {
-        return ::ToastQueue
     }
 }

@@ -1,6 +1,6 @@
 package to.bitkit.ui.shared.toast
 
-import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.models.Toast
 import kotlin.time.Duration
 
@@ -28,7 +27,7 @@ private const val MAX_QUEUE_SIZE = 5
  * - Auto-advance to next toast on completion
  * - Max queue size with FIFO overflow handling
  */
-class ToastQueue(dispatcher: CoroutineDispatcher) : BaseCoroutineScope(dispatcher) {
+class ToastQueue(private val scope: CoroutineScope) {
     // Public state exposed to UI
     private val _currentToast = MutableStateFlow<Toast?>(null)
     val currentToast: StateFlow<Toast?> = _currentToast.asStateFlow()
@@ -116,7 +115,7 @@ class ToastQueue(dispatcher: CoroutineDispatcher) : BaseCoroutineScope(dispatche
 
     private fun startTimer(duration: Duration) {
         cancelTimer()
-        timerJob = launch {
+        timerJob = scope.launch {
             delay(duration)
             if (!isPaused) {
                 _currentToast.value = null
