@@ -732,7 +732,7 @@ class AppViewModel @Inject constructor(
         if (invoice.amountSatoshis > 0uL) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
-                val shortfall = invoice.amountSatoshis - maxSendLightning
+                val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
                 showAddressValidationError(
                     titleRes = R.string.other__pay_insufficient_spending,
                     descriptionRes = R.string.other__pay_insufficient_spending_amount_description,
@@ -1122,7 +1122,7 @@ class AppViewModel @Inject constructor(
 
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
-            val shortfall = invoice.amountSatoshis - maxSendLightning
+            val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_spending),
