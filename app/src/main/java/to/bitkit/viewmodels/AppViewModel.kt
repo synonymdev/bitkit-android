@@ -28,6 +28,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -85,6 +86,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
+import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
@@ -106,7 +108,9 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
+import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -196,6 +200,7 @@ class AppViewModel @Inject constructor(
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
+    private var addressValidationJob: Job? = null
 
     fun setShowForgotPin(value: Boolean) {
         _showForgotPinSheet.value = value
@@ -664,6 +669,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun resetAddressInput() {
+        addressValidationJob?.cancel()
         _sendUiState.update { state ->
             state.copy(
                 addressInput = "",
@@ -674,15 +680,146 @@ class AppViewModel @Inject constructor(
 
     private fun onAddressChange(value: String) {
         val valueWithoutSpaces = value.removeSpaces()
-        viewModelScope.launch {
-            val result = runCatching { decode(valueWithoutSpaces) }
-            _sendUiState.update {
-                it.copy(
-                    addressInput = valueWithoutSpaces,
-                    isAddressInputValid = result.isSuccess,
+
+        // Update text immediately, reset validity until validation completes
+        _sendUiState.update {
+            it.copy(
+                addressInput = valueWithoutSpaces,
+                isAddressInputValid = false,
+            )
+        }
+
+        // Cancel pending validation
+        addressValidationJob?.cancel()
+
+        // Skip validation for empty input
+        if (valueWithoutSpaces.isEmpty()) return
+
+        // Start debounced validation
+        addressValidationJob = viewModelScope.launch {
+            delay(ADDRESS_VALIDATION_DEBOUNCE_MS)
+            validateAddressWithFeedback(valueWithoutSpaces)
+        }
+    }
+
+    private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
+        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
+        if (Bip21Utils.isDuplicatedBip21(input)) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+                testTag = "DuplicatedBip21Toast",
+            )
+            return@withContext
+        }
+
+        val scanResult = runCatching { decode(input) }
+
+        if (scanResult.isFailure) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+                testTag = "InvalidAddressToast",
+            )
+            return@withContext
+        }
+
+        when (val decoded = scanResult.getOrNull()) {
+            is Scanner.Lightning -> validateLightningInvoice(decoded.invoice)
+            is Scanner.OnChain -> validateOnChainAddress(decoded.invoice)
+            else -> _sendUiState.update { it.copy(isAddressInputValid = true) }
+        }
+    }
+
+    private suspend fun validateLightningInvoice(invoice: LightningInvoice) {
+        if (invoice.isExpired) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__expired,
+                testTag = "ExpiredLightningToast",
+            )
+            return
+        }
+
+        if (invoice.amountSatoshis > 0uL) {
+            val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
+            if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
+                val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
+                showAddressValidationError(
+                    titleRes = R.string.other__pay_insufficient_spending,
+                    descriptionRes = R.string.other__pay_insufficient_spending_amount_description,
+                    descriptionArgs = mapOf("amount" to shortfall.toString()),
+                    testTag = "InsufficientSpendingToast",
                 )
+                return
             }
         }
+
+        _sendUiState.update { it.copy(isAddressInputValid = true) }
+    }
+
+    private fun validateOnChainAddress(invoice: OnChainInvoice) {
+        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+            .getOrElse {
+                showAddressValidationError(
+                    titleRes = R.string.other__scan_err_decoding,
+                    descriptionRes = R.string.wallet__error_invalid_bitcoin_address,
+                    testTag = "InvalidAddressToast",
+                )
+                return
+            }
+
+        if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+                testTag = "InvalidAddressToast",
+            )
+            return
+        }
+
+        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
+
+        if (maxSendOnchain == 0uL) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_insufficient_savings,
+                descriptionRes = R.string.other__pay_insufficient_savings_description,
+                testTag = "InsufficientSavingsToast",
+            )
+            return
+        }
+
+        if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+            val shortfall = invoice.amountSatoshis - maxSendOnchain
+            showAddressValidationError(
+                titleRes = R.string.other__pay_insufficient_savings,
+                descriptionRes = R.string.other__pay_insufficient_savings_amount_description,
+                descriptionArgs = mapOf("amount" to shortfall.toString()),
+                testTag = "InsufficientSavingsToast",
+            )
+            return
+        }
+
+        _sendUiState.update { it.copy(isAddressInputValid = true) }
+    }
+
+    private fun showAddressValidationError(
+        @StringRes titleRes: Int,
+        @StringRes descriptionRes: Int,
+        descriptionArgs: Map<String, String> = emptyMap(),
+        testTag: String? = null,
+    ) {
+        _sendUiState.update { it.copy(isAddressInputValid = false) }
+        var description = context.getString(descriptionRes)
+        descriptionArgs.forEach { (key, value) ->
+            description = description.replace("{$key}", value)
+        }
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(titleRes),
+            description = description,
+            testTag = testTag,
+        )
     }
 
     private fun onAddressContinue(data: String) {
@@ -857,6 +994,17 @@ class AppViewModel @Inject constructor(
         resetSendState()
         resetQuickPay()
 
+        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
+        if (Bip21Utils.isDuplicatedBip21(result)) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__scan_err_decoding),
+                description = context.getString(R.string.other__scan__error__generic),
+                testTag = "DuplicatedBip21Toast",
+            )
+            return@withContext
+        }
+
         @Suppress("ForbiddenComment") // TODO: wrap `decode` from bindings in a `CoreService` method and call that one
         val scan = runCatching { decode(result) }
             .onFailure { Logger.error("Failed to decode scan data: '$result'", it, context = TAG) }
@@ -883,20 +1031,35 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
+        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+            .getOrElse {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.wallet__error_invalid_bitcoin_address),
+                    testTag = "InvalidAddressToast",
+                )
+                return
+            }
+
+        if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__scan_err_decoding),
+                description = context.getString(R.string.other__scan__error__generic),
+                testTag = "InvalidAddressToast",
+            )
+            return
+        }
+
         val lnInvoice: LightningInvoice? = invoice.params?.get("lightning")?.let { bolt11 ->
             runCatching { decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
                 ?.invoice
                 ?.takeIf { invoice ->
                     if (invoice.isExpired) {
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__expired),
-                        )
-
                         Logger.debug(
                             "Lightning invoice expired in unified URI, defaulting to onchain-only",
                             context = TAG
@@ -943,6 +1106,31 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        // Check on-chain balance before proceeding to amount screen
+        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
+        if (maxSendOnchain == 0uL) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+                description = context.getString(R.string.other__pay_insufficient_savings_description),
+                testTag = "InsufficientSavingsToast",
+            )
+            return
+        }
+
+        // Check if on-chain invoice amount exceeds available balance
+        if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+            val shortfall = invoice.amountSatoshis - maxSendOnchain
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+                description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
+                    .replace("{amount}", shortfall.toString()),
+                testTag = "InsufficientSavingsToast",
+            )
+            return
+        }
+
         Logger.info(
             when (invoice.amountSatoshis > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
@@ -964,6 +1152,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
                 description = context.getString(R.string.other__scan__error__expired),
+                testTag = "ExpiredLightningToast",
             )
             return
         }
@@ -972,10 +1161,14 @@ class AppViewModel @Inject constructor(
         if (quickPayHandled) return
 
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
+            val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
+            val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
             toast(
                 type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.wallet__error_insufficient_funds_title),
-                description = context.getString(R.string.wallet__error_insufficient_funds_msg)
+                title = context.getString(R.string.other__pay_insufficient_spending),
+                description = context.getString(R.string.other__pay_insufficient_spending_amount_description)
+                    .replace("{amount}", shortfall.toString()),
+                testTag = "InsufficientSpendingToast",
             )
             return
         }
@@ -1331,18 +1524,9 @@ class AppViewModel @Inject constructor(
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 val address = _sendUiState.value.address
-                // TODO validate early, validate network & address types, showing detailed errors
-                val validatedAddress = runCatching { validateBitcoinAddress(address) }
-                    .getOrElse { e ->
-                        Logger.error("Invalid bitcoin send address: '$address'", e, context = TAG)
-                        toast(Exception(context.getString(R.string.wallet__error_invalid_bitcoin_address)))
-                        hideSheet()
-                        return
-                    }
-
                 val tags = _sendUiState.value.selectedTags
 
-                sendOnchain(validatedAddress.address, amount, tags = tags)
+                sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         handlePaymentSuccess(
@@ -1700,6 +1884,7 @@ class AppViewModel @Inject constructor(
     }
 
     suspend fun resetSendState() {
+        addressValidationJob?.cancel()
         val speed = settingsStore.data.first().defaultTransactionSpeed
         val rates = let {
             // Refresh blocktank info to get latest fee rates
@@ -2029,6 +2214,7 @@ class AppViewModel @Inject constructor(
         private const val REMOTE_RESTORE_NODE_RESTART_DELAY_MS = 500L
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
+        private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
     }
 }
 
