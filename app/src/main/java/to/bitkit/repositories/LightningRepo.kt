@@ -325,11 +325,7 @@ class LightningRepo @Inject constructor(
             do {
                 syncPending.set(false)
                 _lightningState.update { it.copy(isSyncingWallet = true) }
-                runCatching {
-                    lightningService.sync()
-                }.onFailure {
-                    return@executeWhenNodeRunning Result.failure(it)
-                }
+                lightningService.sync()
                 refreshChannelCache()
                 syncState()
                 if (syncPending.get()) delay(MS_SYNC_LOOP_DEBOUNCE)
