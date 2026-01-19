@@ -758,7 +758,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
-    private fun validateOnChainAddress(invoice: OnChainInvoice) {
+    private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
         val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
             .getOrElse {
                 showAddressValidationError(
@@ -775,6 +775,22 @@ class AppViewModel @Inject constructor(
                 descriptionRes = R.string.other__scan__error__generic,
                 testTag = "InvalidAddressToast",
             )
+            return
+        }
+
+        // Check if this is a unified invoice with Lightning available
+        val lnInvoice: LightningInvoice? = invoice.params?.get("lightning")?.let { bolt11 ->
+            runCatching { decode(bolt11) }.getOrNull()
+                ?.let { it as? Scanner.Lightning }
+                ?.invoice
+                ?.takeIf { lnInv ->
+                    !lnInv.isExpired && lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
+                }
+        }
+
+        // If Lightning path is available, accept the unified invoice
+        if (lnInvoice != null) {
+            _sendUiState.update { it.copy(isAddressInputValid = true) }
             return
         }
 
