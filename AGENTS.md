@@ -210,6 +210,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
+- ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
 
 ### Architecture Guidelines
 

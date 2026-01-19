@@ -1394,7 +1394,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
+    @Suppress("CyclomaticComplexMethod", "LongMethod")
     private suspend fun updateOnchainActivityMetadata(
         item: RNActivityItem,
         onchain: OnchainActivity,
