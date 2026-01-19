@@ -226,8 +226,8 @@ private fun FoundFundsView(
             text = stringResource(R.string.sweep__to_wallet),
             onClick = onSweepToWallet,
             modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("SweepToWalletButton")
+                .fillMaxWidth()
+                .testTag("SweepToWalletButton")
         )
 
         VerticalSpacer(16.dp)
