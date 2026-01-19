@@ -7,6 +7,8 @@ on:
         description: "Branch of synonymdev/bitkit-e2e-tests to use (main | default-feature-branch | custom branch name)"
         required: false
         default: "default-feature-branch"
+  schedule:
+    - cron: "0 2 * * *"
 
 env:
   TERM: xterm-256color
