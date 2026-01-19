@@ -780,6 +780,18 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        extractViableLightningInvoice(invoice.params)?.let { lnInvoice ->
+            _sendUiState.update {
+                it.copy(
+                    isAddressInputValid = true,
+                    isUnified = true,
+                    decodedInvoice = lnInvoice,
+                    payMethod = SendMethod.LIGHTNING,
+                )
+            }
+            return
+        }
+
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
         if (maxSendOnchain == 0uL) {
@@ -804,6 +816,30 @@ class AppViewModel @Inject constructor(
 
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
+
+    private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
+        params?.get("lightning")?.let { bolt11 ->
+            runCatching { decode(bolt11) }.getOrNull()
+                ?.let { it as? Scanner.Lightning }
+                ?.invoice
+                ?.takeIf { lnInv ->
+                    if (lnInv.isExpired) {
+                        Logger.debug(
+                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
+                            context = TAG
+                        )
+                        return@takeIf false
+                    }
+                    val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
+                    if (!canSend) {
+                        Logger.debug(
+                            "Cannot pay unified invoice using LN, defaulting to onchain-only",
+                            context = TAG
+                        )
+                    }
+                    return@takeIf canSend
+                }
+        }
 
     private fun showAddressValidationError(
         @StringRes titleRes: Int,
@@ -1056,27 +1092,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val lnInvoice: LightningInvoice? = invoice.params?.get("lightning")?.let { bolt11 ->
-            runCatching { decode(bolt11) }.getOrNull()
-                ?.let { it as? Scanner.Lightning }
-                ?.invoice
-                ?.takeIf { invoice ->
-                    if (invoice.isExpired) {
-                        Logger.debug(
-                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
-                            context = TAG
-                        )
-                        return@takeIf false
-                    }
-
-                    // Then check sending capacity
-                    val canSend = lightningRepo.canSend(invoice.amountSatoshis.coerceAtLeast(1u))
-                    if (!canSend) {
-                        Logger.debug("Cannot pay unified invoice using LN, defaulting to onchain-only", context = TAG)
-                    }
-                    return@takeIf canSend
-                }
-        }
+        val lnInvoice = extractViableLightningInvoice(invoice.params)
         _sendUiState.update {
             it.copy(
                 address = invoice.address,
