@@ -28,7 +28,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -812,14 +811,13 @@ class AppViewModel @Inject constructor(
         testTag: String? = null,
     ) {
         _sendUiState.update { it.copy(isAddressInputValid = false) }
-        var description = context.getString(descriptionRes)
-        descriptionArgs.forEach { (key, value) ->
-            description = description.replace("{$key}", value)
-        }
-        toast(
-            type = Toast.ToastType.ERROR,
-            title = context.getString(titleRes),
-            description = description,
+        toaster.error(
+            title = ToastText(titleRes),
+            body = if (descriptionArgs.isEmpty()) {
+                ToastText(descriptionRes)
+            } else {
+                ToastText(descriptionRes, descriptionArgs)
+            },
             testTag = testTag,
         )
     }
@@ -998,10 +996,9 @@ class AppViewModel @Inject constructor(
 
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
         if (Bip21Utils.isDuplicatedBip21(result)) {
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                description = context.getString(R.string.other__scan__error__generic),
+            toaster.error(
+                title = ToastText(R.string.other__scan_err_decoding),
+                body = ToastText(R.string.other__scan__error__generic),
                 testTag = "DuplicatedBip21Toast",
             )
             return@withContext
@@ -1036,20 +1033,18 @@ class AppViewModel @Inject constructor(
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
         val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
             .getOrElse {
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__scan_err_decoding),
-                    description = context.getString(R.string.wallet__error_invalid_bitcoin_address),
+                toaster.error(
+                    title = ToastText(R.string.other__scan_err_decoding),
+                    body = ToastText(R.string.wallet__error_invalid_bitcoin_address),
                     testTag = "InvalidAddressToast",
                 )
                 return
             }
 
         if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__scan_err_decoding),
-                description = context.getString(R.string.other__scan__error__generic),
+            toaster.error(
+                title = ToastText(R.string.other__scan_err_decoding),
+                body = ToastText(R.string.other__scan__error__generic),
                 testTag = "InvalidAddressToast",
             )
             return
@@ -1110,10 +1105,9 @@ class AppViewModel @Inject constructor(
         // Check on-chain balance before proceeding to amount screen
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
         if (maxSendOnchain == 0uL) {
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__pay_insufficient_savings),
-                description = context.getString(R.string.other__pay_insufficient_savings_description),
+            toaster.error(
+                title = ToastText(R.string.other__pay_insufficient_savings),
+                body = ToastText(R.string.other__pay_insufficient_savings_description),
                 testTag = "InsufficientSavingsToast",
             )
             return
@@ -1122,11 +1116,12 @@ class AppViewModel @Inject constructor(
         // Check if on-chain invoice amount exceeds available balance
         if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
             val shortfall = invoice.amountSatoshis - maxSendOnchain
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__pay_insufficient_savings),
-                description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
-                    .replace("{amount}", formatMoneyValue(shortfall)),
+            toaster.error(
+                title = ToastText(R.string.other__pay_insufficient_savings),
+                body = ToastText(
+                    R.string.other__pay_insufficient_savings_amount_description,
+                    mapOf("amount" to formatMoneyValue(shortfall)),
+                ),
                 testTag = "InsufficientSavingsToast",
             )
             return
