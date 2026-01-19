@@ -108,6 +108,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
@@ -153,6 +154,7 @@ class AppViewModel @Inject constructor(
     private val notificationsSheet: NotificationsTimedSheet,
     private val quickPaySheet: QuickPayTimedSheet,
     private val highBalanceSheet: HighBalanceTimedSheet,
+    private val formatMoneyValue: FormatMoneyValue,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -748,7 +750,7 @@ class AppViewModel @Inject constructor(
                 showAddressValidationError(
                     titleRes = R.string.other__pay_insufficient_spending,
                     descriptionRes = R.string.other__pay_insufficient_spending_amount_description,
-                    descriptionArgs = mapOf("amount" to shortfall.toString()),
+                    descriptionArgs = mapOf("amount" to formatMoneyValue(shortfall)),
                     testTag = "InsufficientSpendingToast",
                 )
                 return
@@ -758,7 +760,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
-    private fun validateOnChainAddress(invoice: OnChainInvoice) {
+    private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
         val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
             .getOrElse {
                 showAddressValidationError(
@@ -794,7 +796,7 @@ class AppViewModel @Inject constructor(
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_amount_description,
-                descriptionArgs = mapOf("amount" to shortfall.toString()),
+                descriptionArgs = mapOf("amount" to formatMoneyValue(shortfall)),
                 testTag = "InsufficientSavingsToast",
             )
             return
@@ -915,7 +917,7 @@ class AppViewModel @Inject constructor(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
                     description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
-                        .replace("{amount}", minSendable.toString()),
+                        .replace("{amount}", formatMoneyValue(minSendable)),
                     testTag = "LnurlPayAmountTooLowToast",
                 )
                 return
@@ -1125,7 +1127,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_savings),
                 description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
-                    .replace("{amount}", shortfall.toString()),
+                    .replace("{amount}", formatMoneyValue(shortfall)),
                 testTag = "InsufficientSavingsToast",
             )
             return
@@ -1167,7 +1169,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_spending),
                 description = context.getString(R.string.other__pay_insufficient_spending_amount_description)
-                    .replace("{amount}", shortfall.toString()),
+                    .replace("{amount}", formatMoneyValue(shortfall)),
                 testTag = "InsufficientSpendingToast",
             )
             return
