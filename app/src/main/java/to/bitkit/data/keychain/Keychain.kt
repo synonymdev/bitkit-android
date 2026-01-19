@@ -96,8 +96,10 @@ class Keychain @Inject constructor(
     suspend fun wipe() {
         val keys = snapshot.asMap().keys
         keychain.edit { it.clear() }
+        keyStore.deleteEncryptionKey()
+        val count = keys.size
 
-        Logger.info("Deleted all keychain entries: ${keys.joinToString()}")
+        Logger.info("Deleted keychain encryption key and all '$count' entries")
     }
 
     private val String.indexed: Preferences.Key<String>

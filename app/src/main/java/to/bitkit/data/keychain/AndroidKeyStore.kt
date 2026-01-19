@@ -80,4 +80,10 @@ class AndroidKeyStore(
         val decryptedDataBytes = cipher.doFinal(actualEncryptedData)
         return decryptedDataBytes
     }
+
+    fun deleteEncryptionKey() {
+        if (keyStore.containsAlias(alias)) {
+            keyStore.deleteEntry(alias)
+        }
+    }
 }
