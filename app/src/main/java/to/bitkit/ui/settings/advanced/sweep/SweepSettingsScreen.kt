@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -224,7 +225,9 @@ private fun FoundFundsView(
         PrimaryButton(
             text = stringResource(R.string.sweep__to_wallet),
             onClick = onSweepToWallet,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("SweepToWalletButton")
         )
 
         VerticalSpacer(16.dp)

@@ -465,6 +465,7 @@
     <string name="other__pay_insufficient_savings">Insufficient Savings</string>
     <string name="other__pay_insufficient_savings_amount_description">₿ {amount} more needed to pay this Bitcoin invoice.</string>
     <string name="other__pay_insufficient_savings_description">More ₿ needed to pay this Bitcoin invoice.</string>
+    <string name="other__pay_insufficient_spending_description">More ₿ needed to pay this Lightning invoice.</string>
     <string name="other__pay_insufficient_spending">Insufficient Spending Balance</string>
     <string name="other__pay_insufficient_spending_amount_description">₿ {amount} more needed to pay this Lightning invoice.</string>
     <string name="other__phone_settings">Open Phone Settings</string>

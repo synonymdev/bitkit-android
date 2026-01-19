@@ -1,0 +1,71 @@
+name: Bug Report
+description: Report a bug in Bitkit Android
+title: ''
+type: bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Brief description of the issue or additional context
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots / Recordings
+      description: Attach relevant logs, screenshots, or screen recordings
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Bitkit Version
+      placeholder: e.g., 2.0.0 or commit SHA
+    validations:
+      required: false
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: e.g., Pixel 7 / Emulator / Android 14
+    validations:
+      required: false
+
+  - type: input
+    id: network
+    attributes:
+      label: Network
+      placeholder: e.g., mainnet / regtest / local
+    validations:
+      required: false
