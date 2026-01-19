@@ -86,6 +86,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
+import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
@@ -747,9 +748,17 @@ class AppViewModel @Inject constructor(
     }
 
     private fun validateOnChainAddress(invoice: OnChainInvoice) {
-        // Check network mismatch
-        val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
-        if (NetworkValidationHelper.isNetworkMismatch(addressNetwork, Env.network)) {
+        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+            .getOrElse {
+                showAddressValidationError(
+                    titleRes = R.string.other__scan_err_decoding,
+                    descriptionRes = R.string.wallet__error_invalid_bitcoin_address,
+                    testTag = "InvalidAddressToast",
+                )
+                return
+            }
+
+        if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
             showAddressValidationError(
                 titleRes = R.string.other__scan_err_decoding,
                 descriptionRes = R.string.other__scan__error__generic,
@@ -1000,11 +1009,20 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
-        // Check network mismatch
-        val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
-        if (NetworkValidationHelper.isNetworkMismatch(addressNetwork, Env.network)) {
+        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+            .getOrElse {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.wallet__error_invalid_bitcoin_address),
+                    testTag = "InvalidAddressToast",
+                )
+                return
+            }
+
+        if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1484,18 +1502,9 @@ class AppViewModel @Inject constructor(
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 val address = _sendUiState.value.address
-                // TODO validate early, validate network & address types, showing detailed errors
-                val validatedAddress = runCatching { validateBitcoinAddress(address) }
-                    .getOrElse { e ->
-                        Logger.error("Invalid bitcoin send address: '$address'", e, context = TAG)
-                        toast(Exception(context.getString(R.string.wallet__error_invalid_bitcoin_address)))
-                        hideSheet()
-                        return
-                    }
-
                 val tags = _sendUiState.value.selectedTags
 
-                sendOnchain(validatedAddress.address, amount, tags = tags)
+                sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         handlePaymentSuccess(
