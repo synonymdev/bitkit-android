@@ -75,13 +75,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        rn_version:
+          - v1.1.6
+          - v1.1.4
+          - v1.1.3
         scenario:
           - { name: migration_1-restore, grep: "@migration_1" }
           - { name: migration_2-migration, grep: "@migration_2" }
           - { name: migration_3-with-passphrase, grep: "@migration_3" }
           - { name: migration_4-with-sweep, grep: "@migration_4" }
 
-    name: e2e-tests - ${{ matrix.scenario.name }}
+    name: e2e-tests - ${{ matrix.rn_version }} - ${{ matrix.scenario.name }}
 
     steps:
       - name: Show selected E2E branch
@@ -111,7 +115,7 @@ jobs:
       - name: Download RN app for migration
         run: |
           curl -L -o bitkit-e2e-tests/aut/bitkit_rn_regtest.apk \
-            https://github.com/synonymdev/bitkit-e2e-tests/releases/download/migration-rn-regtest/bitkit_rn_regtest.apk
+            https://github.com/synonymdev/bitkit-e2e-tests/releases/download/migration-rn-regtest/bitkit_rn_regtest_${{ matrix.rn_version }}.apk
 
       - name: List APK directory contents
         run: ls -l bitkit-e2e-tests/aut
@@ -189,5 +193,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-artifacts_${{ matrix.scenario.name }}_${{ github.run_number }}
+          name: e2e-artifacts_${{ matrix.scenario.name }}_${{ matrix.rn_version }}_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
