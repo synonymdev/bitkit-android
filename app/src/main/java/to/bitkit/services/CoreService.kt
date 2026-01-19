@@ -629,6 +629,7 @@ class ActivityService(
         )
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private suspend fun processOnchainPayment(
         kind: PaymentKind.Onchain,
         payment: PaymentDetails,
