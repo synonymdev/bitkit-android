@@ -276,15 +276,7 @@ class WalletViewModel @Inject constructor(
         walletRepo.syncNodeAndWallet()
             .onFailure {
                 Logger.error("Failed to refresh state: ${it.message}", it)
-                if (it is CancellationException) return@onFailure
-                if (it.isTxSyncTimeout()) {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.wallet__ldk_sync_error_title),
-                        description = context.getString(R.string.wallet__ldk_sync_error_body),
-                    )
-                    return@onFailure
-                }
+                if (it is CancellationException || it.isTxSyncTimeout()) return@onFailure
                 ToastEventBus.send(it)
             }
     }
