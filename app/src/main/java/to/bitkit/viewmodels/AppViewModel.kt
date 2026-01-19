@@ -86,6 +86,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
+import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
@@ -107,6 +108,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -701,6 +703,16 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
+        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
+        if (Bip21Utils.isDuplicatedBip21(input)) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+                testTag = "DuplicatedBip21Toast",
+            )
+            return@withContext
+        }
+
         val scanResult = runCatching { decode(input) }
 
         if (scanResult.isFailure) {
@@ -747,9 +759,17 @@ class AppViewModel @Inject constructor(
     }
 
     private fun validateOnChainAddress(invoice: OnChainInvoice) {
-        // Check network mismatch
-        val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
-        if (NetworkValidationHelper.isNetworkMismatch(addressNetwork, Env.network)) {
+        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+            .getOrElse {
+                showAddressValidationError(
+                    titleRes = R.string.other__scan_err_decoding,
+                    descriptionRes = R.string.wallet__error_invalid_bitcoin_address,
+                    testTag = "InvalidAddressToast",
+                )
+                return
+            }
+
+        if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
             showAddressValidationError(
                 titleRes = R.string.other__scan_err_decoding,
                 descriptionRes = R.string.other__scan__error__generic,
@@ -974,6 +994,17 @@ class AppViewModel @Inject constructor(
         resetSendState()
         resetQuickPay()
 
+        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
+        if (Bip21Utils.isDuplicatedBip21(result)) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__scan_err_decoding),
+                description = context.getString(R.string.other__scan__error__generic),
+                testTag = "DuplicatedBip21Toast",
+            )
+            return@withContext
+        }
+
         @Suppress("ForbiddenComment") // TODO: wrap `decode` from bindings in a `CoreService` method and call that one
         val scan = runCatching { decode(result) }
             .onFailure { Logger.error("Failed to decode scan data: '$result'", it, context = TAG) }
@@ -1000,11 +1031,20 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
-        // Check network mismatch
-        val addressNetwork = NetworkValidationHelper.getAddressNetwork(invoice.address)
-        if (NetworkValidationHelper.isNetworkMismatch(addressNetwork, Env.network)) {
+        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+            .getOrElse {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.wallet__error_invalid_bitcoin_address),
+                    testTag = "InvalidAddressToast",
+                )
+                return
+            }
+
+        if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1484,18 +1524,9 @@ class AppViewModel @Inject constructor(
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 val address = _sendUiState.value.address
-                // TODO validate early, validate network & address types, showing detailed errors
-                val validatedAddress = runCatching { validateBitcoinAddress(address) }
-                    .getOrElse { e ->
-                        Logger.error("Invalid bitcoin send address: '$address'", e, context = TAG)
-                        toast(Exception(context.getString(R.string.wallet__error_invalid_bitcoin_address)))
-                        hideSheet()
-                        return
-                    }
-
                 val tags = _sendUiState.value.selectedTags
 
-                sendOnchain(validatedAddress.address, amount, tags = tags)
+                sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         handlePaymentSuccess(

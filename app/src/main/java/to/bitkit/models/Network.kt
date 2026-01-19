@@ -24,3 +24,10 @@ fun Network.toCoreNetworkType(): NetworkType = when (this) {
     Network.SIGNET -> NetworkType.SIGNET
     Network.REGTEST -> NetworkType.REGTEST
 }
+
+fun NetworkType.toLdkNetwork(): Network = when (this) {
+    NetworkType.BITCOIN -> Network.BITCOIN
+    NetworkType.TESTNET -> Network.TESTNET
+    NetworkType.SIGNET -> Network.SIGNET
+    NetworkType.REGTEST -> Network.REGTEST
+}
