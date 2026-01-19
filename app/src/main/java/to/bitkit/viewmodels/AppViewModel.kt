@@ -108,6 +108,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
@@ -702,6 +703,16 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateAddressWithFeedback(input: String) = withContext(bgDispatcher) {
+        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
+        if (Bip21Utils.isDuplicatedBip21(input)) {
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.other__scan__error__generic,
+                testTag = "DuplicatedBip21Toast",
+            )
+            return@withContext
+        }
+
         val scanResult = runCatching { decode(input) }
 
         if (scanResult.isFailure) {
@@ -982,6 +993,17 @@ class AppViewModel @Inject constructor(
         // always reset state on new scan
         resetSendState()
         resetQuickPay()
+
+        // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
+        if (Bip21Utils.isDuplicatedBip21(result)) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__scan_err_decoding),
+                description = context.getString(R.string.other__scan__error__generic),
+                testTag = "DuplicatedBip21Toast",
+            )
+            return@withContext
+        }
 
         @Suppress("ForbiddenComment") // TODO: wrap `decode` from bindings in a `CoreService` method and call that one
         val scan = runCatching { decode(result) }
