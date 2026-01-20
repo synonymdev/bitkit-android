@@ -153,7 +153,7 @@ class LightningNodeService : Service() {
         super.onDestroy()
     }
 
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     override fun onTimeout(startId: Int, fgsType: Int) {
         Logger.warn("Foreground service timeout reached", context = TAG)
         serviceScope.launch {
