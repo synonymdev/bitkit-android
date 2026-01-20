@@ -116,7 +116,7 @@ class LightningNodeService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_notification_no_border)
+            .setSmallIcon(R.drawable.ic_bitkit_outlined)
             .setColor(ContextCompat.getColor(this, R.color.brand))
             .setContentIntent(pendingIntent)
             .setOngoing(true)
