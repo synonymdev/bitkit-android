@@ -16,7 +16,6 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -29,7 +28,23 @@ class VssBackupClient @Inject constructor(
 ) {
     private var isSetup = CompletableDeferred<Unit>()
 
-    suspend fun setup(walletIndex: Int = 0) = withContext(ioDispatcher) {
+    /**
+     * Sets up the VSS client. Returns true if setup succeeded, false if mnemonic not available.
+     * Throws on other errors.
+     */
+    suspend fun setup(walletIndex: Int = 0): Boolean = withContext(ioDispatcher) {
+        // If already set up successfully, return immediately
+        if (isSetup.isCompleted && !isSetup.isCancelled) {
+            runCatching { isSetup.await() }.onSuccess { return@withContext true }
+        }
+
+        // Check if mnemonic is available before proceeding
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        if (mnemonic == null) {
+            Logger.warn("VSS client setup deferred: mnemonic not available yet", context = TAG)
+            return@withContext false
+        }
+
         runCatching {
             withTimeout(30.seconds) {
                 Logger.debug("VSS client setting up…", context = TAG)
@@ -39,8 +54,6 @@ class VssBackupClient @Inject constructor(
                 Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
                 Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
                 if (lnurlAuthServerUrl.isNotEmpty()) {
-                    val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                        ?: throw ServiceError.MnemonicNotFound()
                     val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
                     vssNewClientWithLnurlAuth(
@@ -63,6 +76,7 @@ class VssBackupClient @Inject constructor(
             isSetup.completeExceptionally(it)
             Logger.error("VSS client setup error", e = it, context = TAG)
         }
+        true
     }
 
     fun reset() {

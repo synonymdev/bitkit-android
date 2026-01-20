@@ -120,7 +120,7 @@ class BackupRepo @Inject constructor(
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
 
-        scope.launch { vssBackupClient.setup() }
+        scope.launch { setupVssClientWithRetry() }
 
         scope.launch {
             BackupCategory.entries.forEach { category ->
@@ -164,6 +164,33 @@ class BackupRepo @Inject constructor(
         periodicCheckJob = null
 
         Logger.debug("Stopped observing backup statuses and data store changes", context = TAG)
+    }
+
+    private suspend fun setupVssClientWithRetry() {
+        var attempt = 0
+        val maxAttempts = 10
+        val baseDelayMs = 1000L
+
+        while (attempt < maxAttempts && isObserving) {
+            val success = runCatching { vssBackupClient.setup() }.getOrDefault(false)
+            if (success) {
+                Logger.debug("VSS client setup succeeded on attempt ${attempt + 1}", context = TAG)
+                return
+            }
+            attempt++
+            if (attempt < maxAttempts) {
+                val delayMs = baseDelayMs * attempt // Linear backoff: 1s, 2s, 3s, ...
+                Logger.debug(
+                    "VSS client setup deferred, retrying in ${delayMs}ms (attempt $attempt/$maxAttempts)",
+                    context = TAG,
+                )
+                delay(delayMs)
+            }
+        }
+
+        if (isObserving) {
+            Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
+        }
     }
 
     private fun startBackupStatusObservers() {
