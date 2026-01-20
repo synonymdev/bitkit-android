@@ -249,9 +249,12 @@ class LightningRepo @Inject constructor(
             connectToTrustedPeers().onFailure {
                 Logger.error("Failed to connect to trusted peers", it, context = TAG)
             }
-            sync().getOrThrow().also {
-                scope.launch { registerForNotifications() }
+
+            sync().onFailure { e ->
+                Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
             }
+            scope.launch { registerForNotifications() }
+            Unit
         }.onFailure { e ->
             if (shouldRetry) {
                 val retryDelay = 2.seconds
@@ -271,6 +274,7 @@ class LightningRepo @Inject constructor(
                 _lightningState.update {
                     it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
                 }
+                return@withContext Result.failure(e)
             }
         }
     }
