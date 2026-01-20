@@ -749,7 +749,7 @@ private fun RootNavHost(
                 }
                 composableWithDefaultTransitions<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
-                        onContinue = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onContinue = { navController.navigateToHome() },
                     )
                 }
                 composableWithDefaultTransitions<Routes.ExternalFeeCustom> {
