@@ -257,7 +257,7 @@ class LightningRepo @Inject constructor(
             Unit
         }.onFailure { e ->
             val currentLifecycleState = _lightningState.value.nodeLifecycleState
-            if (currentLifecycleState.isRunningOrStarting()) {
+            if (currentLifecycleState.isRunning()) {
                 Logger.warn("Start error occurred but node is $currentLifecycleState, skipping retry", e, context = TAG)
                 return@withContext Result.success(Unit)
             }
