@@ -88,18 +88,13 @@ fun LightningConnectionsScreen(
         viewModel.refreshObservedState()
         viewModel.clearSelectedChannel()
         viewModel.clearTransactionDetails()
-    }
 
-    LaunchedEffect(navController.currentBackStackEntry) {
         val selectedChannelId = navController.previousBackStackEntry?.savedStateHandle?.get<String>("selectedChannelId")
-        if (selectedChannelId == null) return@LaunchedEffect
-
-        navController.previousBackStackEntry?.savedStateHandle?.remove<String>("selectedChannelId")
-        delay(CHANNEL_SELECTION_DELAY_MS)
-        if (viewModel.findAndSelectChannel(selectedChannelId)) {
-            navController.navigate(Routes.ChannelDetail) {
+        if (selectedChannelId != null) {
+            navController.previousBackStackEntry?.savedStateHandle?.remove<String>("selectedChannelId")
+            delay(CHANNEL_SELECTION_DELAY_MS)
+            navController.navigate(Routes.ChannelDetail(selectedChannelId)) {
                 launchSingleTop = true
-                popUpTo(Routes.ConnectionsNav) { inclusive = false }
             }
         }
     }
@@ -112,8 +107,7 @@ fun LightningConnectionsScreen(
             viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
         },
         onClickChannel = { channelUi ->
-            viewModel.setSelectedChannel(channelUi)
-            navController.navigate(Routes.ChannelDetail)
+            navController.navigate(Routes.ChannelDetail(channelUi.details.channelId))
         },
         onRefresh = {
             viewModel.onPullToRefresh()

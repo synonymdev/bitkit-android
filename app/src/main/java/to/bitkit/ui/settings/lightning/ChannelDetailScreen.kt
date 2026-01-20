@@ -85,19 +85,42 @@ import java.util.Locale
 fun ChannelDetailScreen(
     navController: NavController,
     viewModel: LightningConnectionsViewModel,
+    channelId: String,
 ) {
     val context = LocalContext.current
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
 
+    LaunchedEffect(channelId) {
+        viewModel.findAndSelectChannel(channelId)
+    }
+
     val selectedChannel by viewModel.selectedChannel.collectAsStateWithLifecycle()
-    val channel = selectedChannel ?: return
+    val channel = selectedChannel
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val paidOrders by viewModel.blocktankRepo.blocktankState.collectAsStateWithLifecycle()
+    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
+
+    if (channel == null) {
+        Content(
+            channel = null,
+            blocktankOrders = emptyList(),
+            cjitEntries = emptyList(),
+            txTime = null,
+            isRefreshing = false,
+            isClosedChannel = false,
+            onBack = { navController.popBackStack() },
+            onRefresh = {},
+            onCopyText = {},
+            onOpenUrl = {},
+            onSupport = {},
+            onCloseConnection = {},
+        )
+        return
+    }
 
     val isClosedChannel = uiState.closedChannels.any { it.details.channelId == channel.details.channelId }
-    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
 
     // Fetch transaction details for funding transaction if available
     LaunchedEffect(channel.details.fundingTxo?.txid) {
@@ -108,8 +131,8 @@ fun ChannelDetailScreen(
 
     // Fetch activity timestamp for transfer activity with matching channel ID
     LaunchedEffect(channel.details.channelId) {
-        channel.details.channelId?.let { channelId ->
-            viewModel.fetchActivityTimestamp(channelId)
+        channel.details.channelId.let { id ->
+            viewModel.fetchActivityTimestamp(id)
         }
     }
 
@@ -148,7 +171,7 @@ fun ChannelDetailScreen(
 @Suppress("CyclomaticComplexMethod")
 @Composable
 private fun Content(
-    channel: ChannelUi,
+    channel: ChannelUi?,
     blocktankOrders: List<IBtOrder> = emptyList(),
     cjitEntries: List<IcJitEntry> = emptyList(),
     txTime: ULong? = null,
@@ -161,6 +184,24 @@ private fun Content(
     onSupport: (Any) -> Unit = {},
     onCloseConnection: () -> Unit = {},
 ) {
+    ScreenColumn {
+        AppTopBar(
+            titleText = channel?.name ?: "",
+            onBackClick = onBack,
+            actions = { DrawerNavIcon() },
+        )
+
+        if (channel == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CaptionB(text = stringResource(R.string.common__loading))
+            }
+            return@ScreenColumn
+        }
     // Check if the channel was opened via CJIT
     val cjitEntry = cjitEntries.find { entry ->
         entry.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
@@ -183,13 +224,6 @@ private fun Content(
     val localBalance = channel.details.amountOnClose.toLong()
     val remoteBalance = (channel.details.inboundCapacityMsat / 1000u).toLong()
     val reserveBalance = (channel.details.unspendablePunishmentReserve ?: 0u).toLong()
-
-    ScreenColumn {
-        AppTopBar(
-            titleText = channel.name,
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
-        )
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,
