@@ -10,6 +10,7 @@ import com.synonym.vssclient.vssNewClientWithLnurlAuth
 import com.synonym.vssclient.vssStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.data.keychain.Keychain
@@ -28,24 +29,15 @@ class VssBackupClient @Inject constructor(
 ) {
     private var isSetup = CompletableDeferred<Unit>()
 
-    /**
-     * Sets up the VSS client. Returns true if setup succeeded, false if mnemonic not available.
-     * Throws on other errors.
-     */
-    suspend fun setup(walletIndex: Int = 0): Boolean = withContext(ioDispatcher) {
-        // If already set up successfully, return immediately
-        if (isSetup.isCompleted && !isSetup.isCancelled) {
-            runCatching { isSetup.await() }.onSuccess { return@withContext true }
-        }
-
-        // Check if mnemonic is available before proceeding
-        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-        if (mnemonic == null) {
-            Logger.warn("VSS client setup deferred: mnemonic not available yet", context = TAG)
-            return@withContext false
-        }
-
+    suspend fun setup(walletIndex: Int = 0): Result<Boolean> = withContext(ioDispatcher) {
         runCatching {
+            if (isSetup.isCompleted && !isSetup.isCancelled) {
+                runCatching { isSetup.await() }.onSuccess { return@runCatching true }
+            }
+
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: return@runCatching false
+
             withTimeout(30.seconds) {
                 Logger.debug("VSS client setting up…", context = TAG)
                 val vssUrl = Env.vssServerUrl
@@ -72,11 +64,44 @@ class VssBackupClient @Inject constructor(
                 isSetup.complete(Unit)
                 Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
             }
+            true
         }.onFailure {
             isSetup.completeExceptionally(it)
-            Logger.error("VSS client setup error", e = it, context = TAG)
+            Logger.error("VSS client setup error", it, TAG)
         }
-        true
+    }
+
+    class SetupRetryLogger {
+        var onSuccess: (attempt: Int) -> Unit = {}
+        var onRetry: (attempt: Int, maxAttempts: Int, delayMs: Long) -> Unit = { _, _, _ -> }
+        var onExhausted: (maxAttempts: Int) -> Unit = {}
+    }
+
+    suspend fun setupWithRetry(
+        maxAttempts: Int = 10,
+        baseDelayMs: Long = 1000L,
+        logger: SetupRetryLogger.() -> Unit,
+    ): Result<Boolean> = withContext(ioDispatcher) {
+        val log = SetupRetryLogger().apply(logger)
+        var attempt = 0
+        while (attempt < maxAttempts) {
+            val result = setup()
+            if (result.getOrDefault(false)) {
+                log.onSuccess(attempt + 1)
+                return@withContext Result.success(true)
+            }
+            if (result.isFailure) {
+                return@withContext result
+            }
+            attempt++
+            if (attempt < maxAttempts) {
+                val delayMs = baseDelayMs * attempt
+                log.onRetry(attempt, maxAttempts, delayMs)
+                delay(delayMs)
+            }
+        }
+        log.onExhausted(maxAttempts)
+        Result.success(false)
     }
 
     fun reset() {

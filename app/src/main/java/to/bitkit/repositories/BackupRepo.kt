@@ -120,7 +120,22 @@ class BackupRepo @Inject constructor(
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
 
-        scope.launch { setupVssClientWithRetry() }
+        scope.launch {
+            vssBackupClient.setupWithRetry {
+                onSuccess = { attempt ->
+                    Logger.debug("VSS client setup succeeded on attempt $attempt", context = TAG)
+                }
+                onRetry = { attempt, maxAttempts, delayMs ->
+                    Logger.debug(
+                        "VSS client setup deferred, retrying in ${delayMs}ms (attempt $attempt/$maxAttempts)",
+                        context = TAG,
+                    )
+                }
+                onExhausted = { maxAttempts ->
+                    Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
+                }
+            }
+        }
 
         scope.launch {
             BackupCategory.entries.forEach { category ->
@@ -164,33 +179,6 @@ class BackupRepo @Inject constructor(
         periodicCheckJob = null
 
         Logger.debug("Stopped observing backup statuses and data store changes", context = TAG)
-    }
-
-    private suspend fun setupVssClientWithRetry() {
-        var attempt = 0
-        val maxAttempts = 10
-        val baseDelayMs = 1000L
-
-        while (attempt < maxAttempts && isObserving) {
-            val success = runCatching { vssBackupClient.setup() }.getOrDefault(false)
-            if (success) {
-                Logger.debug("VSS client setup succeeded on attempt ${attempt + 1}", context = TAG)
-                return
-            }
-            attempt++
-            if (attempt < maxAttempts) {
-                val delayMs = baseDelayMs * attempt // Linear backoff: 1s, 2s, 3s, ...
-                Logger.debug(
-                    "VSS client setup deferred, retrying in ${delayMs}ms (attempt $attempt/$maxAttempts)",
-                    context = TAG,
-                )
-                delay(delayMs)
-            }
-        }
-
-        if (isObserving) {
-            Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
-        }
     }
 
     private fun startBackupStatusObservers() {
@@ -570,7 +558,7 @@ class BackupRepo @Inject constructor(
     suspend fun getLatestBackupTime(): ULong? = withContext(ioDispatcher) {
         runCatching {
             withTimeout(VSS_TIMESTAMP_TIMEOUT) {
-                vssBackupClient.setup()
+                vssBackupClient.setup().getOrThrow()
                 coroutineScope {
                     BackupCategory.entries
                         .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
