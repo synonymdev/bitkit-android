@@ -11,7 +11,6 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class VssBackupClientTest : BaseUnitTest() {
 
@@ -35,7 +34,7 @@ class VssBackupClientTest : BaseUnitTest() {
 
         val result = sut.setup()
 
-        assertFalse(result)
+        assertFalse(result.getOrThrow())
     }
 
     @Test
@@ -65,8 +64,8 @@ class VssBackupClientTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
 
         // Multiple calls should all return false without crashing
-        assertFalse(sut.setup())
-        assertFalse(sut.setup())
-        assertFalse(sut.setup())
+        assertFalse(sut.setup().getOrThrow())
+        assertFalse(sut.setup().getOrThrow())
+        assertFalse(sut.setup().getOrThrow())
     }
 }
