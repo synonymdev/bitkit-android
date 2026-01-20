@@ -1204,9 +1204,11 @@ private fun NavGraphBuilder.lightningConnections(
         composableWithDefaultTransitions<Routes.ChannelDetail> {
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
             val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            val route = it.toRoute<Routes.ChannelDetail>()
             ChannelDetailScreen(
                 navController = navController,
                 viewModel = viewModel,
+                channelId = route.channelId,
             )
         }
         composableWithDefaultTransitions<Routes.CloseConnection> {
@@ -1836,7 +1838,7 @@ sealed interface Routes {
     data object LightningConnections : Routes
 
     @Serializable
-    data object ChannelDetail : Routes
+    data class ChannelDetail(val channelId: String) : Routes
 
     @Serializable
     data object CloseConnection : Routes
