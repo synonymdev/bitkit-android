@@ -4,10 +4,12 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -115,7 +117,8 @@ class LightningNodeService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
+            .setColor(ContextCompat.getColor(this, R.color.brand))
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .addAction(
