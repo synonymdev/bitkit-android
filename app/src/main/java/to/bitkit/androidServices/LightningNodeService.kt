@@ -68,9 +68,6 @@ class LightningNodeService : Service() {
                     handlePaymentReceived(event)
                 }
             ).onSuccess {
-                val notification = createNotification()
-                startForeground(ID_NOTIFICATION_NODE, notification)
-
                 walletRepo.setWalletExistsState()
                 walletRepo.refreshBip21()
                 walletRepo.syncBalances()
