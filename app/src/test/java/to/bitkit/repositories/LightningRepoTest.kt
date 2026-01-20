@@ -23,6 +23,7 @@ import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
@@ -645,5 +646,27 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
+    }
+
+    @Test
+    fun `start should not retry when node lifecycle state is Starting`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+
+        // Simulate: start throws (state will be Starting when onFailure is called)
+        whenever(lightningService.start(anyOrNull(), any())).thenThrow(RuntimeException("error"))
+
+        val result = sut.start()
+
+        // Defensive check: state is Starting, so don't retry, return success
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Starting, sut.lightningState.value.nodeLifecycleState)
+        // Verify start was only called once (no retry)
+        verify(lightningService, times(1)).start(anyOrNull(), any())
     }
 }

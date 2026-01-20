@@ -256,6 +256,12 @@ class LightningRepo @Inject constructor(
             scope.launch { registerForNotifications() }
             Unit
         }.onFailure { e ->
+            val currentLifecycleState = _lightningState.value.nodeLifecycleState
+            if (currentLifecycleState.isRunningOrStarting()) {
+                Logger.warn("Start error occurred but node is $currentLifecycleState, skipping retry", e, context = TAG)
+                return@withContext Result.success(Unit)
+            }
+
             if (shouldRetry) {
                 val retryDelay = 2.seconds
                 Logger.warn("Start error, retrying after $retryDelay...", e, context = TAG)
