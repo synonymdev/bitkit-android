@@ -53,22 +53,32 @@ class GiftViewModel @Inject constructor(
         }
         this.code = code
         this.amount = amount
+
+        if (amount == 0uL) {
+            Logger.warn("Gift amount is 0 from QR code - this may be incorrect", context = TAG)
+        }
+
         viewModelScope.launch(bgDispatcher) {
             claimGift()
         }
     }
 
     private suspend fun claimGift() = withContext(bgDispatcher) {
-        if (isClaiming) return@withContext
+        if (isClaiming) {
+            Logger.debug("Gift claim already in progress, skipping", context = TAG)
+            return@withContext
+        }
         isClaiming = true
 
         try {
+            Logger.debug("Claiming gift: code=$code, amount=$amount", context = TAG)
             blocktankRepo.claimGiftCode(
                 code = code,
                 amount = amount,
                 waitTimeout = NODE_STARTUP_TIMEOUT_MS.milliseconds,
             ).fold(
                 onSuccess = { result ->
+                    Logger.debug("Gift claim successful: $result", context = TAG)
                     when (result) {
                         is GiftClaimResult.SuccessWithLiquidity -> {
                             _navigationEvent.emit(GiftRoute.Success)
@@ -113,12 +123,28 @@ class GiftViewModel @Inject constructor(
     }
 
     private suspend fun handleGiftClaimError(error: Throwable) {
-        Logger.error("Gift claim failed: $error", error, context = TAG)
+        val errorMessage = buildString {
+            append("Gift claim failed: ")
+            append(error.message ?: error.toString())
+            error.cause?.let {
+                append(" (cause: ${it.message ?: it})")
+            }
+        }
+        Logger.error(errorMessage, error, context = TAG)
 
         val route = when {
-            errorContains(error, "GIFT_CODE_ALREADY_USED") -> GiftRoute.Used
-            errorContains(error, "GIFT_CODE_USED_UP") -> GiftRoute.UsedUp
-            else -> GiftRoute.Error
+            errorContains(error, "GIFT_CODE_ALREADY_USED") -> {
+                Logger.info("Gift code was already used", context = TAG)
+                GiftRoute.Used
+            }
+            errorContains(error, "GIFT_CODE_USED_UP") -> {
+                Logger.info("Gift code promotion depleted", context = TAG)
+                GiftRoute.UsedUp
+            }
+            else -> {
+                Logger.error("Unhandled gift claim error type: ${error::class.simpleName}", context = TAG)
+                GiftRoute.Error
+            }
         }
 
         _navigationEvent.emit(route)

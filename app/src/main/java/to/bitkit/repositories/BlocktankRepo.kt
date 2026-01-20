@@ -425,7 +425,15 @@ class BlocktankRepo @Inject constructor(
     ): Result<GiftClaimResult> = withContext(bgDispatcher) {
         runCatching {
             require(code.isNotBlank()) { "Gift code cannot be blank" }
-            require(amount > 0u) { "Gift amount must be positive" }
+
+            if (amount == 0uL) {
+                Logger.warn(
+                    "Gift amount is 0 - proceeding anyway as backend may provide actual amount",
+                    context = TAG
+                )
+            }
+
+            Logger.debug("Starting gift code claim: amount=$amount, timeout=$waitTimeout", context = TAG)
 
             lightningRepo.executeWhenNodeRunning(
                 operationName = "claimGiftCode",
@@ -436,14 +444,25 @@ class BlocktankRepo @Inject constructor(
                 val channels = lightningRepo.getChannelsAsync().getOrThrow()
                 val maxInboundCapacity = channels.calculateRemoteBalance()
 
-                if (maxInboundCapacity >= amount) {
+                Logger.debug(
+                    "Liquidity check: maxInbound=$maxInboundCapacity, required=$amount",
+                    context = TAG
+                )
+
+                if (amount > 0uL && maxInboundCapacity >= amount) {
+                    Logger.debug("Sufficient liquidity available, claiming with existing channel", context = TAG)
                     Result.success(claimGiftCodeWithLiquidity(code))
                 } else {
+                    if (amount == 0uL) {
+                        Logger.debug("Amount unknown (0), defaulting to channel opening path", context = TAG)
+                    } else {
+                        Logger.debug("Insufficient liquidity, opening new channel", context = TAG)
+                    }
                     Result.success(claimGiftCodeWithoutLiquidity(code, amount))
                 }
             }.getOrThrow()
         }.onFailure {
-            Logger.error("Failed to claim gift code", it, context = TAG)
+            Logger.error("Failed to claim gift code: ${it.message}", it, context = TAG)
         }
     }
 
@@ -454,9 +473,13 @@ class BlocktankRepo @Inject constructor(
             expirySeconds = 3600u,
         ).getOrThrow()
 
-        ServiceQueue.CORE.background {
+        Logger.debug("Created invoice for gift code, requesting payment from LSP", context = TAG)
+
+        val result = ServiceQueue.CORE.background {
             giftPay(invoice = invoice)
         }
+
+        Logger.debug("Gift payment request completed: $result", context = TAG)
 
         return GiftClaimResult.SuccessWithLiquidity
     }
@@ -464,16 +487,25 @@ class BlocktankRepo @Inject constructor(
     private suspend fun claimGiftCodeWithoutLiquidity(code: String, amount: ULong): GiftClaimResult {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
 
+        Logger.debug("Creating gift order for code (insufficient liquidity)", context = TAG)
+
         val order = ServiceQueue.CORE.background {
             giftOrder(clientNodeId = nodeId, code = "blocktank-gift-code:$code")
         }
 
-        val orderId = checkNotNull(order.orderId) { "Order ID is null" }
+        val orderId = checkNotNull(order.orderId) { "Order ID is null after gift order creation" }
+        Logger.debug("Gift order created: $orderId", context = TAG)
 
         val openedOrder = openChannel(orderId).getOrThrow()
+        Logger.debug("Channel opened for gift order: ${openedOrder.id}", context = TAG)
+
+        val fundingTxId = openedOrder.channel?.fundingTx?.id
+        if (fundingTxId == null) {
+            Logger.warn("Channel opened but funding transaction ID is null", context = TAG)
+        }
 
         return GiftClaimResult.SuccessWithoutLiquidity(
-            paymentHashOrTxId = openedOrder.channel?.fundingTx?.id ?: orderId,
+            paymentHashOrTxId = fundingTxId ?: orderId,
             sats = amount.toLong(),
             invoice = openedOrder.payment?.bolt11Invoice?.request ?: "",
             code = code,
