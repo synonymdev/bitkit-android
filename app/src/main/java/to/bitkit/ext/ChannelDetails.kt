@@ -85,6 +85,7 @@ fun createChannelDetails(): ChannelDetails {
             maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 0u),
             forceCloseAvoidanceMaxFeeSatoshis = 0u,
             acceptUnderpayingHtlcs = false,
+
         ),
     )
 }
