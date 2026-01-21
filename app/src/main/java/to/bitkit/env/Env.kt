@@ -216,7 +216,7 @@ private object ElectrumServers {
     }
 
     object REGTEST {
-        const val STAG = "tcp://34.65.252.32:18483"
+        const val STAG = "ssl://electrs.bitkit.stag0.blocktank.to:9999"
         const val LOCAL = "tcp://127.0.0.1:60001"
     }
 
