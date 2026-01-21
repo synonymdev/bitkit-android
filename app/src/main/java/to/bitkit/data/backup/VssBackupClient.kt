@@ -10,16 +10,20 @@ import com.synonym.vssclient.vssNewClientWithLnurlAuth
 import com.synonym.vssclient.vssStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
+
+class MnemonicNotAvailableException : Exception("Mnemonic not available")
 
 @Singleton
 class VssBackupClient @Inject constructor(
@@ -28,41 +32,83 @@ class VssBackupClient @Inject constructor(
     private val keychain: Keychain,
 ) {
     private var isSetup = CompletableDeferred<Unit>()
+    private val setupMutex = Mutex()
 
-    suspend fun setup(walletIndex: Int = 0) = withContext(ioDispatcher) {
-        runCatching {
-            withTimeout(30.seconds) {
-                Logger.debug("VSS client setting up…", context = TAG)
-                val vssUrl = Env.vssServerUrl
-                val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
-                val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
-                Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
-                Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
-                if (lnurlAuthServerUrl.isNotEmpty()) {
-                    val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                        ?: throw ServiceError.MnemonicNotFound()
-                    val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-
-                    vssNewClientWithLnurlAuth(
-                        baseUrl = vssUrl,
-                        storeId = vssStoreId,
-                        mnemonic = mnemonic,
-                        passphrase = passphrase,
-                        lnurlAuthServerUrl = lnurlAuthServerUrl,
-                    )
-                } else {
-                    vssNewClient(
-                        baseUrl = vssUrl,
-                        storeId = vssStoreId,
-                    )
+    suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
+        setupMutex.withLock {
+            runCatching {
+                if (isSetup.isCompleted && !isSetup.isCancelled) {
+                    runCatching { isSetup.await() }.onSuccess { return@runCatching }
                 }
-                isSetup.complete(Unit)
-                Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
+
+                val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                    ?: throw MnemonicNotAvailableException()
+
+                withTimeout(30.seconds) {
+                    Logger.debug("VSS client setting up…", context = TAG)
+                    val vssUrl = Env.vssServerUrl
+                    val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
+                    val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
+                    Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
+                    Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
+                    if (lnurlAuthServerUrl.isNotEmpty()) {
+                        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
+                        vssNewClientWithLnurlAuth(
+                            baseUrl = vssUrl,
+                            storeId = vssStoreId,
+                            mnemonic = mnemonic,
+                            passphrase = passphrase,
+                            lnurlAuthServerUrl = lnurlAuthServerUrl,
+                        )
+                    } else {
+                        vssNewClient(
+                            baseUrl = vssUrl,
+                            storeId = vssStoreId,
+                        )
+                    }
+                    isSetup.complete(Unit)
+                    Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
+                }
+            }.onFailure {
+                isSetup.completeExceptionally(it)
+                Logger.error("VSS client setup error", it, context = TAG)
             }
-        }.onFailure {
-            isSetup.completeExceptionally(it)
-            Logger.error("VSS client setup error", e = it, context = TAG)
         }
+    }
+
+    class SetupRetryLogger {
+        var onSuccess: (attempt: Int) -> Unit = {}
+        var onRetry: (attempt: Int, maxAttempts: Int, delayMs: Long) -> Unit = { _, _, _ -> }
+        var onExhausted: (maxAttempts: Int) -> Unit = {}
+    }
+
+    suspend fun setupWithRetry(
+        maxAttempts: Int = 10,
+        baseDelayMs: Long = 1000L,
+        logger: SetupRetryLogger.() -> Unit,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        val log = SetupRetryLogger().apply(logger)
+        var attempt = 0
+        while (attempt < maxAttempts) {
+            val result = setup()
+            if (result.isSuccess) {
+                log.onSuccess(attempt + 1)
+                return@withContext Result.success(Unit)
+            }
+            val exception = result.exceptionOrNull()
+            if (exception != null && exception !is MnemonicNotAvailableException) {
+                return@withContext result
+            }
+            attempt++
+            if (attempt < maxAttempts) {
+                val delayMs = baseDelayMs * attempt
+                log.onRetry(attempt, maxAttempts, delayMs)
+                delay(delayMs)
+            }
+        }
+        log.onExhausted(maxAttempts)
+        Result.failure(MnemonicNotAvailableException())
     }
 
     fun reset() {
