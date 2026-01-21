@@ -23,6 +23,7 @@ import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
@@ -645,5 +646,29 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
+    }
+
+    @Test
+    fun `start should not retry when node lifecycle state is Running`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+
+        // lightningService.start() succeeds (state becomes Running at line 241)
+        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        // lightningService.nodeId throws during syncState() (called at line 244, AFTER state = Running)
+        whenever(lightningService.nodeId).thenThrow(RuntimeException("error during syncState"))
+
+        val result = sut.start()
+
+        // Defensive check: state is Running, so don't retry, return success
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        // Verify start was only called once (no retry)
+        verify(lightningService, times(1)).start(anyOrNull(), any())
     }
 }
