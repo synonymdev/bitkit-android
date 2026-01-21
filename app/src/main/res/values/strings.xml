@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_bottom">Connecting &amp; Syncing...</string>
     <string name="lightning__wait_text_top">Please wait for Bitkit to connect to the payment network (±10 seconds).</string>
     <string name="lightning__wallet_balances">Wallet Balances</string>
-    <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version...</string>
+    <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version. This usually takes less than a minute.</string>
     <string name="migration__nav_title">Wallet Migration</string>
     <string name="migration__title">MIGRATING\n&lt;accent&gt;WALLET&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Balance moved from spending to savings</string>

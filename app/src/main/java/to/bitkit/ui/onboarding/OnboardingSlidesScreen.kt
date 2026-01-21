@@ -20,8 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,16 +31,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.shared.util.screen
@@ -153,31 +151,27 @@ fun OnboardingSlidesScreen(
         titleText = null,
         actions = {
             if (pagerState.currentPage == LAST_PAGE_INDEX) {
-                TextButton(
+                SecondaryButton(
+                    text = stringResource(R.string.onboarding__advanced_setup),
                     onClick = onAdvancedSetupClick,
-                    modifier = Modifier.testTag("Passphrase")
-                ) {
-                    Text(
-                        text = stringResource(R.string.onboarding__advanced_setup),
-                        fontSize = 17.sp,
-                        color = Colors.White64,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                    size = ButtonSize.Small,
+                    fullWidth = false,
+                    modifier = Modifier
+                        .testTag("Passphrase")
+                        .padding(horizontal = 16.dp)
+                )
             } else {
-                TextButton(
+                SecondaryButton(
+                    text = stringResource(R.string.onboarding__skip),
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(pagerState.pageCount - 1) }
                     },
-                    modifier = Modifier.testTag("SkipButton")
-                ) {
-                    Text(
-                        text = stringResource(R.string.onboarding__skip),
-                        fontSize = 17.sp,
-                        color = Colors.White64,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                    size = ButtonSize.Small,
+                    fullWidth = false,
+                    modifier = Modifier
+                        .testTag("SkipButton")
+                        .padding(horizontal = 16.dp)
+                )
             }
         }
     )
