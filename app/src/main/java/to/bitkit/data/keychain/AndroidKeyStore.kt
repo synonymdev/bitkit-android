@@ -81,9 +81,10 @@ class AndroidKeyStore(
         return decryptedDataBytes
     }
 
-    fun deleteEncryptionKey() {
+    fun resetEncryptionKey() {
         if (keyStore.containsAlias(alias)) {
             keyStore.deleteEntry(alias)
         }
+        generateKey()
     }
 }
