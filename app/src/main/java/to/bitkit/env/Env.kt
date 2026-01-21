@@ -211,7 +211,7 @@ object Peers {
 
 private object ElectrumServers {
     object MAINNET {
-        const val ESPLORA = "tcp://34.65.215.247:50001"
+        const val ESPLORA = "ssl://bitkit.to:9999"
     }
 
     object REGTEST {
