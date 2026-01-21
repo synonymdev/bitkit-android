@@ -1152,7 +1152,7 @@
     <string name="wallet__receive_show_details">عرض التفاصيل</string>
     <string name="wallet__receive_show_qr">عرض رمز QR</string>
     <string name="wallet__receive_specify">تعديل الفاتورة</string>
-    <string name="wallet__receive_spending">استلام على رصيد الإنفاق</string>
+    <string name="wallet__receive_spending">استلام أموال Lightning</string>
     <string name="wallet__receive_tab_auto">تلقائي</string>
     <string name="wallet__receive_tab_savings">المدخرات</string>
     <string name="wallet__receive_tab_spending">الإنفاق</string>

@@ -1103,7 +1103,7 @@
     <string name="wallet__receive_note_placeholder">Opcjonalna notatka dla płatnika</string>
     <string name="wallet__receive_show_qr">Skanuj kod QR</string>
     <string name="wallet__receive_text_lnfunds">Chcesz otrzymać fundusze &lt;accent&gt;Lightning&lt;/accent&gt;?</string>
-    <string name="wallet__receive_spending">Odbiór na saldo wydatków</string>
+    <string name="wallet__receive_spending">Odbierz środki Lightning</string>
     <string name="wallet__receive_connect_initial">Aby skonfigurować saldo wydatków, zostanie pobrana opłata sieciowa &lt;accent&gt;{networkFee}&lt;/accent&gt; oraz opłata dostawcy usługi &lt;accent&gt;{serviceFee}&lt;/accent&gt;</string>
     <string name="wallet__receive_connect_additional">Bitkit musi zwiększyć Twoją płynność, abyś mógł otrzymywać więcej natychmiastowych płatności. Od wskazanej kwoty zostanie pobrana opłata sieciowa &lt;accent&gt;{networkFee}&lt;/accent&gt; i serwisowa &lt;accent&gt;{serviceFee}&lt;/accent&gt;.</string>
     <string name="wallet__receive_liquidity__nav_title">Konfiguracja salda wydatków</string>

@@ -1181,7 +1181,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__receive_show_details">Показать детали</string>
     <string name="wallet__receive_show_qr">Показать QR-код</string>
     <string name="wallet__receive_specify">Редактировать Инвойс</string>
-    <string name="wallet__receive_spending">Получить на Баланс Расходов</string>
+    <string name="wallet__receive_spending">Получить средства Lightning</string>
     <string name="wallet__receive_tab_auto">Авто</string>
     <string name="wallet__receive_tab_savings">Сбережения</string>
     <string name="wallet__receive_tab_spending">Расходы</string>

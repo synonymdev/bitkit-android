@@ -1145,7 +1145,7 @@
     <string name="wallet__receive_insufficient_text">Capacidad de recepción insuficiente para recibir esta cantidad vía Lightning.</string>
     <string name="wallet__receive_insufficient_title">Saldo de recepción insuficiente.</string>
     <string name="wallet__receive_ldk_init">Inicializando Saldo de Gastos...</string>
-    <string name="wallet__receive_spending">Recibir en Saldo de Gastos</string>
+    <string name="wallet__receive_spending">Recibir Fondos Lightning</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Ahorros</string>
     <string name="wallet__receive_tab_spending">Gastos</string>

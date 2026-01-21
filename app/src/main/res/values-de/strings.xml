@@ -1106,7 +1106,7 @@
     <string name="wallet__receive_note_placeholder">Optionale Notiz an den Zahler</string>
     <string name="wallet__receive_show_qr">QR-Code anzeigen</string>
     <string name="wallet__receive_text_lnfunds">Möchtest du &lt;accent&gt;Lightning&lt;/accent&gt;-Gelder empfangen?</string>
-    <string name="wallet__receive_spending">Auf Ausgabenkonto empfangen</string>
+    <string name="wallet__receive_spending">Lightning-Guthaben empfangen</string>
     <string name="wallet__receive__cjit">Lightning-Gelder empfangen</string>
     <string name="wallet__receive_connect_initial">Um dein Ausgabenguthaben einzurichten, wird eine &lt;accent&gt;{networkFee}&lt;/accent&gt; Netzwerkgebühr und &lt;accent&gt;{serviceFee}&lt;/accent&gt; Service-Provider-Gebühr abgezogen.</string>
     <string name="wallet__receive_connect_additional">Um mehr sofortiges Bitcoin zu empfangen, muss Bitkit deine Liquidität erhöhen. Eine &lt;accent&gt;{networkFee}&lt;/accent&gt; Netzwerkgebühr und &lt;accent&gt;{serviceFee}&lt;/accent&gt; Service-Provider-Gebühr werden von dem von dir angegebenen Betrag abgezogen.</string>

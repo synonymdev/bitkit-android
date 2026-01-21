@@ -1152,7 +1152,7 @@
     <string name="wallet__receive_show_details">Show Details</string>
     <string name="wallet__receive_show_qr">Show QR Code</string>
     <string name="wallet__receive_specify">Edit Invoice</string>
-    <string name="wallet__receive_spending">Receive on Spending Balance</string>
+    <string name="wallet__receive_spending">Receive Lightning Funds</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Savings</string>
     <string name="wallet__receive_tab_spending">Spending</string>

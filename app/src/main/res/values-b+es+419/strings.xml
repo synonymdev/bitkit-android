@@ -1091,7 +1091,7 @@
     <string name="wallet__receive_note_placeholder">Nota opcional para el pagador</string>
     <string name="wallet__receive_show_qr">Mostrar código QR</string>
     <string name="wallet__receive_text_lnfunds">Quiero recibir</string>
-    <string name="wallet__receive_spending">Recibir en Saldo de Gastos</string>
+    <string name="wallet__receive_spending">Recibir Fondos Lightning</string>
     <string name="wallet__receive_connect_initial">Para configurar tu saldo para gastar, se descontará una comisión de red de &lt;accent&gt;{networkFee}&lt;/accent&gt; y una comisión del proveedor de servicio de &lt;accent&gt;{serviceFee}.&lt;/accent&gt;</string>
     <string name="wallet__receive_connect_additional">Para recibir más Bitcoin al instante, Bitkit necesita aumentar tu liquidez. Se descontará una comisión de red de &lt;accent&gt;{networkFee}&lt;/accent&gt; y una comisión del proveedor de servicio de &lt;accent&gt;{serviceFee}&lt;/accent&gt; del monto que especificaste.</string>
     <string name="wallet__receive_liquidity__nav_title">Configuración del saldo de gastos</string>

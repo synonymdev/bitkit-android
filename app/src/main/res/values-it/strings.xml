@@ -1096,7 +1096,7 @@
     <string name="wallet__receive_note_placeholder">Nota opzionale per chi paga</string>
     <string name="wallet__receive_show_qr">Visualizza QR Code</string>
     <string name="wallet__receive_text_lnfunds">Vuoi ricevere fondi &lt;accent&gt;Lightning&lt;/accent&gt;?</string>
-    <string name="wallet__receive_spending">Ricevi sul saldo delle spese</string>
+    <string name="wallet__receive_spending">Ricevi fondi Lightning</string>
     <string name="wallet__receive_cjit_error">Transazione Fallita</string>
     <string name="wallet__receive_cjit_error_msg">Impossibile inviare fondi al tuo conto di spesa.</string>
     <string name="wallet__receive_will">Riceverai</string>

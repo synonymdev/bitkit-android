@@ -1103,7 +1103,7 @@
     <string name="wallet__receive_note_placeholder">Note facultative à destination du payeur</string>
     <string name="wallet__receive_show_qr">Afficher le QR code</string>
     <string name="wallet__receive_text_lnfunds">Vous souhaitez recevoir des fonds &lt;accent&gt;Lightning&lt;/accent&gt;?</string>
-    <string name="wallet__receive_spending">Recevoir sur le compte de dépenses</string>
+    <string name="wallet__receive_spending">Recevoir des fonds Lightning</string>
     <string name="wallet__receive_connect_initial">Pour établir votre solde Dépenses, un &lt;accent&gt;{networkFee}&lt;/accent&gt; frais de réseau et &lt;accent&gt;{serviceFee}&lt;/accent&gt; frais de fournisseur de services seront déduits.</string>
     <string name="wallet__receive_connect_additional">Pour recevoir plus de bitcoins instantanés, Bitkit doit augmenter vos liquidités. A &lt;accent&gt;{lspFee}&lt;/accent&gt; frais de fournisseur de services seront déduits du montant que vous avez spécifié.</string>
     <string name="wallet__receive_liquidity__nav_title">Configuration du solde compte Dépenses</string>

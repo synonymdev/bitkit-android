@@ -1152,7 +1152,7 @@
     <string name="wallet__receive_show_details">Mostrar detalls</string>
     <string name="wallet__receive_show_qr">Mostra el codi QR</string>
     <string name="wallet__receive_specify">Editar factura</string>
-    <string name="wallet__receive_spending">Rebre al saldo de despesa</string>
+    <string name="wallet__receive_spending">Rebre fons Lightning</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Estalvis</string>
     <string name="wallet__receive_tab_spending">Despesa</string>

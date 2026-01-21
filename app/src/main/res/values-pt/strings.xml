@@ -1057,7 +1057,7 @@
     <string name="wallet__receive_note_placeholder">Comentário opcional para o pagador</string>
     <string name="wallet__receive_show_qr">Mostrar código QR</string>
     <string name="wallet__receive_text_lnfunds">Deseja receber &lt;accent&gt;via Lightning&lt;/accent&gt;?</string>
-    <string name="wallet__receive_spending">Receber no Saldo de Gastos</string>
+    <string name="wallet__receive_spending">Receber Fundos Lightning</string>
     <string name="wallet__receive_connect_initial">Para configurar seu saldo de gastos, uma  taxa de rede de &lt;accent&gt;{networkFee}&lt;/accent&gt; e &lt;accent&gt;{serviceFee}&lt;/accent&gt; de taxa do provedor de serviços serão deduzidas.</string>
     <string name="wallet__receive_connect_additional">Para receber mais Bitcoin instantâneo, a Bitkit precisa aumentar sua liquidez. A taxa de rede de &lt;accent&gt;{networkFee}&lt;/accent&gt; e &lt;accent&gt;{serviceFee}&lt;/accent&gt; de taxa do provedor de serviços serão deduzidas do valor que você especificou.</string>
     <string name="wallet__receive_liquidity__nav_title">Setup do saldo de gastos</string>

@@ -1152,7 +1152,7 @@
     <string name="wallet__receive_show_details">Details tonen</string>
     <string name="wallet__receive_show_qr">QR-code tonen</string>
     <string name="wallet__receive_specify">Factuur bewerken</string>
-    <string name="wallet__receive_spending">Ontvangen op bestedingssaldo</string>
+    <string name="wallet__receive_spending">Lightning-fondsen ontvangen</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Spaargeld</string>
     <string name="wallet__receive_tab_spending">Bestedingssaldo</string>

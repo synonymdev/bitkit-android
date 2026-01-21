@@ -1154,7 +1154,7 @@
     <string name="wallet__receive_show_details">Zobrazit podrobnosti</string>
     <string name="wallet__receive_show_qr">Zobrazit QR kód</string>
     <string name="wallet__receive_specify">Upravit fakturu</string>
-    <string name="wallet__receive_spending">Příijmout na disponibilní zůstatek</string>
+    <string name="wallet__receive_spending">Přijmout prostředky Lightning</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Úspory</string>
     <string name="wallet__receive_tab_spending">Útraty</string>

@@ -1152,7 +1152,7 @@
     <string name="wallet__receive_show_details">Εμφάνιση λεπτομερειών</string>
     <string name="wallet__receive_show_qr">Εμφάνιση κωδικού QR</string>
     <string name="wallet__receive_specify">Επεξεργασία τιμολογίου</string>
-    <string name="wallet__receive_spending">Λήψη στο υπόλοιπο δαπανών</string>
+    <string name="wallet__receive_spending">Λήψη κεφαλαίων Lightning</string>
     <string name="wallet__receive_tab_auto">Αυτόματο</string>
     <string name="wallet__receive_tab_savings">Αποταμιεύσεις</string>
     <string name="wallet__receive_tab_spending">Δαπάνες</string>
