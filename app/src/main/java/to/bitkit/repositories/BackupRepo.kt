@@ -120,7 +120,22 @@ class BackupRepo @Inject constructor(
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
 
-        scope.launch { vssBackupClient.setup() }
+        scope.launch {
+            vssBackupClient.setupWithRetry {
+                onSuccess = { attempt ->
+                    Logger.debug("VSS client setup succeeded on attempt $attempt", context = TAG)
+                }
+                onRetry = { attempt, maxAttempts, delayMs ->
+                    Logger.debug(
+                        "VSS client setup deferred, retrying in ${delayMs}ms (attempt $attempt/$maxAttempts)",
+                        context = TAG,
+                    )
+                }
+                onExhausted = { maxAttempts ->
+                    Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
+                }
+            }
+        }
 
         scope.launch {
             BackupCategory.entries.forEach { category ->
@@ -543,7 +558,7 @@ class BackupRepo @Inject constructor(
     suspend fun getLatestBackupTime(): ULong? = withContext(ioDispatcher) {
         runCatching {
             withTimeout(VSS_TIMESTAMP_TIMEOUT) {
-                vssBackupClient.setup()
+                vssBackupClient.setup().getOrThrow()
                 coroutineScope {
                     BackupCategory.entries
                         .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
