@@ -4,8 +4,11 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.os.Build
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -65,9 +68,6 @@ class LightningNodeService : Service() {
                     handlePaymentReceived(event)
                 }
             ).onSuccess {
-                val notification = createNotification()
-                startForeground(ID_NOTIFICATION_NODE, notification)
-
                 walletRepo.setWalletExistsState()
                 walletRepo.refreshBip21()
                 walletRepo.syncBalances()
@@ -116,8 +116,10 @@ class LightningNodeService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_launcher_fg_regtest)
+            .setSmallIcon(R.drawable.ic_bitkit_outlined)
+            .setColor(ContextCompat.getColor(this, R.color.brand))
             .setContentIntent(pendingIntent)
+            .setOngoing(true)
             .addAction(
                 R.drawable.ic_x,
                 getString(R.string.notification__service__stop),
@@ -149,6 +151,16 @@ class LightningNodeService : Service() {
             }
         }
         super.onDestroy()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Logger.warn("Foreground service timeout reached", context = TAG)
+        serviceScope.launch {
+            lightningRepo.stop()
+            stopSelf()
+        }
+        super.onTimeout(startId, fgsType)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
