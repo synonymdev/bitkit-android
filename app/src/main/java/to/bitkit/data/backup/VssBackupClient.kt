@@ -11,6 +11,8 @@ import com.synonym.vssclient.vssStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.data.keychain.Keychain
@@ -30,45 +32,48 @@ class VssBackupClient @Inject constructor(
     private val keychain: Keychain,
 ) {
     private var isSetup = CompletableDeferred<Unit>()
+    private val setupMutex = Mutex()
 
     suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
-            if (isSetup.isCompleted && !isSetup.isCancelled) {
-                runCatching { isSetup.await() }.onSuccess { return@runCatching }
-            }
-
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw MnemonicNotAvailableException()
-
-            withTimeout(30.seconds) {
-                Logger.debug("VSS client setting up…", context = TAG)
-                val vssUrl = Env.vssServerUrl
-                val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
-                val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
-                Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
-                Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
-                if (lnurlAuthServerUrl.isNotEmpty()) {
-                    val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-
-                    vssNewClientWithLnurlAuth(
-                        baseUrl = vssUrl,
-                        storeId = vssStoreId,
-                        mnemonic = mnemonic,
-                        passphrase = passphrase,
-                        lnurlAuthServerUrl = lnurlAuthServerUrl,
-                    )
-                } else {
-                    vssNewClient(
-                        baseUrl = vssUrl,
-                        storeId = vssStoreId,
-                    )
+        setupMutex.withLock {
+            runCatching {
+                if (isSetup.isCompleted && !isSetup.isCancelled) {
+                    runCatching { isSetup.await() }.onSuccess { return@runCatching }
                 }
-                isSetup.complete(Unit)
-                Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
+
+                val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                    ?: throw MnemonicNotAvailableException()
+
+                withTimeout(30.seconds) {
+                    Logger.debug("VSS client setting up…", context = TAG)
+                    val vssUrl = Env.vssServerUrl
+                    val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
+                    val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
+                    Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
+                    Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
+                    if (lnurlAuthServerUrl.isNotEmpty()) {
+                        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
+                        vssNewClientWithLnurlAuth(
+                            baseUrl = vssUrl,
+                            storeId = vssStoreId,
+                            mnemonic = mnemonic,
+                            passphrase = passphrase,
+                            lnurlAuthServerUrl = lnurlAuthServerUrl,
+                        )
+                    } else {
+                        vssNewClient(
+                            baseUrl = vssUrl,
+                            storeId = vssStoreId,
+                        )
+                    }
+                    isSetup.complete(Unit)
+                    Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
+                }
+            }.onFailure {
+                isSetup.completeExceptionally(it)
+                Logger.error("VSS client setup error", it, context = TAG)
             }
-        }.onFailure {
-            isSetup.completeExceptionally(it)
-            Logger.error("VSS client setup error", it, context = TAG)
         }
     }
 
