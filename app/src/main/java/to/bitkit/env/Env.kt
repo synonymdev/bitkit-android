@@ -53,7 +53,7 @@ internal object Env {
         get() {
             val isE2eLocal = isE2eTest && e2eBackend == "local"
             return when (network) {
-                Network.BITCOIN -> ElectrumServers.MAINNET.FULCRUM
+                Network.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
                 Network.REGTEST -> if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
                 Network.TESTNET -> ElectrumServers.TESTNET
                 else -> TODO("${network.name} network not implemented")
@@ -212,6 +212,7 @@ object Peers {
 private object ElectrumServers {
     object MAINNET {
         const val FULCRUM = "ssl://fulcrum.bitkit.blocktank.to:8900"
+        const val ESPLORA = "tcp://34.65.215.247:50001"
     }
 
     object REGTEST {
