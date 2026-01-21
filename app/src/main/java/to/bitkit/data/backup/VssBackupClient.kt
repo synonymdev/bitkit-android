@@ -67,7 +67,7 @@ class VssBackupClient @Inject constructor(
             true
         }.onFailure {
             isSetup.completeExceptionally(it)
-            Logger.error("VSS client setup error", it, TAG)
+            Logger.error("VSS client setup error", it, context = TAG)
         }
     }
 
