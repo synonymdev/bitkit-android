@@ -149,7 +149,7 @@ fun PriceEditContent(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(vertical = 21.dp, horizontal = 16.dp)
+                .padding(16.dp)
                 .fillMaxWidth()
                 .testTag("buttons_row")
         ) {
@@ -189,7 +189,7 @@ private fun PriceEditOptionRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(vertical = 21.dp)
+                .padding(vertical = 16.dp)
                 .fillMaxWidth()
                 .testTag("${testTagPrefix}_setting_row")
         ) {
