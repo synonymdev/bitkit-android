@@ -164,7 +164,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS when fixing lint or test failures prefer to do the minimal amount of changes to fix the issues
 - USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
-- ALWAYS run `git status` to check ALL uncommitted changes after completing any code edits, then provide exactly 3 commit message suggestions covering the ENTIRE uncommitted diff
+- NEVER capitalize words in commit messages
+- ALWAYS run `git status` to check ALL uncommitted changes after completing any code edits, then reply with 3 commit message suggestions covering the ENTIRE uncommitted diff
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
 - ALWAYS consider applying YAGNI (You Ain't Gonna Need It) principle for new code
