@@ -780,6 +780,18 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        extractViableLightningInvoice(invoice.params)?.let { lnInvoice ->
+            _sendUiState.update {
+                it.copy(
+                    isAddressInputValid = true,
+                    isUnified = true,
+                    decodedInvoice = lnInvoice,
+                    payMethod = SendMethod.LIGHTNING,
+                )
+            }
+            return
+        }
+
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
         if (maxSendOnchain == 0uL) {
@@ -804,6 +816,30 @@ class AppViewModel @Inject constructor(
 
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
+
+    private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
+        params?.get("lightning")?.let { bolt11 ->
+            runCatching { decode(bolt11) }.getOrNull()
+                ?.let { it as? Scanner.Lightning }
+                ?.invoice
+                ?.takeIf { lnInv ->
+                    if (lnInv.isExpired) {
+                        Logger.debug(
+                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
+                            context = TAG
+                        )
+                        return@takeIf false
+                    }
+                    val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
+                    if (!canSend) {
+                        Logger.debug(
+                            "Cannot pay unified invoice using LN, defaulting to onchain-only",
+                            context = TAG
+                        )
+                    }
+                    return@takeIf canSend
+                }
+        }
 
     private fun showAddressValidationError(
         @StringRes titleRes: Int,
@@ -1055,35 +1091,16 @@ class AppViewModel @Inject constructor(
             )
             return
         }
+        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
-        val lnInvoice: LightningInvoice? = invoice.params?.get("lightning")?.let { bolt11 ->
-            runCatching { decode(bolt11) }.getOrNull()
-                ?.let { it as? Scanner.Lightning }
-                ?.invoice
-                ?.takeIf { invoice ->
-                    if (invoice.isExpired) {
-                        Logger.debug(
-                            "Lightning invoice expired in unified URI, defaulting to onchain-only",
-                            context = TAG
-                        )
-                        return@takeIf false
-                    }
-
-                    // Then check sending capacity
-                    val canSend = lightningRepo.canSend(invoice.amountSatoshis.coerceAtLeast(1u))
-                    if (!canSend) {
-                        Logger.debug("Cannot pay unified invoice using LN, defaulting to onchain-only", context = TAG)
-                    }
-                    return@takeIf canSend
-                }
-        }
+        val lnInvoice = extractViableLightningInvoice(invoice.params)
         _sendUiState.update {
             it.copy(
                 address = invoice.address,
                 addressInput = scanResult,
                 isAddressInputValid = true,
                 amount = invoice.amountSatoshis,
-                isUnified = lnInvoice != null,
+                isUnified = lnInvoice != null && invoice.amountSatoshis <= maxSendOnchain && maxSendOnchain > 0u,
                 decodedInvoice = lnInvoice,
                 payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
             )
@@ -1109,8 +1126,7 @@ class AppViewModel @Inject constructor(
         }
 
         // Check on-chain balance before proceeding to amount screen
-        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
-        if (maxSendOnchain == 0uL) {
+        if (maxSendOnchain == 0uL && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_savings),
@@ -1121,7 +1137,11 @@ class AppViewModel @Inject constructor(
         }
 
         // Check if on-chain invoice amount exceeds available balance
-        if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+        if (
+            invoice.amountSatoshis > 0uL &&
+            invoice.amountSatoshis > maxSendOnchain &&
+            _sendUiState.value.payMethod == SendMethod.ONCHAIN
+        ) {
             val shortfall = invoice.amountSatoshis - maxSendOnchain
             toast(
                 type = Toast.ToastType.ERROR,
