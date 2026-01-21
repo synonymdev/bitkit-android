@@ -147,9 +147,9 @@ fun updateState(action: Action) {
 ```kotlin
 suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
   runCatching {
-    Result.success(apiService.fetchData())
-  }.onFailure { e ->
-    Logger.error("Failed", e = e, context = TAG)
+    apiService.fetchData()
+  }.onFailure {
+    Logger.error("Failed", it, context = TAG)
   }
 }
 ```
@@ -176,6 +176,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
+- NEVER add `e = ` named parameter to Logger calls
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
