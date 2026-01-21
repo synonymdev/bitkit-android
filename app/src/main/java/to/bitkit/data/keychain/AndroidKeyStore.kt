@@ -28,7 +28,7 @@ class AndroidKeyStore(
         generateKey()
     }
 
-    private fun generateKey() {
+    private fun generateKey(alias: String = this.alias) {
         if (!keyStore.containsAlias(alias)) {
             try {
                 val generator = KeyGenerator.getInstance(algorithm, type)
