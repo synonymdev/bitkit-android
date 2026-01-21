@@ -81,6 +81,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.SendEvent
 import java.util.concurrent.Executors
+import kotlin.coroutines.cancellation.CancellationException
 import androidx.camera.core.Preview as CameraPreview
 
 private const val TAG = "SendRecipientScreen"
@@ -172,6 +173,7 @@ fun SendRecipientScreen(
                 preview.surfaceProvider = previewView.surfaceProvider
                 isCameraInitialized = true
             }.onFailure {
+                if (it is CancellationException) return@onFailure
                 Logger.error("Camera initialization failed", it, context = TAG)
                 app?.toast(
                     type = Toast.ToastType.ERROR,
