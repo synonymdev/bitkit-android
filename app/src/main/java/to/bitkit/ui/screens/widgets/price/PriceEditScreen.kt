@@ -20,9 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
@@ -35,6 +37,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -265,6 +268,59 @@ private fun PriceChartOptionRow(
 
         HorizontalDivider(
             modifier = Modifier.testTag("${testTagPrefix}_divider")
+        )
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        PriceEditContent(
+            onBack = {},
+            priceModel = PriceDTO(
+                widgets = listOf(
+                    PriceWidgetData(
+                        pair = TradingPair.BTC_USD,
+                        period = GraphPeriod.ONE_DAY,
+                        change = Change(isPositive = true, formatted = "+2.5%"),
+                        price = "$97,500",
+                        pastValues = listOf(95000.0, 96000.0, 95500.0, 97000.0, 97500.0)
+                    ),
+                    PriceWidgetData(
+                        pair = TradingPair.BTC_EUR,
+                        period = GraphPeriod.ONE_DAY,
+                        change = Change(isPositive = true, formatted = "+2.3%"),
+                        price = "€89,000",
+                        pastValues = listOf(87000.0, 88000.0, 87500.0, 88500.0, 89000.0)
+                    )
+                ),
+                source = "Kraken"
+            ),
+            allPeriodsUsd = listOf(
+                PriceWidgetData(
+                    pair = TradingPair.BTC_USD,
+                    period = GraphPeriod.ONE_DAY,
+                    change = Change(isPositive = true, formatted = "+2.5%"),
+                    price = "$97,500",
+                    pastValues = listOf(95000.0, 96000.0, 95500.0, 97000.0, 97500.0)
+                ),
+                PriceWidgetData(
+                    pair = TradingPair.BTC_USD,
+                    period = GraphPeriod.ONE_WEEK,
+                    change = Change(isPositive = true, formatted = "+5.0%"),
+                    price = "$97,500",
+                    pastValues = listOf(93000.0, 94000.0, 95000.0, 96000.0, 97500.0)
+                )
+            ),
+            onClickReset = {},
+            onClickGraph = {},
+            onClickTradingPair = {},
+            onClickPreview = {},
+            onClickSource = {},
+            preferences = PricePreferences(),
+            isLoading = false
         )
     }
 }
