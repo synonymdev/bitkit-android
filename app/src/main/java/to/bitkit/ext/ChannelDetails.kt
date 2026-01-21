@@ -78,6 +78,7 @@ fun createChannelDetails(): ChannelDetails {
         forceCloseSpendDelay = null,
         inboundHtlcMinimumMsat = 0u,
         inboundHtlcMaximumMsat = null,
+        claimableOnCloseSats = 0u,
         config = ChannelConfig(
             forwardingFeeProportionalMillionths = 0u,
             forwardingFeeBaseMsat = 0u,
@@ -85,6 +86,7 @@ fun createChannelDetails(): ChannelDetails {
             maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 0u),
             forceCloseAvoidanceMaxFeeSatoshis = 0u,
             acceptUnderpayingHtlcs = false,
+
         ),
     )
 }
