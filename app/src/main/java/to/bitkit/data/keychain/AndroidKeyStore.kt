@@ -28,7 +28,7 @@ class AndroidKeyStore(
         generateKey()
     }
 
-    private fun generateKey() {
+    private fun generateKey(alias: String = this.alias) {
         if (!keyStore.containsAlias(alias)) {
             try {
                 val generator = KeyGenerator.getInstance(algorithm, type)
@@ -79,5 +79,12 @@ class AndroidKeyStore(
 
         val decryptedDataBytes = cipher.doFinal(actualEncryptedData)
         return decryptedDataBytes
+    }
+
+    fun resetEncryptionKey() {
+        if (keyStore.containsAlias(alias)) {
+            keyStore.deleteEntry(alias)
+        }
+        generateKey()
     }
 }
