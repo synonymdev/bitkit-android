@@ -21,6 +21,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
 
+class MnemonicNotAvailableException : Exception("Mnemonic not available")
+
 @Singleton
 class VssBackupClient @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -29,14 +31,14 @@ class VssBackupClient @Inject constructor(
 ) {
     private var isSetup = CompletableDeferred<Unit>()
 
-    suspend fun setup(walletIndex: Int = 0): Result<Boolean> = withContext(ioDispatcher) {
+    suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (isSetup.isCompleted && !isSetup.isCancelled) {
-                runCatching { isSetup.await() }.onSuccess { return@runCatching true }
+                runCatching { isSetup.await() }.onSuccess { return@runCatching }
             }
 
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: return@runCatching false
+                ?: throw MnemonicNotAvailableException()
 
             withTimeout(30.seconds) {
                 Logger.debug("VSS client setting up…", context = TAG)
@@ -64,7 +66,6 @@ class VssBackupClient @Inject constructor(
                 isSetup.complete(Unit)
                 Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
             }
-            true
         }.onFailure {
             isSetup.completeExceptionally(it)
             Logger.error("VSS client setup error", it, context = TAG)
@@ -81,16 +82,17 @@ class VssBackupClient @Inject constructor(
         maxAttempts: Int = 10,
         baseDelayMs: Long = 1000L,
         logger: SetupRetryLogger.() -> Unit,
-    ): Result<Boolean> = withContext(ioDispatcher) {
+    ): Result<Unit> = withContext(ioDispatcher) {
         val log = SetupRetryLogger().apply(logger)
         var attempt = 0
         while (attempt < maxAttempts) {
             val result = setup()
-            if (result.getOrDefault(false)) {
+            if (result.isSuccess) {
                 log.onSuccess(attempt + 1)
-                return@withContext Result.success(true)
+                return@withContext Result.success(Unit)
             }
-            if (result.isFailure) {
+            val exception = result.exceptionOrNull()
+            if (exception != null && exception !is MnemonicNotAvailableException) {
                 return@withContext result
             }
             attempt++
@@ -101,7 +103,7 @@ class VssBackupClient @Inject constructor(
             }
         }
         log.onExhausted(maxAttempts)
-        Result.success(false)
+        Result.failure(MnemonicNotAvailableException())
     }
 
     fun reset() {

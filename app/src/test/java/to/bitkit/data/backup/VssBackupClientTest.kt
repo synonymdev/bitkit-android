@@ -10,7 +10,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
-import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class VssBackupClientTest : BaseUnitTest() {
 
@@ -29,12 +30,13 @@ class VssBackupClientTest : BaseUnitTest() {
     }
 
     @Test
-    fun `setup returns false when mnemonic is not available`() = test {
+    fun `setup fails with MnemonicNotAvailableException when mnemonic is not available`() = test {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
 
         val result = sut.setup()
 
-        assertFalse(result.getOrThrow())
+        assertTrue(result.isFailure)
+        assertIs<MnemonicNotAvailableException>(result.exceptionOrNull())
     }
 
     @Test
@@ -63,9 +65,9 @@ class VssBackupClientTest : BaseUnitTest() {
     fun `setup can be called multiple times when mnemonic not available`() = test {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
 
-        // Multiple calls should all return false without crashing
-        assertFalse(sut.setup().getOrThrow())
-        assertFalse(sut.setup().getOrThrow())
-        assertFalse(sut.setup().getOrThrow())
+        // Multiple calls should all fail with MnemonicNotAvailableException without crashing
+        assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
+        assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
+        assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
     }
 }
