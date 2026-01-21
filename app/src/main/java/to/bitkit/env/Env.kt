@@ -211,7 +211,6 @@ object Peers {
 
 private object ElectrumServers {
     object MAINNET {
-        const val FULCRUM = "ssl://fulcrum.bitkit.blocktank.to:8900"
         const val ESPLORA = "tcp://34.65.215.247:50001"
     }
 
