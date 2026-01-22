@@ -1,8 +1,8 @@
 package to.bitkit.ui.screens.widgets.calculator
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -100,8 +100,8 @@ fun CalculatorPreviewContent(
         ) {
             AnimatedVisibility(
                 visible = !isKeyboardVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
+                enter = expandVertically(),
+                exit = shrinkVertically(),
             ) {
                 Column {
                     Spacer(modifier = Modifier.height(26.dp))
