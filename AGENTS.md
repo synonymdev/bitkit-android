@@ -186,7 +186,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
 - ALWAYS use `remember` for expensive Compose computations
-- ALWAYS add modifiers to the last place in the argument list when calling composable functions
+- ALWAYS add the `modifier` parameter as the LAST argument when calling composable functions, without a trailing comma
 - NEVER add parameters with default values BEFORE the `modifier` parameter in composable functions - modifier must be the FIRST optional parameter
 - ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used

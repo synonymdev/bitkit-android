@@ -108,11 +108,11 @@ fun CalculatorPreviewContent(
                     VerticalSpacer(26.dp)
 
                     Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("header_row"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .testTag("header_row")
                     ) {
                         Headline(
                             text = AnnotatedString(stringResource(R.string.widgets__calculator__name)),

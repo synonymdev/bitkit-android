@@ -39,10 +39,10 @@ fun CalculatorInput(
         onValueChange = onValueChange,
         leadingIcon = {
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .background(color = Colors.Gray6, shape = CircleShape)
-                    .size(32.dp),
-                contentAlignment = Alignment.Center
+                    .size(32.dp)
             ) {
                 BodyMSB(currencySymbol, color = Colors.Brand)
             }
