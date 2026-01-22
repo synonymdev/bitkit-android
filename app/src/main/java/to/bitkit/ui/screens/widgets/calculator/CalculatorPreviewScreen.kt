@@ -110,7 +110,7 @@ fun CalculatorPreviewContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("header_row")
+                            .testTag("header_row"),
                     ) {
                         Headline(
                             text = AnnotatedString(stringResource(R.string.widgets__calculator__name)),
@@ -167,7 +167,7 @@ fun CalculatorPreviewContent(
                 modifier = Modifier
                     .padding(vertical = 21.dp)
                     .fillMaxWidth()
-                    .testTag("buttons_row")
+                    .testTag("buttons_row"),
             ) {
                 if (isCalculatorWidgetEnabled) {
                     SecondaryButton(
@@ -176,7 +176,7 @@ fun CalculatorPreviewContent(
                         onClick = onClickDelete,
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("WidgetDelete")
+                            .testTag("WidgetDelete"),
                     )
                 }
 
@@ -186,7 +186,7 @@ fun CalculatorPreviewContent(
                     onClick = onClickSave,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetSave")
+                        .testTag("WidgetSave"),
                 )
             }
         }
