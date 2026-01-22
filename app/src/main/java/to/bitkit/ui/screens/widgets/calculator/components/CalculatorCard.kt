@@ -101,7 +101,7 @@ fun CalculatorCardContent(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(Colors.Gray6)
     ) {
         Column(
             modifier = Modifier
@@ -129,14 +129,14 @@ fun CalculatorCardContent(
 
             // Fiat input with decimal transformation
             CalculatorInput(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { focusState -> if (focusState.hasFocus) onFiatChange("") },
                 value = fiatValue,
                 onValueChange = onFiatChange,
                 currencySymbol = fiatSymbol,
                 currencyName = fiatName,
-                visualTransformation = MonetaryVisualTransformation(decimalPlaces = 2)
+                visualTransformation = MonetaryVisualTransformation(decimalPlaces = 2),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState -> if (focusState.hasFocus) onFiatChange("") }
             )
         }
     }

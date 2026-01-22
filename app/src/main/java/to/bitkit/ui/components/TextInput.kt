@@ -8,6 +8,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +47,7 @@ fun TextInput(
     supportingText: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     textStyle: TextStyle = AppTextStyles.BodySSB,
+    colors: TextFieldColors = AppTextFieldDefaults.semiTransparent,
 ) {
     var textFieldValue by remember { mutableStateOf(TextFieldValue(value)) }
 
@@ -75,7 +77,7 @@ fun TextInput(
         maxLines = maxLines,
         minLines = minLines,
         singleLine = singleLine,
-        colors = AppTextFieldDefaults.semiTransparent,
+        colors = colors,
         shape = AppShapes.small,
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,

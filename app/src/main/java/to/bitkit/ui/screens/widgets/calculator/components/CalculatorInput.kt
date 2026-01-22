@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -30,7 +31,7 @@ fun CalculatorInput(
     currencySymbol: String,
     currencyName: String,
     modifier: Modifier = Modifier,
-    visualTransformation: VisualTransformation = VisualTransformation.None
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     TextInput(
         value = value,
@@ -38,10 +39,10 @@ fun CalculatorInput(
         onValueChange = onValueChange,
         leadingIcon = {
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .background(color = Colors.White10, shape = CircleShape)
-                    .size(32.dp),
-                contentAlignment = Alignment.Center
+                    .background(color = Colors.Gray6, shape = CircleShape)
+                    .size(32.dp)
             ) {
                 BodyMSB(currencySymbol, color = Colors.Brand)
             }
@@ -50,8 +51,12 @@ fun CalculatorInput(
             keyboardType = KeyboardType.Number
         ),
         suffix = { CaptionB(currencyName.uppercase(), color = Colors.Gray1) },
-        modifier = modifier,
-        visualTransformation = visualTransformation
+        colors = AppTextFieldDefaults.noIndicatorColors.copy(
+            focusedContainerColor = Colors.Black,
+            unfocusedContainerColor = Colors.Black
+        ),
+        visualTransformation = visualTransformation,
+        modifier = modifier
     )
 }
 
@@ -60,22 +65,24 @@ fun CalculatorInput(
 private fun Preview() {
     AppThemeSurface {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
             CalculatorInput(
-                modifier = Modifier.fillMaxWidth(),
                 value = "100000",
                 onValueChange = {},
                 currencySymbol = "₿",
-                currencyName = "BITCOIN"
+                currencyName = "BITCOIN",
+                modifier = Modifier.fillMaxWidth()
             )
             CalculatorInput(
-                modifier = Modifier.fillMaxWidth(),
                 value = "4.55",
                 onValueChange = {},
                 currencySymbol = "$",
-                currencyName = "USD"
+                currencyName = "USD",
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
