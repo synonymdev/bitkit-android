@@ -1,9 +1,12 @@
 package to.bitkit.ui.screens.widgets.price
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -13,10 +16,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -44,7 +51,7 @@ import to.bitkit.ui.theme.Colors
 fun PriceEditScreen(
     viewModel: PriceViewModel,
     onBack: () -> Unit,
-    navigatePreview: () -> Unit
+    navigatePreview: () -> Unit,
 ) {
     val customPreferences by viewModel.customPreferences.collectAsStateWithLifecycle()
     val currentPrice by viewModel.currentPrice.collectAsStateWithLifecycle()
@@ -90,60 +97,77 @@ fun PriceEditContent(
     ScreenColumn(
         modifier = Modifier.testTag("weather_edit_screen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__edit),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
-        )
-
-        Column(
+        Box(
             modifier = Modifier
-                .padding(horizontal = 16.dp)
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .testTag("WidgetEditScrollView")
+                .fillMaxWidth()
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState())
+                    .testTag("WidgetEditScrollView")
+            ) {
+                Spacer(modifier = Modifier.height(82.dp))
 
-            BodyM(
-                text = stringResource(R.string.widgets__widget__edit_description).replace(
-                    "{name}",
-                    stringResource(R.string.widgets__price__name)
-                ),
-                color = Colors.White64,
-                modifier = Modifier.testTag("edit_description")
-            )
+                BodyM(
+                    text = stringResource(R.string.widgets__widget__edit_description).replace(
+                        "{name}",
+                        stringResource(R.string.widgets__price__name)
+                    ),
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("edit_description")
+                )
 
-            Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-            priceModel.widgets.map { data ->
+                priceModel.widgets.map { data ->
+                    PriceEditOptionRow(
+                        label = data.pair.displayName,
+                        value = data.price,
+                        isEnabled = data.pair in preferences.enabledPairs,
+                        onClick = {
+                            onClickTradingPair(data.pair)
+                        },
+                        testTagPrefix = data.pair.displayName,
+                    )
+                }
+
+                allPeriodsUsd.map { priceData ->
+                    PriceChartOptionRow(
+                        widgetData = priceData,
+                        isEnabled = priceData.period == preferences.period,
+                        onClick = onClickGraph,
+                        testTagPrefix = priceData.period.value,
+                    )
+                }
+
                 PriceEditOptionRow(
-                    label = data.pair.displayName,
-                    value = data.price,
-                    isEnabled = data.pair in preferences.enabledPairs,
-                    onClick = {
-                        onClickTradingPair(data.pair)
-                    },
-                    testTagPrefix = data.pair.displayName,
+                    label = stringResource(R.string.widgets__widget__source),
+                    value = priceModel.source,
+                    isEnabled = preferences.showSource,
+                    onClick = onClickSource,
+                    testTagPrefix = "showSource",
                 )
             }
 
-            allPeriodsUsd.map { priceData ->
-                PriceChartOptionRow(
-                    widgetData = priceData,
-                    isEnabled = priceData.period == preferences.period,
-                    onClick = onClickGraph,
-                    testTagPrefix = priceData.period.value,
+            Column {
+                AppTopBar(
+                    titleText = stringResource(R.string.widgets__widget__edit),
+                    onBackClick = onBack,
+                    actions = { DrawerNavIcon() },
+                    modifier = Modifier.background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.background,
+                                Color.Transparent
+                            ),
+                            tileMode = TileMode.Decal
+                        )
+                    )
                 )
             }
-
-            PriceEditOptionRow(
-                label = stringResource(R.string.widgets__widget__source),
-                value = priceModel.source,
-                isEnabled = preferences.showSource,
-                onClick = onClickSource,
-                testTagPrefix = "showSource",
-            )
         }
 
         Row(
@@ -182,7 +206,7 @@ private fun PriceEditOptionRow(
     value: String,
     isEnabled: Boolean,
     onClick: () -> Unit,
-    testTagPrefix: String
+    testTagPrefix: String,
 ) {
     Column {
         Row(
@@ -235,7 +259,7 @@ private fun PriceChartOptionRow(
     widgetData: PriceWidgetData,
     isEnabled: Boolean,
     onClick: (GraphPeriod) -> Unit,
-    testTagPrefix: String
+    testTagPrefix: String,
 ) {
     Column {
         Row(
