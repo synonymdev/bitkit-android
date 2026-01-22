@@ -104,6 +104,8 @@
     <string name="lightning__funding__button1">Trasferimento da risparmio</string>
     <string name="lightning__funding__button2">Usa un altro portafoglio</string>
     <string name="lightning__funding__button3">Avanzate</string>
+    <string name="lightning__funding_advanced__button1">QR Canale LNURL</string>
+    <string name="lightning__funding_advanced__button2">Configurazione Manuale</string>
     <string name="lightning__funding_advanced__nav_title">Conto Spendibile</string>
     <string name="lightning__funding_advanced__text">Scansiona un QR per richiedere il tuo canale LNURL da un altro LSP, oppure scegli la configurazione manuale.</string>
     <string name="lightning__funding_advanced__title">Configurazione &lt;accent&gt;avanzata&lt;/accent&gt;</string>
