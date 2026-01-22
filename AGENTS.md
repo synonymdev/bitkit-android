@@ -178,6 +178,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER use `runBlocking` in suspend functions
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
 - NEVER add `e = ` named parameter to Logger calls
+- NEVER manually append the `Throwable`'s message or any other props to the string passed as the 1st param of `Logger.*` calls, its internals are already enriching the final log message with the details of the `Throwable` passed via the `e` arg
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
@@ -221,4 +222,4 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use `LightningRepo` to defining the business logic for the node operations, usually delegating to `LightningService`
 - Use `WakeNodeWorker` to manage the handling of remote notifications received via cloud messages
 - Use `*Services` to wrap rust library code exposed via bindings
-- Use CQRS pattern of Command + Handler like it's done in the `NotifyPaymentReceived` + `NotifyPaymentReceivedHandler` setup 
+- Use CQRS pattern of Command + Handler like it's done in the `NotifyPaymentReceived` + `NotifyPaymentReceivedHandler` setup

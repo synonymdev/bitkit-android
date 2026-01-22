@@ -425,13 +425,7 @@ class BlocktankRepo @Inject constructor(
     ): Result<GiftClaimResult> = withContext(bgDispatcher) {
         runCatching {
             require(code.isNotBlank()) { "Gift code cannot be blank" }
-
-            if (amount == 0uL) {
-                Logger.warn(
-                    "Gift amount is 0 - proceeding anyway as backend may provide actual amount",
-                    context = TAG
-                )
-            }
+            require(amount > 0u) { "Gift amount must be positive" }
 
             Logger.debug("Starting gift code claim: amount=$amount, timeout=$waitTimeout", context = TAG)
 
@@ -449,20 +443,16 @@ class BlocktankRepo @Inject constructor(
                     context = TAG
                 )
 
-                if (amount > 0uL && maxInboundCapacity >= amount) {
+                if (maxInboundCapacity >= amount) {
                     Logger.debug("Sufficient liquidity available, claiming with existing channel", context = TAG)
                     Result.success(claimGiftCodeWithLiquidity(code))
                 } else {
-                    if (amount == 0uL) {
-                        Logger.debug("Amount unknown (0), defaulting to channel opening path", context = TAG)
-                    } else {
-                        Logger.debug("Insufficient liquidity, opening new channel", context = TAG)
-                    }
+                    Logger.debug("Insufficient liquidity, opening new channel", context = TAG)
                     Result.success(claimGiftCodeWithoutLiquidity(code, amount))
                 }
             }.getOrThrow()
         }.onFailure {
-            Logger.error("Failed to claim gift code: ${it.message}", it, context = TAG)
+            Logger.error("Failed to claim gift code", it, context = TAG)
         }
     }
 

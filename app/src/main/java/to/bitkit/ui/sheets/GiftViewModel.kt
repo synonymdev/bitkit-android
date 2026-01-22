@@ -53,11 +53,6 @@ class GiftViewModel @Inject constructor(
         }
         this.code = code
         this.amount = amount
-
-        if (amount == 0uL) {
-            Logger.warn("Gift amount is 0 from QR code - this may be incorrect", context = TAG)
-        }
-
         viewModelScope.launch(bgDispatcher) {
             claimGift()
         }
@@ -123,14 +118,7 @@ class GiftViewModel @Inject constructor(
     }
 
     private suspend fun handleGiftClaimError(error: Throwable) {
-        val errorMessage = buildString {
-            append("Gift claim failed: ")
-            append(error.message ?: error.toString())
-            error.cause?.let {
-                append(" (cause: ${it.message ?: it})")
-            }
-        }
-        Logger.error(errorMessage, error, context = TAG)
+        Logger.error("Gift claim failed", error, context = TAG)
 
         val route = when {
             errorContains(error, "GIFT_CODE_ALREADY_USED") -> {
@@ -142,7 +130,7 @@ class GiftViewModel @Inject constructor(
                 GiftRoute.UsedUp
             }
             else -> {
-                Logger.error("Unhandled gift claim error type: ${error::class.simpleName}", context = TAG)
+                Logger.error("Unhandled gift claim error type", error, context = TAG)
                 GiftRoute.Error
             }
         }
