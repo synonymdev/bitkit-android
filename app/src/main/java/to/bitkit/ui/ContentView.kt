@@ -89,7 +89,6 @@ import to.bitkit.ui.screens.transfer.TransferIntroScreen
 import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
-import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
@@ -735,7 +734,6 @@ private fun RootNavHost(
                             walletViewModel.refreshState()
                             navController.navigate(Routes.ExternalSuccess)
                         },
-                        onNetworkFeeClick = { navController.navigate(Routes.ExternalFeeCustom) },
                         onBackClick = { navController.popBackStack() },
                     )
                 }
@@ -750,15 +748,6 @@ private fun RootNavHost(
                 composableWithDefaultTransitions<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
                         onContinue = { navController.navigateToHome() },
-                    )
-                }
-                composableWithDefaultTransitions<Routes.ExternalFeeCustom> {
-                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
-                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
-
-                    ExternalFeeCustomScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
                     )
                 }
             }
@@ -1912,9 +1901,6 @@ sealed interface Routes {
 
     @Serializable
     data object ExternalSuccess : Routes
-
-    @Serializable
-    data object ExternalFeeCustom : Routes
 
     @Serializable
     data class LnurlChannel(val uri: String, val callback: String, val k1: String) : Routes

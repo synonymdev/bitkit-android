@@ -21,7 +21,6 @@ import to.bitkit.ext.WatchResult
 import to.bitkit.ext.of
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.Toast
-import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningRepo
@@ -118,33 +117,12 @@ class ExternalNodeViewModel @Inject constructor(
     fun onAmountContinue() {
         viewModelScope.launch {
             val speed = settingsStore.data.first().defaultTransactionSpeed
-            val defaultSatsPerVbyte = lightningRepo.getFeeRateForSpeed(speed).getOrThrow().toUInt()
-            _uiState.update {
-                it.copy(
-                    customFeeRate = defaultSatsPerVbyte,
-                    networkFee = 0L,
-                )
-            }
-            updateNetworkFee()
-        }
-    }
-
-    fun onCustomFeeRateChange(feeRate: UInt) {
-        _uiState.update { it.copy(customFeeRate = feeRate) }
-        updateNetworkFee()
-    }
-
-    private fun updateNetworkFee() {
-        viewModelScope.launch {
             val amountSats = _uiState.value.amount.sats
-            val customFeeRate = _uiState.value.customFeeRate
 
-            if (amountSats <= 0 || customFeeRate == 0u) {
+            if (amountSats <= 0) {
                 _uiState.update { it.copy(networkFee = 0L) }
                 return@launch
             }
-
-            val speed = customFeeRate?.let { TransactionSpeed.Custom(it) }
 
             val fee = lightningRepo.calculateTotalFee(
                 amountSats = amountSats.toULong(),
@@ -219,7 +197,6 @@ interface ExternalNodeContract {
         val peer: PeerDetails? = null,
         val amount: Amount = Amount(),
         val networkFee: Long = 0,
-        val customFeeRate: UInt? = null,
     ) {
         data class Amount(
             val sats: Long = 0,
