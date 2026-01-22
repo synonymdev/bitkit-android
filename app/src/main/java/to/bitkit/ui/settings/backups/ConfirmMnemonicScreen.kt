@@ -159,9 +159,11 @@ private fun ConfirmMnemonicContent(
                     .testTag("backup_shuffled_words_grid")
             ) {
                 shuffledWords.forEachIndexed { index, word ->
+                    val isSelected = pressedStates.getOrElse(index, defaultValue = { false })
                     PrimaryButton(
                         text = word,
-                        color = if (pressedStates.getOrNull(index) == true) Colors.White32 else Colors.White16,
+                        color = if (isSelected) Colors.White32 else Colors.White16,
+                        enableGradient = !isSelected,
                         fullWidth = false,
                         size = ButtonSize.Small,
                         onClick = { onWordPress(word, index) },
