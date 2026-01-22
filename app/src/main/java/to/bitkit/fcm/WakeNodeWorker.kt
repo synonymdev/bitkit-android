@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -109,6 +110,11 @@ class WakeNodeWorker @AssistedInject constructor(
             .fold(
                 onSuccess = { Result.success() },
                 onFailure = { e ->
+                    if (e is CancellationException) {
+                        Logger.debug("Work cancelled", context = TAG)
+                        return@fold Result.failure(workDataOf("Reason" to "Cancelled"))
+                    }
+
                     val reason = e.message ?: appContext.getString(R.string.common__error_body)
 
                     bestAttemptContent = NotificationDetails(
