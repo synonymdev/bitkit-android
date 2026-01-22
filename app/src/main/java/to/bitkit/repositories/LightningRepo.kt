@@ -8,7 +8,6 @@ import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createChannelRequestUrl
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
-import com.synonym.bitkitcore.decode
 import com.synonym.bitkitcore.lnurlAuth
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -256,6 +255,12 @@ class LightningRepo @Inject constructor(
             scope.launch { registerForNotifications() }
             Unit
         }.onFailure { e ->
+            val currentLifecycleState = _lightningState.value.nodeLifecycleState
+            if (currentLifecycleState.isRunning()) {
+                Logger.warn("Start error occurred but node is $currentLifecycleState, skipping retry", e, context = TAG)
+                return@withContext Result.success(Unit)
+            }
+
             if (shouldRetry) {
                 val retryDelay = 2.seconds
                 Logger.warn("Start error, retrying after $retryDelay...", e, context = TAG)
@@ -546,7 +551,7 @@ class LightningRepo @Inject constructor(
         return runCatching {
             // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
             val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).getOrThrow().pr
-            val decoded = (decode(bolt11) as Scanner.Lightning).invoice
+            val decoded = (coreService.decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
             Logger.error(

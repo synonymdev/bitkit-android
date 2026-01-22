@@ -16,7 +16,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -24,6 +23,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.viewmodels.AppViewModel
 
 @Composable
 fun AutoReadClipboardHandler() {
@@ -43,7 +43,7 @@ fun AutoReadClipboardHandler() {
     // Check clipboard on app startup - only after authentication
     LaunchedEffect(isAuthenticated, isAutoReadClipboardEnabled) {
         if (isAuthenticated && isAutoReadClipboardEnabled && !hasCheckedOnStartup) {
-            showClipboardDialog = context.hasScanDataInClipboard()
+            showClipboardDialog = hasScanDataInClipboard(context, appViewModel)
             hasCheckedOnStartup = true
         }
     }
@@ -60,7 +60,7 @@ fun AutoReadClipboardHandler() {
             if (event == Lifecycle.Event.ON_RESUME && isAuthenticated) {
                 if (hasCheckedOnStartup && isAutoReadClipboardEnabled) {
                     scope.launch {
-                        showClipboardDialog = context.hasScanDataInClipboard()
+                        showClipboardDialog = hasScanDataInClipboard(context, appViewModel)
                     }
                 }
             }
@@ -86,12 +86,11 @@ fun AutoReadClipboardHandler() {
     }
 }
 
-private suspend fun Context.hasScanDataInClipboard(): Boolean {
+private suspend fun hasScanDataInClipboard(context: Context, appViewModel: AppViewModel): Boolean {
     delay(1000) // delay needed for Android clipboard accessibility on start
 
-    val clipText = this.getClipboardText()
+    val clipText = context.getClipboardText()
     if (clipText.isNullOrBlank()) return false
 
-    val scanResult = runCatching { decode(clipText) }
-    return scanResult.isSuccess
+    return appViewModel.canDecodeClipboard(clipText)
 }

@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_bottom">Connecting &amp; Syncing...</string>
     <string name="lightning__wait_text_top">Please wait for Bitkit to connect to the payment network (±10 seconds).</string>
     <string name="lightning__wallet_balances">Wallet Balances</string>
-    <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version...</string>
+    <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version. This usually takes less than a minute.</string>
     <string name="migration__nav_title">Wallet Migration</string>
     <string name="migration__title">MIGRATING\n&lt;accent&gt;WALLET&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Balance moved from spending to savings</string>
@@ -344,7 +344,7 @@
     <string name="onboarding__passphrase_header">Secure with &lt;accent&gt;Passphrase&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">You can add a secret passphrase to the 12-word recovery phrase. If you do, make sure you don’t forget.</string>
     <string name="onboarding__pp_checkbox">Privacy Policy</string>
-    <string name="onboarding__pp_checkbox_value">I declare that I have read and accept the &lt;accent&gt;privacy policy.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">By continuing you declare that you have read and accept the &lt;accent&gt;privacy policy.&lt;/accent&gt;</string>
     <string name="onboarding__restore">Restore</string>
     <string name="onboarding__restore_error_description">Bitkit could not restore your wallet from backup or recovery phrase.</string>
     <string name="onboarding__restore_error_title">Wallet Restore Failed</string>
@@ -376,7 +376,7 @@
     <string name="onboarding__slide4_header">Your keys,\n&lt;accent&gt;your coins&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Let’s create your wallet. Please be aware that Bitkit is mobile software. &lt;accent&gt;Don’t store all your money in Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Terms of use</string>
-    <string name="onboarding__tos_checkbox_value">I declare that I have read and accept the terms of use.</string>
+    <string name="onboarding__tos_checkbox_value">By continuing you declare that you have read and accept the terms of use.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;terms of use&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Use Bitkit to pay anyone, anywhere, any time, and spend your bitcoin on the things you value in life.</string>
     <string name="onboarding__welcome_title">You can ₿ \n&lt;accent&gt;the change&lt;/accent&gt;</string>
