@@ -4,7 +4,7 @@ import to.bitkit.utils.AppError
 import java.io.File
 import kotlin.io.path.exists
 
-fun File.ensureDir() = this.also {
+fun File.ensureDir(): File = this.also {
     if (toPath().exists()) return this
 
     val path = if (extension.isEmpty()) this else parentFile
