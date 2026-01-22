@@ -39,10 +39,10 @@ fun CalculatorInput(
         onValueChange = onValueChange,
         leadingIcon = {
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .background(color = Colors.Gray6, shape = CircleShape)
-                    .size(32.dp),
-                contentAlignment = Alignment.Center
+                    .size(32.dp)
             ) {
                 BodyMSB(currencySymbol, color = Colors.Brand)
             }
@@ -55,8 +55,8 @@ fun CalculatorInput(
             focusedContainerColor = Colors.Black,
             unfocusedContainerColor = Colors.Black
         ),
-        modifier = modifier,
-        visualTransformation = visualTransformation
+        visualTransformation = visualTransformation,
+        modifier = modifier
     )
 }
 
@@ -71,18 +71,18 @@ private fun Preview() {
                 .padding(16.dp)
         ) {
             CalculatorInput(
-                modifier = Modifier.fillMaxWidth(),
                 value = "100000",
                 onValueChange = {},
                 currencySymbol = "₿",
-                currencyName = "BITCOIN"
+                currencyName = "BITCOIN",
+                modifier = Modifier.fillMaxWidth()
             )
             CalculatorInput(
-                modifier = Modifier.fillMaxWidth(),
                 value = "4.55",
                 onValueChange = {},
                 currencySymbol = "$",
-                currencyName = "USD"
+                currencyName = "USD",
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
