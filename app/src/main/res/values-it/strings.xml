@@ -10,7 +10,7 @@
     <string name="cards__lightning__title">Spendi</string>
     <string name="cards__lightning__description">Pagamenti istantanei</string>
     <string name="cards__lightningSettingUp__title">Trasferisci</string>
-    <string name="cards__lightningSettingUp__description">In corso...</string>
+    <string name="cards__lightningSettingUp__description">In corso…</string>
     <string name="cards__lightningConnecting__title">Collegamento</string>
     <string name="cards__lightningConnecting__description">Pronto in ±10m</string>
     <string name="cards__lightningReady__title">Pronto</string>
@@ -220,7 +220,6 @@
     <string name="lightning__created_on">Creato il</string>
     <string name="lightning__transaction">Transazione</string>
     <string name="lightning__order_fee">Fee Ordine</string>
-    <string name="lightning__balance">Saldo</string>
     <string name="lightning__reserve_balance">Saldo di riserva</string>
     <string name="lightning__savings_advanced__text">Puoi trasferire parte del tuo conto di spesa ai risparmi, perche\' hai piu\' connessioni Lightning attive.</string>
     <string name="lightning__savings_advanced__title">Seleziona fondi\n&lt;accent&gt;da trasferire&lt;/accent&gt;</string>
