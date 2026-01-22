@@ -94,9 +94,9 @@ fi
 echo ""
 echo "Running tx push..."
 
-# Step 2: Push translations to Transifex
+# Step 2: Push source and translations to Transifex
 cd "$PROJECT_ROOT"
-tx push --translation --all --skip --force
+tx push --source --translation --all --skip --force
 
 echo ""
 echo "Push complete!"
