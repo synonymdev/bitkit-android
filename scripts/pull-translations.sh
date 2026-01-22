@@ -86,6 +86,13 @@ if ! command -v tx &> /dev/null; then
     exit 1
 fi
 
+# Check if TX_TOKEN is set
+if [ -z "$TX_TOKEN" ]; then
+    echo "Error: TX_TOKEN environment variable is not set"
+    echo "Please set it with your Transifex API token: export TX_TOKEN=\"your-token\""
+    exit 1
+fi
+
 # Run tx pull and check for errors
 set +e  # Temporarily disable exit on error to check tx pull status
 tx pull -a
