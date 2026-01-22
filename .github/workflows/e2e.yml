@@ -8,6 +8,12 @@ on:
         required: false
         default: "default-feature-branch"
   pull_request:
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/e2e.yml'
 
 env:
   TERM: xterm-256color
