@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -84,6 +85,12 @@ class MigrationService @Inject constructor(
         private const val TAG = "Migration"
         const val RN_MIGRATION_COMPLETED_KEY = "rnMigrationCompleted"
         const val RN_MIGRATION_CHECKED_KEY = "rnMigrationChecked"
+        private const val RN_NEEDS_POST_MIGRATION_SYNC_KEY = "rnNeedsPostMigrationSync"
+        private const val RN_PENDING_BLOCKTANK_ORDER_IDS_KEY = "rnPendingBlocktankOrderIds"
+        private const val RN_PENDING_PAID_ORDERS_KEY = "rnPendingPaidOrders"
+        private const val RN_PENDING_METADATA_KEY = "rnPendingMetadata"
+        private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
+        private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
@@ -135,6 +142,157 @@ class MigrationService @Inject constructor(
 
     @Volatile
     private var pendingRemotePaidOrders: Map<String, String>? = null
+
+    @Volatile
+    private var pendingBlocktankOrderIds: List<String>? = null
+
+    suspend fun needsPostMigrationSync(): Boolean {
+        val key = stringPreferencesKey(RN_NEEDS_POST_MIGRATION_SYNC_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    suspend fun setNeedsPostMigrationSync(value: Boolean) {
+        val key = stringPreferencesKey(RN_NEEDS_POST_MIGRATION_SYNC_KEY)
+        rnMigrationStore.edit {
+            if (value) {
+                it[key] = "true"
+            } else {
+                it.remove(key)
+            }
+        }
+    }
+
+    private suspend fun loadPersistedMigrationData() {
+        val prefs = rnMigrationStore.data.first()
+
+        prefs[stringPreferencesKey(RN_PENDING_BLOCKTANK_ORDER_IDS_KEY)]?.let { data ->
+            runCatching {
+                pendingBlocktankOrderIds = json.decodeFromString<List<String>>(data)
+                Logger.debug("Loaded ${pendingBlocktankOrderIds?.size} pending Blocktank order IDs", context = TAG)
+            }.onFailure {
+                Logger.warn("Failed to load pending Blocktank order IDs: $it", context = TAG)
+            }
+        }
+
+        prefs[stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY)]?.let { data ->
+            runCatching {
+                pendingRemotePaidOrders = json.decodeFromString<Map<String, String>>(data)
+                Logger.debug("Loaded ${pendingRemotePaidOrders?.size} pending paid orders", context = TAG)
+            }.onFailure {
+                Logger.warn("Failed to load pending paid orders: $it", context = TAG)
+            }
+        }
+
+        prefs[stringPreferencesKey(RN_PENDING_METADATA_KEY)]?.let { data ->
+            runCatching {
+                pendingRemoteMetadata = json.decodeFromString<RNMetadata>(data)
+                Logger.debug("Loaded pending metadata (tags: ${pendingRemoteMetadata?.tags?.size})", context = TAG)
+            }.onFailure {
+                Logger.warn("Failed to load pending metadata: $it", context = TAG)
+            }
+        }
+
+        prefs[stringPreferencesKey(RN_PENDING_TRANSFERS_KEY)]?.let { data ->
+            runCatching {
+                pendingRemoteTransfers = json.decodeFromString<Map<String, String>>(data)
+                Logger.debug("Loaded ${pendingRemoteTransfers?.size} pending transfers", context = TAG)
+            }.onFailure {
+                Logger.warn("Failed to load pending transfers: $it", context = TAG)
+            }
+        }
+
+        prefs[stringPreferencesKey(RN_PENDING_BOOSTS_KEY)]?.let { data ->
+            runCatching {
+                pendingRemoteBoosts = json.decodeFromString<Map<String, String>>(data)
+                Logger.debug("Loaded ${pendingRemoteBoosts?.size} pending boosts", context = TAG)
+            }.onFailure {
+                Logger.warn("Failed to load pending boosts: $it", context = TAG)
+            }
+        }
+    }
+
+    private suspend fun persistBlocktankOrderIds(orderIds: List<String>) {
+        val key = stringPreferencesKey(RN_PENDING_BLOCKTANK_ORDER_IDS_KEY)
+        rnMigrationStore.edit {
+            it[key] = json.encodeToString(orderIds)
+        }
+        pendingBlocktankOrderIds = orderIds
+        Logger.info("Persisted ${orderIds.size} Blocktank order IDs for retry", context = TAG)
+    }
+
+    private suspend fun persistPaidOrders(paidOrders: Map<String, String>) {
+        val key = stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY)
+        rnMigrationStore.edit {
+            it[key] = json.encodeToString(paidOrders)
+        }
+        pendingRemotePaidOrders = paidOrders
+    }
+
+    private suspend fun persistMetadata(metadata: RNMetadata) {
+        val key = stringPreferencesKey(RN_PENDING_METADATA_KEY)
+        rnMigrationStore.edit {
+            it[key] = json.encodeToString(metadata)
+        }
+        pendingRemoteMetadata = metadata
+        Logger.debug("Persisted pending metadata for retry", context = TAG)
+    }
+
+    private suspend fun persistTransfers(transfers: Map<String, String>) {
+        val key = stringPreferencesKey(RN_PENDING_TRANSFERS_KEY)
+        rnMigrationStore.edit {
+            it[key] = json.encodeToString(transfers)
+        }
+        pendingRemoteTransfers = transfers
+        Logger.debug("Persisted ${transfers.size} transfers for retry", context = TAG)
+    }
+
+    private suspend fun persistBoosts(boosts: Map<String, String>) {
+        val key = stringPreferencesKey(RN_PENDING_BOOSTS_KEY)
+        rnMigrationStore.edit {
+            it[key] = json.encodeToString(boosts)
+        }
+        pendingRemoteBoosts = boosts
+        Logger.debug("Persisted ${boosts.size} boosts for retry", context = TAG)
+    }
+
+    private suspend fun clearPersistedBlocktankData() {
+        rnMigrationStore.edit {
+            it.remove(stringPreferencesKey(RN_PENDING_BLOCKTANK_ORDER_IDS_KEY))
+            it.remove(stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY))
+        }
+        pendingBlocktankOrderIds = null
+        pendingRemotePaidOrders = null
+        Logger.debug("Cleared persisted Blocktank data", context = TAG)
+    }
+
+    private suspend fun clearPersistedMigrationData() {
+        rnMigrationStore.edit {
+            it.remove(stringPreferencesKey(RN_PENDING_BLOCKTANK_ORDER_IDS_KEY))
+            it.remove(stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY))
+            it.remove(stringPreferencesKey(RN_PENDING_METADATA_KEY))
+            it.remove(stringPreferencesKey(RN_PENDING_TRANSFERS_KEY))
+            it.remove(stringPreferencesKey(RN_PENDING_BOOSTS_KEY))
+        }
+        pendingBlocktankOrderIds = null
+        pendingRemotePaidOrders = null
+        pendingRemoteMetadata = null
+        pendingRemoteTransfers = null
+        pendingRemoteBoosts = null
+        Logger.debug("Cleared all persisted migration data", context = TAG)
+    }
+
+    val canCleanupAfterMigration: Boolean
+        get() {
+            if (pendingBlocktankOrderIds != null || pendingRemotePaidOrders != null) {
+                Logger.debug("Cannot cleanup: pending Blocktank data exists", context = TAG)
+                return false
+            }
+            if (pendingRemoteMetadata != null || pendingRemoteTransfers != null || pendingRemoteBoosts != null) {
+                Logger.debug("Cannot cleanup: pending metadata/transfers/boosts exists", context = TAG)
+                return false
+            }
+            return true
+        }
 
     private fun buildRnLdkAccountPath(): File = run {
         val rnNetworkString = when (Env.network) {
@@ -286,6 +444,8 @@ class MigrationService @Inject constructor(
                 it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
                 it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
             }
+            setNeedsPostMigrationSync(true)
+            Logger.info("RN local migration completed, marked for post-migration sync", context = TAG)
         } else {
             markMigrationChecked()
             setShowingMigrationLoading(false)
@@ -661,28 +821,37 @@ class MigrationService @Inject constructor(
     }
 
     private suspend fun applyRNMetadata(metadata: RNMetadata) {
-        val allTags = metadata.tags?.mapNotNull { (txId, tagList) ->
-            runCatching {
-                var activityId = txId
-                activityRepo.getOnchainActivityByTxId(txId)?.let {
-                    activityId = it.id
+        val tags = metadata.tags
+        if (tags.isNullOrEmpty()) {
+            Logger.debug("No tags to apply in metadata", context = TAG)
+            return
+        }
+
+        var applied = 0
+        val allTags = tags.mapNotNull { (activityId, tagList) ->
+            val onchain = activityRepo.getOnchainActivityByTxId(activityId)
+            if (onchain != null) {
+                applied++
+                ActivityTags(activityId = onchain.id, tags = tagList)
+            } else {
+                val activity = activityRepo.getActivity(activityId).getOrNull()
+                if (activity != null) {
+                    applied++
+                    ActivityTags(activityId = activityId, tags = tagList)
+                } else {
+                    Logger.warn("Activity not found for tags: id=$activityId", context = TAG)
+                    null
                 }
-                ActivityTags(activityId = activityId, tags = tagList)
-            }.onFailure {
-                Logger.error("Failed to get activity ID for $txId: $it", it, context = TAG)
-            }.getOrNull()
-        } ?: emptyList()
+            }
+        }
 
         if (allTags.isNotEmpty()) {
             runCatching {
                 coreService.activity.upsertTags(allTags)
+                Logger.info("Applied $applied/${tags.size} pending tags", context = TAG)
             }.onFailure {
-                Logger.error("Failed to migrate tags: $it", it, context = TAG)
+                Logger.error("Failed to upsert tags: $it", it, context = TAG)
             }
-        }
-
-        metadata.lastUsedTags?.forEach {
-            settingsStore.addLastUsedTag(it)
         }
     }
 
@@ -960,7 +1129,9 @@ class MigrationService @Inject constructor(
         }
 
         extractRNMetadata(mmkvData)?.let { metadata ->
-            applyRNMetadata(metadata)
+            Logger.info("Storing metadata for application after sync", context = TAG)
+            persistMetadata(metadata)
+            metadata.lastUsedTags?.forEach { settingsStore.addLastUsedTag(it) }
         }
 
         extractRNWidgets(mmkvData)?.let { widgets ->
@@ -997,6 +1168,11 @@ class MigrationService @Inject constructor(
             }
         }.onFailure { e ->
             Logger.warn("Failed to fetch and upsert local Blocktank orders: $e", context = TAG)
+            persistBlocktankOrderIds(orderIds)
+            if (paidOrders.isNotEmpty()) {
+                persistPaidOrders(paidOrders)
+            }
+            Logger.info("Stored ${orderIds.size} Blocktank order IDs for retry", context = TAG)
         }
     }
 
@@ -1046,6 +1222,14 @@ class MigrationService @Inject constructor(
             it[stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)] = "true"
             it[stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)] = "true"
         }
+        setNeedsPostMigrationSync(true)
+        Logger.info("RN migration completed, marked for post-migration sync", context = TAG)
+    }
+
+    suspend fun cleanupAfterMigration() {
+        clearPersistedMigrationData()
+        setNeedsPostMigrationSync(false)
+        Logger.info("Post-migration cleanup completed", context = TAG)
     }
 
     private suspend fun fetchRNRemoteLdkData() {
@@ -1133,15 +1317,16 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private fun applyRNRemoteMetadata(data: ByteArray) {
+    private suspend fun applyRNRemoteMetadata(data: ByteArray) {
         runCatching {
-            pendingRemoteMetadata = decodeBackupData<RNMetadata>(data)
+            val metadata = decodeBackupData<RNMetadata>(data)
+            persistMetadata(metadata)
         }.onFailure { e ->
             Logger.warn("Failed to decode RN remote metadata backup: $e", context = TAG)
         }
     }
 
-    private fun applyRNRemoteWallet(data: ByteArray) {
+    private suspend fun applyRNRemoteWallet(data: ByteArray) {
         runCatching {
             val backup = decodeBackupData<RNRemoteWalletBackup>(data)
 
@@ -1155,7 +1340,7 @@ class MigrationService @Inject constructor(
                     }
                 }
                 if (transferMap.isNotEmpty()) {
-                    pendingRemoteTransfers = transferMap
+                    persistTransfers(transferMap)
                 }
             }
 
@@ -1171,7 +1356,7 @@ class MigrationService @Inject constructor(
                 }
                 if (boostMap.isNotEmpty()) {
                     Logger.info("Found ${boostMap.size} boosted transactions in remote backup", context = TAG)
-                    pendingRemoteBoosts = boostMap
+                    persistBoosts(boostMap)
                 } else {
                     Logger.debug("No boosted transactions found in RN remote wallet backup", context = TAG)
                 }
@@ -1235,53 +1420,99 @@ class MigrationService @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     suspend fun reapplyMetadataAfterSync() {
+        loadPersistedMigrationData()
+
+        // Handle MMKV (local) migration data - apply activities FIRST, then metadata
         if (hasRNMmkvData()) {
-            val mmkvData = loadRNMmkvData() ?: return
-
-            extractRNActivities(mmkvData)?.let { activities ->
-                applyOnchainMetadata(activities)
-            }
-
-            extractRNWalletBackup(mmkvData)?.let { (transfers, boosts) ->
-                if (transfers.isNotEmpty()) {
-                    Logger.info("Applying ${transfers.size} local transfer markers", context = TAG)
-                    applyRemoteTransfers(transfers)
+            loadRNMmkvData()?.let { mmkvData ->
+                extractRNActivities(mmkvData)?.let { activities ->
+                    Logger.info("Applying ${activities.size} MMKV activities", context = TAG)
+                    applyOnchainMetadata(activities)
                 }
-                if (boosts.isNotEmpty()) {
-                    Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
-                    applyBoostTransactions(boosts)
-                }
-            }
 
-            extractRNMetadata(mmkvData)?.let { metadata ->
-                applyRNMetadata(metadata)
+                extractRNWalletBackup(mmkvData)?.let { (transfers, boosts) ->
+                    if (transfers.isNotEmpty()) {
+                        Logger.info("Applying ${transfers.size} local transfer markers", context = TAG)
+                        applyRemoteTransfers(transfers)
+                    }
+                    if (boosts.isNotEmpty()) {
+                        Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
+                        applyBoostTransactions(boosts)
+                    }
+                }
+
+                // Apply MMKV metadata (tags) AFTER activities are created
+                extractRNMetadata(mmkvData)?.let { metadata ->
+                    Logger.info("Applying MMKV metadata (tags: ${metadata.tags?.size})", context = TAG)
+                    applyRNMetadata(metadata)
+                }
             }
         }
 
+        // Handle remote backup data - apply activities FIRST
         pendingRemoteActivityData?.let { remoteActivities ->
+            Logger.info("Applying ${remoteActivities.size} remote activities", context = TAG)
             applyOnchainMetadata(remoteActivities)
             pendingRemoteActivityData = null
         }
 
         pendingRemoteTransfers?.let { transfers ->
+            Logger.info("Applying ${transfers.size} remote transfer markers", context = TAG)
             applyRemoteTransfers(transfers)
             pendingRemoteTransfers = null
         }
 
         pendingRemoteBoosts?.let { boosts ->
+            Logger.info("Applying ${boosts.size} remote boost markers", context = TAG)
             applyBoostTransactions(boosts)
             pendingRemoteBoosts = null
         }
 
+        // Apply remote metadata (tags) AFTER activities are created
         pendingRemoteMetadata?.let { metadata ->
+            Logger.info("Applying remote metadata (tags: ${metadata.tags?.size})", context = TAG)
             applyRNMetadata(metadata)
             pendingRemoteMetadata = null
         }
 
-        pendingRemotePaidOrders?.let { paidOrders ->
-            applyRemotePaidOrders(paidOrders)
-            pendingRemotePaidOrders = null
+        var blocktankFetchFailed = false
+        pendingBlocktankOrderIds?.let { orderIds ->
+            if (orderIds.isNotEmpty()) {
+                Logger.info("Retrying ${orderIds.size} pending Blocktank orders", context = TAG)
+                runCatching {
+                    val fetchedOrders = coreService.blocktank.orders(
+                        orderIds = orderIds,
+                        filter = null,
+                        refresh = true,
+                    )
+                    if (fetchedOrders.isNotEmpty()) {
+                        coreService.blocktank.upsertOrderList(fetchedOrders)
+                        Logger.info("Upserted ${fetchedOrders.size} Blocktank orders after retry", context = TAG)
+
+                        pendingRemotePaidOrders?.let { paidOrders ->
+                            if (paidOrders.isNotEmpty()) {
+                                Logger.info("Creating transfers for ${paidOrders.size} paid orders", context = TAG)
+                                createTransfersForPaidOrders(paidOrders, fetchedOrders)
+                            }
+                        }
+                    }
+                    pendingBlocktankOrderIds = null
+                    pendingRemotePaidOrders = null
+                    clearPersistedBlocktankData()
+                }.onFailure { e ->
+                    Logger.warn("Still unable to fetch Blocktank orders: $e", context = TAG)
+                    blocktankFetchFailed = true
+                }
+            }
+        }
+
+        if (!blocktankFetchFailed) {
+            pendingRemotePaidOrders?.let { paidOrders ->
+                applyRemotePaidOrders(paidOrders)
+                pendingRemotePaidOrders = null
+            }
         }
     }
 
