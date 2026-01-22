@@ -104,6 +104,22 @@ To pull the latest translations from Transifex:
    ./scripts/pull-translations.sh
    ```
 
+### Pushing Source Strings
+
+When you add or modify translation keys in the EN source file, push them to Transifex:
+
+```sh
+tx push --source
+```
+
+### Translation Workflow
+
+1. **Add/modify strings** in `app/src/main/res/values/strings.xml`
+2. **Push to Transifex:** `tx push --source`
+3. **Translators** work on translations in Transifex
+4. **Pull translations:** `./scripts/pull-translations.sh`
+5. **Commit** the updated translation files
+
 ## Build
 
 ### Bitcoin Networks
