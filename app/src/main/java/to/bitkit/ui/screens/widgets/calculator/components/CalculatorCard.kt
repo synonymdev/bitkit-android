@@ -101,7 +101,7 @@ fun CalculatorCardContent(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(Colors.Gray6)
     ) {
         Column(
             modifier = Modifier
