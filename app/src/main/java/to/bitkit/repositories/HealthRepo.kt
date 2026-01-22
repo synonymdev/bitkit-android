@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.BackupCategory
@@ -43,66 +44,78 @@ class HealthRepo @Inject constructor(
         observeBackupStatus()
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private fun collectState() {
-        val internetHealthState = connectivityRepo.isOnline.map { connectivityState ->
-            when (connectivityState) {
-                ConnectivityState.CONNECTED -> HealthState.READY
-                ConnectivityState.CONNECTING -> HealthState.PENDING
-                ConnectivityState.DISCONNECTED -> HealthState.ERROR
-            }
-        }
+        val internetHealthState = connectivityRepo.isOnline.map { it.asHealth() }
 
         repoScope.launch {
             combine(
                 internetHealthState,
                 lightningRepo.lightningState,
             ) { internetHealth, lightningState ->
-                val isOnline = internetHealth == HealthState.READY
-                val nodeLifecycleState = lightningState.nodeLifecycleState
-
-                val nodeHealth = when {
-                    !isOnline -> HealthState.ERROR
-                    else -> nodeLifecycleState.asHealth()
-                }
-
-                val electrumHealth = when {
-                    !isOnline -> HealthState.ERROR
-                    nodeLifecycleState.isRunning() -> HealthState.READY
-                    nodeLifecycleState.canRun() -> HealthState.PENDING
-                    else -> HealthState.ERROR
-                }
-
-                val channelsHealth = when {
-                    !isOnline -> HealthState.ERROR
-                    else -> {
-                        val channels = lightningState.channels
-                        val hasOpenChannels = channels.any { it.isChannelReady }
-                        val hasPendingChannels = channels.any { !it.isChannelReady }
-
-                        when {
-                            hasOpenChannels -> HealthState.READY
-                            hasPendingChannels -> HealthState.PENDING
-                            else -> HealthState.ERROR
-                        }
-                    }
-                }
-
-                AppHealthState(
-                    internet = internetHealth,
-                    electrum = electrumHealth,
-                    node = nodeHealth,
-                    channels = channelsHealth,
-                )
+                computeHealthState(internetHealth, lightningState)
             }.collect { newHealthState ->
-                updateState { currentState ->
-                    newHealthState.copy(
-                        backups = currentState.backups,
-                        app = currentState.app,
+                updateState {
+                    it.copy(
+                        internet = newHealthState.internet,
+                        electrum = newHealthState.electrum,
+                        node = newHealthState.node,
+                        channels = newHealthState.channels,
                     )
                 }
             }
         }
+    }
+
+    @Suppress("CyclomaticComplexMethod")
+    private fun computeHealthState(internetHealth: HealthState, lightningState: LightningState): AppHealthState {
+        val isOnline = internetHealth == HealthState.READY
+        val nodeLifecycleState = lightningState.nodeLifecycleState
+        val isSyncing = lightningState.isSyncingWallet
+        val hasSyncError = lightningState.lastSyncError != null
+
+        val nodeHealth = when {
+            !isOnline -> HealthState.ERROR
+            isSyncing -> HealthState.PENDING
+            hasSyncError && nodeLifecycleState.isRunning() -> HealthState.ERROR
+            else -> nodeLifecycleState.asHealth()
+        }
+
+        val electrumHealth = when {
+            !isOnline -> HealthState.ERROR
+            isSyncing -> HealthState.PENDING
+            hasSyncError && nodeLifecycleState.isRunning() -> HealthState.ERROR
+            nodeLifecycleState.isRunning() -> HealthState.READY
+            nodeLifecycleState.canRun() -> HealthState.PENDING
+            else -> HealthState.ERROR
+        }
+
+        val channelsHealth = when {
+            !isOnline -> HealthState.ERROR
+            else -> computeChannelsHealth(lightningState.channels)
+        }
+
+        return AppHealthState(
+            internet = internetHealth,
+            electrum = electrumHealth,
+            node = nodeHealth,
+            channels = channelsHealth,
+        )
+    }
+
+    private fun computeChannelsHealth(channels: List<ChannelDetails>): HealthState {
+        val hasOpenChannels = channels.any { it.isChannelReady }
+        val hasPendingChannels = channels.any { !it.isChannelReady }
+        return when {
+            hasOpenChannels -> HealthState.READY
+            hasPendingChannels -> HealthState.PENDING
+            else -> HealthState.ERROR
+        }
+    }
+
+    private fun ConnectivityState.asHealth() = when (this) {
+        ConnectivityState.CONNECTED -> HealthState.READY
+        ConnectivityState.CONNECTING -> HealthState.PENDING
+        ConnectivityState.DISCONNECTED -> HealthState.ERROR
     }
 
     private fun observePaidOrdersState() {

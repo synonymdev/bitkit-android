@@ -63,10 +63,12 @@ class LightningRepoTest : BaseUnitTest() {
     private val cacheStore = mock<CacheStore>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lnurlService = mock<LnurlService>()
+    private val connectivityRepo = mock<ConnectivityRepo>()
 
     @Before
     fun setUp() = runBlocking {
         whenever(coreService.isGeoBlocked()).thenReturn(false)
+        whenever(connectivityRepo.isOnline).thenReturn(flowOf(ConnectivityState.CONNECTED))
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
@@ -78,6 +80,7 @@ class LightningRepoTest : BaseUnitTest() {
             lnurlService = lnurlService,
             cacheStore = cacheStore,
             preActivityMetadataRepo = preActivityMetadataRepo,
+            connectivityRepo = connectivityRepo,
         )
     }
 
@@ -86,12 +89,15 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(lightningService.sync()).thenReturn(Unit)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
         whenever(blocktank.info(any())).thenReturn(null)
         val result = sut.start()
         assertTrue(result.isSuccess)
+        // Simulate successful sync to set isSyncHealthy = true
+        sut.sync()
     }
 
     @Test
@@ -370,6 +376,29 @@ class LightningRepoTest : BaseUnitTest() {
     fun `sendOnChain should fail when node is not running`() = test {
         val result = sut.sendOnChain("address", 1000uL)
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `sendOnChain should fail when sync is unhealthy`() = test {
+        // Start node but make sync fail (isSyncHealthy = false)
+        // Mock connectivity as disconnected to prevent retry loop from running indefinitely
+        whenever(connectivityRepo.isOnline).thenReturn(flowOf(ConnectivityState.DISCONNECTED))
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(lightningService.sync()).thenThrow(RuntimeException("Sync failed"))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+        sut.start()
+
+        // Sync failed during start(), so isSyncHealthy should be false
+
+        val result = sut.sendOnChain("address", 1000uL)
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is SyncUnhealthyError)
     }
 
     @Test

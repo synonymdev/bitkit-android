@@ -202,7 +202,7 @@ class WalletRepo @Inject constructor(
         eventSyncJob?.cancel()
         eventSyncJob = repoScope.launch {
             delay(EVENT_SYNC_DEBOUNCE_MS)
-            syncNodeAndWallet()
+            syncBalances()
             transferRepo.syncTransferStates()
         }
     }
