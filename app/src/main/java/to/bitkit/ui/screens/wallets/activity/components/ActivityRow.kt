@@ -45,6 +45,7 @@ import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
@@ -278,7 +279,7 @@ private fun AmountViewContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            BodyMSB(text = titlePrefix, color = Colors.White64)
+            BodyM(text = titlePrefix, color = Colors.White64)
             if (titleSymbol != null) {
                 BodyMSB(text = titleSymbol, color = Colors.White64)
             }
