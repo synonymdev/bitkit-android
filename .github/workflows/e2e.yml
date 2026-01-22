@@ -13,6 +13,7 @@ on:
       - 'gradle/**'
       - '*.gradle.kts'
       - 'gradle.properties'
+      - '.github/workflows/e2e.yml'
 
 env:
   TERM: xterm-256color
