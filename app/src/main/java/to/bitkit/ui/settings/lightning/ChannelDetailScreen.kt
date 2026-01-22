@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -105,17 +106,7 @@ fun ChannelDetailScreen(
     if (channel == null) {
         Content(
             channel = null,
-            blocktankOrders = emptyList(),
-            cjitEntries = emptyList(),
-            txTime = null,
-            isRefreshing = false,
-            isClosedChannel = false,
             onBack = { navController.popBackStack() },
-            onRefresh = {},
-            onCopyText = {},
-            onOpenUrl = {},
-            onSupport = {},
-            onCloseConnection = {},
         )
         return
     }
@@ -193,37 +184,36 @@ private fun Content(
 
         if (channel == null) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize(),
             ) {
-                CaptionB(text = stringResource(R.string.common__loading))
+                CircularProgressIndicator()
             }
             return@ScreenColumn
         }
-    // Check if the channel was opened via CJIT
-    val cjitEntry = cjitEntries.find { entry ->
-        entry.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
-    }
 
-    // Check if the channel was opened via blocktank order
-    val blocktankOrder = blocktankOrders.find { order ->
-        // real channel
-        if (channel.details.fundingTxo?.txid != null) {
-            order.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
-        } else {
-            // fake channel
-            order.id == channel.details.channelId
+        // Check if the channel was opened via CJIT
+        val cjitEntry = cjitEntries.find { entry ->
+            entry.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
         }
-    }
 
-    val order = blocktankOrder ?: cjitEntry
+        // Check if the channel was opened via blocktank order
+        val blocktankOrder = blocktankOrders.find { order ->
+            // real channel
+            if (channel.details.fundingTxo?.txid != null) {
+                order.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
+            } else {
+                // fake channel
+                order.id == channel.details.channelId
+            }
+        }
 
-    val capacity = channel.details.channelValueSats.toLong()
-    val localBalance = channel.details.amountOnClose.toLong()
-    val remoteBalance = (channel.details.inboundCapacityMsat / 1000u).toLong()
-    val reserveBalance = (channel.details.unspendablePunishmentReserve ?: 0u).toLong()
+        val order = blocktankOrder ?: cjitEntry
+
+        val capacity = channel.details.channelValueSats.toLong()
+        val localBalance = channel.details.amountOnClose.toLong()
+        val remoteBalance = (channel.details.inboundCapacityMsat / 1000u).toLong()
+        val reserveBalance = (channel.details.unspendablePunishmentReserve ?: 0u).toLong()
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,
@@ -660,6 +650,14 @@ private fun createSupportEmailIntent(
     val uri = "mailto:${Env.SUPPORT_EMAIL}?subject=${Uri.encode(subject)}&body=${Uri.encode(body)}".toUri()
 
     return Intent(Intent.ACTION_SENDTO, uri)
+}
+
+@Preview
+@Composable
+private fun PreviewLoadingState() {
+    AppThemeSurface {
+        Content(channel = null)
+    }
 }
 
 @Preview
