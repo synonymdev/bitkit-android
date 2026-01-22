@@ -20,6 +20,7 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
+import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.WordCount
 import com.synonym.bitkitcore.addTags
@@ -183,6 +184,12 @@ class CoreService @Inject constructor(
 
     suspend fun isAddressUsed(address: String): Boolean = ServiceQueue.CORE.background {
         com.synonym.bitkitcore.isAddressUsed(address = address)
+    }
+
+    @Suppress("ForbiddenComment")
+    suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {
+        // TODO: Remove lowercase workaround when https://github.com/synonymdev/bitkit-core/issues/66 is fixed
+        com.synonym.bitkitcore.decode(input.lowercase())
     }
 
     companion object {
