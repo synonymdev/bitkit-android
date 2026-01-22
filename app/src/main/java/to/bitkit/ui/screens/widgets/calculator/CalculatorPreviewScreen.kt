@@ -6,9 +6,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -108,11 +106,11 @@ fun CalculatorPreviewContent(
                     VerticalSpacer(26.dp)
 
                     Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("header_row"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .testTag("header_row")
                     ) {
                         Headline(
                             text = AnnotatedString(stringResource(R.string.widgets__calculator__name)),
@@ -158,37 +156,37 @@ fun CalculatorPreviewContent(
 
             currencyViewModel?.let {
                 CalculatorCard(
-                    modifier = Modifier.fillMaxWidth(),
                     showWidgetTitle = showWidgetTitles,
-                    currencyViewModel = it
+                    currencyViewModel = it,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
             Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .padding(vertical = 21.dp)
                     .fillMaxWidth()
-                    .testTag("buttons_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .testTag("buttons_row")
             ) {
                 if (isCalculatorWidgetEnabled) {
                     SecondaryButton(
                         text = stringResource(R.string.common__delete),
+                        fullWidth = false,
+                        onClick = onClickDelete,
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("WidgetDelete"),
-                        fullWidth = false,
-                        onClick = onClickDelete
+                            .testTag("WidgetDelete")
                     )
                 }
 
                 PrimaryButton(
                     text = stringResource(R.string.common__save),
+                    fullWidth = false,
+                    onClick = onClickSave,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetSave"),
-                    fullWidth = false,
-                    onClick = onClickSave
+                        .testTag("WidgetSave")
                 )
             }
         }
