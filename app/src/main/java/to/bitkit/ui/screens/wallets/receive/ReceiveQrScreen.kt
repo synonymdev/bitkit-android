@@ -627,7 +627,8 @@ private fun CopyAddressCard(
                         tint = if (type == CopyAddressType.ONCHAIN) Colors.Brand else Colors.Purple,
                         modifier = Modifier.size(18.dp)
                     )
-                }
+                },
+                modifier = Modifier.weight(1f)
             )
         }
     }
