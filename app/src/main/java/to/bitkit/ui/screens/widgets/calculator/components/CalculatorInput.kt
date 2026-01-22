@@ -65,10 +65,10 @@ fun CalculatorInput(
 private fun Preview() {
     AppThemeSurface {
         Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(16.dp)
         ) {
             CalculatorInput(
                 modifier = Modifier.fillMaxWidth(),
