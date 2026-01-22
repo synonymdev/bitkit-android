@@ -90,14 +90,12 @@ To pull the latest translations from Transifex:
    - Follow the installation instructions: [Transifex CLI Installation](https://developers.transifex.com/docs/cli)
 
 2. **Authenticate with Transifex** (if not already configured):
-   - Create a `.transifexrc` file in your home directory (`~/.transifexrc`) with your API token:
-     ```ini
-     [https://www.transifex.com]
-     rest_hostname = https://rest.api.transifex.com
-     token         = YOUR_API_TOKEN_HERE
+   - Set the `TX_TOKEN` environment variable with your API token:
+     ```sh
+     export TX_TOKEN="YOUR_API_TOKEN_HERE"
      ```
-   - You can get your API token from your [Transifex account settings](https://www.transifex.com/user/settings/api/)
-   - The CLI will prompt you for an API token if one is not configured
+   - You can get your API token from [Transifex account settings](https://www.transifex.com/user/settings/api/)
+   - Add it to `~/.zshrc` or other shell rc file to persist across sessions
 
 3. **Pull translations**:
    ```sh
