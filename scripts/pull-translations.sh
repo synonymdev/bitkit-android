@@ -117,31 +117,41 @@ while IFS= read -r dir; do
     dir_path=$(dirname "$dir")
     
     case "$dir_name" in
-        values-arb)
-            rename_or_merge "$dir" "$dir_path/values-ar" && RENAMED_COUNT=$((RENAMED_COUNT + 1))
+        # Keep these as-is (direct 1:1 mapping from Transifex or already in correct format)
+        values-ar|values-b+es+419|values-ca|values-cs|values-de|values-el|values-es|values-es-rES|values-fr|values-it|values-nl|values-pl|values-pt|values-pt-rBR|values-ru)
             ;;
+        # RENAME Transifex locales to Android folder names
         values-es_419)
-            rename_or_merge "$dir" "$dir_path/values-b+es+419" && RENAMED_COUNT=$((RENAMED_COUNT + 1))
+            echo "  Renaming: $dir_name -> values-b+es+419"
+            rm -rf "$dir_path/values-b+es+419" 2>/dev/null
+            mv "$dir" "$dir_path/values-b+es+419"
+            RENAMED_COUNT=$((RENAMED_COUNT + 1))
             ;;
         values-es_ES)
-            rename_or_merge "$dir" "$dir_path/values-es" && RENAMED_COUNT=$((RENAMED_COUNT + 1))
+            echo "  Renaming: $dir_name -> values-es-rES"
+            rm -rf "$dir_path/values-es-rES" 2>/dev/null
+            mv "$dir" "$dir_path/values-es-rES"
+            RENAMED_COUNT=$((RENAMED_COUNT + 1))
             ;;
-        values-b+es+419|values-es|values-pt)
-            # Keep these as-is
+        values-pt_BR)
+            echo "  Renaming: $dir_name -> values-pt-rBR"
+            rm -rf "$dir_path/values-pt-rBR" 2>/dev/null
+            mv "$dir" "$dir_path/values-pt-rBR"
+            RENAMED_COUNT=$((RENAMED_COUNT + 1))
             ;;
-        values-b+pt+PT|values-pt_PT)
-            echo "  Removing: $dir_name"
-            rm -rf "$dir" && REMOVED_COUNT=$((REMOVED_COUNT + 1))
+        # DELETE 0% or near-0% translation locales
+        values-arb|values-pt_PT|values-ja|values-ko|values-no|values-fa|values-ro|values-uk|values-yo)
+            echo "  Removing: $dir_name (0% translations)"
+            rm -rf "$dir"
+            REMOVED_COUNT=$((REMOVED_COUNT + 1))
             ;;
-        values-b+pt+*|values-pt_*)
-            # Convert Brazilian Portuguese to values-pt
-            rename_or_merge "$dir" "$dir_path/values-pt" && RENAMED_COUNT=$((RENAMED_COUNT + 1))
-            ;;
+        # Handle any other BCP 47 formats
         values-b+*)
-            # Convert other BCP 47 formats to underscore format
             new_name=$(echo "$dir_name" | sed 's/values-b+\([a-z][a-z]*\)+\([A-Z0-9][A-Z0-9]*\)/values-\1_\2/')
             if [ "$new_name" != "$dir_name" ]; then
-                rename_or_merge "$dir" "$dir_path/$new_name" && RENAMED_COUNT=$((RENAMED_COUNT + 1))
+                echo "  Renaming: $dir_name -> $new_name"
+                mv "$dir" "$dir_path/$new_name"
+                RENAMED_COUNT=$((RENAMED_COUNT + 1))
             fi
             ;;
     esac
