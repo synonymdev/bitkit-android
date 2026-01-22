@@ -34,7 +34,7 @@ enum class LogLevel { PERF, VERBOSE, GOSSIP, TRACE, DEBUG, INFO, WARN, ERROR; }
 
 val Logger = AppLogger()
 
-class AppLogger(private val source: LogSource = LogSource.Bitkit) {
+class AppLogger {
     companion object {
         private const val TAG = "Logger"
     }
@@ -45,14 +45,12 @@ class AppLogger(private val source: LogSource = LogSource.Bitkit) {
         delegate = runCatching { createDelegate() }.getOrNull()
     }
 
-    private fun createDelegate(): LoggerImpl {
-        val sessionPath = runCatching { buildSessionLogFilePath(source) }.getOrElse { "" }
-        return LoggerImpl(APP, LogSaverImpl(source, sessionPath))
-    }
+    private fun createDelegate() = LoggerImpl(APP, LogSaverImpl.shared(), source = APP)
 
     fun reset() {
         warn("Wiping entire logs directory…", context = TAG)
         runCatching { Env.logDir.deleteRecursively() }
+        LogSaverImpl.reset()
         delegate = runCatching { createDelegate() }.getOrNull()
     }
 
@@ -118,6 +116,7 @@ class LoggerImpl(
     private val tag: String = APP,
     private val saver: LogSaver,
     private val compact: Boolean = COMPACT,
+    private val source: String = APP,
 ) {
     fun info(
         msg: String?,
@@ -125,7 +124,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val message = formatLog(LogLevel.INFO, msg, context, path, line)
+        val message = formatLog(LogLevel.INFO, msg, context, path, line, source)
         Log.i(tag, message)
         saver.save(message)
     }
@@ -136,7 +135,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val message = formatLog(LogLevel.DEBUG, msg, context, path, line)
+        val message = formatLog(LogLevel.DEBUG, msg, context, path, line, source)
         Log.d(tag, message)
         saver.save(message)
     }
@@ -149,7 +148,7 @@ class LoggerImpl(
         line: Int = getCallerLine(),
     ) {
         val errMsg = e?.let { errorLogOf(it) }.orEmpty()
-        val message = formatLog(LogLevel.WARN, "$msg $errMsg", context, path, line)
+        val message = formatLog(LogLevel.WARN, "$msg $errMsg", context, path, line, source)
         if (compact) Log.w(tag, message) else Log.w(tag, message, e)
         saver.save(message)
     }
@@ -162,7 +161,7 @@ class LoggerImpl(
         line: Int = getCallerLine(),
     ) {
         val errMsg = e?.let { errorLogOf(it) }.orEmpty()
-        val message = formatLog(LogLevel.ERROR, "$msg $errMsg", context, path, line)
+        val message = formatLog(LogLevel.ERROR, "$msg $errMsg", context, path, line, source)
         if (compact) Log.e(tag, message) else Log.e(tag, message, e)
         saver.save(message)
     }
@@ -176,7 +175,7 @@ class LoggerImpl(
         line: Int = getCallerLine(),
         level: LogLevel = LogLevel.VERBOSE,
     ) {
-        val message = formatLog(level, msg, context, path, line)
+        val message = formatLog(level, msg, context, path, line, source)
         if (compact) Log.v(tag, message) else Log.v(tag, message, e)
         saver.save(message)
     }
@@ -187,7 +186,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val message = formatLog(LogLevel.PERF, msg, context, path, line)
+        val message = formatLog(LogLevel.PERF, msg, context, path, line, source)
         Log.v(tag, message)
         saver.save(message)
     }
@@ -197,8 +196,7 @@ interface LogSaver {
     fun save(message: String)
 }
 
-class LogSaverImpl(
-    source: LogSource,
+class LogSaverImpl private constructor(
     private val sessionFilePath: String,
 ) : LogSaver {
     private val queue: CoroutineScope by lazy {
@@ -207,7 +205,7 @@ class LogSaverImpl(
 
     init {
         if (sessionFilePath.isNotEmpty()) {
-            log("Log session for '${source.name}' initialized with file path: '$sessionFilePath'")
+            log("Log session initialized with file path: '$sessionFilePath'")
 
             // Clean all old log files in background
             CoroutineScope(Dispatchers.IO).launch {
@@ -268,15 +266,31 @@ class LogSaverImpl(
 
     companion object {
         private const val TAG = "LogSaver"
+
+        @Volatile
+        private var instance: LogSaverImpl? = null
+
+        fun shared(): LogSaverImpl = instance ?: synchronized(this) {
+            instance ?: runCatching {
+                LogSaverImpl(buildSessionLogFilePath())
+            }.getOrElse {
+                LogSaverImpl("")
+            }.also { instance = it }
+        }
+
+        fun reset() {
+            synchronized(this) {
+                instance = null
+            }
+        }
     }
 }
 
 class LdkLogWriter(
     private val maxLogLevel: LdkLogLevel = Env.ldkLogLevel,
-    private val source: LogSource = LogSource.Ldk,
-    saver: LogSaver = LogSaverImpl(source, buildSessionLogFilePath(source)),
+    saver: LogSaver = LogSaverImpl.shared(),
 ) : LogWriter {
-    private val delegate: LoggerImpl = LoggerImpl(LDK, saver)
+    private val delegate: LoggerImpl = LoggerImpl(LDK, saver, source = LDK)
 
     override fun log(record: LogRecord) {
         if (record.level < maxLogLevel) return
@@ -296,23 +310,30 @@ class LdkLogWriter(
     }
 }
 
-private fun buildSessionLogFilePath(source: LogSource): String {
+private fun buildSessionLogFilePath(): String {
     val logDir = Env.logDir
-    val sourceName = source.name.lowercase()
     val timestamp = utcDateFormatterOf(DatePattern.LOG_FILE).format(Date())
-    val path = logDir.resolve("${sourceName}_$timestamp.log").path
+    val path = logDir.resolve("bitkit_$timestamp.log").path
     return path
 }
 
-private fun formatLog(level: LogLevel, msg: String?, context: String, path: String, line: Int): String {
+private fun formatLog(
+    level: LogLevel,
+    msg: String?,
+    context: String,
+    path: String,
+    line: Int,
+    source: String = APP,
+): String {
     val timestamp = utcDateFormatterOf(DatePattern.LOG_LINE).format(Date())
     val message = msg?.trim().orEmpty()
     val contextString = if (context.isNotEmpty()) " - $context" else ""
     val location = "[$path:$line]"
     return String.format(
         Locale.US,
-        "%s %-7s %-36s %s%s",
+        "%s %-4s %-7s %-36s %s%s",
         timestamp,
+        source,
         level.name,
         location,
         message,

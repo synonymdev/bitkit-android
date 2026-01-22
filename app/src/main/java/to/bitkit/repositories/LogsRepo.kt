@@ -11,7 +11,6 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.fromBase64
-import to.bitkit.ext.getEnumValueOf
 import to.bitkit.ext.toBase64
 import to.bitkit.models.ChatwootMessage
 import to.bitkit.utils.LogSource
@@ -54,7 +53,6 @@ class LogsRepo @Inject constructor(
     }
 
     /** Lists log files sorted by newest first */
-    @Suppress("NestedBlockDepth")
     suspend fun getLogs(): Result<List<LogFile>> = withContext(bgDispatcher) {
         runCatching {
             val logDir = Env.logDir
@@ -65,16 +63,14 @@ class LogsRepo @Inject constructor(
                     val fileName = file.name
                     val components = fileName.split("_")
 
-                    val serviceName = components.firstOrNull()
-                        ?.let { c -> c.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
-                        ?: LogSource.Unknown.name
+                    // Extract timestamp from filename (format: bitkit_yyyy-MM-dd_HH-mm-ss.log)
                     val timestamp = if (components.size >= 3) components[components.size - 2] else ""
-                    val displayName = "$serviceName Log: $timestamp"
+                    val displayName = "Bitkit Log: $timestamp"
 
                     LogFile(
                         displayName = displayName,
                         file = file,
-                        source = getEnumValueOf<LogSource>(serviceName).getOrDefault(LogSource.Unknown),
+                        source = LogSource.Bitkit,
                     )
                 }
                 ?.sortedByDescending { it.file.lastModified() }
@@ -135,26 +131,14 @@ class LogsRepo @Inject constructor(
     /** Zips the most recent logs and returns base64 of zip file */
     suspend fun zipLogs(
         limit: Int = 20,
-        source: LogSource? = null,
+        @Suppress("UNUSED_PARAMETER") source: LogSource? = null,
     ): Result<String> = withContext(bgDispatcher) {
         runCatching {
             val logsResult = getLogs().onFailure {
                 return@withContext Result.failure(it)
             }
 
-            val allLogs = logsResult.getOrDefault(emptyList()).filter { it.source != LogSource.Unknown }
-            val logsToZip = if (source != null) {
-                allLogs.filter { it.source == source }.take(limit)
-            } else {
-                // Group by source and take most recent from each
-                allLogs.groupBy { it.source }
-                    .values
-                    .flatMap { logs ->
-                        val sourcesCount = LogSource.entries.filter { it != LogSource.Unknown }.size
-                        logs.take(limit / sourcesCount.coerceAtLeast(1))
-                    }
-                    .take(limit)
-            }
+            val logsToZip = logsResult.getOrDefault(emptyList()).take(limit)
 
             if (logsToZip.isEmpty()) {
                 return@withContext Result.failure(Exception("No log files found"))
