@@ -1,11 +1,15 @@
 package to.bitkit.ui.screens.widgets.calculator
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,16 +30,18 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
+import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -73,8 +79,12 @@ fun CalculatorPreviewContent(
     currencyViewModel: CurrencyViewModel?,
     isCalculatorWidgetEnabled: Boolean,
 ) {
-    ScreenColumn(
-        modifier = Modifier.testTag("facts_preview_screen")
+    val isKeyboardVisible by keyboardAsState()
+
+    Column(
+        modifier = Modifier
+            .screen()
+            .testTag("facts_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__widget__nav_title),
@@ -84,47 +94,58 @@ fun CalculatorPreviewContent(
 
         Column(
             modifier = Modifier
+                .imePadding()
                 .padding(horizontal = 16.dp)
                 .testTag("main_content")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("header_row"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            AnimatedVisibility(
+                visible = !isKeyboardVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
             ) {
-                Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__calculator__name)),
-                    modifier = Modifier
-                        .width(200.dp)
-                        .testTag("widget_title")
-                )
-                Icon(
-                    painter = painterResource(R.drawable.widget_math_operation),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .testTag("widget_icon")
-                )
+                Column {
+                    Spacer(modifier = Modifier.height(26.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("header_row"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Headline(
+                            text = AnnotatedString(stringResource(R.string.widgets__calculator__name)),
+                            modifier = Modifier
+                                .width(200.dp)
+                                .testTag("widget_title")
+                        )
+                        Icon(
+                            painter = painterResource(R.drawable.widget_math_operation),
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .testTag("widget_icon")
+                        )
+                    }
+
+                    BodyM(
+                        text = stringResource(R.string.widgets__facts__description),
+                        color = Colors.White64,
+                        modifier = Modifier
+                            .padding(vertical = 16.dp)
+                            .testTag("widget_description")
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.testTag("divider")
+                    )
+                }
             }
 
-            BodyM(
-                text = stringResource(R.string.widgets__facts__description),
-                color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("widget_description")
-            )
-
-            HorizontalDivider(
-                modifier = Modifier.testTag("divider")
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
+            if (!isKeyboardVisible) {
+                FillHeight()
+            }
 
             Text13Up(
                 stringResource(R.string.common__preview),
