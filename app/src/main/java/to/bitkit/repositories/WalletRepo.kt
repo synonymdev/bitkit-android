@@ -3,7 +3,6 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
-import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -137,7 +136,7 @@ class WalletRepo @Inject constructor(
     ) {
         val onChainAddress = getOnchainAddress()
         val paymentHash = runCatching {
-            when (val decoded = decode(bip21Url)) {
+            when (val decoded = coreService.decode(bip21Url)) {
                 is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
                 is Scanner.OnChain -> decoded.extractLightningHash()
                 else -> null
@@ -418,7 +417,7 @@ class WalletRepo @Inject constructor(
         if (bolt11.isEmpty()) return@withContext null
 
         runCatching {
-            when (val decoded = decode(bolt11)) {
+            when (val decoded = coreService.decode(bolt11)) {
                 is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
                 else -> null
             }
@@ -544,7 +543,7 @@ class WalletRepo @Inject constructor(
     private suspend fun Scanner.OnChain.extractLightningHash(): String? {
         val lightningInvoice: String = this.invoice.params?.get("lightning") ?: return null
 
-        return when (val decoded = decode(lightningInvoice)) {
+        return when (val decoded = coreService.decode(lightningInvoice)) {
             is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
             else -> null
         }
