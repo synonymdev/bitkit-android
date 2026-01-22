@@ -8,7 +8,6 @@ import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createChannelRequestUrl
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
-import com.synonym.bitkitcore.decode
 import com.synonym.bitkitcore.lnurlAuth
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -552,7 +551,7 @@ class LightningRepo @Inject constructor(
         return runCatching {
             // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
             val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).getOrThrow().pr
-            val decoded = (decode(bolt11) as Scanner.Lightning).invoice
+            val decoded = (coreService.decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
             Logger.error(

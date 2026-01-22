@@ -22,7 +22,6 @@ import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
-import com.synonym.bitkitcore.decode
 import com.synonym.bitkitcore.validateBitcoinAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -101,6 +100,7 @@ import to.bitkit.repositories.SweepRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.AppUpdaterService
+import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
@@ -149,6 +149,7 @@ class AppViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val sweepRepo: SweepRepo,
+    private val coreService: CoreService,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
@@ -715,7 +716,7 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        val scanResult = runCatching { decode(input) }
+        val scanResult = runCatching { coreService.decode(input) }
 
         if (scanResult.isFailure) {
             showAddressValidationError(
@@ -819,7 +820,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
         params?.get("lightning")?.let { bolt11 ->
-            runCatching { decode(bolt11) }.getOrNull()
+            runCatching { coreService.decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
                 ?.invoice
                 ?.takeIf { lnInv ->
@@ -1043,8 +1044,7 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        @Suppress("ForbiddenComment") // TODO: wrap `decode` from bindings in a `CoreService` method and call that one
-        val scan = runCatching { decode(result) }
+        val scan = runCatching { coreService.decode(result) }
             .onFailure { Logger.error("Failed to decode scan data: '$result'", it, context = TAG) }
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
@@ -2110,6 +2110,10 @@ class AppViewModel @Inject constructor(
         }
     }
     // endregion
+
+    suspend fun canDecodeClipboard(text: String): Boolean = withContext(bgDispatcher) {
+        runCatching { coreService.decode(text) }.isSuccess
+    }
 
     fun onClipboardAutoRead(data: String) {
         viewModelScope.launch {
