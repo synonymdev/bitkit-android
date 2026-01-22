@@ -8,6 +8,11 @@ on:
         required: false
         default: "default-feature-branch"
   pull_request:
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
 
 env:
   TERM: xterm-256color
