@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_bottom">Σύνδεση &amp; Συγχρονισμός...</string>
     <string name="lightning__wait_text_top">Περίμενε το Bitkit να συνδεθεί στο δίκτυο πληρωμών (±10 δευτερόλεπτα).</string>
     <string name="lightning__wallet_balances">Υπόλοιπα πορτοφολιού</string>
-    <string name="migration__description">Περίμενε όσο τα παλιά δεδομένα του πορτοφολιού μεταφέρονται σε αυτή τη νέα έκδοση του Bitkit...</string>
+    <string name="migration__description">Περίμενε όσο τα παλιά δεδομένα του πορτοφολιού μεταφέρονται σε αυτή τη νέα έκδοση του Bitkit. Αυτό συνήθως διαρκεί λιγότερο από ένα λεπτό.</string>
     <string name="migration__nav_title">Μετάβαση πορτοφολιού</string>
     <string name="migration__title">ΜΕΤΑΒΑΣΗ\n&lt;accent&gt;ΠΟΡΤΟΦΟΛΙΟΥ&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Το υπόλοιπο μετακινήθηκε από δαπάνες σε αποταμιεύσεις</string>
@@ -344,7 +344,7 @@
     <string name="onboarding__passphrase_header">Ασφάλισε με &lt;accent&gt;κωδική φράση&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">Μπορείς να προσθέσεις μια μυστική κωδική φράση στη φράση ανάκτησης 12 λέξεων. Αν το κάνεις, βεβαιώσου ότι δεν θα την ξεχάσεις.</string>
     <string name="onboarding__pp_checkbox">Πολιτική απορρήτου</string>
-    <string name="onboarding__pp_checkbox_value">Δηλώνω ότι έχω διαβάσει και αποδέχομαι την &lt;accent&gt;πολιτική απορρήτου.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">Συνεχίζοντας, δηλώνεις ότι έχεις διαβάσει και αποδέχεσαι την &lt;accent&gt;πολιτική απορρήτου.&lt;/accent&gt;</string>
     <string name="onboarding__restore">Επαναφορά</string>
     <string name="onboarding__restore_error_description">Το Bitkit δεν μπόρεσε να επαναφέρει το πορτοφόλι σου από αντίγραφο ασφαλείας ή φράση ανάκτησης.</string>
     <string name="onboarding__restore_error_title">Αποτυχία επαναφοράς πορτοφολιού</string>
@@ -376,7 +376,7 @@
     <string name="onboarding__slide4_header">Τα κλειδιά σου,\n&lt;accent&gt;τα κέρματά σου&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Ας δημιουργήσουμε το πορτοφόλι σου. Να γνωρίζεις ότι το Bitkit είναι λογισμικό κινητού. &lt;accent&gt;Μην αποθηκεύεις όλα τα χρήματά σου στο Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Όροι χρήσης</string>
-    <string name="onboarding__tos_checkbox_value">Δηλώνω ότι έχω διαβάσει και αποδέχομαι τους όρους χρήσης.</string>
+    <string name="onboarding__tos_checkbox_value">Συνεχίζοντας, δηλώνεις ότι έχεις διαβάσει και αποδέχεσαι τους όρους χρήσης.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;όροι χρήσης&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Χρησιμοποίησε το Bitkit για να πληρώσεις οποιονδήποτε, οπουδήποτε, οποτεδήποτε και να ξοδέψεις τα bitcoin σου στα πράγματα που εκτιμάς στη ζωή.</string>
     <string name="onboarding__welcome_title">Μπορείς να ₿\n&lt;accent&gt;η αλλαγή&lt;/accent&gt;</string>

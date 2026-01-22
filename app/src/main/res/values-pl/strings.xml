@@ -308,7 +308,7 @@
     <string name="lightning__wallet_balances">Saldo portfela</string>
     <string name="lightning__wait_text_top">Proszę poczekać, aż Bitkit połączy się z siecią płatności (±10 sekund).</string>
     <string name="lightning__wait_text_bottom">Podłączanie i synchronizacja...</string>
-    <string name="migration__description">Proszę czekać, trwa migracja danych starego portfela do nowej wersji Bitkit...</string>
+    <string name="migration__description">Proszę czekać, trwa migracja danych starego portfela do nowej wersji Bitkit. Zwykle trwa to mniej niż minutę.</string>
     <string name="migration__nav_title">Migracja portfela</string>
     <string name="migration__title">MIGRACJA\n&lt;accent&gt;PORTFELA&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Saldo przeniesione z wydatków do oszczędności</string>
@@ -332,9 +332,9 @@
     <string name="notification__service__stop">Zatrzymaj aplikację</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;warunki użytkowania&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Warunki użytkowania</string>
-    <string name="onboarding__tos_checkbox_value">Oświadczam, że zapoznałem się i akceptuję warunki użytkowania.</string>
+    <string name="onboarding__tos_checkbox_value">Kontynuując, oświadczasz, że zapoznałeś się i akceptujesz warunki użytkowania.</string>
     <string name="onboarding__pp_checkbox">Polityka prywatności</string>
-    <string name="onboarding__pp_checkbox_value">Oświadczam, że zapoznałem się i akceptuję &lt;accent&gt;politykę prywatności.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">Kontynuując, oświadczasz, że zapoznałeś się i akceptujesz &lt;accent&gt;politykę prywatności.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_title">Możesz ₿yć \n&lt;accent&gt;zmianą&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Używaj Bitkit, aby płacić każdemu, gdziekolwiek i kiedykolwiek, oraz wydawaj bitcoiny na rzeczy, które cenisz w życiu.</string>
     <string name="onboarding__get_started">Rozpocznij</string>

@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_bottom">جارٍ الاتصال والمزامنة...</string>
     <string name="lightning__wait_text_top">يرجى الانتظار حتى يتصل Bitkit بشبكة الدفع (±10 ثوانٍ).</string>
     <string name="lightning__wallet_balances">أرصدة المحفظة</string>
-    <string name="migration__description">يرجى الانتظار أثناء ترحيل بيانات محفظتك القديمة إلى إصدار Bitkit الجديد...</string>
+    <string name="migration__description">يرجى الانتظار أثناء ترحيل بيانات محفظتك القديمة إلى إصدار Bitkit الجديد. عادةً ما يستغرق هذا أقل من دقيقة.</string>
     <string name="migration__nav_title">ترحيل المحفظة</string>
     <string name="migration__title">جارٍ ترحيل\n&lt;accent&gt;المحفظة&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">تم نقل الرصيد من الإنفاق إلى المدخرات</string>
@@ -344,7 +344,7 @@
     <string name="onboarding__passphrase_header">تأمين بـ &lt;accent&gt;عبارة مرور&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">يمكنك إضافة عبارة مرور سرية إلى عبارة الاسترداد المكونة من 12 كلمة. إذا فعلت ذلك، تأكد من عدم نسيانها.</string>
     <string name="onboarding__pp_checkbox">سياسة الخصوصية</string>
-    <string name="onboarding__pp_checkbox_value">أقر بأنني قرأت وأوافق على &lt;accent&gt;سياسة الخصوصية.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">بالمتابعة، تُقر بأنك قرأت وتوافق على &lt;accent&gt;سياسة الخصوصية.&lt;/accent&gt;</string>
     <string name="onboarding__restore">استعادة</string>
     <string name="onboarding__restore_error_description">تعذر على Bitkit استعادة محفظتك من النسخة الاحتياطية أو عبارة الاسترداد.</string>
     <string name="onboarding__restore_error_title">فشل استعادة المحفظة</string>
@@ -376,7 +376,7 @@
     <string name="onboarding__slide4_header">مفاتيحك\n&lt;accent&gt;عملاتك&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">لنُنشئ محفظتك. يرجى ملاحظة أن Bitkit برنامج للهاتف. &lt;accent&gt;لا تخزن كل أموالك في Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">شروط الاستخدام</string>
-    <string name="onboarding__tos_checkbox_value">أقر بأنني قرأت وأوافق على شروط الاستخدام.</string>
+    <string name="onboarding__tos_checkbox_value">بالمتابعة، تُقر بأنك قرأت وتوافق على شروط الاستخدام.</string>
     <string name="onboarding__tos_header">شروط استخدام\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">استخدم Bitkit للدفع لأي شخص، في أي مكان، في أي وقت، وأنفق Bitcoin على الأشياء التي تقدرها في الحياة.</string>
     <string name="onboarding__welcome_title">يمكنك أن ₿\n&lt;accent&gt;التغيير&lt;/accent&gt;</string>

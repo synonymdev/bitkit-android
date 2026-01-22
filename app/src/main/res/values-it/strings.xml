@@ -306,7 +306,7 @@
     <string name="lightning__order_state__open">Connessione aperta</string>
     <string name="lightning__wait_text_top">Attendi che Bitkit si connetta alla rete di pagamento (±10 secondi).</string>
     <string name="lightning__wait_text_bottom">Connessione e sincronizzazione...</string>
-    <string name="migration__description">Attendi mentre i dati del tuo vecchio wallet migrano a questa nuova versione di Bitkit...</string>
+    <string name="migration__description">Attendi mentre i dati del tuo vecchio wallet migrano a questa nuova versione di Bitkit. Questo di solito richiede meno di un minuto.</string>
     <string name="migration__nav_title">Migrazione Wallet</string>
     <string name="migration__title">MIGRAZIONE\n&lt;accent&gt;WALLET&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Saldo spostato dalle spese ai risparmi</string>
@@ -330,9 +330,9 @@
     <string name="notification__service__stop">Ferma App</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;termini di utilizzo&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Termini di Utilizzo</string>
-    <string name="onboarding__tos_checkbox_value">Dichiaro di aver letto e di accettare i termini di utilizzo.</string>
+    <string name="onboarding__tos_checkbox_value">Continuando, dichiari di aver letto e di accettare i termini di utilizzo.</string>
     <string name="onboarding__pp_checkbox">Informativa Privacy</string>
-    <string name="onboarding__pp_checkbox_value">Dichiaro di aver letto e di accettare &lt;accent&gt;l\'informativa sulla privacy.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">Continuando, dichiari di aver letto e di accettare &lt;accent&gt;l\'informativa sulla privacy.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_title">Puoi essere \n&lt;accent&gt;il cambiamento&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Usa Bitkit per pagare chiunque, ovunque, in qualsiasi momento e spendi i tuoi bitcoin per le cose che apprezzi nella vita.</string>
     <string name="onboarding__get_started">Inizia</string>

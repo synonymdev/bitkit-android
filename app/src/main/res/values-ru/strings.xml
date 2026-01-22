@@ -320,7 +320,7 @@
     <string name="lightning__wait_text_bottom">Подключение и Синхронизация...</string>
     <string name="lightning__wait_text_top">Пожалуйста, подождите, пока Bitkit подключается к платёжной сети (±10 секунд).</string>
     <string name="lightning__wallet_balances">Балансы кошелька</string>
-    <string name="migration__description">Пожалуйста, подождите, пока данные вашего старого кошелька переносятся в эту новую версию Bitkit...</string>
+    <string name="migration__description">Пожалуйста, подождите, пока данные вашего старого кошелька переносятся в эту новую версию Bitkit. Обычно это занимает меньше минуты.</string>
     <string name="migration__nav_title">Миграция кошелька</string>
     <string name="migration__title">МИГРАЦИЯ
 &lt;accent&gt;КОШЕЛЬКА&lt;/accent&gt;</string>
@@ -357,7 +357,7 @@
     <string name="onboarding__passphrase_header">Защитите с &lt;accent&gt;Кодовой Фразой&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">Вы можете добавить секретную кодовую фразу к фразе восстановления из 12 слов. Убедитесь, что не забудете её.</string>
     <string name="onboarding__pp_checkbox">Политика Конфиденциальности</string>
-    <string name="onboarding__pp_checkbox_value">Я подтверждаю, что прочитал и принимаю &lt;accent&gt;Политику Конфиденциальности.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">Продолжая, вы подтверждаете, что прочитали и принимаете &lt;accent&gt;Политику Конфиденциальности.&lt;/accent&gt;</string>
     <string name="onboarding__restore">Восстановить</string>
     <string name="onboarding__restore_error_description">Bitkit не удалось восстановить ваш кошелёк из резервной копии или фразы восстановления.</string>
     <string name="onboarding__restore_error_title">Ошибка Восстановления Кошелька</string>
@@ -389,7 +389,7 @@
     <string name="onboarding__slide4_header">Ваши ключи,\n&lt;accent&gt;ваши монеты&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Давайте создадим ваш кошелёк. Пожалуйста, имейте в виду, что Bitkit — это мобильное ПО. &lt;accent&gt;Не храните все свои деньги в Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Условия использования</string>
-    <string name="onboarding__tos_checkbox_value">Я подтверждаю, что прочитал и принимаю Условия использования.</string>
+    <string name="onboarding__tos_checkbox_value">Продолжая, вы подтверждаете, что прочитали и принимаете Условия использования.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;Условия использования&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Используйте Bitkit, чтобы платить кому угодно, где угодно и когда угодно, тратя свои биткойны на то, что ценно для вас в жизни.</string>
     <string name="onboarding__welcome_title">С вами начинается &lt;accent&gt;изменение&lt;/accent&gt;</string>

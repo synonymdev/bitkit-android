@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_bottom">Connectant i sincronitzant...</string>
     <string name="lightning__wait_text_top">Si us plau, espereu que Bitkit es connecti a la xarxa de pagament (±10 segons).</string>
     <string name="lightning__wallet_balances">Saldos de la cartera</string>
-    <string name="migration__description">Si us plau, espera mentre les dades de la teva antiga cartera es migren a aquesta nova versió de Bitkit...</string>
+    <string name="migration__description">Si us plau, espera mentre les dades de la teva antiga cartera es migren a aquesta nova versió de Bitkit. Normalment triga menys d\'un minut.</string>
     <string name="migration__nav_title">Migració de cartera</string>
     <string name="migration__title">MIGRANT\n&lt;accent&gt;CARTERA&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Saldo mogut de despesa a estalvis</string>
@@ -344,7 +344,7 @@
     <string name="onboarding__passphrase_header">Assegura amb &lt;accent&gt;frase de pas&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">Pots afegir una frase de pas secreta a les 12 paraules de recuperació. Si ho fas, assegura\'t de no oblidar-la.</string>
     <string name="onboarding__pp_checkbox">Política de privadesa</string>
-    <string name="onboarding__pp_checkbox_value">Declaro que he llegit i accepto la &lt;accent&gt;política de privadesa.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">En continuar, declares que has llegit i acceptes la &lt;accent&gt;política de privadesa.&lt;/accent&gt;</string>
     <string name="onboarding__restore">Restaurar</string>
     <string name="onboarding__restore_error_description">Bitkit no ha pogut restaurar la teva cartera des de la còpia de seguretat o la frase de recuperació.</string>
     <string name="onboarding__restore_error_title">La restauració de la cartera ha fallat</string>
@@ -376,7 +376,7 @@
     <string name="onboarding__slide4_header">Les teves claus,\n&lt;accent&gt;les teves monedes&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Creem la teva cartera. Tingues en compte que Bitkit és programari mòbil. &lt;accent&gt;No emmagatzemis tots els teus diners a Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Termes d\'ús</string>
-    <string name="onboarding__tos_checkbox_value">Declaro que he llegit i accepto els termes d\'ús.</string>
+    <string name="onboarding__tos_checkbox_value">En continuar, declares que has llegit i acceptes els termes d\'ús.</string>
     <string name="onboarding__tos_header">Termes d\'ús\n&lt;accent&gt;de Bitkit&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Utilitza Bitkit per pagar a qualsevol persona, a qualsevol lloc, en qualsevol moment, i gasta els teus bitcoin en les coses que valores a la vida.</string>
     <string name="onboarding__welcome_title">Pots ₿\n&lt;accent&gt;el canvi&lt;/accent&gt;</string>

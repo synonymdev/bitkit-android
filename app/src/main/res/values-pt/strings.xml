@@ -308,7 +308,7 @@
     <string name="lightning__monitor_height">Altura do Arquivo do Monitor de Canal</string>
     <string name="lightning__force_channels_skipped">Algumas conexões não puderam ser fechadas.</string>
     <string name="lightning__transfer_in_progress">TRANSFERÊNCIA EM ANDAMENTO</string>
-    <string name="migration__description">Por favor aguarde enquanto seus dados da carteira antiga migram para esta nova versão da Bitkit...</string>
+    <string name="migration__description">Por favor aguarde enquanto seus dados da carteira antiga migram para esta nova versão da Bitkit. Isso geralmente leva menos de um minuto.</string>
     <string name="migration__nav_title">Migração da Carteira</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;CARTEIRA&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Saldo movido de gastos para poupança</string>
@@ -332,9 +332,9 @@
     <string name="notification__service__stop">Parar App</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;termos de uso&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Termos de uso</string>
-    <string name="onboarding__tos_checkbox_value">Declaro que li e aceito os termos de uso.</string>
+    <string name="onboarding__tos_checkbox_value">Ao continuar, você declara que leu e aceita os termos de uso.</string>
     <string name="onboarding__pp_checkbox">Política de Privacidade</string>
-    <string name="onboarding__pp_checkbox_value">Declaro que li e aceito a &lt;accent&gt;política de privacidade.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">Ao continuar, você declara que leu e aceita a &lt;accent&gt;política de privacidade.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_title">Você pode ser \n&lt;accent&gt;a mudança&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Use a Bitkit para pagar qualquer pessoa, em qualquer lugar, a qualquer momento, e gaste seu bitcoin no que você valoriza.</string>
     <string name="onboarding__get_started">Começar</string>

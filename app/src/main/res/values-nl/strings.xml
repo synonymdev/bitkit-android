@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_bottom">Verbinden &amp; synchroniseren...</string>
     <string name="lightning__wait_text_top">Wacht tot Bitkit verbinding maakt met het betaalnetwerk (±10 seconden).</string>
     <string name="lightning__wallet_balances">Wallet-saldi</string>
-    <string name="migration__description">Even geduld terwijl je oude wallet-gegevens migreren naar deze nieuwe Bitkit-versie...</string>
+    <string name="migration__description">Even geduld terwijl je oude wallet-gegevens migreren naar deze nieuwe Bitkit-versie. Dit duurt meestal minder dan een minuut.</string>
     <string name="migration__nav_title">Wallet-migratie</string>
     <string name="migration__title">WALLET\n&lt;accent&gt;MIGREREN&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Saldo verplaatst van bestedingssaldo naar spaargeld</string>
@@ -344,7 +344,7 @@
     <string name="onboarding__passphrase_header">Beveiligen met &lt;accent&gt;wachtwoordzin&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">Je kunt een geheime wachtwoordzin toevoegen aan de 12-woorden herstelzin. Als je dit doet, zorg dat je deze niet vergeet.</string>
     <string name="onboarding__pp_checkbox">Privacybeleid</string>
-    <string name="onboarding__pp_checkbox_value">Ik verklaar dat ik het &lt;accent&gt;privacybeleid&lt;/accent&gt; heb gelezen en accepteer.</string>
+    <string name="onboarding__pp_checkbox_value">Door verder te gaan verklaar je dat je het &lt;accent&gt;privacybeleid&lt;/accent&gt; hebt gelezen en accepteert.</string>
     <string name="onboarding__restore">Herstellen</string>
     <string name="onboarding__restore_error_description">Bitkit kon je wallet niet herstellen van backup of herstelzin.</string>
     <string name="onboarding__restore_error_title">Wallet herstellen mislukt</string>
@@ -376,7 +376,7 @@
     <string name="onboarding__slide4_header">Jouw sleutels,\n&lt;accent&gt;jouw coins&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Laten we je wallet aanmaken. Let op: Bitkit is mobiele software. &lt;accent&gt;Bewaar niet al je geld in Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Gebruiksvoorwaarden</string>
-    <string name="onboarding__tos_checkbox_value">Ik verklaar dat ik de gebruiksvoorwaarden heb gelezen en accepteer.</string>
+    <string name="onboarding__tos_checkbox_value">Door verder te gaan verklaar je dat je de gebruiksvoorwaarden hebt gelezen en accepteert.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;gebruiksvoorwaarden&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Gebruik Bitkit om altijd en overal iedereen te betalen, en besteed je bitcoin aan de dingen die je waardeert in het leven.</string>
     <string name="onboarding__welcome_title">Jij kunt ₿ \n&lt;accent&gt;het verschil&lt;/accent&gt;</string>

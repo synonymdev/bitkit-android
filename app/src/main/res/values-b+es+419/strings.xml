@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 seg.).</string>
     <string name="lightning__wait_text_bottom">Conectado y sincronizando...</string>
     <string name="lightning__wallet_balances">Saldos de billetera</string>
-    <string name="migration__description">Por favor espera mientras se migran los datos de tu billetera anterior a esta nueva versión de Bitkit...</string>
+    <string name="migration__description">Por favor espera mientras se migran los datos de tu billetera anterior a esta nueva versión de Bitkit. Esto normalmente tarda menos de un minuto.</string>
     <string name="migration__nav_title">Migración de billetera</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;BILLETERA&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Saldo movido de gastos a ahorros</string>
@@ -332,9 +332,9 @@
     <string name="notification__service__stop">Detener app</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;términos de uso&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Términos de uso</string>
-    <string name="onboarding__tos_checkbox_value">Declaro que he leído y acepto las &lt;accent&gt;condiciones de uso.&lt;/accent&gt;</string>
+    <string name="onboarding__tos_checkbox_value">Al continuar, declaras que has leído y aceptas las &lt;accent&gt;condiciones de uso.&lt;/accent&gt;</string>
     <string name="onboarding__pp_checkbox">Política de privacidad</string>
-    <string name="onboarding__pp_checkbox_value">Declaro que he leído y acepto la &lt;accent&gt;política de privacidad.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">Al continuar, declaras que has leído y aceptas la &lt;accent&gt;política de privacidad.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_title">Tú puedes ser &lt;accent&gt;el cam₿io&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Usa Bitkit para pagar a quien sea, donde sea y cuando sea. Gasta tu bitcoin en lo que realmente valoras.</string>
     <string name="onboarding__get_started">Empezar</string>

@@ -308,7 +308,7 @@
     <string name="lightning__order_state__inactive">Connexion inactive</string>
     <string name="lightning__wait_text_top">Veuillez attendre que Bitkit se connecte au réseau de paiement (±10 secondes).</string>
     <string name="lightning__wait_text_bottom">Connexion et synchronisation...</string>
-    <string name="migration__description">Veuillez patienter pendant la migration de vos anciennes données vers cette nouvelle version de Bitkit...</string>
+    <string name="migration__description">Veuillez patienter pendant la migration de vos anciennes données vers cette nouvelle version de Bitkit. Cela prend généralement moins d\'une minute.</string>
     <string name="migration__nav_title">Migration du portefeuille</string>
     <string name="migration__title">MIGRATION\n&lt;accent&gt;DU PORTEFEUILLE&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Solde transféré des dépenses vers l\'épargne</string>
@@ -332,9 +332,9 @@
     <string name="notification__service__stop">Arrêter l\'application</string>
     <string name="onboarding__tos_header">Bitkit \n&lt;accent&gt;Conditions d\'utilisation&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Conditions d\'utilisation</string>
-    <string name="onboarding__tos_checkbox_value">Je déclare avoir lu et accepté les conditions d\'utilisation.</string>
+    <string name="onboarding__tos_checkbox_value">En continuant, vous déclarez avoir lu et accepté les conditions d\'utilisation.</string>
     <string name="onboarding__pp_checkbox">Politique de confidentialité</string>
-    <string name="onboarding__pp_checkbox_value">Je déclare avoir lu et accepté la &lt;accent&gt;politique de confidentialité&lt;/accent&gt;.</string>
+    <string name="onboarding__pp_checkbox_value">En continuant, vous déclarez avoir lu et accepté la &lt;accent&gt;politique de confidentialité&lt;/accent&gt;.</string>
     <string name="onboarding__welcome_title">Soyez \n&lt;accent&gt;le changement&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Utilisez Bitkit pour payer n\'importe qui, n\'importe où, n\'importe quand, et dépensez vos bitcoins pour les choses qui vous tiennent à cœur.</string>
     <string name="onboarding__get_started">Commencer</string>

@@ -308,7 +308,7 @@
     <string name="lightning__order_state__open">Conexión abierta</string>
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 segundos).</string>
     <string name="lightning__wait_text_bottom">Conectando y Sincronizando...</string>
-    <string name="migration__description">Por favor espera mientras los datos de tu antiguo monedero migran a esta nueva versión de Bitkit...</string>
+    <string name="migration__description">Por favor espera mientras los datos de tu antiguo monedero migran a esta nueva versión de Bitkit. Esto normalmente tarda menos de un minuto.</string>
     <string name="migration__nav_title">Migración del Monedero</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;MONEDERO&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Saldo movido de gastos a ahorros</string>
@@ -331,9 +331,9 @@
     <string name="notification__service__body">Bitkit se está ejecutando en segundo plano para que puedas recibir pagos Lightning</string>
     <string name="notification__service__stop">Detener App</string>
     <string name="onboarding__tos_checkbox">Condiciones de uso</string>
-    <string name="onboarding__tos_checkbox_value">Declaro que he leído y acepto los términos de uso.</string>
+    <string name="onboarding__tos_checkbox_value">Al continuar, declaras que has leído y aceptas los términos de uso.</string>
     <string name="onboarding__pp_checkbox">Política de privacidad</string>
-    <string name="onboarding__pp_checkbox_value">Declaro que he leído y acepto la &lt;accent&gt;política de privacidad.&lt;/accent&gt;</string>
+    <string name="onboarding__pp_checkbox_value">Al continuar, declaras que has leído y aceptas la &lt;accent&gt;política de privacidad.&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Use Bitkit para pagar a cualquiera, en cualquier sitio, en cualquier momento, y gaste su bitcoin en las cosa que valora en la vida.</string>
     <string name="onboarding__get_started">Empezar</string>
     <string name="onboarding__skip_intro">Saltar introducción</string>

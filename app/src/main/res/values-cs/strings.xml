@@ -308,7 +308,7 @@
     <string name="lightning__wait_text_bottom">Připojování &amp; synchronizace...</string>
     <string name="lightning__wait_text_top">Prosím vyčkejte, až se Bitkit připojí k platební síti (±10 sekund).</string>
     <string name="lightning__wallet_balances">Zůstatky peněženky</string>
-    <string name="migration__description">Počkejte prosím, než budou vaše stará data peněženky migrována do této nové verze Bitkit...</string>
+    <string name="migration__description">Počkejte prosím, než budou vaše stará data peněženky migrována do této nové verze Bitkit. Obvykle to trvá méně než minutu.</string>
     <string name="migration__nav_title">Migrace peněženky</string>
     <string name="migration__title">MIGRACE\n<accent>PENĚŽENKY</accent></string>
     <string name="notification__channel_closed__mutual_body">Zůstatek byl přesunut z útrat do úspor</string>
@@ -344,7 +344,7 @@
     <string name="onboarding__passphrase_header">Zabezpečení pomocí &lt;accent&gt;přístupové fráze&lt;/accent&gt;</string>
     <string name="onboarding__passphrase_text">K 12slovné frázi pro obnovení můžete přidat tajnou přístupovou frázi. Pokud ji přidáte, nezapomeňte ji.</string>
     <string name="onboarding__pp_checkbox">Zásady ochrany osobních údajů</string>
-    <string name="onboarding__pp_checkbox_value">Prohlašuji, že jsem si přečetl/a &lt;accent&gt;zásady ochrany osobních údajů&lt;/accent&gt; a souhlasím s nimi.</string>
+    <string name="onboarding__pp_checkbox_value">Pokračováním prohlašujete, že jste si přečetli &lt;accent&gt;zásady ochrany osobních údajů&lt;/accent&gt; a souhlasíte s nimi.</string>
     <string name="onboarding__restore">Obnovit</string>
     <string name="onboarding__restore_error_description">Bitkit se nepodařilo obnovit peněženku ze zálohy nebo z fráze pro obnovení.</string>
     <string name="onboarding__restore_error_title">Obnovení peněženky se nezdařilo</string>
@@ -376,7 +376,7 @@
     <string name="onboarding__slide4_header">Vaše klíče,\n&lt;accent&gt;vaše mince&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Vytvořte si peněženku. Upozorňujeme, že Bitkit je mobilní software. &lt;accent&gt;Neukládejte všechny své peníze do Bitkitu.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Podmínky použití</string>
-    <string name="onboarding__tos_checkbox_value">Prohlašuji, že jsem si přečetl/a podmínky používání a souhlasím s nimi.</string>
+    <string name="onboarding__tos_checkbox_value">Pokračováním prohlašujete, že jste si přečetli podmínky používání a souhlasíte s nimi.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;podmínky používání&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Pomocí služby Bitkit můžete platit komukoli, kdekoli a kdykoli a utrácet bitcoiny za věci, kterých si v životě vážíte.</string>
     <string name="onboarding__welcome_title">Můžete ₿ \n&lt;accent&gt;změna&lt;/accent&gt;</string>
