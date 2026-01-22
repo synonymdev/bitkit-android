@@ -48,7 +48,7 @@ fun TextInput(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     textStyle: TextStyle = AppTextStyles.BodySSB,
     colors: TextFieldColors = AppTextFieldDefaults.semiTransparent,
-    ) {
+) {
     var textFieldValue by remember { mutableStateOf(TextFieldValue(value)) }
 
     // Sync external changes
