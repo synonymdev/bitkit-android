@@ -35,6 +35,7 @@ import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
@@ -104,7 +105,7 @@ fun CalculatorPreviewContent(
                 exit = shrinkVertically(),
             ) {
                 Column {
-                    Spacer(modifier = Modifier.height(26.dp))
+                    VerticalSpacer(26.dp)
 
                     Row(
                         modifier = Modifier
