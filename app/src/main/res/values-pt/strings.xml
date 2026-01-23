@@ -723,8 +723,6 @@
     <string name="slashtags__onboarding_profile1_text">Configure seu perfil público e seus links, para que seus contatos possam pagá-lo a qualquer hora e em qualquer lugar.</string>
     <string name="slashtags__profile">Perfil</string>
     <string name="slashtags__profile_create">Criar Perfil</string>
-    <string name="slashtags__auth_depricated_title">Desativado</string>
-    <string name="slashtags__auth_depricated_msg">O Slashauth está desativado.</string>
     <string name="wallet__drawer__wallet">Carteira</string>
     <string name="wallet__drawer__activity">Atividade</string>
     <string name="wallet__drawer__contacts">Contatos</string>

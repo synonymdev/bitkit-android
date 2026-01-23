@@ -756,8 +756,6 @@
     <string name="sweep__total">Razem</string>
     <string name="sweep__utxo_format">%1$s, %2$d UTXO</string>
     <string name="sweep__utxos_format">%1$s, %2$d UTXOs</string>
-    <string name="slashtags__auth_depricated_title">Przestarzałe</string>
-    <string name="slashtags__auth_depricated_msg">Slashauth jest przestarzałe. Proszę używać Bitkit Beta.</string>
     <string name="wallet__drawer__wallet">Portfel</string>
     <string name="wallet__drawer__activity">Aktywność</string>
     <string name="wallet__drawer__contacts">Kontakty</string>
