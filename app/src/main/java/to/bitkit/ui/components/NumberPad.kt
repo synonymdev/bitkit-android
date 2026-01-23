@@ -1,6 +1,7 @@
 package to.bitkit.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -12,10 +13,19 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -62,6 +72,12 @@ fun NumberPad(
     availableHeight: Dp = defaultHeight,
     errorKey: String? = null,
 ) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
     BoxWithConstraints(modifier = modifier) {
         val buttonHeight = when {
             constraints.hasFixedHeight -> maxHeight / ROWS
@@ -73,7 +89,71 @@ fun NumberPad(
         LazyVerticalGrid(
             columns = GridCells.Fixed(COLUMNS),
             userScrollEnabled = false,
-            modifier = Modifier.height(totalKeyboardHeight),
+            modifier = Modifier
+                .height(totalKeyboardHeight)
+                .focusRequester(focusRequester)
+                .focusable()
+                .onKeyEvent { keyEvent ->
+                    if (keyEvent.type == KeyEventType.KeyDown) {
+                        when (keyEvent.key) {
+                            Key.Zero, Key.NumPad0 -> {
+                                onPress("0")
+                                true
+                            }
+                            Key.One, Key.NumPad1 -> {
+                                onPress("1")
+                                true
+                            }
+                            Key.Two, Key.NumPad2 -> {
+                                onPress("2")
+                                true
+                            }
+                            Key.Three, Key.NumPad3 -> {
+                                onPress("3")
+                                true
+                            }
+                            Key.Four, Key.NumPad4 -> {
+                                onPress("4")
+                                true
+                            }
+                            Key.Five, Key.NumPad5 -> {
+                                onPress("5")
+                                true
+                            }
+                            Key.Six, Key.NumPad6 -> {
+                                onPress("6")
+                                true
+                            }
+                            Key.Seven, Key.NumPad7 -> {
+                                onPress("7")
+                                true
+                            }
+                            Key.Eight, Key.NumPad8 -> {
+                                onPress("8")
+                                true
+                            }
+                            Key.Nine, Key.NumPad9 -> {
+                                onPress("9")
+                                true
+                            }
+                            Key.Backspace, Key.Delete -> {
+                                onPress(KEY_DELETE)
+                                true
+                            }
+                            Key.Period, Key.NumPadDot -> {
+                                if (type == NumberPadType.DECIMAL) {
+                                    onPress(KEY_DECIMAL)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            else -> false
+                        }
+                    } else {
+                        false
+                    }
+                },
         ) {
             items((1..9).map { "$it" }) { number ->
                 NumberPadKeyButton(
