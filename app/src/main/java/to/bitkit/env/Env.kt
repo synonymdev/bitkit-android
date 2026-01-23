@@ -43,7 +43,6 @@ internal object Env {
 
     const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
     const val SUPPORT_EMAIL = "support@synonym.to"
-    const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8
 

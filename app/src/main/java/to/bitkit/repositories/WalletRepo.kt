@@ -270,7 +270,7 @@ class WalletRepo @Inject constructor(
         val newBip21 = buildBip21Url(
             bitcoinAddress = address,
             amountSats = amountSats,
-            message = message.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
+            message = message,
             lightningInvoice = getBolt11(),
         )
         setBip21(newBip21)
@@ -386,7 +386,7 @@ class WalletRepo @Inject constructor(
     fun buildBip21Url(
         bitcoinAddress: String,
         amountSats: ULong? = null,
-        message: String = Env.DEFAULT_INVOICE_MESSAGE,
+        message: String = "",
         lightningInvoice: String = "",
     ): String {
         return Bip21Utils.buildBip21Url(
