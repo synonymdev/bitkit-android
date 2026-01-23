@@ -157,6 +157,7 @@ fun Modifier.primaryButtonStyle(
     isEnabled: Boolean,
     shape: Shape,
     primaryColor: Color? = null,
+    enableGradient: Boolean = true,
 ): Modifier {
     return this
         // Step 1: Add shadow (only when enabled)
@@ -177,17 +178,25 @@ fun Modifier.primaryButtonStyle(
         .then(
             if (isEnabled) {
                 Modifier.drawWithContent {
-                    // Draw the main gradient background filling entire button
-                    val mainBrush = Brush.verticalGradient(
-                        colors = listOf(primaryColor ?: Colors.Gray5, Colors.Gray6),
-                        startY = 0f,
-                        endY = size.height
-                    )
-                    drawRect(
-                        brush = mainBrush,
-                        topLeft = Offset.Zero,
-                        size = size
-                    )
+                    // Draw the main background filling entire button
+                    val baseColor = primaryColor ?: Colors.Gray5
+                    if (enableGradient) {
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(baseColor, Colors.Gray6),
+                                startY = 0f,
+                                endY = size.height
+                            ),
+                            topLeft = Offset.Zero,
+                            size = size
+                        )
+                    } else {
+                        drawRect(
+                            color = baseColor,
+                            topLeft = Offset.Zero,
+                            size = size
+                        )
+                    }
 
                     // Draw top border highlight (2dp gradient fade)
                     val borderHeight = 2.dp.toPx()
