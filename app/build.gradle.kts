@@ -37,7 +37,9 @@ val keystoreProperties by lazy {
     keystoreProperties
 }
 
-val locales = listOf("en", "ar", "ca", "cs", "de", "el", "es", "fr", "it", "nl", "pl", "pt", "ru")
+val locales = listOf(
+    "en", "ar", "b+es+419", "ca", "cs", "de", "el", "es", "es-rES", "fr", "it", "nl", "pl", "pt", "pt-rBR", "ru"
+)
 val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 
 android {
