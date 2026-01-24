@@ -3,6 +3,7 @@ package to.bitkit.services
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -55,6 +56,7 @@ import to.bitkit.utils.jsonLogOf
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
 import kotlin.time.Duration
 
@@ -219,12 +221,14 @@ class LightningService @Inject constructor(
                 runCatching {
                     Logger.debug("LDK event listener started", context = TAG)
                     if (timeout != null) {
-                        withTimeout(timeout) { listenForEvents(eventHandler) }
+                        withTimeout(timeout) { listenForEvents(node, eventHandler) }
                     } else {
-                        listenForEvents(eventHandler)
+                        listenForEvents(node, eventHandler)
                     }
                 }.onFailure {
-                    Logger.error("LDK event listener error", it, context = TAG)
+                    if (it !is CancellationException) {
+                        Logger.error("LDK event listener error", it, context = TAG)
+                    }
                 }
             }
         }
@@ -236,17 +240,17 @@ class LightningService @Inject constructor(
         shouldListenForEvents = false
         listenerJob?.cancelAndJoin()
         listenerJob = null
-        val node = this.node ?: throw ServiceError.NodeNotStarted()
+
+        val node = this.node ?: run {
+            Logger.debug("Node already stopped", context = TAG)
+            return
+        }
 
         Logger.debug("Stopping node…", context = TAG)
         ServiceQueue.LDK.background {
-            try {
-                node.stop()
-                this@LightningService.node = null
-            } catch (_: NodeException.NotRunning) {
-                // Node is not running, clear the reference
-                this@LightningService.node = null
-            }
+            runCatching { node.stop() }
+                .onFailure { if (it !is NodeException.NotRunning) throw it }
+            this@LightningService.node = null
         }
         Logger.info("Node stopped", context = TAG)
     }
@@ -723,20 +727,34 @@ class LightningService @Inject constructor(
     // region events
     private var shouldListenForEvents = true
 
-    suspend fun listenForEvents(onEvent: NodeEventHandler? = null) = withContext(bgDispatcher) {
+    fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runCatching {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        shouldListenForEvents = true
+        listenerJob = launch {
+            runCatching {
+                Logger.debug("LDK event listener started", context = TAG)
+                listenForEvents(node, onEvent)
+            }.onFailure {
+                if (it !is CancellationException) {
+                    Logger.error("LDK event listener error", it, context = TAG)
+                }
+            }
+        }
+    }
+
+    private suspend fun listenForEvents(node: Node, onEvent: NodeEventHandler? = null) = withContext(bgDispatcher) {
         while (shouldListenForEvents) {
-            val node = this@LightningService.node ?: let {
-                Logger.error(ServiceError.NodeNotStarted().message.orEmpty(), context = TAG)
+            ensureActive()
+
+            val event = runCatching { node.nextEventAsync() }.getOrElse {
+                Logger.warn("Event listener stopping: node stopped", it, context = TAG)
                 return@withContext
             }
-            val event = node.nextEventAsync()
+
             Logger.debug("LDK event fired: ${jsonLogOf(event)}", context = TAG)
-            try {
-                node.eventHandled()
-                Logger.verbose("LDK eventHandled: '$event'", context = TAG)
-            } catch (e: NodeException) {
-                Logger.verbose("LDK eventHandled error: '$event'", LdkError(e), context = TAG)
-            }
+            runCatching { node.eventHandled() }
+                .onSuccess { Logger.verbose("LDK eventHandled: '$event'", context = TAG) }
+                .onFailure { Logger.verbose("LDK eventHandled error: '$event'", it, context = TAG) }
             onEvent?.invoke(event)
         }
     }
