@@ -9,6 +9,9 @@ import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -54,10 +57,15 @@ class LightningNodeService : Service() {
     @Inject
     lateinit var cacheStore: CacheStore
 
+    private var lifecycleObserver: AppLifecycleObserver? = null
+
     override fun onCreate() {
         super.onCreate()
         startForeground(ID_NOTIFICATION_NODE, createNotification())
         setupService()
+        lifecycleObserver = AppLifecycleObserver().also {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(it)
+        }
     }
 
     private fun setupService() {
@@ -145,6 +153,7 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
+        lifecycleObserver?.let { ProcessLifecycleOwner.get().lifecycle.removeObserver(it) }
         serviceScope.launch {
             lightningRepo.stop()
             serviceScope.cancel()
@@ -163,6 +172,24 @@ class LightningNodeService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private inner class AppLifecycleObserver : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            serviceScope.launch {
+                lightningRepo.disableBatterySavingMode()
+                    .onSuccess { Logger.debug("Sync intervals exited battery saving mode", context = TAG) }
+                    .onFailure { Logger.warn("Error setting sync intervals out of battery saving", it, context = TAG) }
+            }
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            serviceScope.launch {
+                lightningRepo.enableBatterySavingMode()
+                    .onSuccess { Logger.debug("Sync intervals entered battery saving mode", context = TAG) }
+                    .onFailure { Logger.warn("Error setting sync intervals set to battery saving", it, context = TAG) }
+            }
+        }
+    }
 
     companion object {
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"

@@ -34,6 +34,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.RuntimeSyncIntervals
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
@@ -193,9 +194,9 @@ class LightningService @Inject constructor(
             serverUrl = serverUrl,
             config = ElectrumSyncConfig(
                 BackgroundSyncConfig(
-                    onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                    lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                    feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                    onchainWalletSyncIntervalSecs = Env.syncIntervals.onchainWalletSyncIntervalSecs,
+                    lightningWalletSyncIntervalSecs = Env.syncIntervals.lightningWalletSyncIntervalSecs,
+                    feeRateCacheUpdateIntervalSecs = Env.syncIntervals.feeRateCacheUpdateIntervalSecs,
                 ),
             ),
         )
@@ -274,6 +275,19 @@ class LightningService @Inject constructor(
 
         Logger.debug("LDK synced", context = TAG)
     }
+
+    suspend fun updateSyncIntervals(intervals: RuntimeSyncIntervals) = withContext(bgDispatcher) {
+        val node = this@LightningService.node ?: throw ServiceError.NodeNotSetup()
+        ServiceQueue.LDK.background {
+            node.updateSyncIntervals(intervals)
+        }
+        Logger.info("Sync intervals updated", context = TAG)
+    }
+
+    fun defaultSyncIntervals(): RuntimeSyncIntervals = Env.syncIntervals
+
+    fun batterySavingIntervals(): RuntimeSyncIntervals =
+        org.lightningdevkit.ldknode.batterySavingSyncIntervals()
 
     suspend fun sign(message: String): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()

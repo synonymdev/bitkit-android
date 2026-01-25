@@ -4,6 +4,7 @@ import android.os.Build
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.RuntimeSyncIntervals
 import to.bitkit.BuildConfig
 import to.bitkit.ext.ensureDir
 import to.bitkit.ext.of
@@ -20,11 +21,16 @@ internal object Env {
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
-    const val walletSyncIntervalSecs = 10_uL
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
     val ldkLogLevel = LogLevel.TRACE
+
+    val syncIntervals = RuntimeSyncIntervals(
+        onchainWalletSyncIntervalSecs = 80_uL, // ldk-node default
+        lightningWalletSyncIntervalSecs = 30_uL, // ldk-node default
+        feeRateCacheUpdateIntervalSecs = 600_uL, // ldk-node default (10 min)
+    )
 
     val trustedLnPeers
         get() = when (network) {

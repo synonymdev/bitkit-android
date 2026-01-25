@@ -36,6 +36,7 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
@@ -438,6 +439,30 @@ class LightningRepo @Inject constructor(
 
     /** Clear pending sync flag. Called when manual pull-to-refresh takes priority. */
     fun clearPendingSync() = syncPending.set(false)
+
+    suspend fun enableBatterySavingMode(): Result<Unit> = executeWhenNodeRunning("enableBatterySavingMode") {
+        runCatching {
+            lightningService.updateSyncIntervals(lightningService.batterySavingIntervals())
+        }.recoverCatching { e ->
+            if (e is NodeException.BackgroundSyncNotEnabled) {
+                Logger.warn("Background sync not enabled, skipping sync intervals update", context = TAG)
+            } else {
+                throw e
+            }
+        }
+    }
+
+    suspend fun disableBatterySavingMode(): Result<Unit> = executeWhenNodeRunning("disableBatterySavingMode") {
+        runCatching {
+            lightningService.updateSyncIntervals(lightningService.defaultSyncIntervals())
+        }.recoverCatching { e ->
+            if (e is NodeException.BackgroundSyncNotEnabled) {
+                Logger.warn("Background sync not enabled, skipping sync intervals update", context = TAG)
+            } else {
+                throw e
+            }
+        }
+    }
 
     private suspend fun refreshChannelCache() = withContext(bgDispatcher) {
         lightningService.channels?.forEach {
