@@ -694,6 +694,7 @@ private fun PreviewAutoMode() {
         forceCloseSpendDelay = null,
         inboundHtlcMinimumMsat = 0uL,
         inboundHtlcMaximumMsat = null,
+        claimableOnCloseSats = 0uL,
         config = org.lightningdevkit.ldknode.ChannelConfig(
             forwardingFeeProportionalMillionths = 0u,
             forwardingFeeBaseMsat = 0u,
@@ -764,6 +765,7 @@ private fun PreviewSpendingMode() {
         forceCloseSpendDelay = null,
         inboundHtlcMinimumMsat = 0uL,
         inboundHtlcMaximumMsat = null,
+        claimableOnCloseSats = 0uL,
         config = org.lightningdevkit.ldknode.ChannelConfig(
             forwardingFeeProportionalMillionths = 0u,
             forwardingFeeBaseMsat = 0u,
