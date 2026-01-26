@@ -36,19 +36,11 @@ class LnurlChannelViewModel @Inject constructor(
 
     private fun fetchChannelInfo() {
         viewModelScope.launch {
-            lightningRepo.fetchLnurlChannelInfo(params.uri)
-                .onSuccess { channelInfo ->
-                    val peer = runCatching { PeerDetails.of(channelInfo.uri) }.getOrElse {
-                        errorToast(it)
-                        return@onSuccess
-                    }
-                    _uiState.update { it.copy(peer = peer) }
-                }
-                .onFailure { error ->
-                    val message = context.getString(R.string.other__lnurl_channel_error_raw)
-                        .replace("{raw}", error.message.orEmpty())
-                    errorToast(Exception(message))
-                }
+            val peer = runCatching { PeerDetails.of(params.uri) }.getOrElse {
+                errorToast(it)
+                return@launch
+            }
+            _uiState.update { it.copy(peer = peer) }
         }
     }
 

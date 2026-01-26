@@ -239,14 +239,18 @@ class LogSaverImpl(
         }
     }
 
-    private fun log(message: String, level: LogLevel = LogLevel.INFO) {
+    private fun log(
+        message: String,
+        level: LogLevel = LogLevel.INFO,
+        androidLog: (String, String) -> Unit = { tag, msg -> Log.i(tag, msg) },
+    ) {
         val formatted = formatLog(level, message, TAG, getCallerPath(), getCallerLine())
-        Log.i(APP, formatted)
+        androidLog(APP, formatted)
         save(formatted)
     }
 
     private fun cleanupOldLogFiles(maxTotalSizeMB: Int = 20) {
-        log("Deleting old log files…", LogLevel.VERBOSE)
+        log("Deleting old log files…", LogLevel.VERBOSE, Log::v)
         val logDir = runCatching { Env.logDir }.getOrNull() ?: return
 
         val logFiles = logDir
@@ -263,15 +267,15 @@ class LogSaverImpl(
                 if (totalSize <= maxSizeBytes) return
 
                 runCatching {
-                    Log.d(APP, "Deleting old log file: '${file.name}'")
+                    log("Deleting old log file: '${file.name}'", LogLevel.DEBUG, Log::d)
                     if (file.delete()) {
                         totalSize -= file.length()
                     }
                 }.onFailure {
-                    Log.w(APP, "Failed to delete old log file: '${file.name}'", it)
+                    log("Failed to delete old log file: '${file.name}'", LogLevel.WARN, Log::w)
                 }
             }
-        Log.v(APP, "Deleted all old log files.")
+        log("Deleted all old log files.", LogLevel.VERBOSE, Log::v)
     }
 
     companion object {

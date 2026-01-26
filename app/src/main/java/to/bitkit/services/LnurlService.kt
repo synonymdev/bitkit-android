@@ -63,21 +63,6 @@ class LnurlService @Inject constructor(
         return@runCatching response.body<LnurlPayResponse>()
     }
 
-    suspend fun fetchLnurlChannelInfo(url: String): Result<LnurlChannelInfoResponse> = runCatching {
-        Logger.debug("Fetching LNURL channel info from: $url", context = TAG)
-
-        val response: HttpResponse = client.get(url)
-        Logger.debug("Http call: $response", context = TAG)
-
-        if (!response.status.isSuccess()) {
-            throw HttpError("fetchLnurlChannelInfo error: '${response.status.description}'", response.status.value)
-        }
-
-        return@runCatching response.body<LnurlChannelInfoResponse>()
-    }.onFailure {
-        Logger.warn("Failed to fetch channel info", it, context = TAG)
-    }
-
     suspend fun requestLnurlChannel(url: String): Result<LnurlChannelResponse> = runCatching {
         Logger.debug("Requesting LNURL channel request via: '$url'", context = TAG)
 
@@ -126,12 +111,4 @@ data class LnurlPayResponse(
 data class LnurlChannelResponse(
     val status: String? = null,
     val reason: String? = null,
-)
-
-@Serializable
-data class LnurlChannelInfoResponse(
-    val uri: String,
-    val tag: String,
-    val callback: String,
-    val k1: String,
 )

@@ -659,8 +659,6 @@ class LightningRepo @Inject constructor(
         lnurlService.requestLnurlWithdraw(callbackUrl)
     }
 
-    suspend fun fetchLnurlChannelInfo(url: String) = lnurlService.fetchLnurlChannelInfo(url)
-
     suspend fun requestLnurlChannel(
         k1: String,
         callback: String,

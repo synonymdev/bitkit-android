@@ -7,11 +7,13 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.testing.BindValue
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltTestApplication
 import dagger.hilt.android.testing.UninstallModules
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -23,12 +25,12 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
-import org.mockito.kotlin.KArgumentCaptor
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
-import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.stub
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.Robolectric
@@ -42,6 +44,7 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.di.DbModule
 import to.bitkit.di.DispatchersModule
+import to.bitkit.di.ViewModelModule
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.NewTransactionSheetDetails
@@ -52,15 +55,22 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastQueueManager
 
 @HiltAndroidTest
-@UninstallModules(DispatchersModule::class, DbModule::class)
+@UninstallModules(DispatchersModule::class, DbModule::class, ViewModelModule::class)
 @Config(application = HiltTestApplication::class, sdk = [34]) // Pin Robolectric to an SDK that supports Java 17
 @RunWith(RobolectricTestRunner::class)
 class LightningNodeServiceTest : BaseUnitTest() {
 
     @get:Rule(order = 1)
     var hiltRule = HiltAndroidRule(this)
+
+    @BindValue
+    val firebaseMessaging = mock<FirebaseMessaging>()
+
+    @BindValue
+    val toastManagerProvider = mock<(CoroutineScope) -> ToastQueueManager>()
 
     @BindValue
     val lightningRepo = mock<LightningRepo>()
@@ -74,28 +84,33 @@ class LightningNodeServiceTest : BaseUnitTest() {
     @BindValue
     val cacheStore = mock<CacheStore>()
 
-    private val captor: KArgumentCaptor<NodeEventHandler?> = argumentCaptor()
-    private val cacheDataFlow = MutableSharedFlow<AppCacheData>(replay = 1)
+    private var capturedHandler: NodeEventHandler? = null
+    private val cacheData = MutableSharedFlow<AppCacheData>(replay = 1)
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Before
     fun setUp() = runBlocking {
         hiltRule.inject()
-        whenever(
-            lightningRepo.start(
-                any(),
-                anyOrNull(),
-                any(),
-                anyOrNull(),
-                anyOrNull(),
-                captor.capture(),
-                anyOrNull(),
-            )
-        ).thenReturn(Result.success(Unit))
+        lightningRepo.stub {
+            on {
+                start(
+                    any(),
+                    anyOrNull(),
+                    any(),
+                    anyOrNull(),
+                    anyOrNull(),
+                    anyOrNull(),
+                    anyOrNull(),
+                )
+            } doAnswer {
+                capturedHandler = it.getArgument(5) as? NodeEventHandler
+                Result.success(Unit)
+            }
+        }
         whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
 
         // Set up CacheStore mock
-        whenever(cacheStore.data).thenReturn(cacheDataFlow)
+        whenever(cacheStore.data).thenReturn(cacheData)
 
         // Mock NotifyPaymentReceivedHandler to return ShowNotification result
         val sheet = NewTransactionSheetDetails(
@@ -130,7 +145,6 @@ class LightningNodeServiceTest : BaseUnitTest() {
         controller.create().startCommand(0, 0)
         testScheduler.advanceUntilIdle()
 
-        val capturedHandler = captor.lastValue
         assertNotNull("Event handler should be captured", capturedHandler)
 
         val event = Event.PaymentReceived(
@@ -177,7 +191,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             customRecords = emptyList()
         )
 
-        captor.lastValue?.invoke(event)
+        capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -205,7 +219,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             customRecords = emptyList()
         )
 
-        captor.lastValue?.invoke(event)
+        capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

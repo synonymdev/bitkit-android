@@ -186,10 +186,8 @@ class CoreService @Inject constructor(
         com.synonym.bitkitcore.isAddressUsed(address = address)
     }
 
-    @Suppress("ForbiddenComment")
     suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {
-        // TODO: Remove lowercase workaround when https://github.com/synonymdev/bitkit-core/issues/66 is fixed
-        com.synonym.bitkitcore.decode(input.lowercase())
+        com.synonym.bitkitcore.decode(input)
     }
 
     companion object {
