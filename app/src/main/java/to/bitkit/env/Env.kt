@@ -26,11 +26,7 @@ internal object Env {
 
     val ldkLogLevel = LogLevel.TRACE
 
-    val syncIntervals = RuntimeSyncIntervals(
-        onchainWalletSyncIntervalSecs = 80_uL, // ldk-node default
-        lightningWalletSyncIntervalSecs = 30_uL, // ldk-node default
-        feeRateCacheUpdateIntervalSecs = 600_uL, // ldk-node default (10 min)
-    )
+    val syncIntervals = if (network == Network.REGTEST) SyncIntervals.REGTEST else SyncIntervals.DEFAULT
 
     val trustedLnPeers
         get() = when (network) {
@@ -225,4 +221,17 @@ private object ElectrumServers {
     }
 
     const val TESTNET = "ssl://electrum.blockstream.info:60002"
+}
+
+private object SyncIntervals {
+    val DEFAULT = RuntimeSyncIntervals(
+        onchainWalletSyncIntervalSecs = 80_uL,
+        lightningWalletSyncIntervalSecs = 30_uL,
+        feeRateCacheUpdateIntervalSecs = 600_uL, // 10 min
+    )
+    val REGTEST = RuntimeSyncIntervals(
+        onchainWalletSyncIntervalSecs = 10_uL,
+        lightningWalletSyncIntervalSecs = 10_uL,
+        feeRateCacheUpdateIntervalSecs = 10_uL,
+    )
 }

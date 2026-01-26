@@ -63,9 +63,7 @@ class LightningNodeService : Service() {
         super.onCreate()
         startForeground(ID_NOTIFICATION_NODE, createNotification())
         setupService()
-        lifecycleObserver = AppLifecycleObserver().also {
-            ProcessLifecycleOwner.get().lifecycle.addObserver(it)
-        }
+        lifecycleObserver = AppLifecycleObserver().also { ProcessLifecycleOwner.get().lifecycle.addObserver(it) }
     }
 
     private fun setupService() {
@@ -116,9 +114,7 @@ class LightningNodeService : Service() {
         val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
 
         // Create stop action that will close both service and app
-        val stopIntent = Intent(this, LightningNodeService::class.java).apply {
-            action = ACTION_STOP_SERVICE_AND_APP
-        }
+        val stopIntent = Intent(this, LightningNodeService::class.java).apply { action = ACTION_STOP_SERVICE_AND_APP }
         val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
@@ -128,11 +124,7 @@ class LightningNodeService : Service() {
             .setColor(ContextCompat.getColor(this, R.color.brand))
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .addAction(
-                R.drawable.ic_x,
-                getString(R.string.notification__service__stop),
-                stopPendingIntent
-            )
+            .addAction(R.drawable.ic_x, getString(R.string.notification__service__stop), stopPendingIntent)
             .build()
     }
 
@@ -192,8 +184,8 @@ class LightningNodeService : Service() {
     }
 
     companion object {
-        const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
+        const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val ACTION_STOP_SERVICE_AND_APP = "to.bitkit.androidServices.action.STOP_SERVICE_AND_APP"
     }
 }

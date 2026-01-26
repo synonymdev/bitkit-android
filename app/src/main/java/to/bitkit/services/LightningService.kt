@@ -14,7 +14,6 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
-import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
@@ -49,6 +48,7 @@ import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.ext.toBackgroundSyncConfig
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
 import to.bitkit.utils.Logger
@@ -193,11 +193,7 @@ class LightningService @Inject constructor(
         setChainSourceElectrum(
             serverUrl = serverUrl,
             config = ElectrumSyncConfig(
-                BackgroundSyncConfig(
-                    onchainWalletSyncIntervalSecs = Env.syncIntervals.onchainWalletSyncIntervalSecs,
-                    lightningWalletSyncIntervalSecs = Env.syncIntervals.lightningWalletSyncIntervalSecs,
-                    feeRateCacheUpdateIntervalSecs = Env.syncIntervals.feeRateCacheUpdateIntervalSecs,
-                ),
+                backgroundSyncConfig = Env.syncIntervals.toBackgroundSyncConfig(),
             ),
         )
     }
