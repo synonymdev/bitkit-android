@@ -20,6 +20,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.GiftClaimResult
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
@@ -73,7 +74,9 @@ class GiftViewModel @Inject constructor(
             ).fold(
                 onSuccess = {
                     Logger.debug("Gift claim successful: $it", context = TAG)
-                    insertGiftActivity(it.paymentHashOrTxId, it.sats, it.invoice, it.code)
+                    if (it is GiftClaimResult.SuccessWithoutLiquidity) {
+                        insertGiftActivity(it.paymentHashOrTxId, it.sats, it.invoice, it.code)
+                    }
                     _successEvent.emit(
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
