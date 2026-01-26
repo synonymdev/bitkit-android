@@ -49,9 +49,11 @@ class ElectrumConfigViewModel @Inject constructor(
     private fun observeState() {
         viewModelScope.launch(bgDispatcher) {
             lightningRepo.lightningState.collect { lightningState ->
+                val isNodeRunning = lightningState.nodeStatus?.isRunning == true
+                val hasSyncError = lightningState.lastSyncError != null
                 _uiState.update { currentState ->
                     currentState.copy(
-                        isConnected = lightningState.nodeStatus?.isRunning == true,
+                        isConnected = isNodeRunning && !hasSyncError,
                     )
                 }
             }
