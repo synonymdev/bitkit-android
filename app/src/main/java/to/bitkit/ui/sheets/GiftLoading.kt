@@ -34,12 +34,8 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 
 @Composable
-fun GiftLoading(
-    viewModel: GiftViewModel,
-) {
-    Content(
-        amount = viewModel.amount,
-    )
+fun GiftLoading(amount: ULong) {
+    Content(amount = amount)
 }
 
 @Composable

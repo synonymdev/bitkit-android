@@ -445,7 +445,7 @@ class BlocktankRepo @Inject constructor(
 
                 if (maxInboundCapacity >= amount) {
                     Logger.debug("Sufficient liquidity available, claiming with existing channel", context = TAG)
-                    Result.success(claimGiftCodeWithLiquidity(code))
+                    Result.success(claimGiftCodeWithLiquidity(code, amount))
                 } else {
                     Logger.debug("Insufficient liquidity, opening new channel", context = TAG)
                     Result.success(claimGiftCodeWithoutLiquidity(code, amount))
@@ -456,7 +456,7 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    private suspend fun claimGiftCodeWithLiquidity(code: String): GiftClaimResult {
+    private suspend fun claimGiftCodeWithLiquidity(code: String, amount: ULong): GiftClaimResult {
         val invoice = lightningRepo.createInvoice(
             amountSats = null,
             description = "blocktank-gift-code:$code",
@@ -465,13 +465,18 @@ class BlocktankRepo @Inject constructor(
 
         Logger.debug("Created invoice for gift code, requesting payment from LSP", context = TAG)
 
-        val result = ServiceQueue.CORE.background {
+        val giftResponse = ServiceQueue.CORE.background {
             giftPay(invoice = invoice)
         }
 
-        Logger.debug("Gift payment request completed: $result", context = TAG)
+        Logger.debug("Gift payment request completed: id=${giftResponse.id}", context = TAG)
 
-        return GiftClaimResult.SuccessWithLiquidity
+        return GiftClaimResult.SuccessWithLiquidity(
+            paymentHashOrTxId = giftResponse.bolt11PaymentId ?: giftResponse.id,
+            sats = amount.toLong(),
+            invoice = invoice,
+            code = code,
+        )
     }
 
     private suspend fun claimGiftCodeWithoutLiquidity(code: String, amount: ULong): GiftClaimResult {
@@ -520,11 +525,22 @@ data class BlocktankState(
 )
 
 sealed class GiftClaimResult {
-    object SuccessWithLiquidity : GiftClaimResult()
+    abstract val paymentHashOrTxId: String
+    abstract val sats: Long
+    abstract val invoice: String
+    abstract val code: String
+
+    data class SuccessWithLiquidity(
+        override val paymentHashOrTxId: String,
+        override val sats: Long,
+        override val invoice: String,
+        override val code: String,
+    ) : GiftClaimResult()
+
     data class SuccessWithoutLiquidity(
-        val paymentHashOrTxId: String,
-        val sats: Long,
-        val invoice: String,
-        val code: String,
+        override val paymentHashOrTxId: String,
+        override val sats: Long,
+        override val invoice: String,
+        override val code: String,
     ) : GiftClaimResult()
 }

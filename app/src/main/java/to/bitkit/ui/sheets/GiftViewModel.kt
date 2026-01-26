@@ -20,7 +20,6 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
-import to.bitkit.repositories.GiftClaimResult
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
@@ -72,46 +71,42 @@ class GiftViewModel @Inject constructor(
                 amount = amount,
                 waitTimeout = NODE_STARTUP_TIMEOUT_MS.milliseconds,
             ).fold(
-                onSuccess = { result ->
-                    Logger.debug("Gift claim successful: $result", context = TAG)
-                    when (result) {
-                        is GiftClaimResult.SuccessWithLiquidity -> {
-                            _navigationEvent.emit(GiftRoute.Success)
-                        }
-                        is GiftClaimResult.SuccessWithoutLiquidity -> {
-                            insertGiftActivity(result)
-                            _successEvent.emit(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.LIGHTNING,
-                                    direction = NewTransactionSheetDirection.RECEIVED,
-                                    paymentHashOrTxId = result.paymentHashOrTxId,
-                                    sats = result.sats,
-                                )
-                            )
-                            _navigationEvent.emit(GiftRoute.Success)
-                        }
-                    }
+                onSuccess = {
+                    Logger.debug("Gift claim successful: $it", context = TAG)
+                    insertGiftActivity(it.paymentHashOrTxId, it.sats, it.invoice, it.code)
+                    _successEvent.emit(
+                        NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.LIGHTNING,
+                            direction = NewTransactionSheetDirection.RECEIVED,
+                            paymentHashOrTxId = it.paymentHashOrTxId,
+                            sats = it.sats,
+                        )
+                    )
+                    _navigationEvent.emit(GiftRoute.Success)
                 },
-                onFailure = { error ->
-                    handleGiftClaimError(error)
-                }
+                onFailure = { handleGiftClaimError(it) },
             )
         } finally {
             isClaiming = false
         }
     }
 
-    private suspend fun insertGiftActivity(result: GiftClaimResult.SuccessWithoutLiquidity) {
+    private suspend fun insertGiftActivity(
+        paymentHashOrTxId: String,
+        sats: Long,
+        invoice: String,
+        code: String,
+    ) {
         val nowTimestamp = nowTimestamp().epochSecond.toULong()
 
         val lightningActivity = LightningActivity.create(
-            id = result.paymentHashOrTxId,
+            id = paymentHashOrTxId,
             txType = PaymentType.RECEIVED,
             status = PaymentState.SUCCEEDED,
-            value = result.sats.toULong(),
-            invoice = result.invoice,
+            value = sats.toULong(),
+            invoice = invoice,
             timestamp = nowTimestamp,
-            message = result.code,
+            message = code,
         )
 
         activityRepo.insertActivity(Activity.Lightning(lightningActivity)).getOrThrow()
