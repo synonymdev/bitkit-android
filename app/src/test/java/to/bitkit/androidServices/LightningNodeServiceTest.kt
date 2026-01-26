@@ -92,7 +92,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
     fun setUp() = runBlocking {
         hiltRule.inject()
         lightningRepo.stub {
-            onBlocking {
+            on {
                 start(
                     any(),
                     anyOrNull(),
@@ -103,7 +103,6 @@ class LightningNodeServiceTest : BaseUnitTest() {
                     anyOrNull(),
                 )
             } doAnswer {
-                @Suppress("UNCHECKED_CAST")
                 capturedHandler = it.getArgument(5) as? NodeEventHandler
                 Result.success(Unit)
             }
