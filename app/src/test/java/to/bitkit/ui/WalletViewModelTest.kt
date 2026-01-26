@@ -20,6 +20,8 @@ import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.ConnectivityRepo
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.SyncSource
@@ -41,11 +43,13 @@ class WalletViewModelTest : BaseUnitTest() {
     private val backupRepo = mock<BackupRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val migrationService = mock<MigrationService>()
+    private val connectivityRepo = mock<ConnectivityRepo>()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
     private val balanceState = MutableStateFlow(BalanceState())
     private val isRecoveryMode = MutableStateFlow(false)
+    private val isOnline = MutableStateFlow(ConnectivityState.CONNECTED)
 
     @Before
     fun setUp() = runBlocking {
@@ -53,6 +57,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
+        whenever(connectivityRepo.isOnline).thenReturn(isOnline)
 
         sut = WalletViewModel(
             context = context,
@@ -63,6 +68,7 @@ class WalletViewModelTest : BaseUnitTest() {
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
             migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
         )
     }
 
@@ -247,6 +253,7 @@ class WalletViewModelTest : BaseUnitTest() {
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
             migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -287,6 +294,7 @@ class WalletViewModelTest : BaseUnitTest() {
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
             migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
         )
 
         // Trigger restore to put state in non-idle
