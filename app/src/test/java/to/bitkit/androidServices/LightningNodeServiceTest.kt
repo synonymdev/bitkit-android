@@ -27,9 +27,10 @@ import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
-import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.stub
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.Robolectric
@@ -83,24 +84,30 @@ class LightningNodeServiceTest : BaseUnitTest() {
     @BindValue
     val cacheStore = mock<CacheStore>()
 
-    private val captor = argumentCaptor<NodeEventHandler>()
+    private var capturedHandler: NodeEventHandler? = null
     private val cacheData = MutableSharedFlow<AppCacheData>(replay = 1)
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Before
     fun setUp() = runBlocking {
         hiltRule.inject()
-        whenever(
-            lightningRepo.start(
-                any(),
-                anyOrNull(),
-                any(),
-                anyOrNull(),
-                anyOrNull(),
-                captor.capture(),
-                anyOrNull(),
-            )
-        ).thenReturn(Result.success(Unit))
+        lightningRepo.stub {
+            onBlocking {
+                start(
+                    any(),
+                    anyOrNull(),
+                    any(),
+                    anyOrNull(),
+                    anyOrNull(),
+                    anyOrNull(),
+                    anyOrNull(),
+                )
+            } doAnswer {
+                @Suppress("UNCHECKED_CAST")
+                capturedHandler = it.getArgument(5) as? NodeEventHandler
+                Result.success(Unit)
+            }
+        }
         whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
 
         // Set up CacheStore mock
@@ -139,7 +146,6 @@ class LightningNodeServiceTest : BaseUnitTest() {
         controller.create().startCommand(0, 0)
         testScheduler.advanceUntilIdle()
 
-        val capturedHandler = captor.lastValue
         assertNotNull("Event handler should be captured", capturedHandler)
 
         val event = Event.PaymentReceived(
@@ -186,7 +192,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             customRecords = emptyList()
         )
 
-        captor.lastValue?.invoke(event)
+        capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -214,7 +220,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             customRecords = emptyList()
         )
 
-        captor.lastValue?.invoke(event)
+        capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
