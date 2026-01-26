@@ -25,69 +25,59 @@ val ChannelDetails.amountOnClose: ULong
     }
 
 /** Returns only `open` channels, filtering out pending ones. */
-fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
-    return this.filter { it.isChannelReady }
-}
+fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> = this.filter { it.isChannelReady }
 
 /** Returns only `pending` channels. */
-fun List<ChannelDetails>.filterPending(): List<ChannelDetails> {
-    return this.filterNot { it.isChannelReady }
-}
+fun List<ChannelDetails>.filterPending(): List<ChannelDetails> = this.filterNot { it.isChannelReady }
 
 /** Returns a limit in sats as close as possible to the HTLC limit we can currently send. */
-fun List<ChannelDetails>?.totalNextOutboundHtlcLimitSats(): ULong {
-    return this?.filter { it.isUsable }
-        ?.sumOf { it.nextOutboundHtlcLimitMsat / 1000u }
-        ?: 0u
-}
+fun List<ChannelDetails>?.totalNextOutboundHtlcLimitSats(): ULong = this?.filter { it.isUsable }
+    ?.sumOf { it.nextOutboundHtlcLimitMsat / 1000u }
+    ?: 0u
 
 /** Calculates the total remote balance (inbound capacity) from open channels. */
-fun List<ChannelDetails>.calculateRemoteBalance(): ULong {
-    return this
-        .filterOpen()
-        .sumOf { it.inboundCapacityMsat / 1000u }
-}
+fun List<ChannelDetails>.calculateRemoteBalance(): ULong = this
+    .filterOpen()
+    .sumOf { it.inboundCapacityMsat / 1000u }
 
-fun createChannelDetails(): ChannelDetails {
-    return ChannelDetails(
-        channelId = "channelId",
-        counterpartyNodeId = "counterpartyNodeId",
-        fundingTxo = null,
-        shortChannelId = null,
-        outboundScidAlias = null,
-        inboundScidAlias = null,
-        channelValueSats = 0u,
-        unspendablePunishmentReserve = null,
-        userChannelId = "0",
-        feerateSatPer1000Weight = 0u,
-        outboundCapacityMsat = 0u,
-        inboundCapacityMsat = 0u,
-        confirmationsRequired = null,
-        confirmations = null,
-        isOutbound = false,
-        isChannelReady = false,
-        isUsable = false,
-        isAnnounced = false,
-        cltvExpiryDelta = null,
-        counterpartyUnspendablePunishmentReserve = 0u,
-        counterpartyOutboundHtlcMinimumMsat = null,
-        counterpartyOutboundHtlcMaximumMsat = null,
-        counterpartyForwardingInfoFeeBaseMsat = null,
-        counterpartyForwardingInfoFeeProportionalMillionths = null,
-        counterpartyForwardingInfoCltvExpiryDelta = null,
-        nextOutboundHtlcLimitMsat = 0u,
-        nextOutboundHtlcMinimumMsat = 0u,
-        forceCloseSpendDelay = null,
-        inboundHtlcMinimumMsat = 0u,
-        inboundHtlcMaximumMsat = null,
-        claimableOnCloseSats = 0u,
-        config = ChannelConfig(
-            forwardingFeeProportionalMillionths = 0u,
-            forwardingFeeBaseMsat = 0u,
-            cltvExpiryDelta = 0u,
-            maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 0u),
-            forceCloseAvoidanceMaxFeeSatoshis = 0u,
-            acceptUnderpayingHtlcs = false,
-        ),
-    )
-}
+fun createChannelDetails(): ChannelDetails = ChannelDetails(
+    channelId = "channelId",
+    counterpartyNodeId = "counterpartyNodeId",
+    fundingTxo = null,
+    shortChannelId = null,
+    outboundScidAlias = null,
+    inboundScidAlias = null,
+    channelValueSats = 0u,
+    unspendablePunishmentReserve = null,
+    userChannelId = "0",
+    feerateSatPer1000Weight = 0u,
+    outboundCapacityMsat = 0u,
+    inboundCapacityMsat = 0u,
+    confirmationsRequired = null,
+    confirmations = null,
+    isOutbound = false,
+    isChannelReady = false,
+    isUsable = false,
+    isAnnounced = false,
+    cltvExpiryDelta = null,
+    counterpartyUnspendablePunishmentReserve = 0u,
+    counterpartyOutboundHtlcMinimumMsat = null,
+    counterpartyOutboundHtlcMaximumMsat = null,
+    counterpartyForwardingInfoFeeBaseMsat = null,
+    counterpartyForwardingInfoFeeProportionalMillionths = null,
+    counterpartyForwardingInfoCltvExpiryDelta = null,
+    nextOutboundHtlcLimitMsat = 0u,
+    nextOutboundHtlcMinimumMsat = 0u,
+    forceCloseSpendDelay = null,
+    inboundHtlcMinimumMsat = 0u,
+    inboundHtlcMaximumMsat = null,
+    claimableOnCloseSats = 0u,
+    config = ChannelConfig(
+        forwardingFeeProportionalMillionths = 0u,
+        forwardingFeeBaseMsat = 0u,
+        cltvExpiryDelta = 0u,
+        maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 0u),
+        forceCloseAvoidanceMaxFeeSatoshis = 0u,
+        acceptUnderpayingHtlcs = false,
+    ),
+)
