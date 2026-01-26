@@ -76,6 +76,8 @@ data class ConvertedAmount(
     val sats: Long,
     val locale: Locale = Locale.getDefault(),
 ) {
+    val isSymbolSuffix: Boolean get() = currency in SUFFIX_SYMBOL_CURRENCIES
+
     data class BitcoinDisplayComponents(
         val symbol: String,
         val value: String,
@@ -88,6 +90,8 @@ data class ConvertedAmount(
             value = formattedValue,
         )
     }
+
+    fun formattedWithSymbol(): String = value.formatCurrencyWithSymbol(currency, symbol)
 }
 
 fun Long.formatMoney(
@@ -144,6 +148,41 @@ fun BigDecimal.formatCurrency(decimalPlaces: Int = FIAT_DECIMALS, locale: Locale
 
     return runCatching { formatter.format(this) }.getOrNull()
 }
+
+fun BigDecimal.formatCurrencyWithSymbol(
+    currencyCode: String,
+    currencySymbol: String? = null,
+    decimalPlaces: Int = FIAT_DECIMALS,
+): String {
+    val formatted = formatCurrency(decimalPlaces) ?: "0.00"
+    val symbol = currencySymbol
+        ?: runCatching { java.util.Currency.getInstance(currencyCode) }.getOrNull()?.symbol
+        ?: currencyCode
+
+    return if (currencyCode in SUFFIX_SYMBOL_CURRENCIES) {
+        "$formatted$symbol"
+    } else {
+        "$symbol$formatted"
+    }
+}
+
+fun isSuffixSymbolCurrency(currencyCode: String): Boolean = currencyCode in SUFFIX_SYMBOL_CURRENCIES
+
+private val SUFFIX_SYMBOL_CURRENCIES = setOf(
+    "BGN", // Bulgarian Lev (10,00 лв)
+    "CHF", // Swiss Franc (10.00 CHF)
+    "CZK", // Czech Koruna (10,00 Kč)
+    "DKK", // Danish Krone (10,00 kr)
+    "HRK", // Croatian Kuna (10,00 kn)
+    "HUF", // Hungarian Forint (10 000 Ft)
+    "ISK", // Icelandic Króna (10.000 kr)
+    "NOK", // Norwegian Krone (10,00 kr)
+    "PLN", // Polish Złoty (0,35 zł)
+    "RON", // Romanian Leu (10,00 lei)
+    "RUB", // Russian Ruble (10,00 ₽)
+    "SEK", // Swedish Krona (10,00 kr)
+    "TRY", // Turkish Lira (10,00 ₺)
+)
 
 /** Represent this sat value in Bitcoin BigDecimal. */
 fun Long.asBtc(): BigDecimal = BigDecimal(this).divide(BigDecimal(SATS_IN_BTC), BTC_SCALE, RoundingMode.HALF_UP)

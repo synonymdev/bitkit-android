@@ -89,10 +89,12 @@ fun BalanceHeaderView(
             modifier = modifier,
             smallRowSymbol = if (isBitcoinPrimary) fiat.symbol else btc.symbol,
             smallRowText = if (isBitcoinPrimary) fiat.formatted else btc.value,
+            smallRowIsSymbolSuffix = if (isBitcoinPrimary) fiat.isSymbolSuffix else false,
             smallRowModifier = Modifier.testTag("$testTag-secondary"),
             largeRowPrefix = prefix,
             largeRowText = if (isBitcoinPrimary) btc.value else fiat.formatted,
             largeRowSymbol = if (isBitcoinPrimary) btc.symbol else fiat.symbol,
+            largeRowIsSymbolSuffix = if (isBitcoinPrimary) false else fiat.isSymbolSuffix,
             largeRowModifier = Modifier.testTag("$testTag-primary"),
             showSymbol = if (isBitcoinPrimary) showBitcoinSymbol else true,
             hideBalance = shouldHideBalance,
@@ -110,10 +112,12 @@ fun BalanceHeader(
     modifier: Modifier = Modifier,
     smallRowSymbol: String? = null,
     smallRowText: String,
+    smallRowIsSymbolSuffix: Boolean = false,
     smallRowModifier: Modifier = Modifier,
     largeRowPrefix: String? = null,
     largeRowText: String,
     largeRowSymbol: String,
+    largeRowIsSymbolSuffix: Boolean = false,
     largeRowModifier: Modifier = Modifier,
     showSymbol: Boolean,
     hideBalance: Boolean = false,
@@ -137,6 +141,7 @@ fun BalanceHeader(
         SmallRow(
             symbol = smallRowSymbol,
             text = smallRowText,
+            isSymbolSuffix = smallRowIsSymbolSuffix,
             hideBalance = hideBalance,
             modifier = smallRowModifier,
         )
@@ -151,6 +156,7 @@ fun BalanceHeader(
                 text = largeRowText,
                 symbol = largeRowSymbol,
                 showSymbol = showSymbol,
+                isSymbolSuffix = largeRowIsSymbolSuffix,
                 hideBalance = hideBalance,
                 modifier = largeRowModifier,
             )
@@ -187,6 +193,7 @@ fun LargeRow(
     symbol: String,
     showSymbol: Boolean,
     modifier: Modifier = Modifier,
+    isSymbolSuffix: Boolean = false,
     hideBalance: Boolean = false,
 ) {
     Row(
@@ -202,7 +209,7 @@ fun LargeRow(
                     .testTag("MoneySign")
             )
         }
-        if (showSymbol) {
+        if (showSymbol && !isSymbolSuffix) {
             Display(
                 text = symbol,
                 color = Colors.White64,
@@ -221,6 +228,15 @@ fun LargeRow(
                 modifier = Modifier.testTag("MoneyText")
             )
         }
+        if (showSymbol && isSymbolSuffix) {
+            Display(
+                text = symbol,
+                color = Colors.White64,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .testTag("MoneyFiatSymbol")
+            )
+        }
     }
 }
 
@@ -229,6 +245,7 @@ private fun SmallRow(
     symbol: String?,
     text: String,
     modifier: Modifier = Modifier,
+    isSymbolSuffix: Boolean = false,
     hideBalance: Boolean = false,
 ) {
     Row(
@@ -236,7 +253,7 @@ private fun SmallRow(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier,
     ) {
-        if (symbol != null) {
+        if (symbol != null && !isSymbolSuffix) {
             Caption13Up(
                 text = symbol,
                 color = Colors.White64,
@@ -252,6 +269,13 @@ private fun SmallRow(
                 text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else text,
                 color = Colors.White64,
                 modifier = Modifier.testTag("MoneyText")
+            )
+        }
+        if (symbol != null && isSymbolSuffix) {
+            Caption13Up(
+                text = symbol,
+                color = Colors.White64,
+                modifier = Modifier.testTag("MoneyFiatSymbol")
             )
         }
     }

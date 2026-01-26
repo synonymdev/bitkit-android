@@ -245,6 +245,7 @@ private fun AmountView(
                 titlePrefix = prefix,
                 subtitle = converted.formatted,
                 subtitleSymbol = converted.symbol,
+                isSymbolSuffix = converted.isSymbolSuffix,
                 hideBalance = hideBalance,
             )
         } else {
@@ -253,6 +254,7 @@ private fun AmountView(
                 titleSymbol = converted.symbol,
                 titlePrefix = prefix,
                 subtitle = btcValue,
+                isSymbolSuffix = converted.isSymbolSuffix,
                 hideBalance = hideBalance,
             )
         }
@@ -267,6 +269,7 @@ private fun AmountViewContent(
     modifier: Modifier = Modifier,
     titleSymbol: String? = null,
     subtitleSymbol: String? = null,
+    isSymbolSuffix: Boolean = false,
     hideBalance: Boolean = false,
 ) {
     Column(
@@ -280,7 +283,7 @@ private fun AmountViewContent(
             horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             BodyM(text = titlePrefix, color = Colors.White64)
-            if (titleSymbol != null) {
+            if (titleSymbol != null && !isSymbolSuffix) {
                 BodyMSB(text = titleSymbol, color = Colors.White64)
             }
             Spacer(modifier = Modifier.width(2.dp))
@@ -291,6 +294,9 @@ private fun AmountViewContent(
             ) { isHidden ->
                 BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else title)
             }
+            if (titleSymbol != null && isSymbolSuffix) {
+                BodyMSB(text = titleSymbol, color = Colors.White64)
+            }
         }
 
         // Subtitle row with static symbol
@@ -298,7 +304,7 @@ private fun AmountViewContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            if (subtitleSymbol != null) {
+            if (subtitleSymbol != null && !isSymbolSuffix) {
                 CaptionB(text = subtitleSymbol, color = Colors.White64)
             }
             AnimatedContent(
@@ -310,6 +316,9 @@ private fun AmountViewContent(
                     text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else subtitle,
                     color = Colors.White64,
                 )
+            }
+            if (subtitleSymbol != null && isSymbolSuffix) {
+                CaptionB(text = subtitleSymbol, color = Colors.White64)
             }
         }
     }
