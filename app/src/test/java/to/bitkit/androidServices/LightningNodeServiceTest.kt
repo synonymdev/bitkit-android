@@ -36,7 +36,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import to.bitkit.App
-import to.bitkit.CurrentActivity
+import to.bitkit.AppLifecycle
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
@@ -115,13 +115,13 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val app = context as Application
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
 
-        // Reset App.currentActivity to simulate background state
-        App.currentActivity = CurrentActivity()
+        // Reset App.lifecycle to simulate background state
+        App.lifecycle = AppLifecycle()
     }
 
     @After
     fun tearDown() {
-        App.currentActivity = null
+        App.lifecycle = null
     }
 
     @Test
@@ -162,9 +162,9 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
     @Test
     fun `payment received in foreground does nothing`() = test {
-        // Simulate foreground by setting App.currentActivity.value via lifecycle callback
+        // Simulate foreground by setting App.lifecycle.value via lifecycle callback
         val mockActivity: Activity = mock()
-        App.currentActivity?.onActivityStarted(mockActivity)
+        App.lifecycle?.onActivityStarted(mockActivity)
 
         val controller = Robolectric.buildService(LightningNodeService::class.java)
         controller.create().startCommand(0, 0)

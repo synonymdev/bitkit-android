@@ -264,7 +264,7 @@ class WakeNodeWorker @AssistedInject constructor(
 
         // Only stop node if app is not in foreground
         // LightningNodeService will keep node running in background when notifications are enabled
-        if (App.currentActivity?.value == null) {
+        if (App.lifecycle?.activity == null) {
             Logger.debug("App in background, stopping node after notification delivery", context = TAG)
             lightningRepo.stop()
         } else {

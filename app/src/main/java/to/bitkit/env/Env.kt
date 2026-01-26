@@ -26,7 +26,7 @@ internal object Env {
 
     val ldkLogLevel = LogLevel.TRACE
 
-    val syncIntervals = if (network == Network.REGTEST) SyncIntervals.REGTEST else SyncIntervals.DEFAULT
+    val syncIntervals = if (network == Network.REGTEST) SyncIntervals.FAST else SyncIntervals.DEFAULT
 
     val trustedLnPeers
         get() = when (network) {
@@ -229,7 +229,7 @@ private object SyncIntervals {
         lightningWalletSyncIntervalSecs = 30_uL,
         feeRateCacheUpdateIntervalSecs = 600_uL, // 10 min
     )
-    val REGTEST = RuntimeSyncIntervals(
+    val FAST = RuntimeSyncIntervals(
         onchainWalletSyncIntervalSecs = 10_uL,
         lightningWalletSyncIntervalSecs = 10_uL,
         feeRateCacheUpdateIntervalSecs = 10_uL,

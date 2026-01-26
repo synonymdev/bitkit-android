@@ -44,11 +44,11 @@ import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.toBackgroundSyncConfig
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
-import to.bitkit.ext.toBackgroundSyncConfig
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
 import to.bitkit.utils.Logger

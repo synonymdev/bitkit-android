@@ -9,9 +9,6 @@ import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +17,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
+import to.bitkit.AppLifecycleListener
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
@@ -57,13 +55,30 @@ class LightningNodeService : Service() {
     @Inject
     lateinit var cacheStore: CacheStore
 
-    private var lifecycleObserver: AppLifecycleObserver? = null
+    private var lifecycleListener: AppLifecycleListener? = null
 
     override fun onCreate() {
         super.onCreate()
         startForeground(ID_NOTIFICATION_NODE, createNotification())
         setupService()
-        lifecycleObserver = AppLifecycleObserver().also { ProcessLifecycleOwner.get().lifecycle.addObserver(it) }
+        setupLifecycleListener()
+    }
+
+    private fun setupLifecycleListener() {
+        lifecycleListener = AppLifecycleListener { isInForeground ->
+            Logger.debug("App lifecycle changed: isInForeground=$isInForeground", context = TAG)
+            serviceScope.launch {
+                if (isInForeground) {
+                    lightningRepo.disableBatterySavingMode()
+                        .onSuccess { Logger.debug("Exited battery saving mode", context = TAG) }
+                        .onFailure { Logger.warn("Error exiting battery saving mode", it, context = TAG) }
+                } else {
+                    lightningRepo.enableBatterySavingMode()
+                        .onSuccess { Logger.debug("Entered battery saving mode", context = TAG) }
+                        .onFailure { Logger.warn("Error entering battery saving mode", it, context = TAG) }
+                }
+            }
+        }.also { App.lifecycle?.addListener(it) }
     }
 
     private fun setupService() {
@@ -96,7 +111,7 @@ class LightningNodeService : Service() {
         sheet: NewTransactionSheetDetails,
         notification: NotificationDetails,
     ) {
-        if (App.currentActivity?.value != null) {
+        if (App.lifecycle?.activity != null) {
             Logger.debug("Skipping payment notification: activity is active", context = TAG)
             return
         }
@@ -134,7 +149,7 @@ class LightningNodeService : Service() {
             ACTION_STOP_SERVICE_AND_APP -> {
                 Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
                 // Close activities gracefully without force-stopping the app
-                App.currentActivity?.value?.finishAffinity()
+                App.lifecycle?.activity?.finishAffinity()
                 // Stop the service
                 stopSelf()
                 return START_NOT_STICKY
@@ -145,7 +160,7 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
-        lifecycleObserver?.let { ProcessLifecycleOwner.get().lifecycle.removeObserver(it) }
+        lifecycleListener?.let { App.lifecycle?.removeListener(it) }
         serviceScope.launch {
             lightningRepo.stop()
             serviceScope.cancel()
@@ -164,24 +179,6 @@ class LightningNodeService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    private inner class AppLifecycleObserver : DefaultLifecycleObserver {
-        override fun onStart(owner: LifecycleOwner) {
-            serviceScope.launch {
-                lightningRepo.disableBatterySavingMode()
-                    .onSuccess { Logger.debug("Sync intervals exited battery saving mode", context = TAG) }
-                    .onFailure { Logger.warn("Error setting sync intervals out of battery saving", it, context = TAG) }
-            }
-        }
-
-        override fun onStop(owner: LifecycleOwner) {
-            serviceScope.launch {
-                lightningRepo.enableBatterySavingMode()
-                    .onSuccess { Logger.debug("Sync intervals entered battery saving mode", context = TAG) }
-                    .onFailure { Logger.warn("Error setting sync intervals set to battery saving", it, context = TAG) }
-            }
-        }
-    }
 
     companion object {
         const val TAG = "LightningNodeService"
