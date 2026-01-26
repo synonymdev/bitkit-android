@@ -720,8 +720,6 @@
     <string name="settings__widgets__nav_title">Widgety</string>
     <string name="settings__widgets__showWidgetTitles">Zobrazit názvy widgetů</string>
     <string name="settings__widgets__showWidgets">Widgety</string>
-    <string name="slashtags__auth_depricated_msg">Slashauth je zastaralý. Používejte prosím Bitkit Beta.</string>
-    <string name="slashtags__auth_depricated_title">Nedoporučený</string>
     <string name="slashtags__onboarding_profile1_header">Vlastněte svůj\n&lt;accent&gt;profil&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Nastavte si veřejný profil a odkazy, aby vás kontakty ze služby Bitkit mohly kdykoli a kdekoli kontaktovat nebo vám zaplatit.</string>
     <string name="slashtags__profile">Profil</string>

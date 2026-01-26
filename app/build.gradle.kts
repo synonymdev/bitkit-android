@@ -37,7 +37,14 @@ val keystoreProperties by lazy {
     keystoreProperties
 }
 
-val locales = listOf("en", "ar", "ca", "cs", "de", "el", "es", "fr", "it", "nl", "pl", "pt", "ru")
+// Android resource qualifier format for androidResources.localeFilters
+val androidLocales = listOf(
+    "en", "ar", "b+es+419", "ca", "cs", "de", "el", "es", "es-rES", "fr", "it", "nl", "pl", "pt", "pt-rBR", "ru"
+)
+// BCP 47 format for BuildConfig.LOCALES (used with Locale.forLanguageTag())
+val bcp47Locales = listOf(
+    "en", "ar", "es-419", "ca", "cs", "de", "el", "es", "es-ES", "fr", "it", "nl", "pl", "pt", "pt-BR", "ru"
+)
 val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 
 android {
@@ -47,8 +54,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 170
-        versionName = "2.0.0-rc.4"
+        versionCode = 172
+        versionName = "2.0.0-rc.6"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -56,7 +63,7 @@ android {
         buildConfigField("boolean", "E2E", System.getenv("E2E")?.toBoolean()?.toString() ?: "false")
         buildConfigField("String", "E2E_BACKEND", "\"$e2eBackendEnv\"")
         buildConfigField("boolean", "GEO", System.getenv("GEO")?.toBoolean()?.toString() ?: "true")
-        buildConfigField("String", "LOCALES", "\"${locales.joinToString(",")}\"")
+        buildConfigField("String", "LOCALES", "\"${bcp47Locales.joinToString(",")}\"")
     }
 
     flavorDimensions += "network"
@@ -146,7 +153,7 @@ android {
     }
     androidResources {
         @Suppress("UnstableApiUsage")
-        localeFilters.addAll(locales)
+        localeFilters.addAll(androidLocales)
         @Suppress("UnstableApiUsage")
         generateLocaleConfig = true
     }

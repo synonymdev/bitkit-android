@@ -59,66 +59,78 @@ class GiftViewModel @Inject constructor(
     }
 
     private suspend fun claimGift() = withContext(bgDispatcher) {
-        if (isClaiming) return@withContext
+        if (isClaiming) {
+            Logger.debug("Gift claim already in progress, skipping", context = TAG)
+            return@withContext
+        }
         isClaiming = true
 
         try {
+            Logger.debug("Claiming gift: code=$code, amount=$amount", context = TAG)
             blocktankRepo.claimGiftCode(
                 code = code,
                 amount = amount,
                 waitTimeout = NODE_STARTUP_TIMEOUT_MS.milliseconds,
             ).fold(
-                onSuccess = { result ->
-                    when (result) {
-                        is GiftClaimResult.SuccessWithLiquidity -> {
-                            _navigationEvent.emit(GiftRoute.Success)
-                        }
-                        is GiftClaimResult.SuccessWithoutLiquidity -> {
-                            insertGiftActivity(result)
-                            _successEvent.emit(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.LIGHTNING,
-                                    direction = NewTransactionSheetDirection.RECEIVED,
-                                    paymentHashOrTxId = result.paymentHashOrTxId,
-                                    sats = result.sats,
-                                )
-                            )
-                            _navigationEvent.emit(GiftRoute.Success)
-                        }
+                onSuccess = {
+                    Logger.debug("Gift claim successful: $it", context = TAG)
+                    if (it is GiftClaimResult.SuccessWithoutLiquidity) {
+                        insertGiftActivity(it.paymentHashOrTxId, it.sats, it.invoice, it.code)
                     }
+                    _successEvent.emit(
+                        NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.LIGHTNING,
+                            direction = NewTransactionSheetDirection.RECEIVED,
+                            paymentHashOrTxId = it.paymentHashOrTxId,
+                            sats = it.sats,
+                        )
+                    )
+                    _navigationEvent.emit(GiftRoute.Success)
                 },
-                onFailure = { error ->
-                    handleGiftClaimError(error)
-                }
+                onFailure = { handleGiftClaimError(it) },
             )
         } finally {
             isClaiming = false
         }
     }
 
-    private suspend fun insertGiftActivity(result: GiftClaimResult.SuccessWithoutLiquidity) {
+    private suspend fun insertGiftActivity(
+        paymentHashOrTxId: String,
+        sats: Long,
+        invoice: String,
+        code: String,
+    ) {
         val nowTimestamp = nowTimestamp().epochSecond.toULong()
 
         val lightningActivity = LightningActivity.create(
-            id = result.paymentHashOrTxId,
+            id = paymentHashOrTxId,
             txType = PaymentType.RECEIVED,
             status = PaymentState.SUCCEEDED,
-            value = result.sats.toULong(),
-            invoice = result.invoice,
+            value = sats.toULong(),
+            invoice = invoice,
             timestamp = nowTimestamp,
-            message = result.code,
+            message = code,
         )
 
         activityRepo.insertActivity(Activity.Lightning(lightningActivity)).getOrThrow()
     }
 
     private suspend fun handleGiftClaimError(error: Throwable) {
-        Logger.error("Gift claim failed: $error", error, context = TAG)
+        Logger.error("Gift claim failed", error, context = TAG)
 
         val route = when {
-            errorContains(error, "GIFT_CODE_ALREADY_USED") -> GiftRoute.Used
-            errorContains(error, "GIFT_CODE_USED_UP") -> GiftRoute.UsedUp
-            else -> GiftRoute.Error
+            errorContains(error, "GIFT_CODE_ALREADY_USED") -> {
+                Logger.info("Gift code was already used", context = TAG)
+                GiftRoute.Used
+            }
+            errorContains(error, "GIFT_CODE_USED_UP") -> {
+                Logger.info("Gift code promotion depleted", context = TAG)
+                GiftRoute.UsedUp
+            }
+            else -> {
+                Logger.error("Unhandled gift claim error type", error, context = TAG)
+                GiftRoute.Error
+            }
         }
 
         _navigationEvent.emit(route)

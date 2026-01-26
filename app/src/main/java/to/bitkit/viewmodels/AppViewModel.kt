@@ -255,7 +255,14 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
                 if (sheetType != null) {
-                    showSheet(Sheet.TimedSheet(sheetType))
+                    val currentSheet = _currentSheet.value
+                    val isHighPrioritySheetShowing = currentSheet is Sheet.Gift ||
+                        currentSheet is Sheet.Send ||
+                        currentSheet is Sheet.LnurlAuth ||
+                        currentSheet is Sheet.Pin
+                    if (!isHighPrioritySheetShowing) {
+                        showSheet(Sheet.TimedSheet(sheetType))
+                    }
                 } else {
                     // Clear the timed sheet when manager sets it to null
                     _currentSheet.update { current ->
