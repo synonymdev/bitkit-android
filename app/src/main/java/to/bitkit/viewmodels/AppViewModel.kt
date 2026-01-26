@@ -285,13 +285,17 @@ class AppViewModel @Inject constructor(
                             migrationService.isShowingMigrationLoading.first { !it }
                         }
                     } catch (e: TimeoutCancellationException) {
-                        if (!isCompletingMigration) {
-                            Logger.warn(
-                                "Migration loading screen timeout, completing migration anyway",
-                                context = TAG
-                            )
-                            completeMigration()
-                        }
+                        val timeoutSecs = MIGRATION_LOADING_TIMEOUT_MS / 1000
+                        Logger.warn("Migration loading timeout (${timeoutSecs}s), dismissing", context = TAG)
+                        migrationService.setShowingMigrationLoading(false)
+                    }
+                } else {
+                    if (migrationService.needsPostMigrationSync()) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.WARNING,
+                            title = context.getString(R.string.migration__network_required_title),
+                            description = context.getString(R.string.migration__network_required_msg),
+                        )
                     }
                 }
             }
@@ -359,11 +363,12 @@ class AppViewModel @Inject constructor(
     private suspend fun handleSyncCompleted() {
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
+        val needsPostMigrationSync = migrationService.needsPostMigrationSync()
 
         when {
-            isShowingLoading && !isCompletingMigration -> completeMigration()
+            (isShowingLoading || needsPostMigrationSync) && !isCompletingMigration -> completeMigration()
             isRestoringRemote -> completeRNRemoteBackupRestore()
-            !isShowingLoading && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
+            !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
             else -> Unit
         }
     }
@@ -391,9 +396,16 @@ class AppViewModel @Inject constructor(
         migrationService.reapplyMetadataAfterSync()
         activityRepo.syncActivities()
         walletRepo.syncBalances()
-        migrationService.setRestoringFromRNRemoteBackup(false)
-        migrationService.setShowingMigrationLoading(false)
-        checkForSweepableFunds()
+
+        if (migrationService.canCleanupAfterMigration) {
+            migrationService.cleanupAfterMigration()
+            migrationService.setRestoringFromRNRemoteBackup(false)
+            migrationService.setShowingMigrationLoading(false)
+            checkForSweepableFunds()
+        } else {
+            Logger.info("Post-migration sync incomplete (remote restore), will retry on next sync", context = TAG)
+            migrationService.setShowingMigrationLoading(false)
+        }
     }
 
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
@@ -439,10 +451,16 @@ class AppViewModel @Inject constructor(
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
-        migrationService.setShowingMigrationLoading(false)
-        delay(MIGRATION_AUTH_RESET_DELAY_MS)
-        resetIsAuthenticatedStateInternal()
-        checkForSweepableFunds()
+        if (migrationService.canCleanupAfterMigration) {
+            migrationService.cleanupAfterMigration()
+            migrationService.setShowingMigrationLoading(false)
+            delay(MIGRATION_AUTH_RESET_DELAY_MS)
+            resetIsAuthenticatedStateInternal()
+            checkForSweepableFunds()
+        } else {
+            Logger.info("Post-migration sync incomplete, will retry on next sync", context = TAG)
+            migrationService.setShowingMigrationLoading(false)
+        }
     }
 
     private suspend fun finishMigrationWithFallbackSync() {
@@ -453,10 +471,16 @@ class AppViewModel @Inject constructor(
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
-        migrationService.setShowingMigrationLoading(false)
-        delay(MIGRATION_AUTH_RESET_DELAY_MS)
-        resetIsAuthenticatedStateInternal()
-        checkForSweepableFunds()
+        if (migrationService.canCleanupAfterMigration) {
+            migrationService.cleanupAfterMigration()
+            migrationService.setShowingMigrationLoading(false)
+            delay(MIGRATION_AUTH_RESET_DELAY_MS)
+            resetIsAuthenticatedStateInternal()
+            checkForSweepableFunds()
+        } else {
+            Logger.info("Post-migration sync incomplete (fallback), will retry on next sync", context = TAG)
+            migrationService.setShowingMigrationLoading(false)
+        }
     }
 
     private suspend fun finishMigrationWithError() {
@@ -566,6 +590,9 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun notifyPaymentReceived(event: Event) {
+        if (migrationService.isShowingMigrationLoading.value || migrationService.needsPostMigrationSync()) {
+            return
+        }
         val command = NotifyPaymentReceived.Command.from(event) ?: return
         val result = notifyPaymentReceivedHandler(command).getOrNull()
         if (result !is NotifyPaymentReceived.Result.ShowSheet) return
@@ -2242,7 +2269,7 @@ class AppViewModel @Inject constructor(
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val SCREEN_TRANSITION_DELAY_MS = 300L
-        private const val MIGRATION_LOADING_TIMEOUT_MS = 300_000L
+        private const val MIGRATION_LOADING_TIMEOUT_MS = 120_000L
         private const val MIGRATION_AUTH_RESET_DELAY_MS = 500L
         private const val REMOTE_RESTORE_NODE_RESTART_DELAY_MS = 500L
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L

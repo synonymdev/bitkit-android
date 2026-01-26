@@ -257,6 +257,8 @@
     <string name="lightning__wallet_balances">Wallet Balances</string>
     <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version. This usually takes less than a minute.</string>
     <string name="migration__nav_title">Wallet Migration</string>
+    <string name="migration__network_required_msg">Please ensure you have a stable internet connection. Data may show incorrectly while trying to connect.</string>
+    <string name="migration__network_required_title">Network Issues Detected</string>
     <string name="migration__title">MIGRATING\n&lt;accent&gt;WALLET&lt;/accent&gt;</string>
     <string name="notification__channel_closed__mutual_body">Balance moved from spending to savings</string>
     <string name="notification__channel_closed__reason_body">Reason: %s</string>

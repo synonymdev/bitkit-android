@@ -29,6 +29,8 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.ConnectivityRepo
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
@@ -54,6 +56,7 @@ class WalletViewModel @Inject constructor(
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
     private val migrationService: MigrationService,
+    private val connectivityRepo: ConnectivityRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -82,10 +85,33 @@ class WalletViewModel @Inject constructor(
     val isRefreshing = _isRefreshing.asStateFlow()
 
     private var syncJob: Job? = null
+    private var pendingWalletStart = false
 
     init {
         checkAndPerformRNMigration()
         collectStates()
+        observeNetworkState()
+    }
+
+    private fun observeNetworkState() = viewModelScope.launch(bgDispatcher) {
+        connectivityRepo.isOnline.collect { state ->
+            if (state == ConnectivityState.CONNECTED && pendingWalletStart) {
+                pendingWalletStart = false
+                val isChecked = migrationService.isMigrationChecked()
+                if (!isChecked && migrationService.hasRNWalletData()) {
+                    Logger.info("Network restored, retrying RN migration...", context = TAG)
+                    checkAndPerformRNMigration()
+                } else {
+                    Logger.info("Network restored, retrying wallet start...", context = TAG)
+                    start()
+                }
+            }
+        }
+    }
+
+    private suspend fun isNetworkConnected(): Boolean {
+        val state = connectivityRepo.isOnline.first()
+        return state == ConnectivityState.CONNECTED
     }
 
     private fun checkAndPerformRNMigration() = viewModelScope.launch(bgDispatcher) {
@@ -110,6 +136,7 @@ class WalletViewModel @Inject constructor(
         }
 
         migrationService.setShowingMigrationLoading(true)
+        Logger.info("RN wallet data found, starting migration...", context = TAG)
 
         runCatching {
             migrationService.migrateFromReactNative()
@@ -117,6 +144,13 @@ class WalletViewModel @Inject constructor(
             walletExists = walletRepo.walletExists()
             loadCacheIfWalletExists()
             if (walletExists) {
+                // Re-check network before starting wallet (like iOS)
+                if (!isNetworkConnected()) {
+                    Logger.warn("Network offline, dismissing loader and skipping wallet start", context = TAG)
+                    migrationService.setShowingMigrationLoading(false)
+                    pendingWalletStart = true
+                    return@launch
+                }
                 val channelMigration = buildChannelMigrationIfAvailable()
                 startNode(0, channelMigration)
             } else {
@@ -212,6 +246,16 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             isStarting = true
             try {
+                if (!isNetworkConnected()) {
+                    Logger.warn("Network offline, skipping wallet start", context = TAG)
+                    pendingWalletStart = true
+
+                    if (migrationService.isShowingMigrationLoading.value) {
+                        migrationService.setShowingMigrationLoading(false)
+                    }
+                    return@launch
+                }
+
                 waitForRestoreIfNeeded()
 
                 val channelMigration = buildChannelMigrationIfAvailable()
