@@ -22,6 +22,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.measureTime
 import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
 
@@ -30,13 +31,21 @@ private const val LDK = "LDK"
 private const val COMPACT = false
 
 enum class LogSource { Ldk, Bitkit, Unknown }
-enum class LogLevel { PERF, VERBOSE, GOSSIP, TRACE, DEBUG, INFO, WARN, ERROR; }
+enum class LogLevel { PERF, VERBOSE, GOSSIP, TRACE, DEBUG, INFO, WARN, ERROR }
 
 val Logger = AppLogger()
 
-class AppLogger(private val source: LogSource = LogSource.Bitkit) {
+class AppLogger {
     companion object {
         private const val TAG = "Logger"
+        private val saverRef = AtomicReference<LogSaver?>(null)
+
+        fun getOrCreateSaver(): LogSaver = saverRef.get() ?: synchronized(this) {
+            saverRef.get() ?: run {
+                val sessionPath = runCatching { buildSessionLogFilePath() }.getOrElse { "" }
+                LogSaverImpl(sessionPath).also { saverRef.set(it) }
+            }
+        }
     }
 
     private var delegate: LoggerImpl? = null
@@ -45,15 +54,15 @@ class AppLogger(private val source: LogSource = LogSource.Bitkit) {
         delegate = runCatching { createDelegate() }.getOrNull()
     }
 
-    private fun createDelegate(): LoggerImpl {
-        val sessionPath = runCatching { buildSessionLogFilePath(source) }.getOrElse { "" }
-        return LoggerImpl(APP, LogSaverImpl(source, sessionPath))
-    }
+    private fun createDelegate() = LoggerImpl(APP, getOrCreateSaver())
 
     fun reset() {
         warn("Wiping entire logs directory…", context = TAG)
-        runCatching { Env.logDir.deleteRecursively() }
-        delegate = runCatching { createDelegate() }.getOrNull()
+        synchronized(AppLogger) {
+            runCatching { Env.logDir.deleteRecursively() }
+            saverRef.set(null)
+            delegate = runCatching { createDelegate() }.getOrNull()
+        }
     }
 
     fun info(
@@ -114,7 +123,7 @@ class AppLogger(private val source: LogSource = LogSource.Bitkit) {
     }
 }
 
-class LoggerImpl(
+private class LoggerImpl(
     private val tag: String = APP,
     private val saver: LogSaver,
     private val compact: Boolean = COMPACT,
@@ -198,7 +207,6 @@ interface LogSaver {
 }
 
 class LogSaverImpl(
-    source: LogSource,
     private val sessionFilePath: String,
 ) : LogSaver {
     private val queue: CoroutineScope by lazy {
@@ -207,7 +215,7 @@ class LogSaverImpl(
 
     init {
         if (sessionFilePath.isNotEmpty()) {
-            log("Log session for '${source.name}' initialized with file path: '$sessionFilePath'")
+            log("Log session initialized with file path: '$sessionFilePath'")
 
             // Clean all old log files in background
             CoroutineScope(Dispatchers.IO).launch {
@@ -221,8 +229,9 @@ class LogSaverImpl(
 
         queue.launch {
             runCatching {
+                val sanitized = message.replace("\n", " ")
                 FileOutputStream(File(sessionFilePath), true).use { stream ->
-                    stream.write("$message\n".toByteArray())
+                    stream.write("$sanitized\n".toByteArray())
                 }
             }.onFailure {
                 Log.e(APP, "Error writing to log file: '$sessionFilePath'", it)
@@ -242,22 +251,21 @@ class LogSaverImpl(
 
         val logFiles = logDir
             .listFiles { file -> file.extension == "log" }
-            ?.map { file -> Triple(file, file.length(), file.lastModified()) }
             ?: return
 
-        var totalSize = logFiles.sumOf { it.second }
+        var totalSize = logFiles.sumOf { it.length() }
         val maxSizeBytes = maxTotalSizeMB * 1024L * 1024L
 
         // Sort by creation date (oldest first)
         logFiles
-            .sortedBy { it.third }
-            .forEach { (file, size, _) ->
+            .sortedBy { it.lastModified() }
+            .forEach { file ->
                 if (totalSize <= maxSizeBytes) return
 
                 runCatching {
                     Log.d(APP, "Deleting old log file: '${file.name}'")
                     if (file.delete()) {
-                        totalSize -= size
+                        totalSize -= file.length()
                     }
                 }.onFailure {
                     Log.w(APP, "Failed to delete old log file: '${file.name}'", it)
@@ -273,8 +281,7 @@ class LogSaverImpl(
 
 class LdkLogWriter(
     private val maxLogLevel: LdkLogLevel = Env.ldkLogLevel,
-    private val source: LogSource = LogSource.Ldk,
-    saver: LogSaver = LogSaverImpl(source, buildSessionLogFilePath(source)),
+    saver: LogSaver = AppLogger.getOrCreateSaver(),
 ) : LogWriter {
     private val delegate: LoggerImpl = LoggerImpl(LDK, saver)
 
@@ -296,11 +303,10 @@ class LdkLogWriter(
     }
 }
 
-private fun buildSessionLogFilePath(source: LogSource): String {
+private fun buildSessionLogFilePath(): String {
     val logDir = Env.logDir
-    val sourceName = source.name.lowercase()
     val timestamp = utcDateFormatterOf(DatePattern.LOG_FILE).format(Date())
-    val path = logDir.resolve("${sourceName}_$timestamp.log").path
+    val path = logDir.resolve("bitkit_$timestamp.log").path
     return path
 }
 
