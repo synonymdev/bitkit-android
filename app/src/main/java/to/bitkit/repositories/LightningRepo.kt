@@ -296,7 +296,10 @@ class LightningRepo @Inject constructor(
             if (getStatus()?.isRunning == true) {
                 Logger.info("LDK node already running", context = TAG)
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                lightningService.listenForEvents(::onEvent)
+                lightningService.startEventListener(::onEvent).onFailure {
+                    Logger.warn("Failed to start event listener", it, context = TAG)
+                    return@withContext Result.failure(it)
+                }
                 return@withContext Result.success(Unit)
             }
 
@@ -896,11 +899,13 @@ class LightningRepo @Inject constructor(
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
 
     suspend fun getBalancesAsync(): Result<BalanceDetails> = executeWhenNodeRunning("getBalancesAsync") {
-        Result.success(checkNotNull(lightningService.balances))
+        lightningService.balances?.let { Result.success(it) }
+            ?: Result.failure(AppError("Balances not available"))
     }
 
     suspend fun getChannelsAsync(): Result<List<ChannelDetails>> = executeWhenNodeRunning("getChannelsAsync") {
-        Result.success(checkNotNull(lightningService.channels))
+        lightningService.channels?.let { Result.success(it) }
+            ?: Result.failure(AppError("Channels not available"))
     }
 
     fun getStatus(): NodeStatus? =

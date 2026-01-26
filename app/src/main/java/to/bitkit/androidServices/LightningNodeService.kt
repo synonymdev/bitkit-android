@@ -146,9 +146,8 @@ class LightningNodeService : Service() {
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
         serviceScope.launch {
-            lightningRepo.stop().onSuccess {
-                serviceScope.cancel()
-            }
+            lightningRepo.stop()
+            serviceScope.cancel()
         }
         super.onDestroy()
     }
