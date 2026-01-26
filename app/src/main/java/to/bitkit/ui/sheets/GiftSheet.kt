@@ -65,9 +65,7 @@ fun GiftSheet(
             startDestination = GiftRoute.Loading,
         ) {
             composableWithDefaultTransitions<GiftRoute.Loading> {
-                GiftLoading(
-                    viewModel = viewModel,
-                )
+                GiftLoading(amount = sheet.amount)
             }
             composableWithDefaultTransitions<GiftRoute.Used> {
                 GiftErrorSheet(
