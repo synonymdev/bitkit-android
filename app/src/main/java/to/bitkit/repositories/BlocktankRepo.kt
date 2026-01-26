@@ -195,7 +195,7 @@ class BlocktankRepo @Inject constructor(
 
     suspend fun createCjit(
         amountSats: ULong,
-        description: String = Env.DEFAULT_INVOICE_MESSAGE,
+        description: String = "",
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
         runCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()

@@ -724,8 +724,6 @@
     <string name="slashtags__onboarding_profile1_text">Configurez votre profil public et vos liens, afin que vos contacts Bitkit puissent vous joindre ou vous payer à tout moment et en tout lieu.</string>
     <string name="slashtags__profile">Profil</string>
     <string name="slashtags__profile_create">Créer un profil</string>
-    <string name="slashtags__auth_depricated_title">Déclassé</string>
-    <string name="slashtags__auth_depricated_msg">Slashauth est obsolète. Veuillez utiliser Bitkit Beta.</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Veuillez patienter pendant que Bitkit recherche des fonds dans les adresses non prises en charge (Legacy, Nested SegWit et Taproot).</string>
     <string name="sweep__checking_loading">RECHERCHE DE FONDS...</string>

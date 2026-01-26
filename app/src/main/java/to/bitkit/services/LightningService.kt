@@ -467,7 +467,7 @@ class LightningService @Inject constructor(
     suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        val message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
+        val message = description
 
         return ServiceQueue.LDK.background {
             val bolt11Invoice: Bolt11Invoice = if (sat != null) {

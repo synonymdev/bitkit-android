@@ -153,6 +153,16 @@ To build the mainnet flavor for release run:
 ./gradlew assembleMainnetRelease
 ```
 
+#### Android App Bundle (AAB)
+
+For Play Store submission, build an AAB instead of APK:
+
+```sh
+./gradlew bundleMainnetRelease
+```
+
+AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
+
 ### Build for E2E Testing
 
 Pass `E2E=true` and build any flavor. By default, E2E uses a local Electrum override.

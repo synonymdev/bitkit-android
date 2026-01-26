@@ -756,8 +756,6 @@
     <string name="slashtags__onboarding_profile1_text">Richte dein öffentliches Profil und Links ein, damit deine Bitkit-Kontakte dich erreichen oder bezahlen können, jederzeit und überall.</string>
     <string name="slashtags__profile">Profil</string>
     <string name="slashtags__profile_create">Profil erstellen</string>
-    <string name="slashtags__auth_depricated_title">Abgelehnt</string>
-    <string name="slashtags__auth_depricated_msg">Slashauth ist veraltet. Bitte verwenden Sie Bitkit Beta.</string>
     <string name="wallet__drawer__wallet">Wallet</string>
     <string name="wallet__drawer__activity">Aktivität</string>
     <string name="wallet__drawer__contacts">Kontakte</string>
