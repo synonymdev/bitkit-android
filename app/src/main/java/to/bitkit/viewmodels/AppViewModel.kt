@@ -293,9 +293,8 @@ class AppViewModel @Inject constructor(
                     if (migrationService.needsPostMigrationSync()) {
                         ToastEventBus.send(
                             type = Toast.ToastType.WARNING,
-                            title = context.getString(R.string.other__connection_issue),
-                            description = "Please ensure you have a stable internet connection. " +
-                                "Data may show incorrectly while trying to connect.",
+                            title = context.getString(R.string.migration__network_required_title),
+                            description = context.getString(R.string.migration__network_required_msg),
                         )
                     }
                 }

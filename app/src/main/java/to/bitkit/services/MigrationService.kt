@@ -170,7 +170,7 @@ class MigrationService @Inject constructor(
                 pendingBlocktankOrderIds = json.decodeFromString<List<String>>(data)
                 Logger.debug("Loaded ${pendingBlocktankOrderIds?.size} pending Blocktank order IDs", context = TAG)
             }.onFailure {
-                Logger.warn("Failed to load pending Blocktank order IDs: $it", context = TAG)
+                Logger.warn("Failed to load pending Blocktank order IDs", it, context = TAG)
             }
         }
 
@@ -179,7 +179,7 @@ class MigrationService @Inject constructor(
                 pendingRemotePaidOrders = json.decodeFromString<Map<String, String>>(data)
                 Logger.debug("Loaded ${pendingRemotePaidOrders?.size} pending paid orders", context = TAG)
             }.onFailure {
-                Logger.warn("Failed to load pending paid orders: $it", context = TAG)
+                Logger.warn("Failed to load pending paid orders", it, context = TAG)
             }
         }
 
@@ -188,7 +188,7 @@ class MigrationService @Inject constructor(
                 pendingRemoteMetadata = json.decodeFromString<RNMetadata>(data)
                 Logger.debug("Loaded pending metadata (tags: ${pendingRemoteMetadata?.tags?.size})", context = TAG)
             }.onFailure {
-                Logger.warn("Failed to load pending metadata: $it", context = TAG)
+                Logger.warn("Failed to load pending metadata", it, context = TAG)
             }
         }
 
@@ -197,7 +197,7 @@ class MigrationService @Inject constructor(
                 pendingRemoteTransfers = json.decodeFromString<Map<String, String>>(data)
                 Logger.debug("Loaded ${pendingRemoteTransfers?.size} pending transfers", context = TAG)
             }.onFailure {
-                Logger.warn("Failed to load pending transfers: $it", context = TAG)
+                Logger.warn("Failed to load pending transfers", it, context = TAG)
             }
         }
 
@@ -206,7 +206,7 @@ class MigrationService @Inject constructor(
                 pendingRemoteBoosts = json.decodeFromString<Map<String, String>>(data)
                 Logger.debug("Loaded ${pendingRemoteBoosts?.size} pending boosts", context = TAG)
             }.onFailure {
-                Logger.warn("Failed to load pending boosts: $it", context = TAG)
+                Logger.warn("Failed to load pending boosts", it, context = TAG)
             }
         }
     }
@@ -263,6 +263,30 @@ class MigrationService @Inject constructor(
         pendingBlocktankOrderIds = null
         pendingRemotePaidOrders = null
         Logger.debug("Cleared persisted Blocktank data", context = TAG)
+    }
+
+    private suspend fun clearPersistedTransfers() {
+        rnMigrationStore.edit {
+            it.remove(stringPreferencesKey(RN_PENDING_TRANSFERS_KEY))
+        }
+        pendingRemoteTransfers = null
+        Logger.debug("Cleared persisted transfers", context = TAG)
+    }
+
+    private suspend fun clearPersistedBoosts() {
+        rnMigrationStore.edit {
+            it.remove(stringPreferencesKey(RN_PENDING_BOOSTS_KEY))
+        }
+        pendingRemoteBoosts = null
+        Logger.debug("Cleared persisted boosts", context = TAG)
+    }
+
+    private suspend fun clearPersistedMetadata() {
+        rnMigrationStore.edit {
+            it.remove(stringPreferencesKey(RN_PENDING_METADATA_KEY))
+        }
+        pendingRemoteMetadata = null
+        Logger.debug("Cleared persisted metadata", context = TAG)
     }
 
     private suspend fun clearPersistedMigrationData() {
@@ -1167,7 +1191,7 @@ class MigrationService @Inject constructor(
                 }
             }
         }.onFailure { e ->
-            Logger.warn("Failed to fetch and upsert local Blocktank orders: $e", context = TAG)
+            Logger.warn("Failed to fetch and upsert local Blocktank orders", e, context = TAG)
             persistBlocktankOrderIds(orderIds)
             if (paidOrders.isNotEmpty()) {
                 persistPaidOrders(paidOrders)
@@ -1313,7 +1337,7 @@ class MigrationService @Inject constructor(
             pendingRemoteActivityData = items
             applyRNActivities(items)
         }.onFailure { e ->
-            Logger.warn("Failed to decode RN remote activity backup: $e", context = TAG)
+            Logger.warn("Failed to decode RN remote activity backup", e, context = TAG)
         }
     }
 
@@ -1322,7 +1346,7 @@ class MigrationService @Inject constructor(
             val metadata = decodeBackupData<RNMetadata>(data)
             persistMetadata(metadata)
         }.onFailure { e ->
-            Logger.warn("Failed to decode RN remote metadata backup: $e", context = TAG)
+            Logger.warn("Failed to decode RN remote metadata backup", e, context = TAG)
         }
     }
 
@@ -1461,20 +1485,20 @@ class MigrationService @Inject constructor(
         pendingRemoteTransfers?.let { transfers ->
             Logger.info("Applying ${transfers.size} remote transfer markers", context = TAG)
             applyRemoteTransfers(transfers)
-            pendingRemoteTransfers = null
+            clearPersistedTransfers()
         }
 
         pendingRemoteBoosts?.let { boosts ->
             Logger.info("Applying ${boosts.size} remote boost markers", context = TAG)
             applyBoostTransactions(boosts)
-            pendingRemoteBoosts = null
+            clearPersistedBoosts()
         }
 
         // Apply remote metadata (tags) AFTER activities are created
         pendingRemoteMetadata?.let { metadata ->
             Logger.info("Applying remote metadata (tags: ${metadata.tags?.size})", context = TAG)
             applyRNMetadata(metadata)
-            pendingRemoteMetadata = null
+            clearPersistedMetadata()
         }
 
         var blocktankFetchFailed = false
@@ -1502,7 +1526,7 @@ class MigrationService @Inject constructor(
                     pendingRemotePaidOrders = null
                     clearPersistedBlocktankData()
                 }.onFailure { e ->
-                    Logger.warn("Still unable to fetch Blocktank orders: $e", context = TAG)
+                    Logger.warn("Still unable to fetch Blocktank orders", e, context = TAG)
                     blocktankFetchFailed = true
                 }
             }
