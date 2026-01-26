@@ -427,6 +427,8 @@ class BlocktankRepo @Inject constructor(
             require(code.isNotBlank()) { "Gift code cannot be blank" }
             require(amount > 0u) { "Gift amount must be positive" }
 
+            Logger.debug("Starting gift code claim: amount=$amount, timeout=$waitTimeout", context = TAG)
+
             lightningRepo.executeWhenNodeRunning(
                 operationName = "claimGiftCode",
                 waitTimeout = waitTimeout,
@@ -436,9 +438,16 @@ class BlocktankRepo @Inject constructor(
                 val channels = lightningRepo.getChannelsAsync().getOrThrow()
                 val maxInboundCapacity = channels.calculateRemoteBalance()
 
+                Logger.debug(
+                    "Liquidity check: maxInbound=$maxInboundCapacity, required=$amount",
+                    context = TAG
+                )
+
                 if (maxInboundCapacity >= amount) {
-                    Result.success(claimGiftCodeWithLiquidity(code))
+                    Logger.debug("Sufficient liquidity available, claiming with existing channel", context = TAG)
+                    Result.success(claimGiftCodeWithLiquidity(code, amount))
                 } else {
+                    Logger.debug("Insufficient liquidity, opening new channel", context = TAG)
                     Result.success(claimGiftCodeWithoutLiquidity(code, amount))
                 }
             }.getOrThrow()
@@ -447,33 +456,53 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    private suspend fun claimGiftCodeWithLiquidity(code: String): GiftClaimResult {
+    private suspend fun claimGiftCodeWithLiquidity(code: String, amount: ULong): GiftClaimResult {
         val invoice = lightningRepo.createInvoice(
             amountSats = null,
             description = "blocktank-gift-code:$code",
             expirySeconds = 3600u,
         ).getOrThrow()
 
-        ServiceQueue.CORE.background {
+        Logger.debug("Created invoice for gift code, requesting payment from LSP", context = TAG)
+
+        val giftResponse = ServiceQueue.CORE.background {
             giftPay(invoice = invoice)
         }
 
-        return GiftClaimResult.SuccessWithLiquidity
+        Logger.debug("Gift payment request completed: id=${giftResponse.id}", context = TAG)
+
+        return GiftClaimResult.SuccessWithLiquidity(
+            paymentHashOrTxId = giftResponse.bolt11PaymentId ?: giftResponse.id,
+            sats = giftResponse.bolt11Payment?.paidSat?.toLong()
+                ?: giftResponse.appliedGiftCode?.giftSat?.toLong()
+                ?: amount.toLong(),
+            invoice = invoice,
+            code = code,
+        )
     }
 
     private suspend fun claimGiftCodeWithoutLiquidity(code: String, amount: ULong): GiftClaimResult {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
 
+        Logger.debug("Creating gift order for code (insufficient liquidity)", context = TAG)
+
         val order = ServiceQueue.CORE.background {
             giftOrder(clientNodeId = nodeId, code = "blocktank-gift-code:$code")
         }
 
-        val orderId = checkNotNull(order.orderId) { "Order ID is null" }
+        val orderId = checkNotNull(order.orderId) { "Order ID is null after gift order creation" }
+        Logger.debug("Gift order created: $orderId", context = TAG)
 
         val openedOrder = openChannel(orderId).getOrThrow()
+        Logger.debug("Channel opened for gift order: ${openedOrder.id}", context = TAG)
+
+        val fundingTxId = openedOrder.channel?.fundingTx?.id
+        if (fundingTxId == null) {
+            Logger.warn("Channel opened but funding transaction ID is null", context = TAG)
+        }
 
         return GiftClaimResult.SuccessWithoutLiquidity(
-            paymentHashOrTxId = openedOrder.channel?.fundingTx?.id ?: orderId,
+            paymentHashOrTxId = fundingTxId ?: orderId,
             sats = amount.toLong(),
             invoice = openedOrder.payment?.bolt11Invoice?.request ?: "",
             code = code,
@@ -498,11 +527,22 @@ data class BlocktankState(
 )
 
 sealed class GiftClaimResult {
-    object SuccessWithLiquidity : GiftClaimResult()
+    abstract val paymentHashOrTxId: String
+    abstract val sats: Long
+    abstract val invoice: String
+    abstract val code: String
+
+    data class SuccessWithLiquidity(
+        override val paymentHashOrTxId: String,
+        override val sats: Long,
+        override val invoice: String,
+        override val code: String,
+    ) : GiftClaimResult()
+
     data class SuccessWithoutLiquidity(
-        val paymentHashOrTxId: String,
-        val sats: Long,
-        val invoice: String,
-        val code: String,
+        override val paymentHashOrTxId: String,
+        override val sats: Long,
+        override val invoice: String,
+        override val code: String,
     ) : GiftClaimResult()
 }
