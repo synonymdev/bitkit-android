@@ -14,10 +14,10 @@ import org.lightningdevkit.ldknode.MaxDustHtlcExposure
  * - outbound_capacity: What we can spend now over Lightning
  * - our_reserve: Our reserve that we get back on close
  */
-@Suppress("ForbiddenComment")
 val ChannelDetails.amountOnClose: ULong
-    // TODO: use channelDetails.claimableOnCloseSats
+    @Suppress("ForbiddenComment")
     get() {
+        // TODO: use channelDetails.claimableOnCloseSats
         val outboundCapacitySat = this.outboundCapacityMsat / 1000u
         val ourReserve = this.unspendablePunishmentReserve ?: 0u
 
