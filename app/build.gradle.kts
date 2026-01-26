@@ -1,4 +1,5 @@
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import com.android.build.gradle.internal.tasks.FinalizeBundleTask
 import io.gitlab.arturbosch.detekt.Detekt
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
@@ -161,6 +162,16 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            // Only architectures supported by native libs (ldk-node, bitkit-core)
+            // x86 not supported; x86_64 only for debug/emulator
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true
         }
     }
     testOptions {
