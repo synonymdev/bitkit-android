@@ -473,7 +473,9 @@ class BlocktankRepo @Inject constructor(
 
         return GiftClaimResult.SuccessWithLiquidity(
             paymentHashOrTxId = giftResponse.bolt11PaymentId ?: giftResponse.id,
-            sats = amount.toLong(),
+            sats = giftResponse.bolt11Payment?.paidSat?.toLong()
+                ?: giftResponse.appliedGiftCode?.giftSat?.toLong()
+                ?: amount.toLong(),
             invoice = invoice,
             code = code,
         )
