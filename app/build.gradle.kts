@@ -174,12 +174,27 @@ android {
     }
     applicationVariants.all {
         val variant = this
+        val bitkit = "bitkit"
+        val flavorName = variant.flavorName
+        val variantName = variant.buildType.name
+        val versionCode = defaultConfig.versionCode
         outputs
             .map { it as BaseVariantOutputImpl }
             .forEach { output ->
-                val apkName = "bitkit-android-${defaultConfig.versionCode}-${variant.name}.apk"
+                val abi = output.getFilter("ABI") ?: "universal"
+                val apkName = "$bitkit-$flavorName-$variantName-$versionCode-$abi.apk"
                 output.outputFileName = apkName
             }
+
+        // Rename AAB bundle
+        tasks.named(
+            "sign${variant.name.replaceFirstChar { it.uppercase() }}Bundle",
+            FinalizeBundleTask::class.java,
+        ) {
+            val aabName = "$bitkit-$flavorName-$variantName-$versionCode.aab"
+            val outputDir = finalBundleFile.asFile.get().parentFile
+            finalBundleFile.set(File(outputDir, aabName))
+        }
     }
 }
 
