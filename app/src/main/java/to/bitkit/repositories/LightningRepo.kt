@@ -407,7 +407,7 @@ class LightningRepo @Inject constructor(
                 Logger.error("Node stop error", it, context = TAG)
                 // On failure, check actual node state and update accordingly
                 // If node is still running, revert to Running state to allow retry
-                if (lightningService.node != null && getStatus()?.isRunning == true) {
+                if (lightningService.node != null && lightningService.status?.isRunning == true) {
                     Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
                 } else {
