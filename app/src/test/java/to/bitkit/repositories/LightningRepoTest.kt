@@ -5,6 +5,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.ILspNode
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -68,7 +69,7 @@ class LightningRepoTest : BaseUnitTest() {
     @Before
     fun setUp() = runBlocking {
         whenever(coreService.isGeoBlocked()).thenReturn(false)
-        whenever(connectivityRepo.isOnline).thenReturn(flowOf(ConnectivityState.CONNECTED))
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
@@ -382,7 +383,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `sendOnChain should fail when sync is unhealthy`() = test {
         // Start node but make sync fail (isSyncHealthy = false)
         // Mock connectivity as disconnected to prevent retry loop from running indefinitely
-        whenever(connectivityRepo.isOnline).thenReturn(flowOf(ConnectivityState.DISCONNECTED))
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
