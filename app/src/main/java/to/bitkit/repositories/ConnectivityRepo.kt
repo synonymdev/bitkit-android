@@ -12,10 +12,12 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.utils.Logger
@@ -35,7 +37,7 @@ class ConnectivityRepo @Inject constructor(
         private const val DELAY_MS = 250L
     }
 
-    val isOnline: Flow<ConnectivityState> = callbackFlow {
+    val isOnline: StateFlow<ConnectivityState> = callbackFlow {
         var currentNetwork: Network? = null
         var currentCapabilities: NetworkCapabilities? = null
 
@@ -127,7 +129,11 @@ class ConnectivityRepo @Inject constructor(
         }
     }.distinctUntilChanged().onEach { state ->
         Logger.debug("New network state: $state")
-    }
+    }.stateIn(
+        scope = repoScope,
+        started = SharingStarted.Eagerly,
+        initialValue = ConnectivityState.DISCONNECTED,
+    )
 
     private fun calculateConnectivityState(capabilities: NetworkCapabilities?): ConnectivityState {
         if (capabilities == null) return ConnectivityState.DISCONNECTED
