@@ -57,7 +57,7 @@ jobs:
 
       - name: Rename APK
         run: |
-          apk=$(find app/build/outputs/apk/dev/debug -name 'bitkit-android-*-devDebug.apk')
+          apk=$(find app/build/outputs/apk/dev/debug -name 'bitkit-dev-debug-*-universal.apk')
           mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
       - name: Upload APK

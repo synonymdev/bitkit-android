@@ -1,4 +1,5 @@
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import com.android.build.gradle.internal.tasks.FinalizeBundleTask
 import io.gitlab.arturbosch.detekt.Detekt
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
@@ -54,8 +55,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 172
-        versionName = "2.0.0-rc.6"
+        versionCode = 174
+        versionName = "2.0.0"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -163,6 +164,16 @@ android {
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            // Only architectures supported by native libs (ldk-node, bitkit-core)
+            // x86 not supported; x86_64 only for debug/emulator
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true
+        }
+    }
     testOptions {
         unitTests {
             isReturnDefaultValues = true // mockito
@@ -174,12 +185,27 @@ android {
     }
     applicationVariants.all {
         val variant = this
+        val bitkit = "bitkit"
+        val flavorName = variant.flavorName
+        val variantName = variant.buildType.name
+        val versionCode = defaultConfig.versionCode
         outputs
             .map { it as BaseVariantOutputImpl }
             .forEach { output ->
-                val apkName = "bitkit-android-${defaultConfig.versionCode}-${variant.name}.apk"
+                val abi = output.getFilter("ABI") ?: "universal"
+                val apkName = "$bitkit-$flavorName-$variantName-$versionCode-$abi.apk"
                 output.outputFileName = apkName
             }
+
+        // Rename AAB bundle
+        tasks.named(
+            "sign${variant.name.replaceFirstChar { it.uppercase() }}Bundle",
+            FinalizeBundleTask::class.java,
+        ) {
+            val aabName = "$bitkit-$flavorName-$variantName-$versionCode.aab"
+            val outputDir = finalBundleFile.asFile.get().parentFile
+            finalBundleFile.set(File(outputDir, aabName))
+        }
     }
 }
 
