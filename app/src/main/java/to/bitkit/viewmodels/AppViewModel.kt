@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -537,7 +538,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
         }
-        notifyPaymentFailed()
+        notifyPaymentFailed(event.reason)
     }
 
     private suspend fun handlePaymentReceived(event: Event.PaymentReceived) {
@@ -625,12 +626,24 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun notifyPaymentFailed() = toast(
+    private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(
         type = Toast.ToastType.ERROR,
         title = context.getString(R.string.wallet__toast_payment_failed_title),
-        description = context.getString(R.string.wallet__toast_payment_failed_description),
+        description = reason.toUserMessage(),
         testTag = "PaymentFailedToast",
     )
+
+    private fun PaymentFailureReason?.toUserMessage(): String = when (this) {
+        PaymentFailureReason.RECIPIENT_REJECTED ->
+            context.getString(R.string.wallet__toast_payment_failed_recipient_rejected)
+        PaymentFailureReason.RETRIES_EXHAUSTED ->
+            context.getString(R.string.wallet__toast_payment_failed_retries_exhausted)
+        PaymentFailureReason.ROUTE_NOT_FOUND ->
+            context.getString(R.string.wallet__toast_payment_failed_route_not_found)
+        PaymentFailureReason.PAYMENT_EXPIRED ->
+            context.getString(R.string.wallet__toast_payment_failed_timeout)
+        else -> context.getString(R.string.wallet__toast_payment_failed_description)
+    }
 
     private suspend fun notifyPaymentSentOnLightning(event: Event.PaymentSuccessful): Result<Activity> {
         val paymentHash = event.paymentHash
@@ -1786,7 +1799,7 @@ class AppViewModel @Inject constructor(
 
                     is Event.PaymentFailed -> {
                         if (event.paymentHash == hash) {
-                            val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                            val error = Exception(event.reason.toUserMessage())
                             WatchResult.Complete(Result.failure(error))
                         } else {
                             WatchResult.Continue()
