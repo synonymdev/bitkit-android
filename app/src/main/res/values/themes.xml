@@ -17,8 +17,8 @@
 
     <!-- Splash Screen Theme -->
     <style name="Theme.App.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#FF4400</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_orange</item>
+        <item name="windowSplashScreenBackground">@color/launcher_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/Theme.App</item>
     </style>
 </resources>
