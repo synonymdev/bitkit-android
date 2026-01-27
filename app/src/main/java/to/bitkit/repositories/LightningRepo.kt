@@ -271,97 +271,98 @@ class LightningRepo @Inject constructor(
 
         eventHandler?.let { _eventHandlers.add(it) }
 
-        // Wait for any in-progress stop to complete to avoid race conditions
-        val currentLifecycleState = _lightningState.value.nodeLifecycleState
-        if (currentLifecycleState == NodeLifecycleState.Stopping) {
-            Logger.debug("Waiting for node to finish stopping before starting...", context = TAG)
-            withTimeoutOrNull(30.seconds) {
-                _lightningState.first { it.nodeLifecycleState != NodeLifecycleState.Stopping }
-            } ?: Logger.warn("Timeout waiting for node to stop, proceeding anyway", context = TAG)
-        }
+        // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)
+        var shouldRetryStart = false
+        var initialLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
 
-        val initialLifecycleState = _lightningState.value.nodeLifecycleState
-        if (initialLifecycleState.isRunningOrStarting()) {
-            Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
-            return@withContext Result.success(Unit)
-        }
+        val result = lifecycleMutex.withLock {
+            initialLifecycleState = _lightningState.value.nodeLifecycleState
+            if (initialLifecycleState.isRunningOrStarting()) {
+                Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
+                return@withLock Result.success(Unit)
+            }
 
-        runCatching {
-            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
+            runCatching {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
 
-            // Setup if needed
-            if (lightningService.node == null) {
-                val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
-                if (setupResult.isFailure) {
-                    _lightningState.update {
-                        it.copy(
-                            nodeLifecycleState = NodeLifecycleState.ErrorStarting(
-                                setupResult.exceptionOrNull() ?: NodeSetupError()
+                // Setup if needed
+                if (lightningService.node == null) {
+                    val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
+                    if (setupResult.isFailure) {
+                        _lightningState.update {
+                            it.copy(
+                                nodeLifecycleState = NodeLifecycleState.ErrorStarting(
+                                    setupResult.exceptionOrNull() ?: NodeSetupError()
+                                )
                             )
-                        )
+                        }
+                        return@withLock setupResult
                     }
-                    return@withContext setupResult
                 }
-            }
 
-            if (getStatus()?.isRunning == true) {
-                Logger.info("LDK node already running", context = TAG)
+                if (getStatus()?.isRunning == true) {
+                    Logger.info("LDK node already running", context = TAG)
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                    lightningService.startEventListener(::onEvent).onFailure {
+                        Logger.warn("Failed to start event listener", it, context = TAG)
+                        return@withLock Result.failure(it)
+                    }
+                    return@withLock Result.success(Unit)
+                }
+
+                // Start node
+                lightningService.start(timeout, ::onEvent)
+
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                lightningService.startEventListener(::onEvent).onFailure {
-                    Logger.warn("Failed to start event listener", it, context = TAG)
-                    return@withContext Result.failure(it)
+
+                // Initial state sync
+                syncState()
+                updateGeoBlockState()
+                refreshChannelCache()
+
+                // Post-startup tasks (non-blocking)
+                connectToTrustedPeers().onFailure {
+                    Logger.error("Failed to connect to trusted peers", it, context = TAG)
                 }
-                return@withContext Result.success(Unit)
-            }
 
-            // Start node
-            lightningService.start(timeout, ::onEvent)
-
-            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-
-            // Initial state sync
-            syncState()
-            updateGeoBlockState()
-            refreshChannelCache()
-
-            // Post-startup tasks (non-blocking)
-            connectToTrustedPeers().onFailure {
-                Logger.error("Failed to connect to trusted peers", it, context = TAG)
-            }
-
-            sync().onFailure { e ->
-                Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
-            }
-            scope.launch { registerForNotifications() }
-            Unit
-        }.onFailure { e ->
-            val currentLifecycleState = _lightningState.value.nodeLifecycleState
-            if (currentLifecycleState.isRunning()) {
-                Logger.warn("Start error occurred but node is $currentLifecycleState, skipping retry", e, context = TAG)
-                return@withContext Result.success(Unit)
-            }
-
-            if (shouldRetry) {
-                val retryDelay = 2.seconds
-                Logger.warn("Start error, retrying after $retryDelay...", e, context = TAG)
-                _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
-
-                delay(retryDelay)
-                return@withContext start(
-                    walletIndex = walletIndex,
-                    timeout = timeout,
-                    shouldRetry = false,
-                    customServerUrl = customServerUrl,
-                    customRgsServerUrl = customRgsServerUrl,
-                    channelMigration = channelMigration,
-                )
-            } else {
-                _lightningState.update {
-                    it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
+                sync().onFailure { e ->
+                    Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
                 }
-                return@withContext Result.failure(e)
+                scope.launch { registerForNotifications() }
+                Result.success(Unit)
+            }.getOrElse { e ->
+                val currentState = _lightningState.value.nodeLifecycleState
+                if (currentState.isRunning()) {
+                    Logger.warn("Start error but node is $currentState, skipping retry", e, context = TAG)
+                    return@withLock Result.success(Unit)
+                }
+
+                if (shouldRetry) {
+                    Logger.warn("Start error, will retry...", e, context = TAG)
+                    _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
+                    shouldRetryStart = true
+                    Result.failure(e)
+                } else {
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e)) }
+                    Result.failure(e)
+                }
             }
         }
+
+        // Retry OUTSIDE the mutex to avoid deadlock (Kotlin Mutex is non-reentrant)
+        if (shouldRetryStart) {
+            delay(2.seconds)
+            return@withContext start(
+                walletIndex = walletIndex,
+                timeout = timeout,
+                shouldRetry = false,
+                customServerUrl = customServerUrl,
+                customRgsServerUrl = customRgsServerUrl,
+                channelMigration = channelMigration,
+            )
+        }
+
+        result
     }
 
     private suspend fun onEvent(event: Event) {
@@ -388,15 +389,6 @@ class LightningRepo @Inject constructor(
         lifecycleMutex.withLock {
             if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
                 return@withLock Result.success(Unit)
-            }
-
-            // Wait for any in-progress start to complete
-            val currentState = _lightningState.value.nodeLifecycleState
-            if (currentState == NodeLifecycleState.Starting) {
-                Logger.debug("Waiting for node to finish starting before stopping...", context = TAG)
-                withTimeoutOrNull(30.seconds) {
-                    _lightningState.first { it.nodeLifecycleState != NodeLifecycleState.Starting }
-                } ?: Logger.warn("Timeout waiting for node to start, proceeding with stop", context = TAG)
             }
 
             runCatching {
