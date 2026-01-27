@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -108,6 +109,7 @@ class LightningRepo @Inject constructor(
     private val syncMutex = Mutex()
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
+    private val lifecycleMutex = Mutex()
 
     init {
         observeConnectivityForSyncRetry()
@@ -269,6 +271,15 @@ class LightningRepo @Inject constructor(
 
         eventHandler?.let { _eventHandlers.add(it) }
 
+        // Wait for any in-progress stop to complete to avoid race conditions
+        val currentLifecycleState = _lightningState.value.nodeLifecycleState
+        if (currentLifecycleState == NodeLifecycleState.Stopping) {
+            Logger.debug("Waiting for node to finish stopping before starting...", context = TAG)
+            withTimeoutOrNull(30.seconds) {
+                _lightningState.first { it.nodeLifecycleState != NodeLifecycleState.Stopping }
+            } ?: Logger.warn("Timeout waiting for node to stop, proceeding anyway", context = TAG)
+        }
+
         val initialLifecycleState = _lightningState.value.nodeLifecycleState
         if (initialLifecycleState.isRunningOrStarting()) {
             Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
@@ -374,16 +385,36 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
-            return@withContext Result.success(Unit)
-        }
+        lifecycleMutex.withLock {
+            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
+                return@withLock Result.success(Unit)
+            }
 
-        runCatching {
-            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
-            lightningService.stop()
-            _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-        }.onFailure {
-            Logger.error("Node stop error", it, context = TAG)
+            // Wait for any in-progress start to complete
+            val currentState = _lightningState.value.nodeLifecycleState
+            if (currentState == NodeLifecycleState.Starting) {
+                Logger.debug("Waiting for node to finish starting before stopping...", context = TAG)
+                withTimeoutOrNull(30.seconds) {
+                    _lightningState.first { it.nodeLifecycleState != NodeLifecycleState.Starting }
+                } ?: Logger.warn("Timeout waiting for node to start, proceeding with stop", context = TAG)
+            }
+
+            runCatching {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+                lightningService.stop()
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            }.onFailure {
+                Logger.error("Node stop error", it, context = TAG)
+                // On failure, check actual node state and update accordingly
+                // If node is still running, revert to Running state to allow retry
+                if (lightningService.node != null && getStatus()?.isRunning == true) {
+                    Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                } else {
+                    // Node appears stopped, update state
+                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                }
+            }
         }
     }
 
