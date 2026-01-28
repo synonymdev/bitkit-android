@@ -175,7 +175,7 @@ class LightningNodeService : Service() {
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
         const val ACTION_STOP_SERVICE_AND_APP = "to.bitkit.androidServices.action.STOP_SERVICE_AND_APP"
-        private const val NODE_STOP_TIMEOUT_MS = 10_000L
-        private const val FORCE_STOP_TIMEOUT_MS = 3_000L
+        private const val NODE_STOP_TIMEOUT_MS = 5_000L
+        private const val FORCE_STOP_TIMEOUT_MS = 2_000L
     }
 }
