@@ -15,6 +15,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
@@ -144,21 +146,26 @@ class LightningNodeService : Service() {
     }
 
     override fun onDestroy() {
-        Logger.debug("onDestroy", context = TAG)
-        serviceScope.launch {
-            lightningRepo.stop()
-            serviceScope.cancel()
+        Logger.debug("onDestroy started", context = TAG)
+        runBlocking {
+            withTimeoutOrNull(NODE_STOP_TIMEOUT_MS) {
+                lightningRepo.stop()
+            } ?: Logger.warn("Node stop timed out during onDestroy", context = TAG)
         }
+        serviceScope.cancel()
+        Logger.debug("onDestroy completed", context = TAG)
         super.onDestroy()
     }
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     override fun onTimeout(startId: Int, fgsType: Int) {
         Logger.warn("Foreground service timeout reached", context = TAG)
-        serviceScope.launch {
-            lightningRepo.stop()
-            stopSelf()
+        runBlocking {
+            withTimeoutOrNull(FORCE_STOP_TIMEOUT_MS) {
+                lightningRepo.stop()
+            }
         }
+        stopSelf()
         super.onTimeout(startId, fgsType)
     }
 
@@ -168,5 +175,7 @@ class LightningNodeService : Service() {
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
         const val ACTION_STOP_SERVICE_AND_APP = "to.bitkit.androidServices.action.STOP_SERVICE_AND_APP"
+        private const val NODE_STOP_TIMEOUT_MS = 10_000L
+        private const val FORCE_STOP_TIMEOUT_MS = 3_000L
     }
 }
