@@ -246,6 +246,12 @@ class LightningService @Inject constructor(
             return
         }
 
+        runCatching {
+            Logger.debug("Performing final sync before shutdown…", context = TAG)
+            ServiceQueue.LDK.background { node.syncWallets() }
+            Logger.debug("Final sync completed", context = TAG)
+        }.onFailure { Logger.warn("Final sync failed, proceeding with shutdown", it, context = TAG) }
+
         Logger.debug("Stopping node…", context = TAG)
         ServiceQueue.LDK.background {
             runCatching { node.stop() }
