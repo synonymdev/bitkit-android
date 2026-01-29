@@ -28,6 +28,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -194,6 +195,18 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
 
+            // Calculate if change would be dust and we should use sendAll
+            val spendableBalance =
+                lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
+            val txFee = lightningRepo.calculateTotalFee(
+                amountSats = spendableBalance,
+                address = address,
+                speed = speed,
+            ).getOrElse { 0uL }
+
+            val expectedChange = spendableBalance.toLong() - order.feeSat.toLong() - txFee.toLong()
+            val shouldUseSendAll = expectedChange >= 0 && expectedChange < Defaults.dustLimit.toInt()
+
             lightningRepo
                 .sendOnChain(
                     address = address,
@@ -201,6 +214,7 @@ class TransferViewModel @Inject constructor(
                     speed = speed,
                     isTransfer = true,
                     channelId = order.channel?.shortChannelId,
+                    isMaxAmount = shouldUseSendAll,
                 )
                 .onSuccess { txId ->
                     cacheStore.addPaidOrder(orderId = order.id, txId = txId)
