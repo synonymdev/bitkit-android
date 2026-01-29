@@ -401,9 +401,7 @@ class WalletViewModel @Inject constructor(
         walletRepo.restoreWallet(
             mnemonic = mnemonic,
             bip39Passphrase = bip39Passphrase,
-        ).onSuccess {
-            settingsStore.update { it.copy(backupVerified = true) }
-        }.onFailure {
+        ).onFailure {
             ToastEventBus.send(it)
         }
     }
