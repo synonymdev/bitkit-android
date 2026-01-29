@@ -297,30 +297,53 @@ class TransferViewModel @Inject constructor(
                 isNodeRunning.first { it }
             }
 
-            // Calculate the LSP fee to the total balance
-            blocktankRepo.estimateOrderFee(
+            // Two-pass fee estimation to match actual order creation
+            // First pass: estimate with availableAmount to get approximate clientBalance
+            val values1 = blocktankRepo.calculateLiquidityOptions(availableAmount).getOrNull()
+            if (values1 == null) {
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+            val lspBalance1 = maxOf(values1.defaultLspBalanceSat, values1.minLspBalanceSat)
+            val feeEstimate1 = blocktankRepo.estimateOrderFee(
                 spendingBalanceSats = availableAmount,
-                receivingBalanceSats = _transferValues.value.maxLspBalance
+                receivingBalanceSats = lspBalance1,
+            ).getOrNull()
+
+            if (feeEstimate1 == null) {
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
+            val lspFees1 = feeEstimate1.networkFeeSat.safe() + feeEstimate1.serviceFeeSat.safe()
+            val approxClientBalance = availableAmount.safe() - lspFees1.safe()
+
+            // Second pass: recalculate with actual clientBalance that order creation will use
+            val values2 = blocktankRepo.calculateLiquidityOptions(approxClientBalance).getOrNull()
+            if (values2 == null || values2.maxLspBalanceSat == 0uL) {
+                _spendingUiState.update { it.copy(isLoading = false, maxAllowedToSend = 0) }
+                return@launch
+            }
+            val lspBalance2 = maxOf(values2.defaultLspBalanceSat, values2.minLspBalanceSat)
+
+            blocktankRepo.estimateOrderFee(
+                spendingBalanceSats = approxClientBalance,
+                receivingBalanceSats = lspBalance2,
             ).onSuccess { estimate ->
                 maxLspFee = estimate.feeSat
-
-                // Calculate the available balance to send after LSP fee
-                val balanceAfterLspFee = availableAmount.safe() - maxLspFee.safe()
+                val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
+                val maxClientBalance = availableAmount.safe() - lspFees.safe()
 
                 _spendingUiState.update {
-                    // Calculate the max available to send considering the current balance and LSP policy
                     it.copy(
-                        maxAllowedToSend = min(
-                            _transferValues.value.maxClientBalance.toLong(),
-                            balanceAfterLspFee.toLong()
-                        ),
+                        maxAllowedToSend = min(values2.maxClientBalanceSat.toLong(), maxClientBalance.toLong()),
                         isLoading = false,
-                        balanceAfterFee = availableAmount.toLong()
+                        balanceAfterFee = availableAmount.toLong(),
                     )
                 }
             }.onFailure { exception ->
                 _spendingUiState.update { it.copy(isLoading = false) }
-                Logger.error("Failure", exception)
+                Logger.error("Failure", exception, context = TAG)
                 setTransferEffect(TransferEffect.ToastException(exception))
             }
         }
