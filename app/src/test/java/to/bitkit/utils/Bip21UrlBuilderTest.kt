@@ -215,4 +215,63 @@ class Bip21UrlBuilderTest {
         val input = first + second
         Assert.assertTrue(isDuplicatedBip21(input))
     }
+
+    // Tests for empty/blank message and label handling - Issue #746
+
+    @Test
+    fun `address with null message produces no message parameter`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = "bitcoin:$address"
+        Assert.assertEquals(expected, buildBip21Url(address, message = null))
+    }
+
+    @Test
+    fun `address with empty message produces no message parameter`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = "bitcoin:$address"
+        Assert.assertEquals(expected, buildBip21Url(address, message = ""))
+    }
+
+    @Test
+    fun `address with blank message produces no message parameter`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = "bitcoin:$address"
+        Assert.assertEquals(expected, buildBip21Url(address, message = "   "))
+    }
+
+    @Test
+    fun `address with null label produces no label parameter`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = "bitcoin:$address?message=Bitkit"
+        Assert.assertEquals(expected, buildBip21Url(address, label = null))
+    }
+
+    @Test
+    fun `address with empty label produces no label parameter`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = "bitcoin:$address?message=Bitkit"
+        Assert.assertEquals(expected, buildBip21Url(address, label = ""))
+    }
+
+    @Test
+    fun `address with blank label produces no label parameter`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = "bitcoin:$address?message=Bitkit"
+        Assert.assertEquals(expected, buildBip21Url(address, label = "   "))
+    }
+
+    @Test
+    fun `address with empty message and label produces clean URL`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = "bitcoin:$address"
+        Assert.assertEquals(expected, buildBip21Url(address, label = "", message = ""))
+    }
+
+    @Test
+    fun `address with lightning but empty message produces correct URL`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val invoice = "lnbc100n1p3k9v3pp5kzmj..."
+        val expected = "bitcoin:$address?lightning=${invoice.encodeToUrl()}"
+        Assert.assertEquals(expected, buildBip21Url(address, message = "", lightningInvoice = invoice))
+    }
 }
