@@ -157,6 +157,15 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoreWallet should set backupVerified to true on success`() = test {
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+
+        sut.restoreWallet("test_mnemonic", null)
+
+        verify(settingsStore).update(any())
+    }
+
+    @Test
     fun `addTagToSelected should call walletRepo addTagToSelected`() = test {
         sut.addTagToSelected("test_tag")
 
