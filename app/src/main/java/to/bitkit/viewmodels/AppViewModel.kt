@@ -75,6 +75,7 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
+import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.FeeRate
@@ -629,21 +630,9 @@ class AppViewModel @Inject constructor(
     private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(
         type = Toast.ToastType.ERROR,
         title = context.getString(R.string.wallet__toast_payment_failed_title),
-        description = reason.toUserMessage(),
+        description = reason.toUserMessage(context),
         testTag = "PaymentFailedToast",
     )
-
-    private fun PaymentFailureReason?.toUserMessage(): String = when (this) {
-        PaymentFailureReason.RECIPIENT_REJECTED ->
-            context.getString(R.string.wallet__toast_payment_failed_recipient_rejected)
-        PaymentFailureReason.RETRIES_EXHAUSTED ->
-            context.getString(R.string.wallet__toast_payment_failed_retries_exhausted)
-        PaymentFailureReason.ROUTE_NOT_FOUND ->
-            context.getString(R.string.wallet__toast_payment_failed_route_not_found)
-        PaymentFailureReason.PAYMENT_EXPIRED ->
-            context.getString(R.string.wallet__toast_payment_failed_timeout)
-        else -> context.getString(R.string.wallet__toast_payment_failed_description)
-    }
 
     private suspend fun notifyPaymentSentOnLightning(event: Event.PaymentSuccessful): Result<Activity> {
         val paymentHash = event.paymentHash
@@ -1799,7 +1788,7 @@ class AppViewModel @Inject constructor(
 
                     is Event.PaymentFailed -> {
                         if (event.paymentHash == hash) {
-                            val error = Exception(event.reason.toUserMessage())
+                            val error = Exception(event.reason.toUserMessage(context))
                             WatchResult.Complete(Result.failure(error))
                         } else {
                             WatchResult.Continue()

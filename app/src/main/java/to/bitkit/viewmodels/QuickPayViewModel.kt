@@ -10,10 +10,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
-import to.bitkit.R
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.utils.Logger
@@ -95,7 +94,7 @@ class QuickPayViewModel @Inject constructor(
 
                 is Event.PaymentFailed -> {
                     if (event.paymentHash == hash) {
-                        val error = Exception(event.reason.toUserMessage())
+                        val error = Exception(event.reason.toUserMessage(context))
                         WatchResult.Complete(Result.failure(error))
                     } else {
                         WatchResult.Continue()
@@ -106,18 +105,6 @@ class QuickPayViewModel @Inject constructor(
             }
         }
         return result
-    }
-
-    private fun PaymentFailureReason?.toUserMessage(): String = when (this) {
-        PaymentFailureReason.RECIPIENT_REJECTED ->
-            context.getString(R.string.wallet__toast_payment_failed_recipient_rejected)
-        PaymentFailureReason.RETRIES_EXHAUSTED ->
-            context.getString(R.string.wallet__toast_payment_failed_retries_exhausted)
-        PaymentFailureReason.ROUTE_NOT_FOUND ->
-            context.getString(R.string.wallet__toast_payment_failed_route_not_found)
-        PaymentFailureReason.PAYMENT_EXPIRED ->
-            context.getString(R.string.wallet__toast_payment_failed_timeout)
-        else -> context.getString(R.string.wallet__toast_payment_failed_description)
     }
 }
 

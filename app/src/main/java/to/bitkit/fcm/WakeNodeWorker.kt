@@ -17,13 +17,13 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.PaymentFailureReason
 import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.toUserMessage
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.BlocktankNotificationType.cjitPaymentArrived
@@ -154,7 +154,7 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.PaymentFailed -> {
                 bestAttemptContent = NotificationDetails(
                     title = appContext.getString(R.string.notification__payment_failed_title),
-                    body = "⚡ ${event.reason.toUserMessage()}",
+                    body = "⚡ ${event.reason.toUserMessage(appContext)}",
                 )
 
                 if (notificationType == wakeToTimeout) {
@@ -273,18 +273,6 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         deliverSignal.complete(Unit)
-    }
-
-    private fun PaymentFailureReason?.toUserMessage(): String = when (this) {
-        PaymentFailureReason.RECIPIENT_REJECTED ->
-            appContext.getString(R.string.wallet__toast_payment_failed_recipient_rejected)
-        PaymentFailureReason.RETRIES_EXHAUSTED ->
-            appContext.getString(R.string.wallet__toast_payment_failed_retries_exhausted)
-        PaymentFailureReason.ROUTE_NOT_FOUND ->
-            appContext.getString(R.string.wallet__toast_payment_failed_route_not_found)
-        PaymentFailureReason.PAYMENT_EXPIRED ->
-            appContext.getString(R.string.wallet__toast_payment_failed_timeout)
-        else -> appContext.getString(R.string.wallet__toast_payment_failed_description)
     }
 
     companion object {
