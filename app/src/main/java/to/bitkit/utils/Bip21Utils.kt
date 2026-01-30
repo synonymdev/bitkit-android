@@ -37,8 +37,8 @@ object Bip21Utils {
         }
 
         // Add optional parameters
-        label?.let { queryParams.add("label=${it.encodeToUrl()}") }
-        message?.let { queryParams.add("message=${it.encodeToUrl()}") }
+        if (!label.isNullOrBlank()) { queryParams.add("label=${label.encodeToUrl()}") }
+        if (!message.isNullOrBlank()) { queryParams.add("message=${message.encodeToUrl()}") }
 
         // Add query parameters if any exist
         if (queryParams.isNotEmpty()) {

@@ -300,6 +300,8 @@ class WalletRepo @Inject constructor(
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
             setWalletExistsState()
+        }.onSuccess {
+            settingsStore.update { it.copy(backupVerified = true) }
         }.onFailure {
             Logger.error("restoreWallet error", it, context = TAG)
         }
