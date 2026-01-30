@@ -2,7 +2,7 @@
 
 ## About
 
-This repository contains a **new native Android app** which is **not ready for production**.
+This repository contains the **native Android app** for Bitkit.
 
 ## Development
 
