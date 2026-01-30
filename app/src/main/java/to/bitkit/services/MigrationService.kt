@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -1212,6 +1211,8 @@ class MigrationService @Inject constructor(
             val bitkitFiles = rnBackupClient.listFiles(fileGroup = "bitkit")?.list ?: emptyList()
             retrieveAndApplyBitkitBackups(bitkitFiles)
             markMigrationCompleted()
+        }.onSuccess {
+            settingsStore.update { it.copy(backupVerified = true) }
         }.onFailure { e ->
             Logger.error("RN remote backup restore failed", e, context = TAG)
             throw e
@@ -1419,6 +1420,7 @@ class MigrationService @Inject constructor(
                     Logger.warn("Paid order $orderId not found in fetched orders", context = TAG)
                     null
                 }
+
                 order.state2 == com.synonym.bitkitcore.BtOrderState2.EXECUTED -> null
                 else -> TransferEntity(
                     id = txId,
