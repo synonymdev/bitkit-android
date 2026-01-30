@@ -280,7 +280,7 @@
     <string name="onboarding__advanced">Avanzado</string>
     <string name="onboarding__advanced_setup">Configuración avanzada</string>
     <string name="onboarding__create_new_wallet">Crear nueva cartera</string>
-    <string name="onboarding__empty_wallet">Para empezar\nempezar\n&lt;accent&gt;envíe\nBitcoin&lt;/accent&gt;\na su\nbilletera</string>
+    <string name="onboarding__empty_wallet">Para\nempezar\n&lt;accent&gt;envíe\nBitcoin&lt;/accent&gt;\na su\nbilletera</string>
     <string name="onboarding__get_started">Empezar</string>
     <string name="onboarding__loading_header">Configurando\n&lt;accent&gt;su billetera&lt;/accent&gt;</string>
     <string name="onboarding__multiple_header">&lt;accent&gt;Precaución:&lt;/accent&gt;\nmúltiples dispositivos</string>
