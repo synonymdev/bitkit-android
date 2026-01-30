@@ -477,6 +477,8 @@ fun ContentView(
                     val showTabBar = currentRoute in listOf(
                         Routes.Home::class.qualifiedName,
                         Routes.AllActivity::class.qualifiedName,
+                        Routes.Savings::class.qualifiedName,
+                        Routes.Spending::class.qualifiedName,
                     )
 
                     if (showTabBar) {
