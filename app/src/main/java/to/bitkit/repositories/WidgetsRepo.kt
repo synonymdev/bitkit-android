@@ -2,14 +2,17 @@ package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.data.SettingsStore
@@ -30,6 +33,7 @@ import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.utils.Logger
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,9 +49,8 @@ class WidgetsRepo @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val settingsStore: SettingsStore,
 ) {
-    // TODO Only refresh in loop widgets displayed in the Home
-    // TODO Perform a refresh when the preview screen is displayed
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
+    private val widgetJobs = ConcurrentHashMap<WidgetType, Job>()
 
     val widgetsDataFlow = widgetsStore.data
     val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
@@ -65,7 +68,86 @@ class WidgetsRepo @Inject constructor(
     val refreshStates: StateFlow<Map<WidgetType, Boolean>> = _refreshStates.asStateFlow()
 
     init {
-        startPeriodicUpdates()
+        observeWidgetStateChanges()
+    }
+
+    private fun observeWidgetStateChanges() {
+        repoScope.launch {
+            widgetsDataFlow
+                .map { it.widgets.map { widget -> widget.type }.toSet() }
+                .distinctUntilChanged()
+                .collect { enabledWidgetTypes ->
+                    updateWidgetJobs(enabledWidgetTypes)
+                }
+        }
+    }
+
+    private fun updateWidgetJobs(enabledWidgetTypes: Set<WidgetType>) {
+        val widgetTypesWithServices = WidgetType.entries.filter {
+            it != WidgetType.CALCULATOR
+        }
+
+        widgetTypesWithServices.forEach { widgetType ->
+            val isEnabled = widgetType in enabledWidgetTypes
+            val hasRunningJob = widgetJobs.containsKey(widgetType) &&
+                widgetJobs[widgetType]?.isActive == true
+
+            when {
+                isEnabled && !hasRunningJob -> startWidgetRefresh(widgetType)
+                !isEnabled && hasRunningJob -> stopWidgetRefresh(widgetType)
+            }
+        }
+    }
+
+    private fun startWidgetRefresh(widgetType: WidgetType) {
+        stopWidgetRefresh(widgetType)
+
+        val job = when (widgetType) {
+            WidgetType.NEWS -> repoScope.launch {
+                while (isActive) {
+                    updateWidget(newsService) { widgetsStore.updateArticles(it) }
+                    delay(newsService.refreshInterval)
+                }
+            }
+
+            WidgetType.FACTS -> repoScope.launch {
+                while (isActive) {
+                    updateWidget(factsService) { widgetsStore.updateFacts(it) }
+                    delay(factsService.refreshInterval)
+                }
+            }
+
+            WidgetType.BLOCK -> repoScope.launch {
+                while (isActive) {
+                    updateWidget(blocksService) { widgetsStore.updateBlock(it) }
+                    delay(blocksService.refreshInterval)
+                }
+            }
+
+            WidgetType.WEATHER -> repoScope.launch {
+                while (isActive) {
+                    updateWidget(weatherService) { widgetsStore.updateWeather(it) }
+                    delay(weatherService.refreshInterval)
+                }
+            }
+
+            WidgetType.PRICE -> repoScope.launch {
+                while (isActive) {
+                    updateWidget(priceService) { widgetsStore.updatePrice(it) }
+                    delay(priceService.refreshInterval)
+                }
+            }
+
+            WidgetType.CALCULATOR -> throw NotImplementedError("Calculator widget doesn't need a service")
+        }
+
+        widgetJobs[widgetType] = job
+    }
+
+    private fun stopWidgetRefresh(widgetType: WidgetType) {
+        widgetJobs[widgetType]?.cancel()
+        widgetJobs.remove(widgetType)
+        Logger.verbose("Stopped refresh coroutine for $widgetType", context = TAG)
     }
 
     suspend fun addWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.addWidget(type) }
@@ -98,45 +180,6 @@ class WidgetsRepo @Inject constructor(
 
     suspend fun fetchAllPeriods() = withContext(bgDispatcher) { priceService.fetchAllPeriods() }
 
-    /**
-     * Start periodic updates for all widgets
-     */
-    private fun startPeriodicUpdates() {
-        startPeriodicUpdate(newsService) { articles ->
-            widgetsStore.updateArticles(articles)
-        }
-        startPeriodicUpdate(factsService) { facts ->
-            widgetsStore.updateFacts(facts)
-        }
-        startPeriodicUpdate(blocksService) { block ->
-            widgetsStore.updateBlock(block)
-        }
-        startPeriodicUpdate(weatherService) { weather ->
-            widgetsStore.updateWeather(weather)
-        }
-        startPeriodicUpdate(priceService) { price ->
-            widgetsStore.updatePrice(price)
-        }
-    }
-
-    /**
-     * Generic method to start periodic updates for any widget service
-     */
-    private fun <T> startPeriodicUpdate(
-        service: WidgetService<T>,
-        updateStore: suspend (T) -> Unit
-    ) {
-        repoScope.launch {
-            while (true) {
-                updateWidget(service, updateStore)
-                delay(service.refreshInterval)
-            }
-        }
-    }
-
-    /**
-     * Update a specific widget type
-     */
     private suspend fun <T> updateWidget(
         service: WidgetService<T>,
         updateStore: suspend (T) -> Unit
@@ -147,34 +190,13 @@ class WidgetsRepo @Inject constructor(
         service.fetchData()
             .onSuccess { data ->
                 updateStore(data)
-                Logger.verbose("Updated $widgetType widget successfully")
+                Logger.verbose("Updated $widgetType widget successfully", context = TAG)
             }
             .onFailure { e ->
                 Logger.verbose("Failed to update $widgetType widget", e = e, context = TAG)
             }
 
         _refreshStates.update { it + (widgetType to false) }
-    }
-
-    /**
-     * Manually refresh all widgets
-     */
-    suspend fun refreshAllWidgets(): Result<Unit> = runCatching {
-        updateWidget(newsService) { articles ->
-            widgetsStore.updateArticles(articles)
-        }
-        updateWidget(factsService) { facts ->
-            widgetsStore.updateFacts(facts)
-        }
-        updateWidget(blocksService) { block ->
-            widgetsStore.updateBlock(block)
-        }
-        updateWidget(weatherService) { weather ->
-            widgetsStore.updateWeather(weather)
-        }
-        updateWidget(priceService) { price ->
-            widgetsStore.updatePrice(price)
-        }
     }
 
     suspend fun refreshEnabledWidgets() = withContext(bgDispatcher) {
