@@ -1642,11 +1642,8 @@ class AppViewModel @Inject constructor(
                             direction = NewTransactionSheetDirection.SENT,
                             paymentHashOrTxId = actualPaymentHash,
                             sats = paymentAmount.toLong(), // TODO Add fee when available
-                            isLoadingDetails = true,
                         ),
                     )
-                    activityRepo.syncActivities()
-                    _successSendUiState.update { it.copy(isLoadingDetails = false) }
                 }.onFailure { e ->
                     // Delete pre-activity metadata on failure
                     if (createdMetadataPaymentId != null) {
