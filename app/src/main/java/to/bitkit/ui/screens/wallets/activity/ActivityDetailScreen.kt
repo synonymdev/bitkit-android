@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -75,6 +76,9 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityAddTagSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
+import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.UiConstants
+import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.BoostTransactionSheet
@@ -314,6 +318,9 @@ private fun ActivityDetailContent(
     onCopy: (String) -> Unit,
     feeRates: FeeRates? = null,
 ) {
+    val settings = settingsViewModel ?: return
+    val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
+
     val isLightning = item is Activity.Lightning
     val isSent = item.isSent()
     val isTransfer = item.isTransfer()
@@ -376,7 +383,7 @@ private fun ActivityDetailContent(
                 sats = item.totalValue().toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
-                useSwipeToHide = false,
+                useSwipeToHide = true,
                 modifier = Modifier.weight(1f)
             )
             ActivityIcon(
@@ -468,7 +475,17 @@ private fun ActivityDetailContent(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        MoneySSB(sats = displayAmount.toLong())
+                        AnimatedContent(
+                            targetState = hideBalance,
+                            transitionSpec = { BalanceAnimations.activityAmountTransition },
+                            label = "amountAnimation"
+                        ) { isHidden ->
+                            if (isHidden) {
+                                BodySSB(text = UiConstants.HIDE_BALANCE_SHORT)
+                            } else {
+                                MoneySSB(sats = displayAmount.toLong())
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     HorizontalDivider()
@@ -495,7 +512,17 @@ private fun ActivityDetailContent(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            MoneySSB(sats = fee.toLong())
+                            AnimatedContent(
+                                targetState = hideBalance,
+                                transitionSpec = { BalanceAnimations.activityAmountTransition },
+                                label = "feeAnimation"
+                            ) { isHidden ->
+                                if (isHidden) {
+                                    BodySSB(text = UiConstants.HIDE_BALANCE_SHORT)
+                                } else {
+                                    MoneySSB(sats = fee.toLong())
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         HorizontalDivider()
