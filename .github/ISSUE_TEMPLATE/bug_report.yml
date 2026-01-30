@@ -53,15 +53,6 @@ body:
     validations:
       required: false
 
-  - type: checkboxes
-    id: environment
-    attributes:
-      label: Environment
-      options:
-        - label: Mainnet
-        - label: Regtest
-        - label: Local
-
   - type: dropdown
     id: reproducibility
     attributes:
@@ -83,5 +74,6 @@ body:
         - New wallet / Restored from backup / Migrated from RN
         - Lightning or on-chain related
         - Specific channel state
+        - Environment (Mainnet / Regtest / Local)
     validations:
       required: false
