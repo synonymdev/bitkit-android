@@ -167,6 +167,28 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoreWallet should set backupVerified to true on success`() = test {
+        val mnemonic = "restore mnemonic"
+        whenever(keychain.saveString(any(), any())).thenReturn(Unit)
+
+        val result = sut.restoreWallet(mnemonic, null)
+
+        assertTrue(result.isSuccess)
+        verify(settingsStore).update(any())
+    }
+
+    @Test
+    fun `restoreWallet should not set backupVerified when keychain fails`() = test {
+        val mnemonic = "restore mnemonic"
+        whenever(keychain.saveString(any(), any())).thenThrow(error)
+
+        val result = sut.restoreWallet(mnemonic, null)
+
+        assertTrue(result.isFailure)
+        verify(settingsStore, never()).update(any())
+    }
+
+    @Test
     fun `refreshBip21 should generate new address when current is empty`() = test {
         whenever(lightningRepo.newAddress()).thenReturn(Result.success(ADDRESS_NEW))
 
