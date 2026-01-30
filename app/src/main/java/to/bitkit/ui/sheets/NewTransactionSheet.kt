@@ -174,8 +174,7 @@ fun NewTransactionSheetView(
                     SecondaryButton(
                         text = stringResource(R.string.wallet__send_details),
                         onClick = onDetailClick,
-                        enabled = details.paymentHashOrTxId != null,
-                        isLoading = details.isLoadingDetails,
+                        enabled = details.paymentHashOrTxId != null && !details.isLoadingDetails,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("Details")
