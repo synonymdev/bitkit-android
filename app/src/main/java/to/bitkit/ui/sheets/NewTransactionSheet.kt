@@ -156,7 +156,6 @@ fun NewTransactionSheetView(
 
             BalanceHeaderView(
                 sats = details.sats,
-                onClick = onDetailClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("ReceivedTransaction")
