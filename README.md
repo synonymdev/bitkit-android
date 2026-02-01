@@ -1,15 +1,8 @@
 # Bitkit Android (Native)
 
-> [!CAUTION]
-> ⚠️This is **NOT** the repository of the Bitkit app from the app stores!<br>
-> ⚠️Work-in-progress<br>
-> The Bitkit app repository is here: **[github.com/synonymdev/bitkit](https://github.com/synonymdev/bitkit)**
-
----
-
 ## About
 
-This repository contains a **new native Android app** which is **not ready for production**.
+This repository contains the **native Android app** for Bitkit.
 
 ## Development
 
