@@ -1591,10 +1591,12 @@ class AppViewModel @Inject constructor(
                                 direction = NewTransactionSheetDirection.SENT,
                                 paymentHashOrTxId = txId,
                                 sats = amount.toLong(),
+                                isLoadingDetails = true,
                             )
                         )
                         lightningRepo.sync()
                         activityRepo.syncActivities()
+                        _successSendUiState.update { it.copy(isLoadingDetails = false) }
                     }.onFailure { e ->
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
                         toast(
