@@ -546,6 +546,8 @@ class BackupRepo @Inject constructor(
             }
 
             Logger.info("Full restore success", context = TAG)
+        }.onSuccess {
+            settingsStore.update { it.copy(backupVerified = true) }
         }.onFailure { e ->
             Logger.warn("Full restore error", e = e, context = TAG)
         }
