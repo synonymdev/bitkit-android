@@ -1265,13 +1265,33 @@ class MigrationService @Inject constructor(
             val managerData = rnBackupClient.retrieve("channel_manager", fileGroup = "ldk")
                 ?: return@runCatching
 
-            val monitors = coroutineScope {
+            val expectedCount = files.channelMonitors.size
+            val monitorResults = coroutineScope {
                 files.channelMonitors.map { monitorFile ->
                     async {
                         val channelId = monitorFile.replace(".bin", "")
-                        rnBackupClient.retrieveChannelMonitor(channelId)
+                        channelId to rnBackupClient.retrieveChannelMonitor(channelId)
                     }
-                }.mapNotNull { it.await() }
+                }.awaitAll()
+            }
+
+            val failedMonitors = monitorResults.filter { it.second == null }.map { it.first }
+            if (failedMonitors.isNotEmpty()) {
+                Logger.error(
+                    "Failed to retrieve ${failedMonitors.size}/$expectedCount channel monitors: " +
+                        failedMonitors.joinToString(),
+                    context = TAG
+                )
+            }
+
+            val monitors = monitorResults.mapNotNull { it.second }
+
+            if (monitors.size < expectedCount) {
+                Logger.warn(
+                    "Channel monitor count mismatch: expected $expectedCount, got ${monitors.size}. " +
+                        "Some channels may not be recoverable.",
+                    context = TAG
+                )
             }
 
             if (monitors.isNotEmpty()) {
