@@ -150,7 +150,11 @@ class LightningNodeService : Service() {
         runBlocking {
             withTimeoutOrNull(NODE_STOP_TIMEOUT_MS) {
                 lightningRepo.stop()
-            } ?: Logger.warn("Node stop timed out during onDestroy", context = TAG)
+            }.let { result ->
+                if (result == null || result.isFailure) {
+                    Logger.warn("Node stop timed out or failed during onDestroy", context = TAG)
+                }
+            }
         }
         serviceScope.cancel()
         Logger.debug("onDestroy completed", context = TAG)
@@ -163,6 +167,10 @@ class LightningNodeService : Service() {
         runBlocking {
             withTimeoutOrNull(FORCE_STOP_TIMEOUT_MS) {
                 lightningRepo.stop()
+            }.let { result ->
+                if (result == null || result.isFailure) {
+                    Logger.warn("Node stop timed out or failed during onTimeout", context = TAG)
+                }
             }
         }
         stopSelf()
