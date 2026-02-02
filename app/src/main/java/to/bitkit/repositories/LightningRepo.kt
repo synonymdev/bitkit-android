@@ -396,6 +396,12 @@ class LightningRepo @Inject constructor(
                 lightningService.stop()
                 _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
             }.onFailure {
+                // On cancellation (e.g., timeout), ensure state is recoverable
+                if (it is CancellationException) {
+                    Logger.warn("Node stop cancelled, forcing Stopped state for recovery", context = TAG)
+                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                    return@withLock Result.failure(it)
+                }
                 Logger.error("Node stop error", it, context = TAG)
                 // On failure, check actual node state and update accordingly
                 // If node is still running, revert to Running state to allow retry
