@@ -277,6 +277,14 @@ class LightningRepo @Inject constructor(
 
         val result = lifecycleMutex.withLock {
             initialLifecycleState = _lightningState.value.nodeLifecycleState
+
+            // Recovery: if stuck at Stopping (e.g., previous shutdown interrupted), reset to Stopped
+            if (initialLifecycleState == NodeLifecycleState.Stopping) {
+                Logger.warn("Found stuck Stopping state, resetting to Stopped", context = TAG)
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                initialLifecycleState = NodeLifecycleState.Stopped
+            }
+
             if (initialLifecycleState.isRunningOrStarting()) {
                 Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
                 return@withLock Result.success(Unit)
