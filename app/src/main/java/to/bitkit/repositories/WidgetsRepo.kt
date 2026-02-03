@@ -182,7 +182,7 @@ class WidgetsRepo @Inject constructor(
 
     private suspend fun <T> updateWidget(
         service: WidgetService<T>,
-        updateStore: suspend (T) -> Unit
+        updateStore: suspend (T) -> Unit,
     ) {
         val widgetType = service.widgetType
         _refreshStates.update { it + (widgetType to true) }
@@ -193,7 +193,7 @@ class WidgetsRepo @Inject constructor(
                 Logger.verbose("Updated $widgetType widget successfully", context = TAG)
             }
             .onFailure { e ->
-                Logger.verbose("Failed to update $widgetType widget", e = e, context = TAG)
+                Logger.verbose("Failed to update $widgetType widget", context = TAG)
             }
 
         _refreshStates.update { it + (widgetType to false) }
