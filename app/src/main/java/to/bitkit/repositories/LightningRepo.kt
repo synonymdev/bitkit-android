@@ -274,6 +274,7 @@ class LightningRepo @Inject constructor(
 
         // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)
         var shouldRetryStart = false
+        var shouldRestartForGraphReset = false
         var initialLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
 
         val result = lifecycleMutex.withLock {
@@ -321,6 +322,16 @@ class LightningRepo @Inject constructor(
                 updateGeoBlockState()
                 refreshChannelCache()
 
+                // Validate network graph has trusted peers (RGS cache can become stale)
+                if (shouldValidateGraph && !lightningService.validateNetworkGraph()) {
+                    Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
+                    lightningService.stop()
+                    lightningService.resetNetworkGraph(walletIndex)
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                    shouldRestartForGraphReset = true
+                    return@withLock Result.success(Unit)
+                }
+
                 // Post-startup tasks (non-blocking)
                 connectToTrustedPeers().onFailure {
                     Logger.error("Failed to connect to trusted peers", it, context = TAG)
@@ -360,6 +371,21 @@ class LightningRepo @Inject constructor(
                 customServerUrl = customServerUrl,
                 customRgsServerUrl = customRgsServerUrl,
                 channelMigration = channelMigration,
+                shouldValidateGraph = shouldValidateGraph,
+            )
+        }
+
+        // Restart after graph reset OUTSIDE the mutex to avoid deadlock
+        if (shouldRestartForGraphReset) {
+            return@withContext start(
+                walletIndex = walletIndex,
+                timeout = timeout,
+                shouldRetry = shouldRetry,
+                customServerUrl = customServerUrl,
+                customRgsServerUrl = customRgsServerUrl,
+                eventHandler = eventHandler,
+                channelMigration = channelMigration,
+                shouldValidateGraph = false, // Prevent infinite loop
             )
         }
 
