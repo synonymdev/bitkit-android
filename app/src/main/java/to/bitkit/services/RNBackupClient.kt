@@ -21,6 +21,7 @@ import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.deriveNodeSecretFromMnemonic
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
+import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.utils.AppError
@@ -56,10 +57,15 @@ class RNBackupClient @Inject constructor(
 
     suspend fun listFiles(fileGroup: String? = "ldk"): RNBackupListResponse? = withContext(ioDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw RNBackupError.NotSetup()
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw RNBackupError.NotSetup()
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val bearer = authenticate(mnemonic, passphrase)
+            val bearer = mnemonicSecret.useAsString { mnemonic ->
+                authenticate(mnemonic, passphraseSecret?.peek { String(it) })
+            }
+            passphraseSecret?.wipe()
+
             val url = buildUrl("list", fileGroup = fileGroup, network = getNetworkString())
             val response: HttpResponse = httpClient.get(url) {
                 header("Authorization", bearer.bearer)
@@ -75,10 +81,18 @@ class RNBackupClient @Inject constructor(
 
     suspend fun retrieve(label: String, fileGroup: String? = null): ByteArray? = withContext(ioDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw RNBackupError.NotSetup()
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw RNBackupError.NotSetup()
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val bearer = authenticate(mnemonic, passphrase)
+            val (bearer, encryptionKey) = mnemonicSecret.useAsString { mnemonic ->
+                val passphraseStr = passphraseSecret?.peek { String(it) }
+                val auth = authenticate(mnemonic, passphraseStr)
+                val key = deriveEncryptionKey(mnemonic, passphraseStr)
+                auth to key
+            }
+            passphraseSecret?.wipe()
+
             val url = buildUrl("retrieve", label = label, fileGroup = fileGroup, network = getNetworkString())
             val response: HttpResponse = httpClient.get(url) {
                 header("Authorization", bearer.bearer)
@@ -88,8 +102,6 @@ class RNBackupClient @Inject constructor(
 
             val encryptedData = response.body<ByteArray>()
             if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
-
-            val encryptionKey = deriveEncryptionKey(mnemonic, passphrase)
 
             decrypt(encryptedData, encryptionKey).also {
                 if (it.isEmpty()) throw RNBackupError.DecryptFailed("Decrypted data is empty")
@@ -101,10 +113,18 @@ class RNBackupClient @Inject constructor(
 
     suspend fun retrieveChannelMonitor(channelId: String): ByteArray? = withContext(ioDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw RNBackupError.NotSetup()
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw RNBackupError.NotSetup()
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val bearer = authenticate(mnemonic, passphrase)
+            val (bearer, encryptionKey) = mnemonicSecret.useAsString { mnemonic ->
+                val passphraseStr = passphraseSecret?.peek { String(it) }
+                val auth = authenticate(mnemonic, passphraseStr)
+                val key = deriveEncryptionKey(mnemonic, passphraseStr)
+                auth to key
+            }
+            passphraseSecret?.wipe()
+
             val url = buildUrl(
                 method = "retrieve",
                 label = "channel_monitor",
@@ -121,7 +141,6 @@ class RNBackupClient @Inject constructor(
             val encryptedData = response.body<ByteArray>()
             if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
 
-            val encryptionKey = deriveEncryptionKey(mnemonic, passphrase)
             decrypt(encryptedData, encryptionKey).also {
                 if (it.isEmpty()) throw RNBackupError.DecryptFailed("Decrypted data is empty")
             }

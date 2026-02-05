@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
+import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -41,7 +42,7 @@ class VssBackupClient @Inject constructor(
                     runCatching { isSetup.await() }.onSuccess { return@runCatching }
                 }
 
-                val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+                val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
                     ?: throw MnemonicNotAvailableException()
 
                 withTimeout(30.seconds) {
@@ -52,16 +53,20 @@ class VssBackupClient @Inject constructor(
                     Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
                     Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
                     if (lnurlAuthServerUrl.isNotEmpty()) {
-                        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+                        val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-                        vssNewClientWithLnurlAuth(
-                            baseUrl = vssUrl,
-                            storeId = vssStoreId,
-                            mnemonic = mnemonic,
-                            passphrase = passphrase,
-                            lnurlAuthServerUrl = lnurlAuthServerUrl,
-                        )
+                        mnemonicSecret.useAsString { mnemonic ->
+                            vssNewClientWithLnurlAuth(
+                                baseUrl = vssUrl,
+                                storeId = vssStoreId,
+                                mnemonic = mnemonic,
+                                passphrase = passphraseSecret?.peek { String(it) },
+                                lnurlAuthServerUrl = lnurlAuthServerUrl,
+                            )
+                        }
+                        passphraseSecret?.wipe()
                     } else {
+                        mnemonicSecret.wipe()
                         vssNewClient(
                             baseUrl = vssUrl,
                             storeId = vssStoreId,
