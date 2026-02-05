@@ -262,6 +262,7 @@ class LightningRepo @Inject constructor(
         customRgsServerUrl: String? = null,
         eventHandler: NodeEventHandler? = null,
         channelMigration: ChannelDataMigration? = null,
+        shouldValidateGraph: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
@@ -312,6 +313,23 @@ class LightningRepo @Inject constructor(
             syncState()
             updateGeoBlockState()
             refreshChannelCache()
+
+            // Validate network graph has trusted peers (RGS cache can become stale)
+            if (shouldValidateGraph && !lightningService.validateNetworkGraph()) {
+                Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
+                lightningService.stop()
+                lightningService.resetNetworkGraph(walletIndex)
+                return@withContext start(
+                    walletIndex = walletIndex,
+                    timeout = timeout,
+                    shouldRetry = shouldRetry,
+                    customServerUrl = customServerUrl,
+                    customRgsServerUrl = customRgsServerUrl,
+                    eventHandler = eventHandler,
+                    channelMigration = channelMigration,
+                    shouldValidateGraph = false, // Prevent infinite loop
+                )
+            }
 
             // Post-startup tasks (non-blocking)
             connectToTrustedPeers().onFailure {
