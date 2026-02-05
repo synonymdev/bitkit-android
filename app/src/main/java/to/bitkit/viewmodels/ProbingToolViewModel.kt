@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.Scanner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -12,7 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.synonym.bitkitcore.Scanner
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
@@ -100,6 +100,7 @@ class ProbingToolViewModel @Inject constructor(
                 val lightningParam = decoded.invoice.params?.get("lightning") ?: return@runCatching null
                 (coreService.decode(lightningParam) as? Scanner.Lightning)?.invoice?.bolt11
             }
+
             else -> null
         }
     }.getOrNull()
