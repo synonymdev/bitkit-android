@@ -43,6 +43,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
@@ -147,12 +148,17 @@ class LightningService @Inject constructor(
                 )
             }
 
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()
-            setEntropyBip39Mnemonic(
-                mnemonic = mnemonic,
-                passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),
-            )
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
+
+            mnemonicSecret.useAsString { mnemonic ->
+                setEntropyBip39Mnemonic(
+                    mnemonic = mnemonic,
+                    passphrase = passphraseSecret?.peek { String(it) },
+                )
+            }
+            passphraseSecret?.wipe()
         }
         try {
             val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
@@ -170,8 +176,6 @@ class LightningService @Inject constructor(
             }
         } catch (e: BuildException) {
             throw LdkError(e)
-        } finally {
-            // TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values
         }
     }
 
