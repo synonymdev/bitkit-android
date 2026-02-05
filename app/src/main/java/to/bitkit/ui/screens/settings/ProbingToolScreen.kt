@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +33,7 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
@@ -128,7 +127,7 @@ private fun ProbingToolContent(
                     .padding(vertical = 8.dp),
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             PrimaryButton(
                 text = "Send Probe",
@@ -145,7 +144,7 @@ private fun ProbingToolContent(
             ) {
                 uiState.probeResult?.let { result ->
                     Column {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
                         SectionHeader("PROBE RESULTS")
                         SettingsTextButtonRow(
                             title = "Status",
@@ -172,7 +171,7 @@ private fun ProbingToolContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
         }
     }
 }
