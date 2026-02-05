@@ -282,7 +282,7 @@ class LightningService @Inject constructor(
 
     /**
      * Validates that all trusted peers are present in the network graph.
-     * Returns false if any trusted peer is missing, indicating the graph cache is stale.
+     * Returns false if all trusted peers are missing, indicating the graph cache is stale.
      */
     fun validateNetworkGraph(): Boolean {
         val node = this.node ?: return true
@@ -293,15 +293,24 @@ class LightningService @Inject constructor(
             return true
         }
         val missingPeers = trustedPeers.filter { it.nodeId !in graphNodes }
-        if (missingPeers.isNotEmpty()) {
+        if (missingPeers.size == trustedPeers.size) {
             Logger.warn(
-                "Network graph missing ${missingPeers.size} trusted peers: " +
-                    missingPeers.joinToString { it.nodeId.take(20) + "..." },
+                "Network graph missing all ${trustedPeers.size} trusted peers",
                 context = TAG,
             )
             return false
         }
-        Logger.debug("Network graph validated: all ${trustedPeers.size} trusted peers present", context = TAG)
+        if (missingPeers.isNotEmpty()) {
+            Logger.debug(
+                "Network graph missing ${missingPeers.size}/${trustedPeers.size} trusted peers",
+                context = TAG,
+            )
+        }
+        val presentCount = trustedPeers.size - missingPeers.size
+        Logger.debug(
+            "Network graph validated: $presentCount/${trustedPeers.size} trusted peers present",
+            context = TAG,
+        )
         return true
     }
 
