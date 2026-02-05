@@ -1,5 +1,10 @@
 package to.bitkit.ui.screens.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,16 +29,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
+import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.ProbeResult
 import to.bitkit.viewmodels.ProbingToolUiState
 import to.bitkit.viewmodels.ProbingToolViewModel
 
@@ -127,6 +136,40 @@ private fun ProbingToolContent(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            AnimatedVisibility(
+                visible = uiState.probeResult != null,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                uiState.probeResult?.let { result ->
+                    Column {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SectionHeader("PROBE RESULTS")
+                        SettingsTextButtonRow(
+                            title = "Status",
+                            iconRes = if (result.success) R.drawable.ic_check else R.drawable.ic_x,
+                            iconTint = if (result.success) Colors.Green else Colors.Red,
+                            value = if (result.success) "Success" else "Failed",
+                        )
+                        SettingsTextButtonRow(
+                            title = "Duration",
+                            iconRes = R.drawable.ic_clock,
+                            value = "${result.durationMs} ms",
+                        )
+                        result.estimatedFeeSats?.let { fee ->
+                            SettingsTextButtonRow(
+                                title = "Estimated Fee",
+                                iconRes = R.drawable.ic_coins,
+                                value = "$fee sats",
+                            )
+                        }
+                        result.errorMessage?.let { error ->
+                            SectionFooter(error)
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
@@ -140,6 +183,39 @@ private fun Preview() {
             ProbingToolUiState(
                 invoice = "lnbc1000n1pj...",
                 amountSats = "1000",
+                probeResult = ProbeResult(
+                    success = true,
+                    durationMs = 342,
+                    estimatedFeeSats = 5uL,
+                ),
+            )
+        )
+    }
+
+    AppThemeSurface {
+        ProbingToolContent(
+            uiState = uiState,
+            onBackClick = {},
+            onInvoiceChange = { uiState = uiState.copy(invoice = it) },
+            onAmountChange = { uiState = uiState.copy(amountSats = it) },
+            onPasteInvoice = {},
+            onSendProbe = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewFailed() {
+    var uiState by remember {
+        mutableStateOf(
+            ProbingToolUiState(
+                invoice = "lnbc1000n1pj...",
+                probeResult = ProbeResult(
+                    success = false,
+                    durationMs = 1250,
+                    errorMessage = "No route found to destination",
+                ),
             )
         )
     }

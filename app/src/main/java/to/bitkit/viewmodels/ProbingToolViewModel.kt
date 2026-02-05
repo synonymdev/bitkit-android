@@ -58,16 +58,29 @@ class ProbingToolViewModel @Inject constructor(
 
     fun sendProbe() {
         val invoice = _uiState.value.invoice.trim()
+        if (!validateInvoice(invoice)) return
+
+        viewModelScope.launch(bgDispatcher) {
+            _uiState.update { it.copy(isLoading = true, probeResult = null) }
+
+            val amountSats = _uiState.value.amountSats.toULongOrNull()
+            val startTime = System.currentTimeMillis()
+
+            lightningRepo.sendProbeForInvoice(invoice, amountSats)
+                .onSuccess { handleProbeSuccess(startTime, invoice, amountSats) }
+                .onFailure { handleProbeFailure(startTime, it) }
+
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    private fun validateInvoice(invoice: String): Boolean {
         if (invoice.isEmpty()) {
             viewModelScope.launch {
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = "Please enter an invoice",
-                )
+                ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Please enter an invoice")
             }
-            return
+            return false
         }
-
         if (!invoice.lowercase().startsWith("ln")) {
             viewModelScope.launch {
                 ToastEventBus.send(
@@ -76,33 +89,38 @@ class ProbingToolViewModel @Inject constructor(
                     description = "Invoice should start with 'ln'",
                 )
             }
-            return
+            return false
         }
+        return true
+    }
 
-        viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(isLoading = true) }
+    private suspend fun handleProbeSuccess(startTime: Long, invoice: String, amountSats: ULong?) {
+        val durationMs = System.currentTimeMillis() - startTime
+        Logger.info("Probe successful for invoice in ${durationMs}ms", context = TAG)
 
-            val amountSats = _uiState.value.amountSats.toULongOrNull()
-
-            lightningRepo.sendProbeForInvoice(invoice, amountSats)
-                .onSuccess {
-                    Logger.info("Probe successful for invoice", context = TAG)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = "Probe successful",
-                    )
-                }
-                .onFailure { e ->
-                    Logger.error("Probe failed", e, context = TAG)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = "Probe failed",
-                        description = e.message,
-                    )
-                }
-
-            _uiState.update { it.copy(isLoading = false) }
+        val estimatedFee = getEstimatedFee(invoice, amountSats)
+        _uiState.update {
+            it.copy(probeResult = ProbeResult(success = true, durationMs = durationMs, estimatedFeeSats = estimatedFee))
         }
+        ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = "Probe successful")
+    }
+
+    private suspend fun handleProbeFailure(startTime: Long, error: Throwable) {
+        val durationMs = System.currentTimeMillis() - startTime
+        Logger.error("Probe failed in ${durationMs}ms", error, context = TAG)
+
+        _uiState.update {
+            it.copy(probeResult = ProbeResult(success = false, durationMs = durationMs, errorMessage = error.message))
+        }
+        ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Probe failed", description = error.message)
+    }
+
+    private suspend fun getEstimatedFee(invoice: String, amountSats: ULong?): ULong? = run {
+        if (amountSats != null) {
+            lightningRepo.estimateRoutingFeesForAmount(invoice, amountSats)
+        } else {
+            lightningRepo.estimateRoutingFees(invoice)
+        }.getOrNull()
     }
 
     companion object {
@@ -115,4 +133,13 @@ data class ProbingToolUiState(
     val invoice: String = "",
     val amountSats: String = "",
     val isLoading: Boolean = false,
+    val probeResult: ProbeResult? = null,
+)
+
+@Stable
+data class ProbeResult(
+    val success: Boolean,
+    val durationMs: Long,
+    val estimatedFeeSats: ULong? = null,
+    val errorMessage: String? = null,
 )
