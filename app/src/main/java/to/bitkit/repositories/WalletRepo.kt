@@ -21,6 +21,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.useAsString
+import to.bitkit.domain.models.withSecretChars
 import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
@@ -282,10 +284,8 @@ class WalletRepo @Inject constructor(
         lightningRepo.setRecoveryMode(enabled = false)
         runCatching {
             val mnemonic = generateEntropyMnemonic()
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-            if (bip39Passphrase != null) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
+            mnemonic.withSecretChars { keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, it) }
+            bip39Passphrase?.withSecretChars { keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, it) }
             setWalletExistsState()
         }.onFailure {
             Logger.error("createWallet error", it, context = TAG)
@@ -295,10 +295,8 @@ class WalletRepo @Inject constructor(
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
         runCatching {
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-            if (bip39Passphrase != null) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
+            mnemonic.withSecretChars { keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, it) }
+            bip39Passphrase?.withSecretChars { keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, it) }
             setWalletExistsState()
         }.onFailure {
             Logger.error("restoreWallet error", it, context = TAG)
@@ -337,25 +335,27 @@ class WalletRepo @Inject constructor(
         count: Int = 20,
     ): Result<List<AddressModel>> = withContext(bgDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()
-
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val baseDerivationPath = AddressType.P2WPKH.toDerivationPath(
                 index = 0,
                 isChange = isChange,
             ).substringBeforeLast("/0")
 
-            val result = coreService.onchain.deriveBitcoinAddresses(
-                mnemonicPhrase = mnemonic,
-                derivationPathStr = baseDerivationPath,
-                network = Env.network,
-                bip39Passphrase = passphrase,
-                isChange = isChange,
-                startIndex = startIndex.toUInt(),
-                count = count.toUInt(),
-            )
+            val result = mnemonicSecret.useAsString { mnemonic ->
+                coreService.onchain.deriveBitcoinAddresses(
+                    mnemonicPhrase = mnemonic,
+                    derivationPathStr = baseDerivationPath,
+                    network = Env.network,
+                    bip39Passphrase = passphraseSecret?.peek { String(it) },
+                    isChange = isChange,
+                    startIndex = startIndex.toUInt(),
+                    count = count.toUInt(),
+                )
+            }
+            passphraseSecret?.wipe()
 
             val addresses = result.addresses.mapIndexed { index, address ->
                 AddressModel(
