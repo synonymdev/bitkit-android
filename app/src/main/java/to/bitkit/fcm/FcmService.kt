@@ -107,14 +107,21 @@ class FcmService : FirebaseMessagingService() {
         }
         val password =
             runCatching { crypto.generateSharedSecret(privateKey, response.publicKey, derivationName) }.getOrElse {
+                privateKey.fill(0) // Wipe on error path
                 Logger.error("Failed to generate shared secret", it, context = TAG)
                 return
             }
+
+        // Wipe private key after use
+        privateKey.fill(0)
 
         val decrypted = crypto.decrypt(
             encryptedPayload = Crypto.EncryptedPayload(ciphertext, response.iv.fromHex(), response.tag.fromHex()),
             secretKey = password,
         )
+
+        // Wipe password after use
+        password.fill(0)
 
         val decoded = decrypted.decodeToString()
         Logger.debug("Decrypted payload: $decoded", context = TAG)

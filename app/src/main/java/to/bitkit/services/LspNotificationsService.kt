@@ -43,6 +43,10 @@ class LspNotificationsService @Inject constructor(
         }
         keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privateKey)
 
+        // Wipe keypair from memory after storage
+        keypair.privateKey.fill(0)
+        keypair.publicKey.fill(0)
+
         ServiceQueue.CORE.background {
             com.synonym.bitkitcore.registerDevice(
                 deviceToken = deviceToken,
