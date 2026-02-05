@@ -58,6 +58,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.Secret
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.env.Defaults
@@ -2094,8 +2095,8 @@ class AppViewModel @Inject constructor(
     }
 
     fun validatePin(pin: String): Boolean {
-        val storedPin = keychain.loadString(Keychain.Key.PIN.name)
-        val isValid = storedPin == pin
+        val storedPinSecret: Secret? = keychain.loadSecret(Keychain.Key.PIN.name)
+        val isValid = storedPinSecret?.use { storedChars -> String(storedChars) == pin } ?: false
 
         if (isValid) {
             viewModelScope.launch {
