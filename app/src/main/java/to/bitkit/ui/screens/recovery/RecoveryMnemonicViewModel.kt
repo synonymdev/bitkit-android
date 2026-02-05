@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.models.Secret
+import to.bitkit.domain.models.splitWords
+import to.bitkit.domain.models.wipeAll
 import to.bitkit.models.Toast
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -33,15 +36,11 @@ class RecoveryMnemonicViewModel @Inject constructor(
     private fun loadMnemonic() {
         viewModelScope.launch {
             runCatching {
-                val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name).orEmpty()
-                val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name).orEmpty()
+                val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
+                val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-                if (mnemonic.isEmpty()) {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                        )
-                    }
+                if (mnemonicSecret == null) {
+                    _uiState.update { it.copy(isLoading = false) }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.security__mnemonic_load_error),
@@ -50,25 +49,28 @@ class RecoveryMnemonicViewModel @Inject constructor(
                     return@launch
                 }
 
-                val mnemonicWords = mnemonic.split(" ").filter { it.isNotBlank() }
+                val mnemonicWordSecrets = mnemonicSecret.splitWords()
+                mnemonicSecret.wipe()
 
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        mnemonicWords = mnemonicWords,
-                        passphrase = passphrase,
+                        mnemonicWords = mnemonicWordSecrets,
+                        passphrase = passphraseSecret,
                     )
                 }
             }.onFailure { e ->
                 Logger.error("Failed to load mnemonic", e, context = TAG)
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                    )
-                }
+                _uiState.update { it.copy(isLoading = false) }
                 ToastEventBus.send(e)
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _uiState.value.mnemonicWords.wipeAll()
+        _uiState.value.passphrase?.wipe()
     }
 
     private companion object {
@@ -78,6 +80,6 @@ class RecoveryMnemonicViewModel @Inject constructor(
 
 data class RecoveryMnemonicUiState(
     val isLoading: Boolean = true,
-    val mnemonicWords: List<String> = emptyList(),
-    val passphrase: String = "",
+    val mnemonicWords: List<Secret> = emptyList(),
+    val passphrase: Secret? = null,
 )

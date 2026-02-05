@@ -17,6 +17,9 @@ import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.models.Secret
+import to.bitkit.domain.models.splitWords
+import to.bitkit.domain.models.wipeAll
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.HealthState
 import to.bitkit.models.Toast
@@ -75,13 +78,23 @@ class BackupNavSheetViewModel @Inject constructor(
 
     fun loadMnemonicData() = viewModelScope.launch {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)!! // NPE handled with UI toast
-            val bip39Passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name) ?: ""
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
+                ?: throw NullPointerException("Mnemonic not found")
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
+
+            val mnemonicWordSecrets = mnemonicSecret.splitWords()
+            mnemonicSecret.wipe()
+
+            val mnemonic = mnemonicWordSecrets.joinToString(" ") { it.peek { chars -> String(chars) } }
+            mnemonicWordSecrets.wipeAll()
+
+            val passphrase = passphraseSecret?.peek { String(it) } ?: ""
+            passphraseSecret?.wipe()
 
             _uiState.update {
                 it.copy(
                     bip39Mnemonic = mnemonic,
-                    bip39Passphrase = bip39Passphrase,
+                    bip39Passphrase = passphrase,
                 )
             }
         }.onFailure {

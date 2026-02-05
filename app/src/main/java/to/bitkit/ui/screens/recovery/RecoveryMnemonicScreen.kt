@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,6 +23,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import to.bitkit.R
+import to.bitkit.domain.models.Secret
+import to.bitkit.domain.models.secretOf
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.MnemonicWordsGrid
@@ -54,6 +57,14 @@ private fun Content(
     uiState: RecoveryMnemonicUiState,
     onNavigateBack: () -> Unit,
 ) {
+    // Convert Secret words to Strings for display (using remember to minimize String creation)
+    val displayWords = remember(uiState.mnemonicWords) {
+        uiState.mnemonicWords.map { secret -> secret.peek { String(it) } }
+    }
+    val displayPassphrase = remember(uiState.passphrase) {
+        uiState.passphrase?.peek { String(it) }.orEmpty()
+    }
+
     Column(
         modifier = Modifier
             .screen()
@@ -89,7 +100,7 @@ private fun Content(
                 BodyM(
                     text = stringResource(R.string.security__mnemonic_write).replace(
                         "{length}",
-                        uiState.mnemonicWords.count().toString()
+                        displayWords.count().toString()
                     ),
                     color = Colors.White64
                 )
@@ -105,13 +116,13 @@ private fun Content(
                         .testTag("backup_mnemonic_words_box")
                 ) {
                     MnemonicWordsGrid(
-                        actualWords = uiState.mnemonicWords,
+                        actualWords = displayWords,
                         showMnemonic = true,
                     )
                 }
 
                 // Passphrase section (if available)
-                if (uiState.passphrase.isNotEmpty()) {
+                if (displayPassphrase.isNotEmpty()) {
                     VerticalSpacer(32.dp)
 
                     Column {
@@ -120,8 +131,8 @@ private fun Content(
                         VerticalSpacer(16.dp)
 
                         BodyM(
-                            text = stringResource(R.string.security__pass_recovery, uiState.passphrase)
-                                .replace("{passphrase}", uiState.passphrase)
+                            text = stringResource(R.string.security__pass_recovery, displayPassphrase)
+                                .replace("{passphrase}", displayPassphrase)
                                 .withAccent(accentColor = Colors.White64),
                             color = Colors.White
                         )
@@ -164,8 +175,8 @@ private fun ContentPreview12Words() {
                 mnemonicWords = listOf(
                     "abandon", "ability", "able", "about", "above", "absent",
                     "absorb", "abstract", "absurd", "abuse", "access", "accident",
-                ),
-                passphrase = "my_secret_passphrase"
+                ).map { secretOf(it) },
+                passphrase = secretOf("my_secret_passphrase")
             ),
             onNavigateBack = {},
         )
@@ -184,8 +195,8 @@ private fun ContentPreview24Words() {
                     "absorb", "abstract", "absurd", "abuse", "access", "accident",
                     "account", "accuse", "achieve", "acid", "acoustic", "acquire",
                     "across", "act", "action", "actor", "actress", "actual"
-                ),
-                passphrase = "my_secret_passphrase"
+                ).map { secretOf(it) },
+                passphrase = secretOf("my_secret_passphrase")
             ),
             onNavigateBack = {},
         )
