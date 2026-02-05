@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.CoreService
@@ -31,20 +32,23 @@ class SweepRepo @Inject constructor(
 ) {
     suspend fun checkSweepableBalances(): Result<SweepableBalances> = withContext(bgDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
             Logger.debug("Checking sweepable balances...", context = TAG)
 
-            val balances = ServiceQueue.CORE.background {
-                checkSweepableBalances(
-                    mnemonicPhrase = mnemonic,
-                    network = Env.network.toCoreNetwork(),
-                    bip39Passphrase = passphrase,
-                    electrumUrl = Env.electrumServerUrl,
-                )
+            val balances = mnemonicSecret.useAsString { mnemonic ->
+                ServiceQueue.CORE.background {
+                    checkSweepableBalances(
+                        mnemonicPhrase = mnemonic,
+                        network = Env.network.toCoreNetwork(),
+                        bip39Passphrase = passphraseSecret?.peek { String(it) },
+                        electrumUrl = Env.electrumServerUrl,
+                    )
+                }
             }
+            passphraseSecret?.wipe()
 
             balances.toSweepableBalances()
         }
@@ -55,22 +59,25 @@ class SweepRepo @Inject constructor(
         feeRateSatsPerVbyte: UInt,
     ): Result<SweepTransactionPreview> = withContext(bgDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
             Logger.debug("Preparing sweep transaction...", context = TAG)
 
-            val preview = ServiceQueue.CORE.background {
-                prepareSweepTransaction(
-                    mnemonicPhrase = mnemonic,
-                    network = Env.network.toCoreNetwork(),
-                    bip39Passphrase = passphrase,
-                    electrumUrl = Env.electrumServerUrl,
-                    destinationAddress = destinationAddress,
-                    feeRateSatsPerVbyte = feeRateSatsPerVbyte,
-                )
+            val preview = mnemonicSecret.useAsString { mnemonic ->
+                ServiceQueue.CORE.background {
+                    prepareSweepTransaction(
+                        mnemonicPhrase = mnemonic,
+                        network = Env.network.toCoreNetwork(),
+                        bip39Passphrase = passphraseSecret?.peek { String(it) },
+                        electrumUrl = Env.electrumServerUrl,
+                        destinationAddress = destinationAddress,
+                        feeRateSatsPerVbyte = feeRateSatsPerVbyte,
+                    )
+                }
             }
+            passphraseSecret?.wipe()
 
             preview.toSweepTransactionPreview()
         }
@@ -78,21 +85,24 @@ class SweepRepo @Inject constructor(
 
     suspend fun broadcastSweepTransaction(psbt: String): Result<SweepResult> = withContext(bgDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
                 ?: throw ServiceError.MnemonicNotFound()
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+            val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
             Logger.debug("Broadcasting sweep transaction...", context = TAG)
 
-            val result = ServiceQueue.CORE.background {
-                broadcastSweepTransaction(
-                    psbt = psbt,
-                    mnemonicPhrase = mnemonic,
-                    network = Env.network.toCoreNetwork(),
-                    bip39Passphrase = passphrase,
-                    electrumUrl = Env.electrumServerUrl,
-                )
+            val result = mnemonicSecret.useAsString { mnemonic ->
+                ServiceQueue.CORE.background {
+                    broadcastSweepTransaction(
+                        psbt = psbt,
+                        mnemonicPhrase = mnemonic,
+                        network = Env.network.toCoreNetwork(),
+                        bip39Passphrase = passphraseSecret?.peek { String(it) },
+                        electrumUrl = Env.electrumServerUrl,
+                    )
+                }
             }
+            passphraseSecret?.wipe()
 
             result.toSweepResult()
         }
