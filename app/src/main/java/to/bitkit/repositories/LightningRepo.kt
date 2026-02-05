@@ -46,6 +46,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
@@ -679,18 +680,23 @@ class LightningRepo @Inject constructor(
         callback: String,
         domain: String,
     ): Result<String> = runCatching {
-        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
-        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val mnemonicSecret = keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)
+            ?: throw ServiceError.MnemonicNotFound()
+        val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-        lnurlAuth(
-            k1 = k1,
-            callback = callback,
-            domain = domain,
-            network = Env.network.toCoreNetwork(),
-            bip32Mnemonic = mnemonic,
-            bip39Passphrase = passphrase,
-        ).also {
-            Logger.debug("LNURL auth result: '$it'", context = TAG)
+        mnemonicSecret.useAsString { mnemonic ->
+            lnurlAuth(
+                k1 = k1,
+                callback = callback,
+                domain = domain,
+                network = Env.network.toCoreNetwork(),
+                bip32Mnemonic = mnemonic,
+                bip39Passphrase = passphraseSecret?.peek { String(it) },
+            ).also {
+                Logger.debug("LNURL auth result: '$it'", context = TAG)
+            }
+        }.also {
+            passphraseSecret?.wipe()
         }
     }.onFailure {
         Logger.error("requestLnurlAuth error, k1: $k1, callback: $callback, domain: $domain", it, context = TAG)
