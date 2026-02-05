@@ -91,6 +91,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(lightningService.sync()).thenReturn(Unit)
+        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
@@ -107,6 +108,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
         whenever(blocktank.info(any())).thenReturn(null)
@@ -388,6 +390,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         whenever(lightningService.sync()).thenThrow(RuntimeException("Sync failed"))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         val blocktank = mock<BlocktankService>()
@@ -621,6 +624,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
 
         val blocktank = mock<BlocktankService>()
@@ -665,6 +669,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
 
         val blocktank = mock<BlocktankService>()
@@ -690,6 +695,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         // lightningService.start() succeeds (state becomes Running at line 241)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         // lightningService.nodeId throws during syncState() (called at line 244, AFTER state = Running)
         whenever(lightningService.nodeId).thenThrow(RuntimeException("error during syncState"))
 
