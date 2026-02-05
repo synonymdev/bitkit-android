@@ -12,9 +12,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.synonym.bitkitcore.Scanner
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -23,6 +25,7 @@ import javax.inject.Inject
 class ProbingToolViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
@@ -57,42 +60,49 @@ class ProbingToolViewModel @Inject constructor(
     }
 
     fun sendProbe() {
-        val invoice = _uiState.value.invoice.trim()
-        if (!validateInvoice(invoice)) return
+        val input = _uiState.value.invoice.trim()
+        if (input.isEmpty()) {
+            viewModelScope.launch {
+                ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Please enter an invoice")
+            }
+            return
+        }
 
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true, probeResult = null) }
 
+            val bolt11 = extractBolt11Invoice(input)
+            if (bolt11 == null) {
+                ToastEventBus.send(
+                    type = Toast.ToastType.WARNING,
+                    title = "Invalid invoice format",
+                    description = "Could not extract Lightning invoice",
+                )
+                _uiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
             val amountSats = _uiState.value.amountSats.toULongOrNull()
             val startTime = System.currentTimeMillis()
 
-            lightningRepo.sendProbeForInvoice(invoice, amountSats)
-                .onSuccess { handleProbeSuccess(startTime, invoice, amountSats) }
+            lightningRepo.sendProbeForInvoice(bolt11, amountSats)
+                .onSuccess { handleProbeSuccess(startTime, bolt11, amountSats) }
                 .onFailure { handleProbeFailure(startTime, it) }
 
             _uiState.update { it.copy(isLoading = false) }
         }
     }
 
-    private fun validateInvoice(invoice: String): Boolean {
-        if (invoice.isEmpty()) {
-            viewModelScope.launch {
-                ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Please enter an invoice")
+    private suspend fun extractBolt11Invoice(input: String): String? = runCatching {
+        when (val decoded = coreService.decode(input)) {
+            is Scanner.Lightning -> decoded.invoice.bolt11
+            is Scanner.OnChain -> {
+                val lightningParam = decoded.invoice.params?.get("lightning") ?: return@runCatching null
+                (coreService.decode(lightningParam) as? Scanner.Lightning)?.invoice?.bolt11
             }
-            return false
+            else -> null
         }
-        if (!invoice.lowercase().startsWith("ln")) {
-            viewModelScope.launch {
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = "Invalid invoice format",
-                    description = "Invoice should start with 'ln'",
-                )
-            }
-            return false
-        }
-        return true
-    }
+    }.getOrNull()
 
     private suspend fun handleProbeSuccess(startTime: Long, invoice: String, amountSats: ULong?) {
         val durationMs = System.currentTimeMillis() - startTime
