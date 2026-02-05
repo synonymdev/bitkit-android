@@ -288,6 +288,10 @@ class LightningService @Inject constructor(
         val node = this.node ?: return true
         val graph = node.networkGraph()
         val graphNodes = graph.listNodes().toSet()
+        if (graphNodes.isEmpty()) {
+            Logger.debug("Network graph is empty, skipping validation", context = TAG)
+            return true
+        }
         val missingPeers = trustedPeers.filter { it.nodeId !in graphNodes }
         if (missingPeers.isNotEmpty()) {
             Logger.warn(
