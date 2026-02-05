@@ -296,7 +296,7 @@ class LightningService @Inject constructor(
         if (missingPeers.isNotEmpty()) {
             Logger.warn(
                 "Network graph missing ${missingPeers.size} trusted peers: " +
-                    "${missingPeers.joinToString { it.nodeId.take(20) + "..." }}",
+                    missingPeers.joinToString { it.nodeId.take(20) + "..." },
                 context = TAG,
             )
             return false
