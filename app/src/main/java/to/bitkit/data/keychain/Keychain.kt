@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.map
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
+import to.bitkit.domain.models.Secret
+import to.bitkit.domain.models.secretOf
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
 import to.bitkit.utils.AppError
@@ -40,6 +42,13 @@ class Keychain @Inject constructor(
     val snapshot get() = runBlocking(this.coroutineContext) { keychain.data.first() }
 
     fun loadString(key: String): String? = load(key)?.decodeToString()
+
+    /** Load a keychain value as a [Secret] for deterministic cleanup. */
+    fun loadSecret(key: String): Secret? = loadString(key)?.let { secretOf(it) }
+
+    /** Load raw keychain bytes as a [Secret] for deterministic cleanup. */
+    fun loadSecretBytes(key: String): Secret? =
+        load(key)?.let { bytes -> secretOf(bytes.map { it.toInt().toChar() }.toCharArray()) }
 
     @Suppress("TooGenericExceptionCaught", "SwallowedException")
     fun load(key: String): ByteArray? {
