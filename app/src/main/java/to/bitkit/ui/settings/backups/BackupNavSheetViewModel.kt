@@ -17,7 +17,6 @@ import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.domain.models.Secret
 import to.bitkit.domain.models.splitWords
 import to.bitkit.domain.models.wipeAll
 import to.bitkit.models.BackupCategory

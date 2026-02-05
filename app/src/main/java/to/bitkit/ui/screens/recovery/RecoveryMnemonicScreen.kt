@@ -23,7 +23,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import to.bitkit.R
-import to.bitkit.domain.models.Secret
 import to.bitkit.domain.models.secretOf
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight

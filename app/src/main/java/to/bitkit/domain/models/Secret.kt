@@ -22,7 +22,7 @@ class Secret internal constructor(initialValue: CharArray) : AutoCloseable {
 
     init {
         // Wipe the input array immediately after copying to reduce exposure
-        wipe(nullify = false)
+        initialValue.fill(WIPE_CHAR)
     }
 
     operator fun getValue(thisRef: Any?, property: KProperty<*>): CharArray {

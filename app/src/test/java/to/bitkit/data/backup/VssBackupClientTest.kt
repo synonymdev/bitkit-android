@@ -9,6 +9,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.models.secretOf
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -31,7 +32,7 @@ class VssBackupClientTest : BaseUnitTest() {
 
     @Test
     fun `setup fails with MnemonicNotAvailableException when mnemonic is not available`() = test {
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
+        whenever(keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
 
         val result = sut.setup()
 
@@ -41,7 +42,7 @@ class VssBackupClientTest : BaseUnitTest() {
 
     @Test
     fun `setup does not call vssStoreIdProvider when mnemonic is not available`() = test {
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
+        whenever(keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
 
         sut.setup()
 
@@ -52,7 +53,7 @@ class VssBackupClientTest : BaseUnitTest() {
     fun `setup checks mnemonic before proceeding with vss initialization`() = test {
         val testMnemonic = "abandon abandon abandon abandon abandon abandon " +
             "abandon abandon abandon abandon abandon about"
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(testMnemonic)
+        whenever(keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(secretOf(testMnemonic))
         whenever(vssStoreIdProvider.getVssStoreId(any())).thenReturn("test-store-id")
 
         // Setup will fail on native VSS calls, but we verify we passed the mnemonic check
@@ -63,7 +64,7 @@ class VssBackupClientTest : BaseUnitTest() {
 
     @Test
     fun `setup can be called multiple times when mnemonic not available`() = test {
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
+        whenever(keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
 
         // Multiple calls should all fail with MnemonicNotAvailableException without crashing
         assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
