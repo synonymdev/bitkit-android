@@ -21,8 +21,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.secretOf
 import to.bitkit.domain.models.useAsString
-import to.bitkit.domain.models.withSecretChars
 import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
@@ -284,8 +284,8 @@ class WalletRepo @Inject constructor(
         lightningRepo.setRecoveryMode(enabled = false)
         runCatching {
             val mnemonic = generateEntropyMnemonic()
-            mnemonic.withSecretChars { keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, it) }
-            bip39Passphrase?.withSecretChars { keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, it) }
+            keychain.saveSecret(Keychain.Key.BIP39_MNEMONIC.name, secretOf(mnemonic))
+            bip39Passphrase?.let { keychain.saveSecret(Keychain.Key.BIP39_PASSPHRASE.name, secretOf(it)) }
             setWalletExistsState()
         }.onFailure {
             Logger.error("createWallet error", it, context = TAG)
@@ -295,8 +295,8 @@ class WalletRepo @Inject constructor(
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
         runCatching {
-            mnemonic.withSecretChars { keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, it) }
-            bip39Passphrase?.withSecretChars { keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, it) }
+            keychain.saveSecret(Keychain.Key.BIP39_MNEMONIC.name, secretOf(mnemonic))
+            bip39Passphrase?.let { keychain.saveSecret(Keychain.Key.BIP39_PASSPHRASE.name, secretOf(it)) }
             setWalletExistsState()
         }.onFailure {
             Logger.error("restoreWallet error", it, context = TAG)

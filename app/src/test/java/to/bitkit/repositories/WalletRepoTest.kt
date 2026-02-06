@@ -12,6 +12,7 @@ import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -21,6 +22,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.models.Secret
 import to.bitkit.models.BalanceState
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
@@ -146,30 +148,30 @@ class WalletRepoTest : BaseUnitTest() {
     fun `restoreWallet should save provided mnemonic and passphrase to keychain`() = test {
         val mnemonic = "restore mnemonic"
         val passphrase = "restore passphrase"
-        whenever(keychain.saveString(any(), any())).thenReturn(Unit)
+        whenever(keychain.saveSecret(any(), any())).thenReturn(Unit)
 
         val result = sut.restoreWallet(mnemonic, passphrase)
 
         assertTrue(result.isSuccess)
-        verify(keychain).saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-        verify(keychain).saveString(Keychain.Key.BIP39_PASSPHRASE.name, passphrase)
+        verify(keychain).saveSecret(eq(Keychain.Key.BIP39_MNEMONIC.name), any<Secret>())
+        verify(keychain).saveSecret(eq(Keychain.Key.BIP39_PASSPHRASE.name), any<Secret>())
     }
 
     @Test
     fun `restoreWallet should work without passphrase`() = test {
         val mnemonic = "restore mnemonic"
-        whenever(keychain.saveString(any(), any())).thenReturn(Unit)
+        whenever(keychain.saveSecret(any(), any())).thenReturn(Unit)
 
         val result = sut.restoreWallet(mnemonic, null)
 
         assertTrue(result.isSuccess)
-        verify(keychain).saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+        verify(keychain).saveSecret(eq(Keychain.Key.BIP39_MNEMONIC.name), any<Secret>())
     }
 
     @Test
     fun `restoreWallet should not call settingsStore`() = test {
         val mnemonic = "restore mnemonic"
-        whenever(keychain.saveString(any(), any())).thenReturn(Unit)
+        whenever(keychain.saveSecret(any(), any())).thenReturn(Unit)
 
         val result = sut.restoreWallet(mnemonic, null)
 

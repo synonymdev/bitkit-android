@@ -42,6 +42,7 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
@@ -493,13 +494,13 @@ class MigrationService @Inject constructor(
             )
         }
 
-        keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+        keychain.saveSecret(Keychain.Key.BIP39_MNEMONIC.name, secretOf(mnemonic))
     }
 
     private suspend fun migratePassphrase() {
         val passphrase = loadStringFromRNKeychain(RNKeychainKey.PASSPHRASE)
         if (passphrase.isNullOrEmpty()) return
-        keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, passphrase)
+        keychain.saveSecret(Keychain.Key.BIP39_PASSPHRASE.name, secretOf(passphrase))
     }
 
     private suspend fun migratePin() {
@@ -519,7 +520,7 @@ class MigrationService @Inject constructor(
             return
         }
 
-        keychain.saveString(Keychain.Key.PIN.name, pin)
+        keychain.saveSecret(Keychain.Key.PIN.name, secretOf(pin))
     }
 
     private fun migrateLdkData() = runCatching {
@@ -1446,7 +1447,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     suspend fun reapplyMetadataAfterSync() {
         loadPersistedMigrationData()
 

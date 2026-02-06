@@ -58,9 +58,10 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
-import to.bitkit.domain.models.Secret
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.domain.models.Secret
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
@@ -2132,7 +2133,7 @@ class AppViewModel @Inject constructor(
     fun editPin(newPin: String) {
         viewModelScope.launch(bgDispatcher) {
             settingsStore.update { it.copy(isPinEnabled = true) }
-            keychain.upsertString(Keychain.Key.PIN.name, newPin)
+            keychain.upsertSecret(Keychain.Key.PIN.name, secretOf(newPin))
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
     }

@@ -21,6 +21,8 @@ import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,6 +30,7 @@ private val Context.keychainDataStore: DataStore<Preferences> by preferencesData
     name = "keychain"
 )
 
+@Suppress("TooManyFunctions")
 @Singleton
 class Keychain @Inject constructor(
     private val db: AppDb,
@@ -43,56 +46,63 @@ class Keychain @Inject constructor(
 
     fun loadString(key: String): String? = load(key)?.decodeToString()
 
-    /** Load a keychain value as a [Secret] for deterministic cleanup. */
-    fun loadSecret(key: String): Secret? = loadString(key)?.let { secretOf(it) }
+    fun loadSecret(key: String): Secret? {
+        val bytes = load(key) ?: return null
+        val chars = bytes.decodeToCharArray()
+        bytes.fill(0)
+        return secretOf(chars)
+    }
 
-    /** Load raw keychain bytes as a [Secret] for deterministic cleanup. */
-    fun loadSecretBytes(key: String): Secret? =
-        load(key)?.let { bytes -> secretOf(bytes.map { it.toInt().toChar() }.toCharArray()) }
-
-    @Suppress("TooGenericExceptionCaught", "SwallowedException")
     fun load(key: String): ByteArray? {
-        try {
-            return snapshot[key.indexed]?.fromBase64()?.let {
+        return runCatching {
+            snapshot[key.indexed]?.fromBase64()?.let {
                 keyStore.decrypt(it)
             }
-        } catch (_: Exception) {
+        }.getOrElse {
             throw KeychainError.FailedToLoad(key)
         }
     }
 
     suspend fun saveString(key: String, value: String) = save(key, value.toByteArray())
 
-    @Suppress("TooGenericExceptionCaught", "SwallowedException")
+    suspend fun saveSecret(key: String, value: Secret) = value.use {
+        val bytes = it.encodeToByteArray()
+        try { save(key, bytes) } finally { bytes.fill(0) }
+    }
+
     suspend fun save(key: String, value: ByteArray) {
         if (exists(key)) throw KeychainError.FailedToSaveAlreadyExists(key)
 
-        try {
+        runCatching {
             val encryptedValue = keyStore.encrypt(value)
             keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
-        } catch (_: Exception) {
+        }.onFailure {
             throw KeychainError.FailedToSave(key)
         }
         Logger.info("Saved to keychain: $key")
     }
 
-    /** Inserts or replaces a string value associated with a given key in the keychain. */
-    @Suppress("TooGenericExceptionCaught", "SwallowedException")
-    suspend fun upsertString(key: String, value: String) {
-        try {
-            val encryptedValue = keyStore.encrypt(value.toByteArray())
+    suspend fun upsertString(key: String, value: String) = upsert(key, value.toByteArray())
+
+    suspend fun upsertSecret(key: String, value: Secret) = value.use { chars ->
+        val bytes = chars.encodeToByteArray()
+        try { upsert(key, bytes) } finally { bytes.fill(0) }
+    }
+
+    suspend fun upsert(key: String, value: ByteArray) {
+        runCatching {
+            val encryptedValue = keyStore.encrypt(value)
             keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
-        } catch (_: Exception) {
+        }.onFailure {
             throw KeychainError.FailedToSave(key)
         }
         Logger.info("Upsert in keychain: $key")
     }
 
-    @Suppress("TooGenericExceptionCaught", "SwallowedException")
     suspend fun delete(key: String) {
-        try {
+        runCatching {
             keychain.edit { it.remove(key.indexed) }
-        } catch (_: Exception) {
+        }.onFailure {
             throw KeychainError.FailedToDelete(key)
         }
         Logger.debug("Deleted from keychain: $key")
@@ -127,6 +137,16 @@ class Keychain @Inject constructor(
                 }
             }
             .map { string -> string?.toIntOrNull() }
+    }
+
+    private fun ByteArray.decodeToCharArray(): CharArray {
+        val charBuffer = Charsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(this))
+        return CharArray(charBuffer.remaining()).also { charBuffer.get(it) }
+    }
+
+    private fun CharArray.encodeToByteArray(): ByteArray {
+        val byteBuffer = Charsets.UTF_8.newEncoder().encode(CharBuffer.wrap(this))
+        return ByteArray(byteBuffer.remaining()).also { byteBuffer.get(it) }
     }
 
     enum class Key {
