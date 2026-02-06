@@ -34,6 +34,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.RouteParametersConfig
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
@@ -121,6 +122,12 @@ class LightningService @Inject constructor(
             anchorChannelsConfig = AnchorChannelsConfig(
                 trustedPeersNoReserve = trustedPeerNodeIds,
                 perChannelReserveSats = 1u,
+            ),
+            routeParameters = RouteParametersConfig(
+                maxTotalRoutingFeeMsat = null,
+                maxTotalCltvExpiryDelta = 1008u,
+                maxPathCount = 10u.toUByte(),
+                maxChannelSaturationPowerOfHalf = 1u.toUByte(),
             ),
             includeUntrustedPendingInSpendable = true,
         )
