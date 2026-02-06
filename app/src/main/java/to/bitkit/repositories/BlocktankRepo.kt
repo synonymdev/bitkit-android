@@ -173,7 +173,7 @@ class BlocktankRepo @Inject constructor(
             )
             openChannelWithPaidOrders()
         }.onFailure {
-            Logger.error("Failed to refresh orders", it, context = TAG)
+            Logger.warn("Failed to refresh orders", it, context = TAG)
         }
 
         isRefreshing = false
