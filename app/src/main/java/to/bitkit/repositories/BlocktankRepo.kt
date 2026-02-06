@@ -134,8 +134,8 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshOrders() = withContext(bgDispatcher) {
-        if (isRefreshing) return@withContext
+    suspend fun refreshOrders(): Result<Unit> = withContext(bgDispatcher) {
+        if (isRefreshing) return@withContext Result.success(Unit)
         isRefreshing = true
 
         runCatching {
@@ -172,11 +172,9 @@ class BlocktankRepo @Inject constructor(
                 context = TAG
             )
             openChannelWithPaidOrders()
-        }.onFailure {
-            Logger.warn("Failed to refresh orders", it, context = TAG)
+        }.also {
+            isRefreshing = false
         }
-
-        isRefreshing = false
     }
 
     suspend fun refreshMinCjitSats() = withContext(bgDispatcher) {
@@ -303,7 +301,7 @@ class BlocktankRepo @Inject constructor(
     ): Result<IBtOrder?> = withContext(bgDispatcher) {
         runCatching {
             if (refresh) {
-                refreshOrders()
+                refreshOrders().getOrThrow()
             }
             val order = _blocktankState.value.orders.find { it.id == orderId }
             return@runCatching order
