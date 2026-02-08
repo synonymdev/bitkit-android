@@ -1099,9 +1099,7 @@ private fun NavGraphBuilder.changePinNew(navController: NavHostController) {
 
 private fun NavGraphBuilder.changePinConfirm(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.ChangePinConfirm> {
-        val route = it.toRoute<Routes.ChangePinConfirm>()
         ChangePinConfirmScreen(
-            newPin = route.newPin,
             navController = navController,
         )
     }
@@ -1575,8 +1573,8 @@ fun NavController.navigateToChangePinNew() = navigate(
     route = Routes.ChangePinNew,
 )
 
-fun NavController.navigateToChangePinConfirm(newPin: String) = navigate(
-    route = Routes.ChangePinConfirm(newPin),
+fun NavController.navigateToChangePinConfirm() = navigate(
+    route = Routes.ChangePinConfirm,
 )
 
 fun NavController.navigateToChangePinResult() = navigate(
@@ -1780,7 +1778,7 @@ sealed interface Routes {
     data object ChangePinNew : Routes
 
     @Serializable
-    data class ChangePinConfirm(val newPin: String) : Routes
+    data object ChangePinConfirm : Routes
 
     @Serializable
     data object ChangePinResult : Routes

@@ -31,6 +31,7 @@ import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.mutableSecretOf
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -38,37 +39,43 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PinConfirmScreen(
-    originalPin: String,
     onPinConfirmed: () -> Unit,
     onBack: () -> Unit,
 ) {
     val app = appViewModel ?: return
-    var pin by remember { mutableStateOf("") }
+    var pin by remember { mutableSecretOf() }
     var showError by remember { mutableStateOf(false) }
 
     LaunchedEffect(pin) {
-        if (pin.length == Env.PIN_LENGTH) {
-            if (pin == originalPin) {
-                app.addPin(secretOf(pin))
+        if (pin.size == Env.PIN_LENGTH) {
+            val matches = app.consumePendingPin()?.let { pending ->
+                val result = pending.peek { it.contentEquals(pin) }
+                if (result) {
+                    app.addPin(secretOf(pin.copyOf()))
+                    pending.wipe()
+                }
+                result
+            } ?: false
+            if (matches) {
                 onPinConfirmed()
             } else {
                 showError = true
                 delay(500)
-                pin = ""
+                pin = charArrayOf()
             }
         }
     }
 
     ConfirmPinContent(
-        pin = pin,
+        pinLength = pin.size,
         showError = showError,
         onKeyPress = { key ->
             if (key == KEY_DELETE) {
                 if (pin.isNotEmpty()) {
-                    pin = pin.dropLast(1)
+                    pin = pin.sliceArray(0 until pin.size - 1)
                 }
-            } else if (pin.length < Env.PIN_LENGTH) {
-                pin += key
+            } else if (pin.size < Env.PIN_LENGTH) {
+                pin = pin + key[0]
             }
         },
         onBack = onBack,
@@ -77,7 +84,7 @@ fun PinConfirmScreen(
 
 @Composable
 private fun ConfirmPinContent(
-    pin: String,
+    pinLength: Int,
     showError: Boolean,
     onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
@@ -119,7 +126,7 @@ private fun ConfirmPinContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        PinDots(pin = pin)
+        PinDots(pinLength = pinLength)
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -138,7 +145,7 @@ private fun ConfirmPinContent(
 private fun Preview() {
     AppThemeSurface {
         ConfirmPinContent(
-            pin = "",
+            pinLength = 0,
             showError = false,
             onKeyPress = {},
             onBack = {},
@@ -151,7 +158,7 @@ private fun Preview() {
 private fun PreviewRetry() {
     AppThemeSurface {
         ConfirmPinContent(
-            pin = "123",
+            pinLength = 3,
             showError = true,
             onKeyPress = {},
             onBack = {},

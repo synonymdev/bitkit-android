@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,6 +29,7 @@ import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.mutableSecretOf
 import to.bitkit.ui.navigateToChangePinNew
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -44,28 +44,28 @@ fun ChangePinScreen(
 ) {
     val app = appViewModel ?: return
     val attemptsRemaining by app.pinAttemptsRemaining.collectAsStateWithLifecycle()
-    var pin by remember { mutableStateOf("") }
+    var pin by remember { mutableSecretOf() }
 
     LaunchedEffect(pin) {
-        if (pin.length == Env.PIN_LENGTH) {
-            if (app.validatePin(secretOf(pin))) {
+        if (pin.size == Env.PIN_LENGTH) {
+            if (app.validatePin(secretOf(pin.copyOf()))) {
                 navController.navigateToChangePinNew()
             } else {
-                pin = ""
+                pin = charArrayOf()
             }
         }
     }
 
     ChangePinContent(
-        pin = pin,
+        pinLength = pin.size,
         attemptsRemaining = attemptsRemaining,
         onKeyPress = { key ->
             if (key == KEY_DELETE) {
                 if (pin.isNotEmpty()) {
-                    pin = pin.dropLast(1)
+                    pin = pin.sliceArray(0 until pin.size - 1)
                 }
-            } else if (pin.length < Env.PIN_LENGTH) {
-                pin += key
+            } else if (pin.size < Env.PIN_LENGTH) {
+                pin = pin + key[0]
             }
         },
         onBackClick = { navController.popBackStack() },
@@ -75,7 +75,7 @@ fun ChangePinScreen(
 
 @Composable
 private fun ChangePinContent(
-    pin: String,
+    pinLength: Int,
     attemptsRemaining: Int,
     onKeyPress: (String) -> Unit,
     onBackClick: () -> Unit,
@@ -126,7 +126,7 @@ private fun ChangePinContent(
             }
 
             PinDots(
-                pin = pin,
+                pinLength = pinLength,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
 
@@ -146,7 +146,7 @@ private fun ChangePinContent(
 private fun Preview() {
     AppThemeSurface {
         ChangePinContent(
-            pin = "12",
+            pinLength = 2,
             attemptsRemaining = 8,
             onKeyPress = {},
             onBackClick = {},
@@ -160,7 +160,7 @@ private fun Preview() {
 private fun PreviewAttemptsRemaining() {
     AppThemeSurface {
         ChangePinContent(
-            pin = "1234",
+            pinLength = 4,
             attemptsRemaining = 5,
             onKeyPress = {},
             onBackClick = {},
@@ -174,7 +174,7 @@ private fun PreviewAttemptsRemaining() {
 private fun PreviewAttemptsLast() {
     AppThemeSurface {
         ChangePinContent(
-            pin = "",
+            pinLength = 0,
             attemptsRemaining = 1,
             onKeyPress = {},
             onBackClick = {},

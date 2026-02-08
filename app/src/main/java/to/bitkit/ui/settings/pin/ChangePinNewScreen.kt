@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -18,12 +17,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Env
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.mutableSecretOf
 import to.bitkit.ui.navigateToChangePinConfirm
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -35,23 +37,26 @@ import to.bitkit.ui.theme.Colors
 fun ChangePinNewScreen(
     navController: NavController,
 ) {
-    var pin by remember { mutableStateOf("") }
+    val app = appViewModel ?: return
+    var pin by remember { mutableSecretOf() }
 
     LaunchedEffect(pin) {
-        if (pin.length == Env.PIN_LENGTH) {
-            navController.navigateToChangePinConfirm(pin)
+        if (pin.size == Env.PIN_LENGTH) {
+            app.setPendingPin(secretOf(pin.copyOf()))
+            pin = charArrayOf()
+            navController.navigateToChangePinConfirm()
         }
     }
 
     ChangePinNewContent(
-        pin = pin,
+        pinLength = pin.size,
         onKeyPress = { key ->
             if (key == KEY_DELETE) {
                 if (pin.isNotEmpty()) {
-                    pin = pin.dropLast(1)
+                    pin = pin.sliceArray(0 until pin.size - 1)
                 }
-            } else if (pin.length < Env.PIN_LENGTH) {
-                pin += key
+            } else if (pin.size < Env.PIN_LENGTH) {
+                pin = pin + key[0]
             }
         },
         onBackClick = { navController.popBackStack() },
@@ -60,7 +65,7 @@ fun ChangePinNewScreen(
 
 @Composable
 private fun ChangePinNewContent(
-    pin: String,
+    pinLength: Int,
     onKeyPress: (String) -> Unit,
     onBackClick: () -> Unit,
 ) {
@@ -85,7 +90,7 @@ private fun ChangePinNewContent(
             Spacer(modifier = Modifier.height(32.dp))
 
             PinDots(
-                pin = pin,
+                pinLength = pinLength,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
 
@@ -105,7 +110,7 @@ private fun ChangePinNewContent(
 private fun Preview() {
     AppThemeSurface {
         ChangePinNewContent(
-            pin = "12",
+            pinLength = 2,
             onKeyPress = {},
             onBackClick = {},
         )

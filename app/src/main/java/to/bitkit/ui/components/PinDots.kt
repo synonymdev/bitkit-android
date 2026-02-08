@@ -10,15 +10,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import to.bitkit.env.Env
 import to.bitkit.ui.theme.Colors
 
+fun mutableSecretOf(): MutableState<CharArray> = mutableStateOf(charArrayOf())
+
 @Composable
 fun PinDots(
-    pin: String,
+    pinLength: Int,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -32,7 +36,7 @@ fun PinDots(
                     .size(20.dp)
                     .clip(CircleShape)
                     .border(1.dp, Colors.Brand, CircleShape)
-                    .background(if (index < pin.length) Colors.Brand else Colors.Brand08)
+                    .background(if (index < pinLength) Colors.Brand else Colors.Brand08)
             )
         }
     }

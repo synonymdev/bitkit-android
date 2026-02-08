@@ -45,15 +45,12 @@ fun PinSheet(
             }
             composableWithDefaultTransitions<PinRoute.Choose> {
                 PinChooseScreen(
-                    onPinChosen = { pin ->
-                        navController.navigate(PinRoute.Confirm(pin))
-                    },
+                    onPinChosen = { navController.navigate(PinRoute.Confirm) },
                     onBack = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<PinRoute.Confirm> {
                 PinConfirmScreen(
-                    originalPin = it.toRoute<PinRoute.Confirm>().pin,
                     onPinConfirmed = { navController.navigate(PinRoute.Biometrics) },
                     onBack = { navController.popBackStack() },
                 )
@@ -86,7 +83,7 @@ sealed interface PinRoute {
     data object Choose : PinRoute
 
     @Serializable
-    data class Confirm(val pin: String) : PinRoute
+    data object Confirm : PinRoute
 
     @Serializable
     data object Biometrics : PinRoute

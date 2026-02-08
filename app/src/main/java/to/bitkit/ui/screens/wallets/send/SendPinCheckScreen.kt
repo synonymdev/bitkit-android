@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,6 +31,7 @@ import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.mutableSecretOf
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -48,27 +48,27 @@ fun SendPinCheckScreen(
 ) {
     val app = appViewModel ?: return
     val attemptsRemaining by app.pinAttemptsRemaining.collectAsStateWithLifecycle()
-    var pin by remember { mutableStateOf("") }
+    var pin by remember { mutableSecretOf() }
 
     LaunchedEffect(pin) {
-        if (pin.length == Env.PIN_LENGTH) {
-            if (app.validatePin(secretOf(pin))) {
+        if (pin.size == Env.PIN_LENGTH) {
+            if (app.validatePin(secretOf(pin.copyOf()))) {
                 onSuccess()
             }
-            pin = ""
+            pin = charArrayOf()
         }
     }
 
     PinCheckContent(
-        pin = pin,
+        pinLength = pin.size,
         attemptsRemaining = attemptsRemaining,
         onKeyPress = { key ->
             if (key == KEY_DELETE) {
                 if (pin.isNotEmpty()) {
-                    pin = pin.dropLast(1)
+                    pin = pin.sliceArray(0 until pin.size - 1)
                 }
-            } else if (pin.length < Env.PIN_LENGTH) {
-                pin += key
+            } else if (pin.size < Env.PIN_LENGTH) {
+                pin = pin + key[0]
             }
         },
         onBack = onBack,
@@ -78,7 +78,7 @@ fun SendPinCheckScreen(
 
 @Composable
 private fun PinCheckContent(
-    pin: String,
+    pinLength: Int,
     attemptsRemaining: Int,
     onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
@@ -135,7 +135,7 @@ private fun PinCheckContent(
             }
 
             PinDots(
-                pin = pin,
+                pinLength = pinLength,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
 
@@ -158,7 +158,7 @@ private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             PinCheckContent(
-                pin = "123",
+                pinLength = 3,
                 attemptsRemaining = 8,
                 onKeyPress = {},
                 onBack = {},
@@ -175,7 +175,7 @@ private fun PreviewAttemptsLeft() {
     AppThemeSurface {
         BottomSheetPreview {
             PinCheckContent(
-                pin = "123",
+                pinLength = 3,
                 attemptsRemaining = 3,
                 onKeyPress = {},
                 onBack = {},
@@ -192,7 +192,7 @@ private fun PreviewAttemptsLast() {
     AppThemeSurface {
         BottomSheetPreview {
             PinCheckContent(
-                pin = "123",
+                pinLength = 3,
                 attemptsRemaining = 1,
                 onKeyPress = {},
                 onBack = {},

@@ -31,6 +31,7 @@ import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.mutableSecretOf
 import to.bitkit.ui.navigateToChangePinResult
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -40,36 +41,42 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun ChangePinConfirmScreen(
-    newPin: String,
     navController: NavController,
 ) {
     val app = appViewModel ?: return
-    var pin by remember { mutableStateOf("") }
+    var pin by remember { mutableSecretOf() }
     var showError by remember { mutableStateOf(false) }
 
     LaunchedEffect(pin) {
-        if (pin.length == Env.PIN_LENGTH) {
-            if (pin == newPin) {
-                app.editPin(secretOf(newPin))
+        if (pin.size == Env.PIN_LENGTH) {
+            val matches = app.consumePendingPin()?.let { pending ->
+                val result = pending.peek { it.contentEquals(pin) }
+                if (result) {
+                    app.editPin(secretOf(pin.copyOf()))
+                    pending.wipe()
+                }
+                result
+            } ?: false
+            if (matches) {
                 navController.navigateToChangePinResult()
             } else {
                 showError = true
                 delay(500)
-                pin = ""
+                pin = charArrayOf()
             }
         }
     }
 
     ChangePinConfirmContent(
-        pin = pin,
+        pinLength = pin.size,
         showError = showError,
         onKeyPress = { key ->
             if (key == KEY_DELETE) {
                 if (pin.isNotEmpty()) {
-                    pin = pin.dropLast(1)
+                    pin = pin.sliceArray(0 until pin.size - 1)
                 }
-            } else if (pin.length < Env.PIN_LENGTH) {
-                pin += key
+            } else if (pin.size < Env.PIN_LENGTH) {
+                pin = pin + key[0]
             }
         },
         onBackClick = { navController.popBackStack() },
@@ -78,7 +85,7 @@ fun ChangePinConfirmScreen(
 
 @Composable
 private fun ChangePinConfirmContent(
-    pin: String,
+    pinLength: Int,
     showError: Boolean,
     onKeyPress: (String) -> Unit,
     onBackClick: () -> Unit,
@@ -115,7 +122,7 @@ private fun ChangePinConfirmContent(
             }
 
             PinDots(
-                pin = pin,
+                pinLength = pinLength,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
 
@@ -135,7 +142,7 @@ private fun ChangePinConfirmContent(
 private fun Preview() {
     AppThemeSurface {
         ChangePinConfirmContent(
-            pin = "12",
+            pinLength = 2,
             showError = false,
             onKeyPress = {},
             onBackClick = {},
@@ -148,7 +155,7 @@ private fun Preview() {
 private fun PreviewRetry() {
     AppThemeSurface {
         ChangePinConfirmContent(
-            pin = "",
+            pinLength = 0,
             showError = true,
             onKeyPress = {},
             onBackClick = {},

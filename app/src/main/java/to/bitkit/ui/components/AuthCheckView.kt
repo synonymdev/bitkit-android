@@ -61,7 +61,7 @@ fun AuthCheckView(
         attemptsRemaining = attemptsRemaining,
         requireBiometrics = requireBiometrics,
         requirePin = requirePin,
-        validatePin = { pin -> appViewModel.validatePin(secretOf(pin)) },
+        validatePin = { pinChars -> appViewModel.validatePin(secretOf(pinChars.copyOf())) },
         onSuccess = onSuccess,
         onBack = onBack,
         onClickForgotPin = { appViewModel.setShowForgotPin(true) },
@@ -77,7 +77,7 @@ private fun AuthCheckViewContent(
     attemptsRemaining: Int,
     requireBiometrics: Boolean = false,
     requirePin: Boolean = false,
-    validatePin: (String) -> Boolean,
+    validatePin: (CharArray) -> Boolean,
     onSuccess: (() -> Unit)? = null,
     onBack: (() -> Unit)?,
     onClickForgotPin: () -> Unit,
@@ -119,7 +119,7 @@ private fun AuthCheckViewContent(
 @Composable
 private fun PinPad(
     showLogo: Boolean = false,
-    validatePin: (String) -> Boolean,
+    validatePin: (CharArray) -> Boolean,
     attemptsRemaining: Int,
     allowBiometrics: Boolean,
     onShowBiometrics: () -> Unit,
@@ -127,15 +127,15 @@ private fun PinPad(
     onBack: (() -> Unit)? = null,
     onClickForgotPin: () -> Unit = {},
 ) {
-    var pin by remember { mutableStateOf("") }
+    var pin by remember { mutableSecretOf() }
     val isLastAttempt = attemptsRemaining == 1
 
     LaunchedEffect(pin) {
-        if (pin.length == Env.PIN_LENGTH) {
+        if (pin.size == Env.PIN_LENGTH) {
             if (validatePin(pin)) {
                 onSuccess?.invoke()
             }
-            pin = ""
+            pin = charArrayOf()
         }
     }
 
@@ -204,17 +204,17 @@ private fun PinPad(
         }
 
         PinDots(
-            pin = pin,
+            pinLength = pin.size,
             modifier = Modifier.padding(vertical = 16.dp),
         )
         NumberPad(
             onPress = { key ->
                 if (key == KEY_DELETE) {
                     if (pin.isNotEmpty()) {
-                        pin = pin.dropLast(1)
+                        pin = pin.sliceArray(0 until pin.size - 1)
                     }
-                } else if (pin.length < Env.PIN_LENGTH) {
-                    pin += key
+                } else if (pin.size < Env.PIN_LENGTH) {
+                    pin = pin + key[0]
                 }
             },
             type = NumberPadType.SIMPLE,

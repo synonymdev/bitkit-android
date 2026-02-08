@@ -2094,6 +2094,19 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private var _pendingPin: Secret? = null
+
+    fun setPendingPin(pin: Secret) {
+        _pendingPin?.wipe()
+        _pendingPin = pin
+    }
+
+    fun consumePendingPin(): Secret? {
+        val pin = _pendingPin
+        _pendingPin = null
+        return pin
+    }
+
     fun validatePin(pin: Secret): Boolean {
         val storedPinSecret = keychain.loadSecret(Keychain.Key.PIN.name)
         val isValid = pin.use { pinChars ->

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -17,12 +16,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Env
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.mutableSecretOf
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -30,10 +32,11 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PinChooseScreen(
-    onPinChosen: (String) -> Unit,
+    onPinChosen: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var pin by remember { mutableStateOf("") }
+    val app = appViewModel ?: return
+    var pin by remember { mutableSecretOf() }
 
     Column(
         modifier = Modifier
@@ -55,7 +58,7 @@ fun PinChooseScreen(
         Spacer(modifier = Modifier.height(32.dp))
         Spacer(modifier = Modifier.weight(1f))
 
-        PinDots(pin = pin)
+        PinDots(pinLength = pin.size)
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -63,12 +66,14 @@ fun PinChooseScreen(
             onPress = { key ->
                 if (key == KEY_DELETE) {
                     if (pin.isNotEmpty()) {
-                        pin = pin.dropLast(1)
+                        pin = pin.sliceArray(0 until pin.size - 1)
                     }
-                } else if (pin.length < Env.PIN_LENGTH) {
-                    pin += key
-                    if (pin.length == Env.PIN_LENGTH) {
-                        onPinChosen(pin)
+                } else if (pin.size < Env.PIN_LENGTH) {
+                    pin = pin + key[0]
+                    if (pin.size == Env.PIN_LENGTH) {
+                        app.setPendingPin(secretOf(pin.copyOf()))
+                        pin = charArrayOf()
+                        onPinChosen()
                     }
                 }
             },
