@@ -66,14 +66,19 @@ fun ShowMnemonicScreen(
 ) {
     BlockScreenshots()
 
+    val displayWords = remember(uiState.mnemonicWords) {
+        uiState.mnemonicWords.map { it.peek { chars -> String(chars) } }
+    }
+    val displayMnemonic = remember(displayWords) { displayWords.joinToString(" ") }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     ShowMnemonicContent(
-        mnemonic = uiState.bip39Mnemonic,
+        mnemonic = displayMnemonic,
         showMnemonic = uiState.showMnemonic,
         onRevealClick = onRevealClick,
         onCopyClick = {
-            context.setClipboardText(uiState.bip39Mnemonic)
+            context.setClipboardText(displayMnemonic)
             scope.launch {
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,

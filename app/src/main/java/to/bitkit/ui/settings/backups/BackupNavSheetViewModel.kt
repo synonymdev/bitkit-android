@@ -17,6 +17,7 @@ import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.models.Secret
 import to.bitkit.domain.models.splitWords
 import to.bitkit.domain.models.wipeAll
 import to.bitkit.models.BackupCategory
@@ -84,16 +85,10 @@ class BackupNavSheetViewModel @Inject constructor(
             val mnemonicWordSecrets = mnemonicSecret.splitWords()
             mnemonicSecret.wipe()
 
-            val mnemonic = mnemonicWordSecrets.joinToString(" ") { it.peek { chars -> String(chars) } }
-            mnemonicWordSecrets.wipeAll()
-
-            val passphrase = passphraseSecret?.peek { String(it) } ?: ""
-            passphraseSecret?.wipe()
-
             _uiState.update {
                 it.copy(
-                    bip39Mnemonic = mnemonic,
-                    bip39Passphrase = passphrase,
+                    mnemonicWords = mnemonicWordSecrets,
+                    passphrase = passphraseSecret,
                 )
             }
         }.onFailure {
@@ -116,7 +111,7 @@ class BackupNavSheetViewModel @Inject constructor(
 
     fun onShowMnemonicContinue() {
         val state = _uiState.value
-        if (state.bip39Passphrase.isNotEmpty()) {
+        if (state.passphrase != null) {
             setEffect(SideEffect.NavigateToShowPassphrase)
         } else {
             setEffect(SideEffect.NavigateToConfirmMnemonic)
@@ -129,7 +124,7 @@ class BackupNavSheetViewModel @Inject constructor(
 
     fun onConfirmMnemonicContinue() {
         val state = _uiState.value
-        if (state.bip39Passphrase.isNotEmpty()) {
+        if (state.passphrase != null) {
             setEffect(SideEffect.NavigateToConfirmPassphrase)
         } else {
             setEffect(SideEffect.NavigateToWarning)
@@ -164,18 +159,25 @@ class BackupNavSheetViewModel @Inject constructor(
     }
 
     fun resetState() {
+        wipeSecrets()
         _uiState.update { UiState() }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        wipeSecrets()
+    }
+
+    private fun wipeSecrets() {
+        _uiState.value.mnemonicWords.wipeAll()
+        _uiState.value.passphrase?.wipe()
     }
 }
 
 interface BackupContract {
-    companion object {
-        private val PLACEHOLDER_MNEMONIC = List(24) { "secret" }.joinToString(" ")
-    }
-
     data class UiState(
-        val bip39Mnemonic: String = PLACEHOLDER_MNEMONIC,
-        val bip39Passphrase: String = "",
+        val mnemonicWords: List<Secret> = emptyList(),
+        val passphrase: Secret? = null,
         val showMnemonic: Boolean = false,
         val enteredPassphrase: String = "",
         val lastBackupTimeMs: Long? = null,

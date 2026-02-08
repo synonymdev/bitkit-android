@@ -48,8 +48,8 @@ fun ConfirmMnemonicScreen(
 ) {
     BlockScreenshots()
 
-    val originalSeed = remember(uiState.bip39Mnemonic) {
-        uiState.bip39Mnemonic.split(" ").filter { it.isNotBlank() }
+    val originalSeed = remember(uiState.mnemonicWords) {
+        uiState.mnemonicWords.map { it.peek { chars -> String(chars) } }
     }
     val shuffledWords = remember(originalSeed) {
         originalSeed.shuffled()

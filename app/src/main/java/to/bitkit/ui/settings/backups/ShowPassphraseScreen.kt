@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
@@ -37,8 +38,12 @@ fun ShowPassphraseScreen(
 ) {
     BlockScreenshots()
 
+    val displayPassphrase = remember(uiState.passphrase) {
+        uiState.passphrase?.peek { String(it) }.orEmpty()
+    }
+
     ShowPassphraseContent(
-        bip39Passphrase = uiState.bip39Passphrase,
+        bip39Passphrase = displayPassphrase,
         onContinue = onContinue,
         onBack = onBack,
     )
