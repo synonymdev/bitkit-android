@@ -87,8 +87,8 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(BalanceState()))
 
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
-        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
+        whenever(keychain.loadSecret(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(secretOf("test mnemonic"))
+        whenever(keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
 
         whenever(coreService.onchain).thenReturn(onchainService)
         whenever(preActivityMetadataRepo.addPreActivityMetadataTags(any(), any())).thenReturn(Result.success(Unit))
