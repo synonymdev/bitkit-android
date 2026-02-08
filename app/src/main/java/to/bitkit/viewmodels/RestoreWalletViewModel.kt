@@ -26,6 +26,15 @@ class RestoreWalletViewModel @Inject constructor(
         recomputeValidationState()
     }
 
+    override fun onCleared() {
+        _uiState.update {
+            it.copy(
+                words = List(WORDS_MAX) { "" },
+                bip39Passphrase = "",
+            )
+        }
+    }
+
     private fun recomputeValidationState() = viewModelScope.launch {
         val currentState = _uiState.value
         val checksumError = currentState.isChecksumErrorVisible()
