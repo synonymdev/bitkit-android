@@ -21,6 +21,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.Secret
 import to.bitkit.domain.models.secretOf
 import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
@@ -280,23 +281,23 @@ class WalletRepo @Inject constructor(
         return newBip21
     }
 
-    suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun createWallet(bip39Passphrase: Secret?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
         runCatching {
             val mnemonic = generateEntropyMnemonic()
-            keychain.saveSecret(Keychain.Key.BIP39_MNEMONIC.name, secretOf(mnemonic))
-            bip39Passphrase?.let { keychain.saveSecret(Keychain.Key.BIP39_PASSPHRASE.name, secretOf(it)) }
+            keychain.saveSecret(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+            bip39Passphrase?.let { keychain.saveSecret(Keychain.Key.BIP39_PASSPHRASE.name, it) }
             setWalletExistsState()
         }.onFailure {
             Logger.error("createWallet error", it, context = TAG)
         }
     }
 
-    suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun restoreWallet(mnemonic: Secret, bip39Passphrase: Secret?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
         runCatching {
-            keychain.saveSecret(Keychain.Key.BIP39_MNEMONIC.name, secretOf(mnemonic))
-            bip39Passphrase?.let { keychain.saveSecret(Keychain.Key.BIP39_PASSPHRASE.name, secretOf(it)) }
+            keychain.saveSecret(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+            bip39Passphrase?.let { keychain.saveSecret(Keychain.Key.BIP39_PASSPHRASE.name, it) }
             setWalletExistsState()
         }.onFailure {
             Logger.error("restoreWallet error", it, context = TAG)
@@ -549,8 +550,8 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    private fun generateEntropyMnemonic(): String {
-        return org.lightningdevkit.ldknode.generateEntropyMnemonic(wordCount = WordCount.WORDS12)
+    private fun generateEntropyMnemonic(): Secret {
+        return secretOf(org.lightningdevkit.ldknode.generateEntropyMnemonic(wordCount = WordCount.WORDS12))
     }
 
     private companion object {

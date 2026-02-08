@@ -23,6 +23,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.models.Secret
+import to.bitkit.domain.models.secretOf
 import to.bitkit.models.BalanceState
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
@@ -150,7 +151,7 @@ class WalletRepoTest : BaseUnitTest() {
         val passphrase = "restore passphrase"
         whenever(keychain.saveSecret(any(), any())).thenReturn(Unit)
 
-        val result = sut.restoreWallet(mnemonic, passphrase)
+        val result = sut.restoreWallet(secretOf(mnemonic), secretOf(passphrase))
 
         assertTrue(result.isSuccess)
         verify(keychain).saveSecret(eq(Keychain.Key.BIP39_MNEMONIC.name), any<Secret>())
@@ -162,7 +163,7 @@ class WalletRepoTest : BaseUnitTest() {
         val mnemonic = "restore mnemonic"
         whenever(keychain.saveSecret(any(), any())).thenReturn(Unit)
 
-        val result = sut.restoreWallet(mnemonic, null)
+        val result = sut.restoreWallet(secretOf(mnemonic), null)
 
         assertTrue(result.isSuccess)
         verify(keychain).saveSecret(eq(Keychain.Key.BIP39_MNEMONIC.name), any<Secret>())
@@ -173,7 +174,7 @@ class WalletRepoTest : BaseUnitTest() {
         val mnemonic = "restore mnemonic"
         whenever(keychain.saveSecret(any(), any())).thenReturn(Unit)
 
-        val result = sut.restoreWallet(mnemonic, null)
+        val result = sut.restoreWallet(secretOf(mnemonic), null)
 
         assertTrue(result.isSuccess)
         verify(settingsStore, never()).update(any())

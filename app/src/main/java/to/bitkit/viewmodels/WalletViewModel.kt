@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.models.Secret
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -383,7 +384,7 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    suspend fun createWallet(bip39Passphrase: String?) {
+    suspend fun createWallet(bip39Passphrase: Secret?) {
         setInitNodeLifecycleState()
         walletRepo.createWallet(bip39Passphrase)
             .onSuccess {
@@ -394,7 +395,7 @@ class WalletViewModel @Inject constructor(
             }
     }
 
-    suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
+    suspend fun restoreWallet(mnemonic: Secret, bip39Passphrase: Secret?) {
         setInitNodeLifecycleState()
         _restoreState.update { RestoreState.InProgress.Wallet }
 

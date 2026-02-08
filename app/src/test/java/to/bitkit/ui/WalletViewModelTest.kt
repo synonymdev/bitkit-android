@@ -16,6 +16,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsStore
+import to.bitkit.domain.models.secretOf
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.BackupRepo
@@ -142,7 +143,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restoreWallet should call walletRepo restoreWallet`() = test {
         whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
 
-        sut.restoreWallet("test_mnemonic", null)
+        sut.restoreWallet(secretOf("test_mnemonic"), null)
 
         verify(walletRepo).restoreWallet(any(), anyOrNull())
     }
@@ -151,7 +152,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restoreWallet should call setInitNodeLifecycleState`() = test {
         whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
 
-        sut.restoreWallet("test_mnemonic", null)
+        sut.restoreWallet(secretOf("test_mnemonic"), null)
 
         verify(lightningRepo).setInitNodeLifecycleState()
     }
@@ -190,7 +191,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `onBackupRestoreSuccess should reset restoreState`() = test {
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
         walletState.value = walletState.value.copy(walletExists = true)
-        sut.restoreWallet("mnemonic", "passphrase")
+        sut.restoreWallet(secretOf("mnemonic"), secretOf("passphrase"))
         assertEquals(RestoreState.InProgress.Wallet, sut.restoreState.value)
 
         sut.onRestoreContinue()
@@ -202,7 +203,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `onProceedWithoutRestore should exit restore flow`() = test {
         val testError = Exception("Test error")
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
-        sut.restoreWallet("mnemonic", "passphrase")
+        sut.restoreWallet(secretOf("mnemonic"), secretOf("passphrase"))
         walletState.value = walletState.value.copy(walletExists = true)
         assertEquals(RestoreState.Completed, sut.restoreState.value)
 
@@ -216,7 +217,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
         assertEquals(RestoreState.Initial, sut.restoreState.value)
 
-        sut.restoreWallet("mnemonic", "passphrase")
+        sut.restoreWallet(secretOf("mnemonic"), secretOf("passphrase"))
         assertEquals(RestoreState.InProgress.Wallet, sut.restoreState.value)
 
         walletState.value = walletState.value.copy(walletExists = true)
@@ -298,7 +299,7 @@ class WalletViewModelTest : BaseUnitTest() {
         )
 
         // Trigger restore to put state in non-idle
-        testSut.restoreWallet("mnemonic", null)
+        testSut.restoreWallet(secretOf("mnemonic"), null)
         assertEquals(RestoreState.InProgress.Wallet, testSut.restoreState.value)
 
         testSut.start()

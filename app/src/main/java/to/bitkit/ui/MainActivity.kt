@@ -33,6 +33,7 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
+import to.bitkit.domain.models.secretOf
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.IsOnlineTracker
@@ -293,7 +294,10 @@ private fun OnboardingNav(
                     scope.launch {
                         runCatching {
                             appViewModel.resetIsAuthenticatedState()
-                            walletViewModel.restoreWallet(mnemonic, passphrase)
+                            walletViewModel.restoreWallet(
+                                secretOf(mnemonic),
+                                passphrase?.let { secretOf(it) },
+                            )
                         }.onFailure {
                             appViewModel.toast(it)
                         }
@@ -308,7 +312,7 @@ private fun OnboardingNav(
                     scope.launch {
                         runCatching {
                             appViewModel.resetIsAuthenticatedState()
-                            walletViewModel.createWallet(bip39Passphrase = passphrase)
+                            walletViewModel.createWallet(bip39Passphrase = secretOf(passphrase))
                         }.onFailure {
                             appViewModel.toast(it)
                         }
