@@ -24,6 +24,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
+import to.bitkit.ext.wipe
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
@@ -93,18 +94,22 @@ class RNBackupClient @Inject constructor(
             }
             passphraseSecret?.wipe()
 
-            val url = buildUrl("retrieve", label = label, fileGroup = fileGroup, network = getNetworkString())
-            val response: HttpResponse = httpClient.get(url) {
-                header("Authorization", bearer.bearer)
-            }
+            try {
+                val url = buildUrl("retrieve", label = label, fileGroup = fileGroup, network = getNetworkString())
+                val response: HttpResponse = httpClient.get(url) {
+                    header("Authorization", bearer.bearer)
+                }
 
-            if (!response.status.isSuccess()) throw RNBackupError.RequestFailed("Status: ${response.status.value}")
+                if (!response.status.isSuccess()) throw RNBackupError.RequestFailed("Status: ${response.status.value}")
 
-            val encryptedData = response.body<ByteArray>()
-            if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
+                val encryptedData = response.body<ByteArray>()
+                if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
 
-            decrypt(encryptedData, encryptionKey).also {
-                if (it.isEmpty()) throw RNBackupError.DecryptFailed("Decrypted data is empty")
+                decrypt(encryptedData, encryptionKey).also {
+                    if (it.isEmpty()) throw RNBackupError.DecryptFailed("Decrypted data is empty")
+                }
+            } finally {
+                encryptionKey.wipe()
             }
         }.onFailure { e ->
             Logger.error("Failed to retrieve $label", e, context = TAG)
@@ -125,24 +130,28 @@ class RNBackupClient @Inject constructor(
             }
             passphraseSecret?.wipe()
 
-            val url = buildUrl(
-                method = "retrieve",
-                label = "channel_monitor",
-                fileGroup = "ldk",
-                channelId = channelId,
-                network = getNetworkString(),
-            )
-            val response: HttpResponse = httpClient.get(url) {
-                header("Authorization", bearer.bearer)
-            }
+            try {
+                val url = buildUrl(
+                    method = "retrieve",
+                    label = "channel_monitor",
+                    fileGroup = "ldk",
+                    channelId = channelId,
+                    network = getNetworkString(),
+                )
+                val response: HttpResponse = httpClient.get(url) {
+                    header("Authorization", bearer.bearer)
+                }
 
-            if (!response.status.isSuccess()) throw RNBackupError.RequestFailed("Status: ${response.status.value}")
+                if (!response.status.isSuccess()) throw RNBackupError.RequestFailed("Status: ${response.status.value}")
 
-            val encryptedData = response.body<ByteArray>()
-            if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
+                val encryptedData = response.body<ByteArray>()
+                if (encryptedData.isEmpty()) throw RNBackupError.RequestFailed("Retrieved data is empty")
 
-            decrypt(encryptedData, encryptionKey).also {
-                if (it.isEmpty()) throw RNBackupError.DecryptFailed("Decrypted data is empty")
+                decrypt(encryptedData, encryptionKey).also {
+                    if (it.isEmpty()) throw RNBackupError.DecryptFailed("Decrypted data is empty")
+                }
+            } finally {
+                encryptionKey.wipe()
             }
         }.onFailure { e ->
             Logger.error("Failed to retrieve channel monitor $channelId", e, context = TAG)
