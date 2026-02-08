@@ -168,6 +168,8 @@ fun ActivityDetailScreen(
             is ActivityDetailViewModel.ActivityLoadState.Success -> {
                 val item = loadState.activity
                 val app = appViewModel ?: return@Box
+                val settings = settingsViewModel ?: return@Box
+                val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
                 val copyToastTitle = stringResource(R.string.common__copied)
 
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
@@ -237,6 +239,7 @@ fun ActivityDetailScreen(
                                 description = text.ellipsisMiddle(40)
                             )
                         },
+                        hideBalance = hideBalance,
                         feeRates = feeRates,
                     )
                     if (showAddTagSheet) {
@@ -316,11 +319,9 @@ private fun ActivityDetailContent(
     isCpfpChild: Boolean = false,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit,
+    hideBalance: Boolean = false,
     feeRates: FeeRates? = null,
 ) {
-    val settings = settingsViewModel ?: return
-    val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
-
     val isLightning = item is Activity.Lightning
     val isSent = item.isSent()
     val isTransfer = item.isTransfer()
