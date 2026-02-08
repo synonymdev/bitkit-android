@@ -262,6 +262,58 @@ class LightningService @Inject constructor(
         Logger.info("LDK storage wiped", context = TAG)
     }
 
+    /**
+     * Resets the network graph cache, forcing a full RGS sync on next startup.
+     * This is useful when the cached graph is stale or missing nodes.
+     * Note: Node must be stopped before calling this.
+     */
+    fun resetNetworkGraph(walletIndex: Int) {
+        if (node != null) throw ServiceError.NodeStillRunning()
+        Logger.warn("Resetting network graph cache…", context = TAG)
+        val ldkPath = Path(Env.ldkStoragePath(walletIndex)).toFile()
+        val graphFile = ldkPath.resolve("network_graph")
+        if (graphFile.exists()) {
+            graphFile.delete()
+            Logger.info("Network graph cache deleted", context = TAG)
+        } else {
+            Logger.info("No network graph cache found", context = TAG)
+        }
+    }
+
+    /**
+     * Validates that all trusted peers are present in the network graph.
+     * Returns false if all trusted peers are missing, indicating the graph cache is stale.
+     */
+    fun validateNetworkGraph(): Boolean {
+        val node = this.node ?: return true
+        val graph = node.networkGraph()
+        val graphNodes = graph.listNodes().toSet()
+        if (graphNodes.isEmpty()) {
+            Logger.debug("Network graph is empty, skipping validation", context = TAG)
+            return true
+        }
+        val missingPeers = trustedPeers.filter { it.nodeId !in graphNodes }
+        if (missingPeers.size == trustedPeers.size) {
+            Logger.warn(
+                "Network graph missing all ${trustedPeers.size} trusted peers",
+                context = TAG,
+            )
+            return false
+        }
+        if (missingPeers.isNotEmpty()) {
+            Logger.debug(
+                "Network graph missing ${missingPeers.size}/${trustedPeers.size} trusted peers",
+                context = TAG,
+            )
+        }
+        val presentCount = trustedPeers.size - missingPeers.size
+        Logger.debug(
+            "Network graph validated: $presentCount/${trustedPeers.size} trusted peers present",
+            context = TAG,
+        )
+        return true
+    }
+
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
