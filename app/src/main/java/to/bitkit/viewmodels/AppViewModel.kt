@@ -61,7 +61,6 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.domain.models.Secret
-import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
@@ -2095,9 +2094,11 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun validatePin(pin: String): Boolean {
-        val storedPinSecret: Secret? = keychain.loadSecret(Keychain.Key.PIN.name)
-        val isValid = storedPinSecret?.use { storedChars -> String(storedChars) == pin } ?: false
+    fun validatePin(pin: Secret): Boolean {
+        val storedPinSecret = keychain.loadSecret(Keychain.Key.PIN.name)
+        val isValid = pin.use { pinChars ->
+            storedPinSecret?.use { it.contentEquals(pinChars) } ?: false
+        }
 
         if (isValid) {
             viewModelScope.launch {
@@ -2123,17 +2124,17 @@ class AppViewModel @Inject constructor(
         return false
     }
 
-    fun addPin(pin: String) {
+    fun addPin(pin: Secret) {
         viewModelScope.launch {
             settingsStore.addDismissedSuggestion(Suggestion.SECURE)
         }
         editPin(pin)
     }
 
-    fun editPin(newPin: String) {
+    fun editPin(newPin: Secret) {
         viewModelScope.launch(bgDispatcher) {
             settingsStore.update { it.copy(isPinEnabled = true) }
-            keychain.upsertSecret(Keychain.Key.PIN.name, secretOf(newPin))
+            keychain.upsertSecret(Keychain.Key.PIN.name, newPin)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
     }

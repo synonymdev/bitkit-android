@@ -22,6 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Env
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
@@ -48,7 +49,7 @@ fun PinConfirmScreen(
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
             if (pin == originalPin) {
-                app.addPin(pin)
+                app.addPin(secretOf(pin))
                 onPinConfirmed()
             } else {
                 showError = true

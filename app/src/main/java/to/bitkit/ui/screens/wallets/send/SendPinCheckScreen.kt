@@ -22,6 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Env
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
@@ -51,7 +52,7 @@ fun SendPinCheckScreen(
 
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
-            if (app.validatePin(pin)) {
+            if (app.validatePin(secretOf(pin))) {
                 onSuccess()
             }
             pin = ""

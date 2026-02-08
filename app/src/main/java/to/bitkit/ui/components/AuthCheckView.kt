@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Env
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -60,7 +61,7 @@ fun AuthCheckView(
         attemptsRemaining = attemptsRemaining,
         requireBiometrics = requireBiometrics,
         requirePin = requirePin,
-        validatePin = appViewModel::validatePin,
+        validatePin = { pin -> appViewModel.validatePin(secretOf(pin)) },
         onSuccess = onSuccess,
         onBack = onBack,
         onClickForgotPin = { appViewModel.setShowForgotPin(true) },

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.domain.models.secretOf
 import to.bitkit.env.Env
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
@@ -49,7 +50,7 @@ fun ChangePinConfirmScreen(
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
             if (pin == newPin) {
-                app.editPin(newPin)
+                app.editPin(secretOf(newPin))
                 navController.navigateToChangePinResult()
             } else {
                 showError = true
