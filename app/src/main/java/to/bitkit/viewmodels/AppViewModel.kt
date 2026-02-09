@@ -750,7 +750,7 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        val scanResult = runCatching { coreService.decode(input) }
+        val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
         if (scanResult.isFailure) {
             showAddressValidationError(
