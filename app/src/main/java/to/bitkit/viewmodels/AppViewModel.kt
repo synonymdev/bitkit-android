@@ -2226,7 +2226,7 @@ class AppViewModel @Inject constructor(
         handleScan(data)
     }
 
-    // TODO Temporary fix while these schemes can't be decoded
+    // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
     @Suppress("SpellCheckingInspection")
     private fun String.removeLightningSchemes(): String {
         return this
