@@ -950,8 +950,8 @@
     <string name="wallet__toast_payment_failed_recipient_rejected">The recipient rejected this payment. Try a different amount.</string>
     <string name="wallet__toast_payment_failed_retries_exhausted">Could not find a route with sufficient liquidity. Try a smaller amount or wait and try again.</string>
     <string name="wallet__toast_payment_failed_route_not_found">Could not find a payment path to the recipient.</string>
-    <string name="wallet__toast_payment_failed_title">Payment Failed</string>
     <string name="wallet__toast_payment_failed_timeout">Payment timed out. Please try again.</string>
+    <string name="wallet__toast_payment_failed_title">Payment Failed</string>
     <string name="wallet__toast_received_transaction_replaced_description">Your received transaction was replaced by a fee bump</string>
     <string name="wallet__toast_received_transaction_replaced_title">Received Transaction Replaced</string>
     <string name="wallet__toast_transaction_removed_description">Transaction was removed from mempool</string>
