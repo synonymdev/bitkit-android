@@ -193,7 +193,7 @@ class WidgetsRepo @Inject constructor(
                 Logger.verbose("Updated $widgetType widget successfully", context = TAG)
             }
             .onFailure { e ->
-                Logger.verbose("Failed to update $widgetType widget", context = TAG)
+                Logger.verbose("Failed to update $widgetType widget", e, context = TAG)
             }
 
         _refreshStates.update { it + (widgetType to false) }
