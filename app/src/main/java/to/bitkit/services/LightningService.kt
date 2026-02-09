@@ -271,7 +271,7 @@ class LightningService @Inject constructor(
         if (node != null) throw ServiceError.NodeStillRunning()
         Logger.warn("Resetting network graph cache…", context = TAG)
         val ldkPath = Path(Env.ldkStoragePath(walletIndex)).toFile()
-        val graphFile = ldkPath.resolve("network_graph")
+        val graphFile = ldkPath.resolve("network_graph_cache")
         if (graphFile.exists()) {
             graphFile.delete()
             Logger.info("Network graph cache deleted", context = TAG)

@@ -46,6 +46,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -92,6 +93,7 @@ class LightningRepo @Inject constructor(
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val connectivityRepo: ConnectivityRepo,
+    private val vssBackupClient: VssBackupClient,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -328,6 +330,14 @@ class LightningRepo @Inject constructor(
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
                     lightningService.stop()
                     lightningService.resetNetworkGraph(walletIndex)
+                    // Also clear stale graph from VSS to prevent fallback restoration
+                    runCatching {
+                        vssBackupClient.setup(walletIndex).getOrThrow()
+                        vssBackupClient.deleteObject("network_graph").getOrThrow()
+                        Logger.info("Cleared stale network graph from VSS", context = TAG)
+                    }.onFailure {
+                        Logger.warn("Failed to clear graph from VSS", it, context = TAG)
+                    }
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                     shouldRestartForGraphReset = true
                     return@withLock Result.success(Unit)
