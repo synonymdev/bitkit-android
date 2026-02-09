@@ -289,6 +289,11 @@ class LightningService @Inject constructor(
         val graph = node.networkGraph()
         val graphNodes = graph.listNodes().toSet()
         if (graphNodes.isEmpty()) {
+            val rgsTimestamp = node.status().latestRgsSnapshotTimestamp
+            if (rgsTimestamp != null) {
+                Logger.warn("Network graph is empty despite RGS timestamp $rgsTimestamp", context = TAG)
+                return false
+            }
             Logger.debug("Network graph is empty, skipping validation", context = TAG)
             return true
         }
