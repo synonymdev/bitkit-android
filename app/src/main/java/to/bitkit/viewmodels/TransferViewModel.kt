@@ -199,7 +199,7 @@ class TransferViewModel @Inject constructor(
             val spendableBalance =
                 lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
             val txFee = lightningRepo.calculateTotalFee(
-                amountSats = spendableBalance,
+                amountSats = order.feeSat,
                 address = address,
                 speed = speed,
             ).getOrElse { 0uL }
