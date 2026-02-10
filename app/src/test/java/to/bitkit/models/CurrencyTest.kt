@@ -103,6 +103,31 @@ class CurrencyTest {
     }
 
     @Test
+    fun `formatCurrencyWithSymbol places USD symbol before amount with space`() {
+        val value = BigDecimal("10.50")
+
+        val formatted = value.formatCurrencyWithSymbol(
+            currencyCode = "USD",
+            withSpace = true,
+        )
+
+        assertEquals("$ 10.50", formatted)
+    }
+
+    @Test
+    fun `formatCurrencyWithSymbol places PLN symbol after amount with space`() {
+        val value = BigDecimal("0.35")
+
+        val formatted = value.formatCurrencyWithSymbol(
+            currencyCode = "PLN",
+            currencySymbol = "zł",
+            withSpace = true,
+        )
+
+        assertEquals("0.35 zł", formatted)
+    }
+
+    @Test
     fun `formatCurrencyWithSymbol falls back to currency code when no symbol provided`() {
         val value = BigDecimal("100.00")
 
@@ -156,5 +181,33 @@ class CurrencyTest {
         )
 
         assertEquals("0.35zł", converted.formattedWithSymbol())
+    }
+
+    @Test
+    fun `ConvertedAmount formattedWithSymbol returns correct format for prefix currency with space`() {
+        val converted = ConvertedAmount(
+            value = BigDecimal("10.50"),
+            formatted = "10.50",
+            symbol = "$",
+            currency = "USD",
+            flag = "🇺🇸",
+            sats = 1000L,
+        )
+
+        assertEquals("$ 10.50", converted.formattedWithSymbol(withSpace = true))
+    }
+
+    @Test
+    fun `ConvertedAmount formattedWithSymbol returns correct format for suffix currency with space`() {
+        val converted = ConvertedAmount(
+            value = BigDecimal("0.35"),
+            formatted = "0.35",
+            symbol = "zł",
+            currency = "PLN",
+            flag = "🇵🇱",
+            sats = 100L,
+        )
+
+        assertEquals("0.35 zł", converted.formattedWithSymbol(withSpace = true))
     }
 }

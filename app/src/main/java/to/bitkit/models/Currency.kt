@@ -91,7 +91,11 @@ data class ConvertedAmount(
         )
     }
 
-    fun formattedWithSymbol(): String = value.formatCurrencyWithSymbol(currency, symbol)
+    fun formattedWithSymbol(withSpace: Boolean = false): String = value.formatCurrencyWithSymbol(
+        currencyCode = currency,
+        currencySymbol = symbol,
+        withSpace = withSpace,
+    )
 }
 
 fun Long.formatMoney(
@@ -152,17 +156,19 @@ fun BigDecimal.formatCurrency(decimalPlaces: Int = FIAT_DECIMALS, locale: Locale
 fun BigDecimal.formatCurrencyWithSymbol(
     currencyCode: String,
     currencySymbol: String? = null,
+    withSpace: Boolean = false,
     decimalPlaces: Int = FIAT_DECIMALS,
 ): String {
     val formatted = formatCurrency(decimalPlaces) ?: "0.00"
     val symbol = currencySymbol
         ?: runCatching { java.util.Currency.getInstance(currencyCode) }.getOrNull()?.symbol
         ?: currencyCode
+    val separator = if (withSpace) " " else ""
 
     return if (currencyCode in SUFFIX_SYMBOL_CURRENCIES) {
-        "$formatted$symbol"
+        "$formatted$separator$symbol"
     } else {
-        "$symbol$formatted"
+        "$symbol$separator$formatted"
     }
 }
 
