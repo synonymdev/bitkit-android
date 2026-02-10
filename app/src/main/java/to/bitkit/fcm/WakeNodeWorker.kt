@@ -23,6 +23,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.toUserMessage
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.BlocktankNotificationType.cjitPaymentArrived
@@ -153,7 +154,7 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.PaymentFailed -> {
                 bestAttemptContent = NotificationDetails(
                     title = appContext.getString(R.string.notification__payment_failed_title),
-                    body = "⚡ ${event.reason}",
+                    body = "⚡ ${event.reason.toUserMessage(appContext)}",
                 )
 
                 if (notificationType == wakeToTimeout) {
