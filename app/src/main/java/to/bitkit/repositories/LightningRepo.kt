@@ -248,6 +248,16 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    private suspend fun dumpGraphToFile(walletIndex: Int, label: String) {
+        runCatching {
+            val outputDir = Env.ldkStoragePath(walletIndex)
+            val timestamp = System.currentTimeMillis()
+            lightningService.exportNetworkGraphToFile(outputDir, "graph_dump_${label}_$timestamp.txt")
+        }.onFailure {
+            Logger.warn("Failed to dump graph to file ($label)", it, context = TAG)
+        }
+    }
+
     private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runCatching {
         val info = coreService.blocktank.info(refresh = false)
             ?: coreService.blocktank.info(refresh = true)
@@ -325,19 +335,34 @@ class LightningRepo @Inject constructor(
                 updateGeoBlockState()
                 refreshChannelCache()
 
-                // Validate network graph has trusted peers (RGS cache can become stale)
-                if (shouldValidateGraph && !lightningService.validateNetworkGraph()) {
+                if (shouldValidateGraph && !lightningService.validateNetworkGraphHasTrustedPeers()) {
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
-                    lightningService.stop()
-                    lightningService.resetNetworkGraph(walletIndex)
-                    // Also clear stale graph from VSS to prevent fallback restoration
+
+                    dumpGraphToFile(walletIndex, "before_reset")
+
                     runCatching {
                         vssBackupClient.setup(walletIndex).getOrThrow()
-                        vssBackupClient.deleteObject("network_graph").getOrThrow()
-                        Logger.info("Cleared stale network graph from VSS", context = TAG)
+                        val allKeys = vssBackupClient.listKeys().getOrThrow()
+                        val allKeysStr = allKeys.map { "${it.key}@v${it.version}" }
+                        Logger.info("VSS all keys before reset: $allKeysStr", context = TAG)
+                        val ldkKeys = vssBackupClient.ldk.listKeys().getOrThrow()
+                        val ldkKeysStr = ldkKeys.map { "${it.key}@v${it.version}" }
+                        Logger.info("VSS LDK keys before reset: $ldkKeysStr", context = TAG)
                     }.onFailure {
-                        Logger.warn("Failed to clear graph from VSS", it, context = TAG)
+                        Logger.warn("Failed to list VSS keys before reset", it, context = TAG)
                     }
+
+                    lightningService.stop()
+                    lightningService.resetNetworkGraph(walletIndex)
+
+                    runCatching {
+                        vssBackupClient.setup(walletIndex).getOrThrow()
+                        vssBackupClient.ldk.deleteObject("network_graph").getOrThrow()
+                        Logger.info("Cleared stale network graph from VSS (first delete)", context = TAG)
+                    }.onFailure {
+                        Logger.warn("Failed to clear graph from VSS (first delete)", it, context = TAG)
+                    }
+
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                     shouldRestartForGraphReset = true
                     return@withLock Result.success(Unit)

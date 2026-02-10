@@ -70,8 +70,12 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever(lightningService.validateNetworkGraphHasTrustedPeers()).thenReturn(true)
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
@@ -91,11 +95,7 @@ class LightningRepoTest : BaseUnitTest() {
     private suspend fun startNodeForTesting() {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
-        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(lightningService.sync()).thenReturn(Unit)
-        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
         whenever(blocktank.info(any())).thenReturn(null)
@@ -109,9 +109,6 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should transition through correct states`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
-        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
         whenever(blocktank.info(any())).thenReturn(null)
@@ -391,11 +388,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
-        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         whenever(lightningService.sync()).thenThrow(RuntimeException("Sync failed"))
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
         whenever(blocktank.info(any())).thenReturn(null)
@@ -625,10 +618,6 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should load trusted peers from blocktank info`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
-        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
 
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
@@ -670,10 +659,6 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should pass null trusted peers when blocktank returns null`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
-        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
 
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
@@ -690,15 +675,11 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should not retry when node lifecycle state is Running`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
         whenever(blocktank.info(any())).thenReturn(null)
 
         // lightningService.start() succeeds (state becomes Running at line 241)
-        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(lightningService.validateNetworkGraph()).thenReturn(true)
         // lightningService.nodeId throws during syncState() (called at line 244, AFTER state = Running)
         whenever(lightningService.nodeId).thenThrow(RuntimeException("error during syncState"))
 
