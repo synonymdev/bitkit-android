@@ -263,19 +263,40 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun pollUntil(orderId: String, condition: (IBtOrder) -> Boolean): IBtOrder? {
+        var consecutiveErrors = 0
+
         while (true) {
-            val order = blocktankRepo.getOrder(orderId, refresh = true).getOrNull()
-            if (order == null) {
-                Logger.error("Order not found: '$orderId'", context = TAG)
-                return null
-            }
-            if (order.state2 == BtOrderState2.EXPIRED) {
-                Logger.error("Order expired: '$orderId'", context = TAG)
-                return null
-            }
-            if (condition(order)) {
-                return order
-            }
+            blocktankRepo.getOrder(orderId, refresh = true).fold(
+                onSuccess = { order ->
+                    consecutiveErrors = 0
+
+                    if (order == null) {
+                        Logger.error("Order not found: '$orderId'", context = TAG)
+                        return null
+                    }
+                    if (order.state2 == BtOrderState2.EXPIRED) {
+                        Logger.error("Order expired: '$orderId'", context = TAG)
+                        return null
+                    }
+                    if (condition(order)) {
+                        return order
+                    }
+                },
+                onFailure = {
+                    consecutiveErrors++
+                    Logger.warn(
+                        "Failed to fetch order '$orderId' (attempt $consecutiveErrors/$MAX_CONSECUTIVE_ERRORS)",
+                        it,
+                        context = TAG
+                    )
+
+                    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                        Logger.error("Too many consecutive errors polling order '$orderId', giving up", context = TAG)
+                        return null
+                    }
+                }
+            )
+
             delay(POLL_INTERVAL_MS)
         }
     }
@@ -539,6 +560,7 @@ class TransferViewModel @Inject constructor(
         private const val TAG = "TransferViewModel"
         private const val MIN_STEP_DELAY_MS = 500L
         private const val POLL_INTERVAL_MS = 2_500L
+        private const val MAX_CONSECUTIVE_ERRORS = 5
         const val LN_SETUP_STEP_0 = 0
         const val LN_SETUP_STEP_1 = 1
         const val LN_SETUP_STEP_2 = 2
