@@ -286,7 +286,7 @@ class TransferViewModel @Inject constructor(
                     consecutiveErrors++
                     Logger.warn(
                         "Failed to fetch order '$orderId' (attempt $consecutiveErrors/$MAX_CONSECUTIVE_ERRORS)",
-                        e = it,
+                        it,
                         context = TAG
                     )
 
