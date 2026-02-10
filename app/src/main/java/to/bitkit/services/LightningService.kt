@@ -73,6 +73,11 @@ class LightningService @Inject constructor(
     private val logDumperLdk: LogDumperLdk,
 ) : BaseCoroutineScope(bgDispatcher) {
 
+    companion object {
+        private const val TAG = "LightningService"
+        private const val NODE_ID_PREVIEW_LEN = 20
+    }
+
     @Volatile
     var node: Node? = null
 
@@ -292,11 +297,12 @@ class LightningService @Inject constructor(
             return true
         }
 
-        val peersMissing = trustedPeers.filter { it.nodeId !in nodes }
-        if (peersMissing.size == trustedPeers.size) {
+        val missing = trustedPeers.filter { it.nodeId !in nodes }
+        if (missing.size == trustedPeers.size) {
             val rgsTimestamp = node.status().latestRgsSnapshotTimestamp
+            val missingIds = missing.joinToString { it.nodeId.take(NODE_ID_PREVIEW_LEN) }
             Logger.warn(
-                "Network graph missing all ${trustedPeers.size} trusted peers " +
+                "Network graph missing all ${trustedPeers.size} trusted peers: [$missingIds] " +
                     "(graphNodes=${nodes.size}, channels=${graph.listChannels().size}, " +
                     "rgsTimestamp=$rgsTimestamp)",
                 context = TAG,
@@ -304,15 +310,18 @@ class LightningService @Inject constructor(
             return false
         }
 
-        if (peersMissing.isNotEmpty()) {
+        if (missing.isNotEmpty()) {
+            val ids = missing.joinToString { it.nodeId }
             Logger.debug(
-                "Network graph missing ${peersMissing.size}/${trustedPeers.size} trusted peers",
+                "Network graph missing ${missing.size}/${trustedPeers.size} trusted peers: [$ids]",
                 context = TAG,
             )
         }
-        val countMissing = trustedPeers.size - peersMissing.size
+
+        val total = trustedPeers.size
+        val count = total - missing.size
         Logger.debug(
-            "Network graph validated: $countMissing/${trustedPeers.size} trusted peers present",
+            "Network graph validated: $count/$total trusted peers present",
             context = TAG,
         )
         return true
@@ -886,10 +895,6 @@ class LightningService @Inject constructor(
     ): Result<File> {
         val node = this.node ?: return Result.failure(ServiceError.NodeNotSetup())
         return logDumperLdk.exportNetworkGraphToFile(node, outputDir, fileName)
-    }
-
-    companion object {
-        private const val TAG = "LightningService"
     }
 }
 
