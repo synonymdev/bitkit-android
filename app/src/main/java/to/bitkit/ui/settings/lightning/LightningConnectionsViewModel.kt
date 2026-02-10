@@ -461,6 +461,7 @@ class LightningConnectionsViewModel @Inject constructor(
                         channelId = channel.channelId,
                         fundingTxId = channel.fundingTxo?.txid,
                     )
+                    walletRepo.syncNodeAndWallet()
 
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,
