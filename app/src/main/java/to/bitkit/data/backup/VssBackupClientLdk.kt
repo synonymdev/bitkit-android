@@ -19,6 +19,10 @@ class VssBackupClientLdk @AssistedInject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @Assisted private val awaitSetup: suspend () -> Unit,
 ) {
+    companion object {
+        private const val TAG = "VssBackupClientLdk"
+    }
+
     @AssistedFactory
     interface Factory {
         fun create(awaitSetup: suspend () -> Unit): VssBackupClientLdk
@@ -90,9 +94,5 @@ class VssBackupClientLdk @AssistedInject constructor(
         }.onFailure {
             Logger.verbose("VSS LDK 'listItems' error", it, context = TAG)
         }
-    }
-
-    companion object {
-        private const val TAG = "VssBackupClientLdk"
     }
 }
