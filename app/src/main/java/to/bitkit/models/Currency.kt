@@ -169,19 +169,19 @@ fun BigDecimal.formatCurrencyWithSymbol(
 fun isSuffixSymbolCurrency(currencyCode: String): Boolean = currencyCode in SUFFIX_SYMBOL_CURRENCIES
 
 private val SUFFIX_SYMBOL_CURRENCIES = setOf(
-    "BGN", // Bulgarian Lev (10,00 лв)
-    "CHF", // Swiss Franc (10.00 CHF)
-    "CZK", // Czech Koruna (10,00 Kč)
-    "DKK", // Danish Krone (10,00 kr)
-    "HRK", // Croatian Kuna (10,00 kn)
-    "HUF", // Hungarian Forint (10 000 Ft)
-    "ISK", // Icelandic Króna (10.000 kr)
-    "NOK", // Norwegian Krone (10,00 kr)
-    "PLN", // Polish Złoty (0,35 zł)
-    "RON", // Romanian Leu (10,00 lei)
-    "RUB", // Russian Ruble (10,00 ₽)
-    "SEK", // Swedish Krona (10,00 kr)
-    "TRY", // Turkish Lira (10,00 ₺)
+    "BGN",
+    "CHF",
+    "CZK",
+    "DKK",
+    "HRK",
+    "HUF",
+    "ISK",
+    "NOK",
+    "PLN",
+    "RON",
+    "RUB",
+    "SEK",
+    "TRY",
 )
 
 /** Represent this sat value in Bitcoin BigDecimal. */
