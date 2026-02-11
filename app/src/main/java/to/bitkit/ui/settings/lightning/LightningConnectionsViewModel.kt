@@ -32,10 +32,12 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
 import to.bitkit.models.Toast
+import to.bitkit.models.TransferType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -51,6 +53,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val logsRepo: LogsRepo,
     private val walletRepo: WalletRepo,
     private val activityRepo: ActivityRepo,
+    private val transferRepo: TransferRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
@@ -452,6 +455,12 @@ class LightningConnectionsViewModel @Inject constructor(
 
             lightningRepo.closeChannel(channel).fold(
                 onSuccess = {
+                    transferRepo.createTransfer(
+                        type = TransferType.COOP_CLOSE,
+                        amountSats = channel.amountOnClose.toLong(),
+                        channelId = channel.channelId,
+                        fundingTxId = channel.fundingTxo?.txid,
+                    )
                     walletRepo.syncNodeAndWallet()
 
                     ToastEventBus.send(
