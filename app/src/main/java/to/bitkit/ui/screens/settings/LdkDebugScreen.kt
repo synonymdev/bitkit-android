@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,6 +32,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.vssclient.KeyVersion
+import com.synonym.vssclient.LdkNamespace
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
@@ -45,6 +47,8 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
+import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.shared.util.shareFile
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -70,10 +74,14 @@ fun LdkDebugScreen(
         onListVssKeys = viewModel::listVssKeys,
         onDeleteVssKey = viewModel::deleteVssKey,
         onDeleteAllVssKeys = viewModel::deleteAllVssKeys,
+        onDeleteVssLdkKey = viewModel::deleteVssLdkKey,
+        onListVssLdkKeys = viewModel::listVssLdkKeys,
+        onShareVssLdkKey = viewModel::shareVssLdkKey,
         onRestartNode = viewModel::restartNode,
     )
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun LdkDebugContent(
     uiState: LdkDebugUiState,
@@ -86,10 +94,14 @@ private fun LdkDebugContent(
     onListVssKeys: () -> Unit,
     onDeleteVssKey: (String) -> Unit,
     onDeleteAllVssKeys: () -> Unit,
+    onDeleteVssLdkKey: (String, LdkNamespace) -> Unit,
+    onListVssLdkKeys: () -> Unit,
+    onShareVssLdkKey: (String, LdkNamespace, (File) -> Unit) -> Unit,
     onRestartNode: () -> Unit,
 ) {
     val context = LocalContext.current
     var showDeleteAllConfirmation by remember { mutableStateOf(false) }
+    var selectedVssTab by remember { mutableIntStateOf(0) }
 
     ScreenColumn {
         AppTopBar(
@@ -136,6 +148,7 @@ private fun LdkDebugContent(
             SettingsTextButtonRow(
                 title = "Log Graph Info",
                 iconRes = R.drawable.ic_list,
+                iconSize = 24.dp,
                 enabled = !uiState.isLoading,
                 onClick = onLogNetworkGraphInfo,
             )
@@ -148,6 +161,7 @@ private fun LdkDebugContent(
             SettingsTextButtonRow(
                 title = "Export to File",
                 iconRes = R.drawable.ic_share,
+                iconSize = 24.dp,
                 enabled = !uiState.isLoading,
                 onClick = {
                     onExportNetworkGraph { file ->
@@ -158,60 +172,139 @@ private fun LdkDebugContent(
             )
 
             SectionHeader("VSS")
-            SettingsTextButtonRow(
-                title = "List Keys",
-                iconRes = R.drawable.ic_stack,
-                value = if (uiState.vssKeys.isNotEmpty()) "${uiState.vssKeys.size} found" else "",
-                enabled = !uiState.isLoading,
-                onClick = onListVssKeys,
+            CustomTabRowWithSpacing(
+                tabs = VssTab.entries,
+                currentTabIndex = selectedVssTab,
+                onTabChange = { selectedVssTab = it.ordinal },
             )
-            AnimatedVisibility(
-                visible = uiState.vssKeys.isNotEmpty(),
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
-            ) {
-                Column {
-                    uiState.vssKeys.take(MAX_VSS_KEYS_DISPLAY).forEach { keyVersion ->
-                        SettingsTextButtonRow(
-                            title = keyVersion.key,
-                            iconRes = R.drawable.ic_tag,
-                            value = "v${keyVersion.version}",
-                            enabled = !uiState.isLoading,
-                            height = 44.dp,
-                            trailingContent = {
-                                SecondaryButton(
-                                    text = null,
-                                    onClick = { onDeleteVssKey(keyVersion.key) },
+            when (VssTab.entries[selectedVssTab]) {
+                VssTab.APP -> {
+                    SettingsTextButtonRow(
+                        title = "List Keys",
+                        iconRes = R.drawable.ic_stack,
+                        iconSize = 24.dp,
+                        value = if (uiState.vssKeys.isNotEmpty()) "${uiState.vssKeys.size} found" else "",
+                        enabled = !uiState.isLoading,
+                        onClick = onListVssKeys,
+                    )
+                    AnimatedVisibility(
+                        visible = uiState.vssKeys.isNotEmpty(),
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        Column {
+                            uiState.vssKeys.forEachIndexed { index, keyVersion ->
+                                SettingsTextButtonRow(
+                                    title = "${index + 1}. v${keyVersion.version}",
+                                    description = keyVersion.key,
+                                    iconRes = R.drawable.ic_tag,
+                                    iconSize = 24.dp,
                                     enabled = !uiState.isLoading,
-                                    size = ButtonSize.Small,
-                                    fullWidth = false,
-                                    icon = {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_trash),
-                                            contentDescription = "Delete key",
-                                            tint = Colors.Red,
+                                    height = 44.dp,
+                                    trailingContent = {
+                                        SecondaryButton(
+                                            text = null,
+                                            onClick = { onDeleteVssKey(keyVersion.key) },
+                                            enabled = !uiState.isLoading,
+                                            size = ButtonSize.Small,
+                                            fullWidth = false,
+                                            icon = {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_trash),
+                                                    contentDescription = "Delete key",
+                                                    tint = Colors.Red,
+                                                )
+                                            },
                                         )
                                     },
                                 )
-                            },
-                        )
+                            }
+                        }
                     }
-                    if (uiState.vssKeys.size > MAX_VSS_KEYS_DISPLAY) {
-                        SectionFooter("…and ${uiState.vssKeys.size - MAX_VSS_KEYS_DISPLAY} more")
+                    SettingsTextButtonRow(
+                        title = "Delete All",
+                        iconRes = R.drawable.ic_trash,
+                        iconSize = 24.dp,
+                        enabled = !uiState.isLoading && uiState.vssKeys.isNotEmpty(),
+                        onClick = { showDeleteAllConfirmation = true },
+                    )
+                }
+
+                VssTab.LDK -> {
+                    SettingsTextButtonRow(
+                        title = "List Keys",
+                        iconRes = R.drawable.ic_stack,
+                        iconSize = 24.dp,
+                        value = if (uiState.vssLdkKeys.isNotEmpty()) "${uiState.vssLdkKeys.size} found" else "",
+                        enabled = !uiState.isLoading,
+                        onClick = onListVssLdkKeys,
+                    )
+                    AnimatedVisibility(
+                        visible = uiState.vssLdkKeys.isNotEmpty(),
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        Column {
+                            uiState.vssLdkKeys.forEachIndexed { index, item ->
+                                SettingsTextButtonRow(
+                                    title = "${index + 1}. v${item.keyVersion.version}",
+                                    description = item.keyVersion.key,
+                                    iconRes = R.drawable.ic_tag,
+                                    iconSize = 24.dp,
+                                    enabled = !uiState.isLoading,
+                                    height = 44.dp,
+                                    trailingContent = {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            SecondaryButton(
+                                                text = null,
+                                                onClick = {
+                                                    onShareVssLdkKey(item.keyVersion.key, item.namespace) { file ->
+                                                        val uri = FileProvider.getUriForFile(
+                                                            context,
+                                                            Env.FILE_PROVIDER_AUTHORITY,
+                                                            file,
+                                                        )
+                                                        context.shareFile(uri, "application/octet-stream")
+                                                    }
+                                                },
+                                                enabled = !uiState.isLoading,
+                                                size = ButtonSize.Small,
+                                                fullWidth = false,
+                                                icon = {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.ic_share),
+                                                        contentDescription = "Share key",
+                                                    )
+                                                },
+                                            )
+                                            SecondaryButton(
+                                                text = null,
+                                                onClick = { onDeleteVssLdkKey(item.keyVersion.key, item.namespace) },
+                                                enabled = !uiState.isLoading,
+                                                size = ButtonSize.Small,
+                                                fullWidth = false,
+                                                icon = {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.ic_trash),
+                                                        contentDescription = "Delete key",
+                                                        tint = Colors.Red,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
-            SettingsTextButtonRow(
-                title = "Delete All",
-                iconRes = R.drawable.ic_trash,
-                enabled = !uiState.isLoading && uiState.vssKeys.isNotEmpty(),
-                onClick = { showDeleteAllConfirmation = true },
-            )
 
             SectionHeader("NODE")
             SettingsTextButtonRow(
                 title = "Restart",
                 iconRes = R.drawable.ic_arrow_clockwise,
+                iconSize = 24.dp,
                 enabled = !uiState.isLoading,
                 onClick = onRestartNode,
             )
@@ -234,7 +327,15 @@ private fun LdkDebugContent(
     }
 }
 
-private const val MAX_VSS_KEYS_DISPLAY = 10
+private enum class VssTab : TabItem {
+    APP, LDK;
+
+    override val uiText: String
+        @Composable get() = when (this) {
+            APP -> "App"
+            LDK -> "LDK"
+        }
+}
 
 @Preview(showSystemUi = true)
 @Composable
@@ -264,6 +365,9 @@ private fun Preview() {
             onListVssKeys = ::listVssKeys,
             onDeleteVssKey = {},
             onDeleteAllVssKeys = {},
+            onDeleteVssLdkKey = { _, _ -> },
+            onListVssLdkKeys = {},
+            onShareVssLdkKey = { _, _, _ -> },
             onRestartNode = {},
         )
     }

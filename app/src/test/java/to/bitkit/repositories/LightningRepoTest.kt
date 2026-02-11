@@ -32,7 +32,7 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
@@ -66,7 +66,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
-    private val vssBackupClient = mock<VssBackupClient>()
+    private val vssBackupClientLdk = mock<VssBackupClientLdk>()
 
     @Before
     fun setUp() = runBlocking {
@@ -88,7 +88,7 @@ class LightningRepoTest : BaseUnitTest() {
             cacheStore = cacheStore,
             preActivityMetadataRepo = preActivityMetadataRepo,
             connectivityRepo = connectivityRepo,
-            vssBackupClient = vssBackupClient,
+            vssBackupClientLdk = vssBackupClientLdk,
         )
     }
 

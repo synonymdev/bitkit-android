@@ -30,10 +30,7 @@ class VssBackupClient @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val keychain: Keychain,
-    private val ldkFactory: VssBackupClientLdk.Factory,
 ) {
-    val ldk by lazy((LazyThreadSafetyMode.PUBLICATION)) { ldkFactory.create { isSetup.await() } }
-
     private var isSetup = CompletableDeferred<Unit>()
     private val setupMutex = Mutex()
 

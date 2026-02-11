@@ -6,6 +6,7 @@ import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.vssclient.KeyVersion
+import com.synonym.vssclient.LdkNamespace
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.of
 import to.bitkit.models.Toast
@@ -25,12 +27,14 @@ import to.bitkit.utils.Logger
 import java.io.File
 import javax.inject.Inject
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class LdkDebugViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val vssBackupClient: VssBackupClient,
+    private val vssBackupClientLdk: VssBackupClientLdk,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LdkDebugUiState())
@@ -134,7 +138,7 @@ class LdkDebugViewModel @Inject constructor(
     fun exportNetworkGraph(onFileReady: (File) -> Unit) {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
-            val outputDir = context.cacheDir.absolutePath
+            val outputDir = File(context.cacheDir, "exports").apply { mkdirs() }.absolutePath
             lightningRepo.exportNetworkGraphToFile(outputDir).onSuccess { file ->
                 Logger.info("Network graph exported to: ${file.absolutePath}", context = TAG)
                 ToastEventBus.send(
@@ -159,6 +163,7 @@ class LdkDebugViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             vssBackupClient.listKeys().onSuccess { keys ->
                 Logger.info("VSS keys: ${keys.size}", context = TAG)
+                keys.forEach { Logger.debug("  ${it.key} v${it.version}", context = TAG) }
                 _uiState.update { it.copy(vssKeys = keys) }
                 ToastEventBus.send(
                     type = Toast.ToastType.INFO,
@@ -231,6 +236,98 @@ class LdkDebugViewModel @Inject constructor(
         }
     }
 
+    fun listVssLdkKeys() {
+        viewModelScope.launch(bgDispatcher) {
+            _uiState.update { it.copy(isLoading = true) }
+            vssBackupClientLdk.listAllKeysTagged().onSuccess { tagged ->
+                Logger.info("VSS LDK keys: ${tagged.size}", context = TAG)
+                tagged.forEach { Logger.debug("  ${it.second.key} v${it.second.version}", context = TAG) }
+                val items = tagged.map { VssLdkKeyItem(keyVersion = it.second, namespace = it.first) }
+                _uiState.update { it.copy(vssLdkKeys = items) }
+                ToastEventBus.send(
+                    type = Toast.ToastType.INFO,
+                    title = "Found ${tagged.size} VSS LDK key(s)",
+                )
+            }.onFailure { e ->
+                Logger.error("Failed to list VSS LDK keys", e, context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Failed to list VSS LDK keys",
+                    description = e.message,
+                )
+            }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun deleteVssLdkKey(key: String, namespace: LdkNamespace) {
+        viewModelScope.launch(bgDispatcher) {
+            _uiState.update { it.copy(isLoading = true) }
+            vssBackupClientLdk.deleteObject(key, namespace)
+                .onSuccess { wasDeleted ->
+                    if (wasDeleted) {
+                        Logger.info("Deleted VSS LDK key: $key", context = TAG)
+                        _uiState.update { state ->
+                            state.copy(
+                                vssLdkKeys = state.vssLdkKeys.filter {
+                                    it.keyVersion.key != key || it.namespace != namespace
+                                }
+                            )
+                        }
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = "Deleted LDK key: $key",
+                        )
+                    } else {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.WARNING,
+                            title = "Key not found: $key",
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    Logger.error("Failed to delete VSS LDK key: $key", e, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = "Failed to delete LDK key",
+                        description = e.message,
+                    )
+                }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun shareVssLdkKey(key: String, namespace: LdkNamespace, onFileReady: (File) -> Unit) {
+        viewModelScope.launch(bgDispatcher) {
+            _uiState.update { it.copy(isLoading = true) }
+            vssBackupClientLdk.getObject(key, namespace).onSuccess { item ->
+                if (item != null) {
+                    val privateDir = File(context.filesDir, "export").apply { mkdirs() }
+                    File(privateDir, "vss_ldk_$key").writeBytes(item.value)
+
+                    val cacheExportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+                    val file = File(cacheExportsDir, "vss_ldk_$key")
+                    file.writeBytes(item.value)
+                    Logger.info("VSS LDK key exported: $key (${item.value.size} bytes)", context = TAG)
+                    onFileReady(file)
+                } else {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = "Key not found: $key",
+                    )
+                }
+            }.onFailure { e ->
+                Logger.error("Failed to get VSS LDK key: $key", e, context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Failed to get VSS LDK key",
+                    description = e.message,
+                )
+            }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
     fun restartNode() {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
@@ -264,5 +361,11 @@ data class LdkDebugUiState(
     val nodeUri: String = "",
     val isLoading: Boolean = false,
     @Stable val vssKeys: List<KeyVersion> = emptyList(),
+    @Stable val vssLdkKeys: List<VssLdkKeyItem> = emptyList(),
     val networkGraphInfo: NetworkGraphInfo? = null,
+)
+
+data class VssLdkKeyItem(
+    val keyVersion: KeyVersion,
+    val namespace: LdkNamespace,
 )

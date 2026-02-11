@@ -6,4 +6,7 @@
     <cache-path
         name="qr_codes"
         path="qr_codes/" />
+    <cache-path
+        name="exports"
+        path="exports/" />
 </paths>

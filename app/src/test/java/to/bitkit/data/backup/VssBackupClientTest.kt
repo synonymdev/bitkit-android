@@ -19,7 +19,6 @@ class VssBackupClientTest : BaseUnitTest() {
 
     private val vssStoreIdProvider = mock<VssStoreIdProvider>()
     private val keychain = mock<Keychain>()
-    private val ldkFactory = mock<VssBackupClientLdk.Factory>()
 
     @Before
     fun setUp() = runBlocking {
@@ -27,7 +26,6 @@ class VssBackupClientTest : BaseUnitTest() {
             ioDispatcher = testDispatcher,
             vssStoreIdProvider = vssStoreIdProvider,
             keychain = keychain,
-            ldkFactory = ldkFactory,
         )
     }
 
