@@ -884,11 +884,15 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true): Boolean {
-        return if (!_lightningState.value.nodeLifecycleState.isRunning() && fallbackToCachedBalance) {
-            amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
-        } else {
-            lightningService.canSend(amountSats)
+        if (!_lightningState.value.nodeLifecycleState.isRunning() && fallbackToCachedBalance) {
+            return amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
         }
+        if (lightningService.channels == null) {
+            withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
+                _lightningState.first { lightningService.channels != null }
+            }
+        }
+        return lightningService.canSend(amountSats)
     }
 
     fun getNodeId(): String? =
@@ -1071,6 +1075,7 @@ class LightningRepo @Inject constructor(
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
+        private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
     }
 }
 
