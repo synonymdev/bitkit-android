@@ -884,7 +884,10 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true): Boolean {
-        if (!_lightningState.value.nodeLifecycleState.isRunning() && fallbackToCachedBalance) {
+        if (!_lightningState.value.nodeLifecycleState.canRun()) {
+           return false
+        }
+        if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
             return amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
         }
         if (lightningService.channels == null) {
