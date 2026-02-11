@@ -75,7 +75,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
-        whenever(lightningService.validateNetworkGraphHasTrustedPeers()).thenReturn(true)
+        whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(true)
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
