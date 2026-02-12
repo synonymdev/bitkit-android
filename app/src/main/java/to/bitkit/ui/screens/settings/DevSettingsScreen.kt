@@ -52,6 +52,7 @@ fun DevSettingsScreen(
             SettingsButtonRow("Fee Settings") { navController.navigate(Routes.FeeSettings) }
             SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
             SettingsButtonRow("LDK Debug") { navController.navigate(Routes.LdkDebug) }
+            SettingsButtonRow("VSS Debug") { navController.navigate(Routes.VssDebug) }
             SettingsButtonRow("Probing Tool") { navController.navigate(Routes.ProbingTool) }
 
             SectionHeader("LOGS")
