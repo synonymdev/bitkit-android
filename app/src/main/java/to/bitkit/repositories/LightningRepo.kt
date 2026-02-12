@@ -284,6 +284,9 @@ class LightningRepo @Inject constructor(
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
+                lightningService.startEventListener(::onEvent).onFailure {
+                    Logger.warn("Failed to restart event listener", it, context = TAG)
+                }
                 return@withLock Result.success(Unit)
             }
 

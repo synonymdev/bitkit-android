@@ -812,8 +812,9 @@ class LightningService @Inject constructor(
     // region events
     private var shouldListenForEvents = true
 
-    fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runCatching {
+    suspend fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runCatching {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+        listenerJob?.cancelAndJoin()
         shouldListenForEvents = true
         listenerJob = launch {
             runCatching {
