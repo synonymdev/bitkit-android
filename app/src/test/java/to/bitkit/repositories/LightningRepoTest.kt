@@ -28,14 +28,12 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
-import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
-import to.bitkit.models.BalanceState
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
@@ -310,15 +308,8 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `canSend should use cached outbound when node is not running`() = test {
-        val cacheData = AppCacheData(
-            balance = BalanceState(
-                maxSendLightningSats = 2000uL
-            )
-        )
-        whenever(cacheStore.data).thenReturn(flowOf(cacheData))
-
-        assert(sut.canSend(1000uL, fallbackToCachedBalance = true))
+    fun `canSend should return false when node is stopped`() = test {
+        assertFalse(sut.canSend(1000uL, fallbackToCachedBalance = true))
     }
 
     @Test
