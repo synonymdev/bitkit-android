@@ -138,6 +138,7 @@ class LightningService @Inject constructor(
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
+            configureScorerSource()
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -184,6 +185,12 @@ class LightningService @Inject constructor(
             Logger.info("Using gossip source: P2P", context = TAG)
             setGossipSourceP2p()
         }
+    }
+
+    private fun Builder.configureScorerSource() {
+        val scorerUrl = Env.ldkScorerUrl ?: return
+        Logger.info("Using pathfinding scores source: '$scorerUrl'", context = TAG)
+        setPathfindingScoresSource(scorerUrl)
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
