@@ -101,6 +101,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
                     anyOrNull(),
                     anyOrNull(),
                     anyOrNull(),
+                    any(),
                 )
             } doAnswer {
                 capturedHandler = it.getArgument(5) as? NodeEventHandler
