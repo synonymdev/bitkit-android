@@ -17,7 +17,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
-import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -55,16 +54,13 @@ class VssBackupClient @Inject constructor(
                     if (lnurlAuthServerUrl.isNotEmpty()) {
                         val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-                        mnemonicSecret.useAsString { mnemonic ->
-                            vssNewClientWithLnurlAuth(
-                                baseUrl = vssUrl,
-                                storeId = vssStoreId,
-                                mnemonic = mnemonic,
-                                passphrase = passphraseSecret?.peek { String(it) },
-                                lnurlAuthServerUrl = lnurlAuthServerUrl,
-                            )
-                        }
-                        passphraseSecret?.wipe()
+                        vssNewClientWithLnurlAuth(
+                            baseUrl = vssUrl,
+                            storeId = vssStoreId,
+                            mnemonic = mnemonicSecret.use { String(it) },
+                            passphrase = passphraseSecret?.use { String(it) },
+                            lnurlAuthServerUrl = lnurlAuthServerUrl,
+                        )
                     } else {
                         mnemonicSecret.wipe()
                         vssNewClient(

@@ -21,7 +21,7 @@ import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.deriveNodeSecretFromMnemonic
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
-import to.bitkit.domain.models.useAsString
+import to.bitkit.domain.models.Secret
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.ext.wipe
@@ -42,7 +42,6 @@ class RNBackupClient @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val json: Json,
 ) {
-    @Suppress("SpellCheckingInspection")
     companion object {
         private const val TAG = "RNBackup"
         private const val VERSION = "v1"
@@ -62,9 +61,8 @@ class RNBackupClient @Inject constructor(
                 ?: throw RNBackupError.NotSetup()
             val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val bearer = mnemonicSecret.useAsString { mnemonic ->
-                authenticate(mnemonic, passphraseSecret?.peek { String(it) })
-            }
+            val bearer = authenticate(mnemonicSecret, passphraseSecret)
+            mnemonicSecret.wipe()
             passphraseSecret?.wipe()
 
             val url = buildUrl("list", fileGroup = fileGroup, network = getNetworkString())
@@ -86,12 +84,9 @@ class RNBackupClient @Inject constructor(
                 ?: throw RNBackupError.NotSetup()
             val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val (bearer, encryptionKey) = mnemonicSecret.useAsString { mnemonic ->
-                val passphraseStr = passphraseSecret?.peek { String(it) }
-                val auth = authenticate(mnemonic, passphraseStr)
-                val key = deriveEncryptionKey(mnemonic, passphraseStr)
-                auth to key
-            }
+            val bearer = authenticate(mnemonicSecret, passphraseSecret)
+            val encryptionKey = deriveEncryptionKey(mnemonicSecret, passphraseSecret)
+            mnemonicSecret.wipe()
             passphraseSecret?.wipe()
 
             try {
@@ -122,12 +117,9 @@ class RNBackupClient @Inject constructor(
                 ?: throw RNBackupError.NotSetup()
             val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val (bearer, encryptionKey) = mnemonicSecret.useAsString { mnemonic ->
-                val passphraseStr = passphraseSecret?.peek { String(it) }
-                val auth = authenticate(mnemonic, passphraseStr)
-                val key = deriveEncryptionKey(mnemonic, passphraseStr)
-                auth to key
-            }
+            val bearer = authenticate(mnemonicSecret, passphraseSecret)
+            val encryptionKey = deriveEncryptionKey(mnemonicSecret, passphraseSecret)
+            mnemonicSecret.wipe()
             passphraseSecret?.wipe()
 
             try {
@@ -211,7 +203,7 @@ class RNBackupClient @Inject constructor(
         return url
     }
 
-    private suspend fun authenticate(mnemonic: String, passphrase: String?): AuthBearerResponse {
+    private suspend fun authenticate(mnemonic: Secret, passphrase: Secret?): AuthBearerResponse {
         fun isBearerValid(bearer: AuthBearerResponse): Boolean {
             val now = System.currentTimeMillis() / 1000.0
             return bearer.expires / 1000.0 > now
@@ -278,10 +270,13 @@ class RNBackupClient @Inject constructor(
         return crypto.sign(fullMessage, privateKey)
     }
 
-    private fun deriveSigningKey(mnemonic: String, passphrase: String?): ByteArray =
-        deriveNodeSecretFromMnemonic(mnemonic, passphrase).map { it.toByte() }.toByteArray()
+    private fun deriveSigningKey(mnemonic: Secret, passphrase: Secret?): ByteArray =
+        deriveNodeSecretFromMnemonic(
+            mnemonic.peek { String(it) },
+            passphrase?.peek { String(it) },
+        ).map { it.toByte() }.toByteArray()
 
-    private fun deriveEncryptionKey(mnemonic: String, passphrase: String?): ByteArray =
+    private fun deriveEncryptionKey(mnemonic: Secret, passphrase: Secret?): ByteArray =
         deriveSigningKey(mnemonic, passphrase)
 
     private fun decrypt(blob: ByteArray, encryptionKey: ByteArray): ByteArray {

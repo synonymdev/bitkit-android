@@ -69,6 +69,7 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
+import to.bitkit.domain.models.Secret
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.create
@@ -1446,37 +1447,37 @@ class OnchainService {
     }
 
     suspend fun deriveBitcoinAddress(
-        mnemonicPhrase: String,
+        mnemonicPhrase: Secret,
         derivationPathStr: String?,
         network: Network?,
-        bip39Passphrase: String?,
+        bip39Passphrase: Secret?,
     ): GetAddressResponse {
         return ServiceQueue.CORE.background {
             com.synonym.bitkitcore.deriveBitcoinAddress(
-                mnemonicPhrase = mnemonicPhrase,
+                mnemonicPhrase = mnemonicPhrase.use { String(it) },
                 derivationPathStr = derivationPathStr,
                 network = network?.toCoreNetwork(),
-                bip39Passphrase = bip39Passphrase,
+                bip39Passphrase = bip39Passphrase?.use { String(it) },
             )
         }
     }
 
     @Suppress("LongParameterList")
     suspend fun deriveBitcoinAddresses(
-        mnemonicPhrase: String,
+        mnemonicPhrase: Secret,
         derivationPathStr: String?,
         network: Network?,
-        bip39Passphrase: String?,
+        bip39Passphrase: Secret?,
         isChange: Boolean?,
         startIndex: UInt?,
         count: UInt?,
     ): GetAddressesResponse {
         return ServiceQueue.CORE.background {
-            return@background com.synonym.bitkitcore.deriveBitcoinAddresses(
-                mnemonicPhrase = mnemonicPhrase,
+            com.synonym.bitkitcore.deriveBitcoinAddresses(
+                mnemonicPhrase = mnemonicPhrase.use { String(it) },
                 derivationPathStr = derivationPathStr,
                 network = network?.toCoreNetwork(),
-                bip39Passphrase = bip39Passphrase,
+                bip39Passphrase = bip39Passphrase?.use { String(it) },
                 isChange = isChange,
                 startIndex = startIndex,
                 count = count,
@@ -1485,17 +1486,17 @@ class OnchainService {
     }
 
     suspend fun derivePrivateKey(
-        mnemonicPhrase: String,
+        mnemonicPhrase: Secret,
         derivationPathStr: String?,
         network: Network?,
-        bip39Passphrase: String?,
+        bip39Passphrase: Secret?,
     ): String {
         return ServiceQueue.CORE.background {
             com.synonym.bitkitcore.derivePrivateKey(
-                mnemonicPhrase = mnemonicPhrase,
+                mnemonicPhrase = mnemonicPhrase.use { String(it) },
                 derivationPathStr = derivationPathStr,
                 network = network?.toCoreNetwork(),
-                bip39Passphrase = bip39Passphrase,
+                bip39Passphrase = bip39Passphrase?.use { String(it) },
             )
         }
     }

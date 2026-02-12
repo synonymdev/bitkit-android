@@ -9,7 +9,6 @@ import kotlinx.coroutines.withContext
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
-import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.CoreService
@@ -38,17 +37,14 @@ class SweepRepo @Inject constructor(
 
             Logger.debug("Checking sweepable balances...", context = TAG)
 
-            val balances = mnemonicSecret.useAsString { mnemonic ->
-                ServiceQueue.CORE.background {
-                    checkSweepableBalances(
-                        mnemonicPhrase = mnemonic,
-                        network = Env.network.toCoreNetwork(),
-                        bip39Passphrase = passphraseSecret?.peek { String(it) },
-                        electrumUrl = Env.electrumServerUrl,
-                    )
-                }
+            val balances = ServiceQueue.CORE.background {
+                checkSweepableBalances(
+                    mnemonicPhrase = mnemonicSecret.use { String(it) },
+                    network = Env.network.toCoreNetwork(),
+                    bip39Passphrase = passphraseSecret?.use { String(it) },
+                    electrumUrl = Env.electrumServerUrl,
+                )
             }
-            passphraseSecret?.wipe()
 
             balances.toSweepableBalances()
         }
@@ -65,19 +61,16 @@ class SweepRepo @Inject constructor(
 
             Logger.debug("Preparing sweep transaction...", context = TAG)
 
-            val preview = mnemonicSecret.useAsString { mnemonic ->
-                ServiceQueue.CORE.background {
-                    prepareSweepTransaction(
-                        mnemonicPhrase = mnemonic,
-                        network = Env.network.toCoreNetwork(),
-                        bip39Passphrase = passphraseSecret?.peek { String(it) },
-                        electrumUrl = Env.electrumServerUrl,
-                        destinationAddress = destinationAddress,
-                        feeRateSatsPerVbyte = feeRateSatsPerVbyte,
-                    )
-                }
+            val preview = ServiceQueue.CORE.background {
+                prepareSweepTransaction(
+                    mnemonicPhrase = mnemonicSecret.use { String(it) },
+                    network = Env.network.toCoreNetwork(),
+                    bip39Passphrase = passphraseSecret?.use { String(it) },
+                    electrumUrl = Env.electrumServerUrl,
+                    destinationAddress = destinationAddress,
+                    feeRateSatsPerVbyte = feeRateSatsPerVbyte,
+                )
             }
-            passphraseSecret?.wipe()
 
             preview.toSweepTransactionPreview()
         }
@@ -91,18 +84,15 @@ class SweepRepo @Inject constructor(
 
             Logger.debug("Broadcasting sweep transaction...", context = TAG)
 
-            val result = mnemonicSecret.useAsString { mnemonic ->
-                ServiceQueue.CORE.background {
-                    broadcastSweepTransaction(
-                        psbt = psbt,
-                        mnemonicPhrase = mnemonic,
-                        network = Env.network.toCoreNetwork(),
-                        bip39Passphrase = passphraseSecret?.peek { String(it) },
-                        electrumUrl = Env.electrumServerUrl,
-                    )
-                }
+            val result = ServiceQueue.CORE.background {
+                broadcastSweepTransaction(
+                    psbt = psbt,
+                    mnemonicPhrase = mnemonicSecret.use { String(it) },
+                    network = Env.network.toCoreNetwork(),
+                    bip39Passphrase = passphraseSecret?.use { String(it) },
+                    electrumUrl = Env.electrumServerUrl,
+                )
             }
-            passphraseSecret?.wipe()
 
             result.toSweepResult()
         }

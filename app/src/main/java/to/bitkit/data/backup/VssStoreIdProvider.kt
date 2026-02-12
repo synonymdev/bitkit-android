@@ -2,7 +2,6 @@ package to.bitkit.data.backup
 
 import com.synonym.vssclient.vssDeriveStoreId
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -24,14 +23,11 @@ class VssStoreIdProvider @Inject constructor(
                 ?: throw ServiceError.MnemonicNotFound()
             val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val storeId = mnemonicSecret.useAsString { mnemonic ->
-                vssDeriveStoreId(
-                    prefix = Env.vssStoreIdPrefix,
-                    mnemonic = mnemonic,
-                    passphrase = passphraseSecret?.peek { String(it) },
-                )
-            }
-            passphraseSecret?.wipe()
+            val storeId = vssDeriveStoreId(
+                prefix = Env.vssStoreIdPrefix,
+                mnemonic = mnemonicSecret.use { String(it) },
+                passphrase = passphraseSecret?.use { String(it) },
+            )
 
             cacheMap[walletIndex] = storeId
             Logger.info("VSS store id setup for wallet[$walletIndex]: '$storeId'", context = TAG)

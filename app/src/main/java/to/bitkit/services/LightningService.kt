@@ -43,7 +43,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
-import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
@@ -152,13 +151,10 @@ class LightningService @Inject constructor(
                 ?: throw ServiceError.MnemonicNotFound()
             val passphraseSecret = keychain.loadSecret(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            mnemonicSecret.useAsString { mnemonic ->
-                setEntropyBip39Mnemonic(
-                    mnemonic = mnemonic,
-                    passphrase = passphraseSecret?.peek { String(it) },
-                )
-            }
-            passphraseSecret?.wipe()
+            setEntropyBip39Mnemonic(
+                mnemonic = mnemonicSecret.use { String(it) },
+                passphrase = passphraseSecret?.use { String(it) },
+            )
         }
         try {
             val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)

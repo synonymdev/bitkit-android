@@ -23,7 +23,6 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.models.Secret
 import to.bitkit.domain.models.secretOf
-import to.bitkit.domain.models.useAsString
 import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
@@ -345,18 +344,15 @@ class WalletRepo @Inject constructor(
                 isChange = isChange,
             ).substringBeforeLast("/0")
 
-            val result = mnemonicSecret.useAsString { mnemonic ->
-                coreService.onchain.deriveBitcoinAddresses(
-                    mnemonicPhrase = mnemonic,
-                    derivationPathStr = baseDerivationPath,
-                    network = Env.network,
-                    bip39Passphrase = passphraseSecret?.peek { String(it) },
-                    isChange = isChange,
-                    startIndex = startIndex.toUInt(),
-                    count = count.toUInt(),
-                )
-            }
-            passphraseSecret?.wipe()
+            val result = coreService.onchain.deriveBitcoinAddresses(
+                mnemonicPhrase = mnemonicSecret,
+                derivationPathStr = baseDerivationPath,
+                network = Env.network,
+                bip39Passphrase = passphraseSecret,
+                isChange = isChange,
+                startIndex = startIndex.toUInt(),
+                count = count.toUInt(),
+            )
 
             val addresses = result.addresses.mapIndexed { index, address ->
                 AddressModel(
