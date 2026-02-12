@@ -883,19 +883,19 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true): Boolean {
+    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true) = withContext(bgDispatcher) {
         if (!_lightningState.value.nodeLifecycleState.canRun()) {
-            return false
+            return@withContext false
         }
         if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
-            return amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
+            return@withContext amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
         }
         if (lightningService.channels == null) {
             withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
                 _lightningState.first { lightningService.channels != null }
             }
         }
-        return lightningService.canSend(amountSats)
+        return@withContext lightningService.canSend(amountSats)
     }
 
     fun getNodeId(): String? =
