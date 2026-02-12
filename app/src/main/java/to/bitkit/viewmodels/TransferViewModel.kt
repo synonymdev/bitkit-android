@@ -332,8 +332,8 @@ class TransferViewModel @Inject constructor(
                 isNodeRunning.first { it }
             }
 
-            // Two-pass fee estimation to match actual order creation
-            // First pass: estimate with availableAmount to get approximate clientBalance
+            // Two-step fee estimation to match actual order creation
+            // First step: estimate with availableAmount to get approximate clientBalance
             val values1 = blocktankRepo.calculateLiquidityOptions(availableAmount).getOrNull()
             if (values1 == null) {
                 _spendingUiState.update { it.copy(isLoading = false) }
@@ -353,7 +353,7 @@ class TransferViewModel @Inject constructor(
             val lspFees1 = feeEstimate1.networkFeeSat.safe() + feeEstimate1.serviceFeeSat.safe()
             val approxClientBalance = availableAmount.safe() - lspFees1.safe()
 
-            // Second pass: recalculate with actual clientBalance that order creation will use
+            // Second step: recalculate with actual clientBalance that order creation will use
             val values2 = blocktankRepo.calculateLiquidityOptions(approxClientBalance).getOrNull()
             if (values2 == null || values2.maxLspBalanceSat == 0uL) {
                 _spendingUiState.update { it.copy(isLoading = false, maxAllowedToSend = 0) }
