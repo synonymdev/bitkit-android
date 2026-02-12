@@ -62,13 +62,15 @@ class ShopWebViewClient(
         )
         onLoadingStateChanged(false)
 
-        error?.let {
-            if (it.errorCode == ERROR_HOST_LOOKUP ||
-                it.errorCode == ERROR_CONNECT ||
-                it.errorCode == ERROR_TIMEOUT ||
-                it.errorCode == ERROR_FILE_NOT_FOUND
-            ) {
-                onError()
+        if (request?.isForMainFrame == true) {
+            error?.let {
+                if (it.errorCode == ERROR_HOST_LOOKUP ||
+                    it.errorCode == ERROR_CONNECT ||
+                    it.errorCode == ERROR_TIMEOUT ||
+                    it.errorCode == ERROR_FILE_NOT_FOUND
+                ) {
+                    onError()
+                }
             }
         }
     }
