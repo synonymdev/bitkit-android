@@ -282,7 +282,8 @@ class LightningService @Inject constructor(
         }
     }
 
-    fun validateNetworkGraphHasTrustedPeers(): Boolean {
+    @Suppress("ReturnCount")
+    fun aresRequiredPeersInNetworkGraph(): Boolean {
         val node = this.node ?: return true
         val graph = node.networkGraph()
 
@@ -297,6 +298,7 @@ class LightningService @Inject constructor(
             return true
         }
 
+        // reset graph if missing trusted peers
         val missing = trustedPeers.filter { it.nodeId !in nodes }
         if (missing.size == trustedPeers.size) {
             val rgsTimestamp = node.status().latestRgsSnapshotTimestamp
@@ -305,6 +307,19 @@ class LightningService @Inject constructor(
                 "Network graph missing all ${trustedPeers.size} trusted peers: [$missingIds] " +
                     "(graphNodes=${nodes.size}, channels=${graph.listChannels().size}, " +
                     "rgsTimestamp=$rgsTimestamp)",
+                context = TAG,
+            )
+            return false
+        }
+
+        // reset graph if missing channel counterparty
+        val channels = node.listChannels().filter { it.isUsable }
+        val missingCounterparties = channels.filter { it.counterpartyNodeId !in nodes }
+        if (missingCounterparties.isNotEmpty()) {
+            val ids = missingCounterparties.joinToString { it.counterpartyNodeId.take(NODE_ID_PREVIEW_LEN) }
+            Logger.warn(
+                "Network graph missing ${missingCounterparties.size} active channel counterparties: [$ids] " +
+                    "(graphNodes=${nodes.size}, channels=${graph.listChannels().size})",
                 context = TAG,
             )
             return false

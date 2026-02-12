@@ -138,9 +138,7 @@ class BackupRepo @Inject constructor(
                     Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
                 }
             }.onSuccess {
-                vssBackupClientLdk.setup()
-                    .onSuccess { Logger.debug("VSS LDK client setup succeeded", context = TAG) }
-                    .onFailure { Logger.warn("VSS LDK client setup failed", it, context = TAG) }
+                scope.launch { vssBackupClientLdk.setup() }
             }
         }
 

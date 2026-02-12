@@ -325,7 +325,7 @@ class LightningRepo @Inject constructor(
                 updateGeoBlockState()
                 refreshChannelCache()
 
-                if (shouldValidateGraph && !lightningService.validateNetworkGraphHasTrustedPeers()) {
+                if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
 
                     lightningService.stop()
