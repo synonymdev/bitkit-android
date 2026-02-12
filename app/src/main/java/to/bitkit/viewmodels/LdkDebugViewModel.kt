@@ -10,6 +10,7 @@ import com.synonym.vssclient.LdkNamespace
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -26,6 +27,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import java.io.File
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("TooManyFunctions")
 @HiltViewModel
@@ -36,7 +38,11 @@ class LdkDebugViewModel @Inject constructor(
     private val vssBackupClient: VssBackupClient,
     private val vssBackupClientLdk: VssBackupClientLdk,
 ) : ViewModel() {
-
+    companion object {
+        private const val TAG = "LdkDebugViewModel"
+        private const val DIR_EXPORTS = "exports"
+        private val DELAY_EXPORT_CLEANUP = 60.seconds
+    }
     private val _uiState = MutableStateFlow(LdkDebugUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -138,7 +144,7 @@ class LdkDebugViewModel @Inject constructor(
     fun exportNetworkGraph(onFileReady: (File) -> Unit) {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
-            val outputDir = File(context.cacheDir, "exports").apply { mkdirs() }.absolutePath
+            val outputDir = File(context.cacheDir, DIR_EXPORTS).apply { mkdirs() }.absolutePath
             lightningRepo.exportNetworkGraphToFile(outputDir).onSuccess { file ->
                 Logger.info("Network graph exported to: ${file.absolutePath}", context = TAG)
                 ToastEventBus.send(
@@ -246,7 +252,7 @@ class LdkDebugViewModel @Inject constructor(
                 _uiState.update { it.copy(vssLdkKeys = items) }
                 ToastEventBus.send(
                     type = Toast.ToastType.INFO,
-                    title = "Found ${tagged.size} VSS LDK key(s)",
+                    title = "Found ${tagged.size} VSS LDK keys(s)",
                 )
             }.onFailure { e ->
                 Logger.error("Failed to list VSS LDK keys", e, context = TAG)
@@ -266,7 +272,7 @@ class LdkDebugViewModel @Inject constructor(
             vssBackupClientLdk.deleteObject(key, namespace)
                 .onSuccess { wasDeleted ->
                     if (wasDeleted) {
-                        Logger.info("Deleted VSS LDK key: $key", context = TAG)
+                        Logger.info("Deleted VSS LDK key: '$key'", context = TAG)
                         _uiState.update { state ->
                             state.copy(
                                 vssLdkKeys = state.vssLdkKeys.filter {
@@ -286,7 +292,7 @@ class LdkDebugViewModel @Inject constructor(
                     }
                 }
                 .onFailure { e ->
-                    Logger.error("Failed to delete VSS LDK key: $key", e, context = TAG)
+                    Logger.error("Failed to delete VSS LDK key: '$key'", e, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = "Failed to delete LDK key",
@@ -302,14 +308,18 @@ class LdkDebugViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             vssBackupClientLdk.getObject(key, namespace).onSuccess { item ->
                 if (item != null) {
-                    val privateDir = File(context.filesDir, "export").apply { mkdirs() }
-                    File(privateDir, "vss_ldk_$key").writeBytes(item.value)
-
-                    val cacheExportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+                    val cacheExportsDir = File(context.cacheDir, DIR_EXPORTS).apply { mkdirs() }
                     val file = File(cacheExportsDir, "vss_ldk_$key")
                     file.writeBytes(item.value)
-                    Logger.info("VSS LDK key exported: $key (${item.value.size} bytes)", context = TAG)
+                    Logger.info("VSS LDK key exported: '$key' of (${item.value.size} bytes)", context = TAG)
                     onFileReady(file)
+                    viewModelScope.launch(bgDispatcher) {
+                        delay(DELAY_EXPORT_CLEANUP)
+                        if (file.exists()) {
+                            file.delete()
+                            Logger.verbose("VSS LDK file deleted: '$key'", context = TAG)
+                        }
+                    }
                 } else {
                     ToastEventBus.send(
                         type = Toast.ToastType.WARNING,
@@ -351,8 +361,9 @@ class LdkDebugViewModel @Inject constructor(
         }
     }
 
-    companion object {
-        private const val TAG = "LdkDebugViewModel"
+    override fun onCleared() {
+        super.onCleared()
+        File(context.cacheDir, DIR_EXPORTS).deleteRecursively()
     }
 }
 
