@@ -69,6 +69,7 @@ import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -278,15 +279,13 @@ class LightningRepo @Inject constructor(
         // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)
         var shouldRetryStart = false
         var shouldRestartForGraphReset = false
-        var initialLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
+        var initialLifecycleState: NodeLifecycleState
 
         val result = lifecycleMutex.withLock {
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
-                lightningService.startEventListener(::onEvent).onFailure {
-                    Logger.warn("Failed to restart event listener", it, context = TAG)
-                }
+                lightningService.startEventListener(::onEvent)
                 return@withLock Result.success(Unit)
             }
 
@@ -1092,7 +1091,7 @@ class LightningRepo @Inject constructor(
     // region debug
     fun getNetworkGraphInfo() = lightningService.getNetworkGraphInfo()
 
-    suspend fun exportNetworkGraphToFile(outputDir: String): Result<java.io.File> =
+    suspend fun exportNetworkGraphToFile(outputDir: String): Result<File> =
         executeWhenNodeRunning("exportNetworkGraphToFile") {
             lightningService.exportNetworkGraphToFile(outputDir)
         }
