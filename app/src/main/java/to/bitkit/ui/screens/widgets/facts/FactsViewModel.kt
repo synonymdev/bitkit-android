@@ -89,6 +89,12 @@ class FactsViewModel @Inject constructor(
         }
     }
 
+    fun refreshOnDisplay() {
+        viewModelScope.launch {
+            widgetsRepo.refreshWidget(WidgetType.FACTS)
+        }
+    }
+
     // MARK: - Private Methods
 
     private fun initializeCustomPreferences() {

@@ -752,7 +752,7 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        val scanResult = runCatching { coreService.decode(input) }
+        val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
         if (scanResult.isFailure) {
             showAddressValidationError(
@@ -1069,8 +1069,10 @@ class AppViewModel @Inject constructor(
         resetSendState()
         resetQuickPay()
 
+        val input = result.removeLightningSchemes()
+
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(result)) {
+        if (Bip21Utils.isDuplicatedBip21(input)) {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1080,14 +1082,14 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        val scan = runCatching { coreService.decode(result) }
-            .onFailure { Logger.error("Failed to decode scan data: '$result'", it, context = TAG) }
+        val scan = runCatching { coreService.decode(input) }
+            .onFailure { Logger.error("Failed to decode scan data: '$input'", it, context = TAG) }
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
         when (scan) {
-            is Scanner.OnChain -> onScanOnchain(scan.invoice, result)
-            is Scanner.Lightning -> onScanLightning(scan.invoice, result)
+            is Scanner.OnChain -> onScanOnchain(scan.invoice, input)
+            is Scanner.Lightning -> onScanLightning(scan.invoice, input)
             is Scanner.LnurlPay -> onScanLnurlPay(scan.data)
             is Scanner.LnurlWithdraw -> onScanLnurlWithdraw(scan.data)
             is Scanner.LnurlAuth -> onScanLnurlAuth(scan.data)
@@ -2224,17 +2226,18 @@ class AppViewModel @Inject constructor(
 
         val data = uri.toString()
         delay(SCREEN_TRANSITION_DELAY_MS)
-        handleScan(data.removeLightningSchemes())
+        handleScan(data)
     }
 
-    // TODO Temporary fix while these schemes can't be decoded
+    // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
     @Suppress("SpellCheckingInspection")
     private fun String.removeLightningSchemes(): String {
         return this
-            .replace("lnurl:", "")
-            .replace("lnurlw:", "")
-            .replace("lnurlc:", "")
-            .replace("lnurlp:", "")
+            .replace(Regex("^lightning:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurl:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurlw:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurlc:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurlp:", RegexOption.IGNORE_CASE), "")
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()

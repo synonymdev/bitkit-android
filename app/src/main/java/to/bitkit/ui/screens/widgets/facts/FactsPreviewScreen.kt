@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,10 @@ fun FactsPreviewScreen(
     val customFactsPreferences by factsViewModel.customPreferences.collectAsStateWithLifecycle()
     val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
     val isFactsWidgetEnabled by factsViewModel.isFactsWidgetEnabled.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        factsViewModel.refreshOnDisplay()
+    }
 
     FactsPreviewContent(
         onBack = onBack,
