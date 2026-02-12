@@ -1130,7 +1130,7 @@ class AppViewModel @Inject constructor(
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
         val lnInvoice = extractViableLightningInvoice(invoice.params)
-        val amount = lnInvoice?.amountSatoshis ?: invoice.amountSatoshis
+        val amount = lnInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: invoice.amountSatoshis
         _sendUiState.update {
             it.copy(
                 address = invoice.address,
