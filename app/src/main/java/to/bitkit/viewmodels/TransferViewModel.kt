@@ -334,36 +334,48 @@ class TransferViewModel @Inject constructor(
 
             // Two-step fee estimation to match actual order creation
             // First step: estimate with availableAmount to get approximate clientBalance
-            val values1 = blocktankRepo.calculateLiquidityOptions(availableAmount).getOrNull()
-            if (values1 == null) {
+            val liquidityFromAvailableBalance = blocktankRepo
+                .calculateLiquidityOptions(availableAmount)
+                .getOrNull()
+
+            if (liquidityFromAvailableBalance == null) {
                 _spendingUiState.update { it.copy(isLoading = false) }
                 return@launch
             }
-            val lspBalance1 = maxOf(values1.defaultLspBalanceSat, values1.minLspBalanceSat)
-            val feeEstimate1 = blocktankRepo.estimateOrderFee(
+
+            val lspBalance1 = maxOf(
+                liquidityFromAvailableBalance.defaultLspBalanceSat,
+                liquidityFromAvailableBalance.minLspBalanceSat
+            )
+
+            val orderFeeFromAvailableAmount = blocktankRepo.estimateOrderFee(
                 spendingBalanceSats = availableAmount,
                 receivingBalanceSats = lspBalance1,
             ).getOrNull()
 
-            if (feeEstimate1 == null) {
+            if (orderFeeFromAvailableAmount == null) {
                 _spendingUiState.update { it.copy(isLoading = false) }
                 return@launch
             }
 
-            val lspFees1 = feeEstimate1.networkFeeSat.safe() + feeEstimate1.serviceFeeSat.safe()
-            val approxClientBalance = availableAmount.safe() - lspFees1.safe()
+            val lspFeesFromAvailableAmount =
+                orderFeeFromAvailableAmount.networkFeeSat.safe() + orderFeeFromAvailableAmount.serviceFeeSat.safe()
+            val balanceAfterLspFee = availableAmount.safe() - lspFeesFromAvailableAmount.safe()
 
             // Second step: recalculate with actual clientBalance that order creation will use
-            val values2 = blocktankRepo.calculateLiquidityOptions(approxClientBalance).getOrNull()
-            if (values2 == null || values2.maxLspBalanceSat == 0uL) {
+            val liquidityAfterLspFee = blocktankRepo.calculateLiquidityOptions(balanceAfterLspFee).getOrNull()
+            if (liquidityAfterLspFee == null || liquidityAfterLspFee.maxLspBalanceSat == 0uL) {
                 _spendingUiState.update { it.copy(isLoading = false, maxAllowedToSend = 0) }
                 return@launch
             }
-            val lspBalance2 = maxOf(values2.defaultLspBalanceSat, values2.minLspBalanceSat)
+            val receivingAmountAfterFee = maxOf(
+                liquidityAfterLspFee.defaultLspBalanceSat,
+                liquidityAfterLspFee.minLspBalanceSat
+            )
 
             blocktankRepo.estimateOrderFee(
-                spendingBalanceSats = approxClientBalance,
-                receivingBalanceSats = lspBalance2,
+                spendingBalanceSats = balanceAfterLspFee,
+                receivingBalanceSats = receivingAmountAfterFee,
             ).onSuccess { estimate ->
                 maxLspFee = estimate.feeSat
                 val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
@@ -371,7 +383,10 @@ class TransferViewModel @Inject constructor(
 
                 _spendingUiState.update {
                     it.copy(
-                        maxAllowedToSend = min(values2.maxClientBalanceSat.toLong(), maxClientBalance.toLong()),
+                        maxAllowedToSend = min(
+                            liquidityAfterLspFee.maxClientBalanceSat.toLong(),
+                            maxClientBalance.toLong()
+                        ),
                         isLoading = false,
                         balanceAfterFee = availableAmount.toLong(),
                     )
