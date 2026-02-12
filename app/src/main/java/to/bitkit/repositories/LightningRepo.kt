@@ -602,7 +602,9 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        runCatching { lightningService.connectToTrustedPeers() }
+        runCatching { lightningService.connectToTrustedPeers() }.also {
+            syncState()
+        }
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("connectPeer") {
@@ -701,9 +703,21 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
+        waitForUsableChannels()
         runCatching { lightningService.send(bolt11, sats) }.also {
             syncState()
         }
+    }
+
+    private suspend fun waitForUsableChannels() {
+        if (lightningService.channels?.any { it.isUsable } == true) return
+
+        Logger.info("Waiting for usable channels before sending payment", context = TAG)
+        syncState()
+
+        withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+            _lightningState.first { state -> state.channels.any { it.isUsable } }
+        } ?: Logger.warn("Timeout waiting for usable channels", context = TAG)
     }
 
     @Suppress("LongParameterList")
@@ -1079,6 +1093,7 @@ class LightningRepo @Inject constructor(
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
+        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
     }
 }
 

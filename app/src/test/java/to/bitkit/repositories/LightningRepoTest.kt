@@ -183,11 +183,29 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `payInvoice should succeed when node is running`() = test {
+    fun `payInvoice should succeed when node is running and channels are usable`() = test {
+        startNodeForTesting()
+        val usableChannel = createChannelDetails().copy(isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(usableChannel))
+        val testPaymentId = "testPaymentId"
+        whenever(lightningService.send("bolt11", 1000uL)).thenReturn(testPaymentId)
+
+        val result = sut.payInvoice("bolt11", 1000uL)
+        assertTrue(result.isSuccess)
+        assertEquals(testPaymentId, result.getOrNull())
+    }
+
+    @Test
+    fun `payInvoice should proceed after timeout when channels are not usable`() = test {
         startNodeForTesting()
         val testPaymentId = "testPaymentId"
         whenever(lightningService.send("bolt11", 1000uL)).thenReturn(testPaymentId)
 
+        // Channels are ready but not usable (peer disconnected)
+        val readyButNotUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(readyButNotUsable))
+
+        // payInvoice should wait, timeout, then still attempt to send
         val result = sut.payInvoice("bolt11", 1000uL)
         assertTrue(result.isSuccess)
         assertEquals(testPaymentId, result.getOrNull())
