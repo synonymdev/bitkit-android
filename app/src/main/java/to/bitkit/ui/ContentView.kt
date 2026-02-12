@@ -69,6 +69,7 @@ import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.settings.LdkDebugScreen
+import to.bitkit.ui.screens.settings.ProbingToolScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
@@ -889,6 +890,9 @@ private fun NavGraphBuilder.settings(
     }
     composableWithDefaultTransitions<Routes.LdkDebug> {
         LdkDebugScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.ProbingTool> {
+        ProbingToolScreen(navController)
     }
     composableWithDefaultTransitions<Routes.FeeSettings> {
         FeeSettingsScreen(navController)
@@ -1835,6 +1839,9 @@ sealed interface Routes {
 
     @Serializable
     data object LdkDebug : Routes
+
+    @Serializable
+    data object ProbingTool : Routes
 
     @Serializable
     data object FeeSettings : Routes

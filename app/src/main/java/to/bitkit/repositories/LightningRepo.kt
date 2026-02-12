@@ -31,6 +31,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -1037,6 +1038,23 @@ class LightningRepo @Inject constructor(
     suspend fun exportNetworkGraphToFile(outputDir: String): Result<java.io.File> =
         executeWhenNodeRunning("exportNetworkGraphToFile") {
             lightningService.exportNetworkGraphToFile(outputDir)
+        }
+    // endregion
+
+    // region probing
+    suspend fun sendProbeForInvoice(bolt11: String, amountSats: ULong? = null): Result<Unit> =
+        executeWhenNodeRunning("sendProbeForInvoice") {
+            runCatching {
+                val invoice = Bolt11Invoice.fromStr(bolt11)
+                if (amountSats != null) {
+                    val amountMsat = amountSats * 1000u
+                    lightningService.sendProbesUsingAmount(invoice, amountMsat)
+                } else {
+                    lightningService.sendProbes(invoice)
+                }
+            }.getOrElse {
+                Result.failure(it)
+            }
         }
     // endregion
 

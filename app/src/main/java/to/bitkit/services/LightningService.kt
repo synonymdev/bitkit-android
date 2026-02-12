@@ -598,6 +598,34 @@ class LightningService @Inject constructor(
     }
     // endregion
 
+    // region probing
+    suspend fun sendProbes(invoice: Bolt11Invoice): Result<Unit> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            runCatching {
+                node.bolt11Payment().sendProbes(invoice, null)
+                Result.success(Unit)
+            }.getOrElse {
+                Result.failure(if (it is NodeException) LdkError(it) else it)
+            }
+        }
+    }
+
+    suspend fun sendProbesUsingAmount(invoice: Bolt11Invoice, amountMsat: ULong): Result<Unit> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            runCatching {
+                node.bolt11Payment().sendProbesUsingAmount(invoice, amountMsat, null)
+                Result.success(Unit)
+            }.getOrElse {
+                Result.failure(if (it is NodeException) LdkError(it) else it)
+            }
+        }
+    }
+    // endregion
+
     // region utxo selection
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()

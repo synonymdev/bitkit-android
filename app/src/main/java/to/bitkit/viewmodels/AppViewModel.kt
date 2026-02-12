@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -75,6 +76,7 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
+import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.FeeRate
@@ -538,7 +540,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
         }
-        notifyPaymentFailed()
+        notifyPaymentFailed(event.reason)
     }
 
     private suspend fun handlePaymentReceived(event: Event.PaymentReceived) {
@@ -626,10 +628,10 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun notifyPaymentFailed() = toast(
+    private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(
         type = Toast.ToastType.ERROR,
         title = context.getString(R.string.wallet__toast_payment_failed_title),
-        description = context.getString(R.string.wallet__toast_payment_failed_description),
+        description = reason.toUserMessage(context),
         testTag = "PaymentFailedToast",
     )
 
@@ -1097,8 +1099,8 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Unhandled scan data: $scan", context = TAG)
                 toast(
                     type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.other__scan_err_decoding),
-                    description = context.getString(R.string.other__scan_err_interpret_title),
+                    title = context.getString(R.string.other__qr_error_header),
+                    description = context.getString(R.string.other__qr_error_text),
                 )
             }
         }
@@ -1789,7 +1791,7 @@ class AppViewModel @Inject constructor(
 
                     is Event.PaymentFailed -> {
                         if (event.paymentHash == hash) {
-                            val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                            val error = Exception(event.reason.toUserMessage(context))
                             WatchResult.Complete(Result.failure(error))
                         } else {
                             WatchResult.Continue()

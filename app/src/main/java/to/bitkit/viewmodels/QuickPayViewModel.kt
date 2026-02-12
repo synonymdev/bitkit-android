@@ -1,8 +1,10 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -10,6 +12,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.utils.Logger
@@ -17,6 +20,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class QuickPayViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
@@ -90,7 +94,7 @@ class QuickPayViewModel @Inject constructor(
 
                 is Event.PaymentFailed -> {
                     if (event.paymentHash == hash) {
-                        val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                        val error = Exception(event.reason.toUserMessage(context))
                         WatchResult.Complete(Result.failure(error))
                     } else {
                         WatchResult.Continue()
