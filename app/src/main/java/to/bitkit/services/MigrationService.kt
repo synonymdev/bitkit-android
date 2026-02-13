@@ -1446,7 +1446,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     suspend fun reapplyMetadataAfterSync() {
         loadPersistedMigrationData()
 

@@ -214,6 +214,24 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
 - ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
+- ALWAYS position companion object at the top of the class
+
+### Device Debugging (adb)
+
+- App IDs per flavor: `to.bitkit.dev` (dev/regtest), `to.bitkit.tnet` (testnet), `to.bitkit` (mainnet)
+- ALWAYS use `adb shell "run-as to.bitkit.dev ..."` to access the app's private data directory (debug builds only)
+- App files root: `files/` (relative, inside `run-as` context)
+- Key paths:
+  - `files/logs/` — app log files (e.g. `bitkit_2026-02-09_21-04-16.log`)
+  - `files/bitcoin/wallet0/ldk/` — LDK node storage (graph cache, dumps)
+  - `files/bitcoin/wallet0/core/` — bitkit-core storage
+  - `files/datastore/` — DataStore preferences and JSON stores
+- To read a file: `adb shell "run-as to.bitkit.dev cat files/logs/bitkit_YYYY-MM-DD_HH-MM-SS.log"`
+- To list files: `adb shell "run-as to.bitkit.dev ls -la files/logs/"`
+- To find files: `adb shell "run-as to.bitkit.dev find files/ -name '*.log' -o -name '*.txt'"`
+- ALWAYS download device files to `.ai/{name}_{timestamp}/` when needed for debugging (e.g. `.ai/logs_1770671066/`)
+- To download: `adb shell "run-as to.bitkit.dev cat files/path/to/file" > .ai/folder_timestamp/filename`
+- ALWAYS try reading device logs automatically via adb BEFORE asking user to provide log files
 
 ### Architecture Guidelines
 
