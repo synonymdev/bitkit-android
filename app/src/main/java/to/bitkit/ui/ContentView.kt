@@ -896,7 +896,7 @@ private fun NavGraphBuilder.settings(
         VssDebugScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ProbingTool> {
-        ProbingToolScreen(navController)
+        ProbingToolScreen(it.savedStateHandle, navController)
     }
     composableWithDefaultTransitions<Routes.FeeSettings> {
         FeeSettingsScreen(navController)

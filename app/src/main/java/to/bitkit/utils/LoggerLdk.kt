@@ -3,6 +3,8 @@ package to.bitkit.utils
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Bolt11Invoice
+import org.lightningdevkit.ldknode.LogRecord
+import org.lightningdevkit.ldknode.LogWriter
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.di.IoDispatcher
@@ -10,9 +12,12 @@ import to.bitkit.env.Env
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
+
+private const val LDK = "LDK"
 
 @Singleton
-class LogDumperLdk @Inject constructor(
+class LoggerLdk @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -111,6 +116,28 @@ class LogDumperLdk @Inject constructor(
         sb.appendLine("  Total nodes: ${allNodes.size}")
         sb.appendLine("  Total channels: ${allChannels.size}")
 
+        // Payee and route hints check
+        runCatching {
+            val invoice = Bolt11Invoice.fromStr(bolt11)
+            val payeeNodeId = invoice.recoverPayeePubKey()
+            sb.appendLine("\nInvoice Payee & Route Hints:")
+            sb.appendLine("  - Amount: ${invoice.amountMilliSatoshis()} msat")
+            sb.appendLine("  - Payee Node ID: $payeeNodeId")
+            sb.appendLine("  - Payee in graph: ${allNodes.any { it == payeeNodeId }}")
+
+            val routeHints = invoice.routeHints()
+            sb.appendLine("  - Route hints: ${routeHints.size} group(s)")
+            routeHints.forEachIndexed { groupIdx, hops ->
+                hops.forEachIndexed { hopIdx, hop ->
+                    val hopInGraph = allNodes.any { it == hop.srcNodeId }
+                    sb.appendLine(
+                        "    Hint[$groupIdx][$hopIdx]: src=${hop.srcNodeId.take(nodeIdPreviewLen)}... " +
+                            "scid=${hop.shortChannelId} inGraph=$hopInGraph"
+                    )
+                }
+            }
+        }
+
         sb.appendLine("\n  Checking for trusted peers in network graph:")
         var foundTrustedNodes = 0
         trustedPeers.forEach { peer ->
@@ -162,6 +189,30 @@ class LogDumperLdk @Inject constructor(
             outputFile
         }.onFailure {
             Logger.error("Failed to export network graph to file", it, context = TAG)
+        }
+    }
+}
+
+class LdkLogWriter(
+    private val maxLogLevel: LdkLogLevel = Env.ldkLogLevel,
+    saver: LogSaver = AppLogger.getOrCreateSaver(),
+) : LogWriter {
+    private val delegate: LoggerImpl = LoggerImpl(LDK, saver)
+
+    override fun log(record: LogRecord) {
+        if (record.level < maxLogLevel) return
+
+        val msg = record.args
+        val path = record.modulePath
+        val line = record.line.toInt()
+
+        when (record.level) {
+            LdkLogLevel.GOSSIP -> delegate.verbose(msg, path = path, line = line, level = LogLevel.GOSSIP)
+            LdkLogLevel.TRACE -> delegate.verbose(msg, path = path, line = line, level = LogLevel.TRACE)
+            LdkLogLevel.DEBUG -> delegate.debug(msg, path = path, line = line)
+            LdkLogLevel.INFO -> delegate.info(msg, path = path, line = line)
+            LdkLogLevel.WARN -> delegate.warn(msg, path = path, line = line)
+            LdkLogLevel.ERROR -> delegate.error(msg, path = path, line = line)
         }
     }
 }

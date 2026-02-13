@@ -48,10 +48,11 @@ import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
-import to.bitkit.utils.LogDumperLdk
 import to.bitkit.utils.Logger
+import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import java.io.File
@@ -70,7 +71,7 @@ class LightningService @Inject constructor(
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
-    private val logDumperLdk: LogDumperLdk,
+    private val loggerLdk: LoggerLdk,
 ) : BaseCoroutineScope(bgDispatcher) {
 
     companion object {
@@ -145,6 +146,7 @@ class LightningService @Inject constructor(
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
+            configureScorerSource()
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -191,6 +193,12 @@ class LightningService @Inject constructor(
             Logger.info("Using gossip source: P2P", context = TAG)
             setGossipSourceP2p()
         }
+    }
+
+    private fun Builder.configureScorerSource() {
+        val scorerUrl = Env.ldkScorerUrl ?: return
+        Logger.info("Using pathfinding scores source: '$scorerUrl'", context = TAG)
+        setPathfindingScoresSource(scorerUrl)
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
@@ -638,7 +646,7 @@ class LightningService @Inject constructor(
                 }
             }
         }.onFailure {
-            logDumperLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
+            loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
         }.getOrThrow()
     }
 
@@ -675,27 +683,48 @@ class LightningService @Inject constructor(
     // endregion
 
     // region probing
-    suspend fun sendProbes(invoice: Bolt11Invoice): Result<Unit> {
+    suspend fun sendProbes(bolt11: String): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
+
+        val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
+        Logger.debug(
+            "sendProbes: invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            context = TAG
+        )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbes(invoice, null)
+                node.bolt11Payment().sendProbes(bolt11Invoice, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
     }
 
-    suspend fun sendProbesUsingAmount(invoice: Bolt11Invoice, amountMsat: ULong): Result<Unit> {
+    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
+
+        val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
+        Logger.debug(
+            "sendProbesUsingAmount: customAmountMsat=$amountMsat (${amountMsat / 1000u} sats), " +
+                "invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            context = TAG
+        )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbesUsingAmount(invoice, amountMsat, null)
+                node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
@@ -892,6 +921,8 @@ class LightningService @Inject constructor(
     val payments: List<PaymentDetails>? get() = node?.listPayments()
     // endregion
 
+    // region debug
+
     fun getNetworkGraphInfo(): NetworkGraphInfo? {
         val node = this.node ?: return null
 
@@ -907,13 +938,20 @@ class LightningService @Inject constructor(
         }.getOrNull()
     }
 
+    private fun dumpNetworkGraphInfo(bolt11: String) {
+        val node = this.node ?: return
+        loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
+    }
+
     suspend fun exportNetworkGraphToFile(
         outputDir: String,
         fileName: String = "network_graph_nodes.txt",
     ): Result<File> {
         val node = this.node ?: return Result.failure(ServiceError.NodeNotSetup())
-        return logDumperLdk.exportNetworkGraphToFile(node, outputDir, fileName)
+        return loggerLdk.exportNetworkGraphToFile(node, outputDir, fileName)
     }
+
+    // endregion
 }
 
 @Serializable
@@ -923,6 +961,6 @@ data class NetworkGraphInfo(
     val latestRgsSyncTimestamp: ULong?,
 )
 
-class TrustedPeerForceCloseException : Exception(
+class TrustedPeerForceCloseException : AppError(
     "Cannot force close channel with trusted peer. Force close is disabled for Blocktank LSP channels."
 )
