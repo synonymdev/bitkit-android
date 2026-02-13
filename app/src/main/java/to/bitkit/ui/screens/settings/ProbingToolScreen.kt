@@ -102,7 +102,7 @@ private fun ProbingToolContent(
                 .verticalScroll(rememberScrollState())
         ) {
             SectionHeader("PROBE INVOICE", padding = PaddingValues(0.dp))
-            SectionFooter("Enter a Lightning invoice to probe the payment route")
+            SectionFooter("Enter a Lightning invoice or LNURL to probe the payment route")
 
             TextInput(
                 value = uiState.invoice,
@@ -134,8 +134,13 @@ private fun ProbingToolContent(
                 )
             }
 
-            SectionHeader("AMOUNT OVERRIDE (OPTIONAL)")
-            SectionFooter("Override the invoice amount for variable-amount invoices")
+            if (uiState.isLnurlPay) {
+                SectionHeader("AMOUNT (REQUIRED)")
+                SectionFooter("Enter the amount in sats to probe via LNURL")
+            } else {
+                SectionHeader("AMOUNT OVERRIDE (OPTIONAL)")
+                SectionFooter("Override the invoice amount for variable-amount invoices")
+            }
 
             TextInput(
                 value = uiState.amountSats,
@@ -156,7 +161,8 @@ private fun ProbingToolContent(
             PrimaryButton(
                 text = "Send Probe",
                 onClick = onSendProbe,
-                enabled = !uiState.isLoading && uiState.invoice.isNotBlank(),
+                enabled = !uiState.isLoading && uiState.invoice.isNotBlank() &&
+                    (!uiState.isLnurlPay || uiState.amountSats.isNotBlank()),
                 isLoading = uiState.isLoading,
                 modifier = Modifier.fillMaxWidth(),
             )
