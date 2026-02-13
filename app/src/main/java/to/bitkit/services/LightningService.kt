@@ -667,6 +667,7 @@ class LightningService @Inject constructor(
                 node.bolt11Payment().sendProbes(invoice, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
@@ -680,6 +681,7 @@ class LightningService @Inject constructor(
                 node.bolt11Payment().sendProbesUsingAmount(invoice, amountMsat, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
