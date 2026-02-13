@@ -317,7 +317,6 @@ class LightningRepo @Inject constructor(
                     return@withLock Result.success(Unit)
                 }
 
-                // Start node
                 lightningService.start(timeout, ::onEvent)
 
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
