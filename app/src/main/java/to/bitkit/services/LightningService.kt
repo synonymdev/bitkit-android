@@ -659,12 +659,15 @@ class LightningService @Inject constructor(
     // endregion
 
     // region probing
-    suspend fun sendProbes(invoice: Bolt11Invoice): Result<Unit> {
+    suspend fun sendProbes(bolt11: String): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbes(invoice, null)
+                node.bolt11Payment().sendProbes(bolt11Invoice, null)
                 Result.success(Unit)
             }.getOrElse {
                 dumpNetworkGraphInfo(bolt11)
@@ -673,12 +676,15 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun sendProbesUsingAmount(invoice: Bolt11Invoice, amountMsat: ULong): Result<Unit> {
+    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbesUsingAmount(invoice, amountMsat, null)
+                node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
                 Result.success(Unit)
             }.getOrElse {
                 dumpNetworkGraphInfo(bolt11)
