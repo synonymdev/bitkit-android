@@ -1098,6 +1098,10 @@ class LightningRepo @Inject constructor(
     // region probing
     suspend fun sendProbeForInvoice(bolt11: String, amountSats: ULong? = null): Result<Unit> =
         executeWhenNodeRunning("sendProbeForInvoice") {
+            Logger.debug(
+                "sendProbeForInvoice: amountSats=${amountSats ?: "null (using invoice amount)"}",
+                context = TAG
+            )
             runCatching {
                 if (amountSats != null) {
                     val amountMsat = amountSats * 1000u
