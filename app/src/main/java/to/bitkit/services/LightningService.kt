@@ -48,10 +48,11 @@ import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
-import to.bitkit.utils.LogDumperLdk
 import to.bitkit.utils.Logger
+import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import java.io.File
@@ -70,7 +71,7 @@ class LightningService @Inject constructor(
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
-    private val logDumperLdk: LogDumperLdk,
+    private val loggerLdk: LoggerLdk,
 ) : BaseCoroutineScope(bgDispatcher) {
 
     companion object {
@@ -645,7 +646,7 @@ class LightningService @Inject constructor(
                 }
             }
         }.onFailure {
-            logDumperLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
+            loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
         }.getOrThrow()
     }
 
@@ -918,6 +919,8 @@ class LightningService @Inject constructor(
     val payments: List<PaymentDetails>? get() = node?.listPayments()
     // endregion
 
+    // region debug
+
     fun getNetworkGraphInfo(): NetworkGraphInfo? {
         val node = this.node ?: return null
 
@@ -933,13 +936,20 @@ class LightningService @Inject constructor(
         }.getOrNull()
     }
 
+    private fun dumpNetworkGraphInfo(bolt11: String) {
+        val node = this.node ?: return
+        loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
+    }
+
     suspend fun exportNetworkGraphToFile(
         outputDir: String,
         fileName: String = "network_graph_nodes.txt",
     ): Result<File> {
         val node = this.node ?: return Result.failure(ServiceError.NodeNotSetup())
-        return logDumperLdk.exportNetworkGraphToFile(node, outputDir, fileName)
+        return loggerLdk.exportNetworkGraphToFile(node, outputDir, fileName)
     }
+
+    // endregion
 }
 
 @Serializable
@@ -949,6 +959,6 @@ data class NetworkGraphInfo(
     val latestRgsSyncTimestamp: ULong?,
 )
 
-class TrustedPeerForceCloseException : Exception(
+class TrustedPeerForceCloseException : AppError(
     "Cannot force close channel with trusted peer. Force close is disabled for Blocktank LSP channels."
 )

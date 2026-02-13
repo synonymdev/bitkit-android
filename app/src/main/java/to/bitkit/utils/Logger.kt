@@ -10,8 +10,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
-import org.lightningdevkit.ldknode.LogRecord
-import org.lightningdevkit.ldknode.LogWriter
 import to.bitkit.async.ServiceQueue
 import to.bitkit.async.newSingleThreadDispatcher
 import to.bitkit.di.json
@@ -24,10 +22,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.measureTime
-import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
 
 private const val APP = "APP"
-private const val LDK = "LDK"
 private const val COMPACT = false
 
 enum class LogSource { Ldk, Bitkit, Unknown }
@@ -123,7 +119,7 @@ class AppLogger {
     }
 }
 
-private class LoggerImpl(
+internal class LoggerImpl(
     private val tag: String = APP,
     private val saver: LogSaver,
     private val compact: Boolean = COMPACT,
@@ -280,30 +276,6 @@ class LogSaverImpl(
 
     companion object {
         private const val TAG = "LogSaver"
-    }
-}
-
-class LdkLogWriter(
-    private val maxLogLevel: LdkLogLevel = Env.ldkLogLevel,
-    saver: LogSaver = AppLogger.getOrCreateSaver(),
-) : LogWriter {
-    private val delegate: LoggerImpl = LoggerImpl(LDK, saver)
-
-    override fun log(record: LogRecord) {
-        if (record.level < maxLogLevel) return
-
-        val msg = record.args
-        val path = record.modulePath
-        val line = record.line.toInt()
-
-        when (record.level) {
-            LdkLogLevel.GOSSIP -> delegate.verbose(msg, path = path, line = line, level = LogLevel.GOSSIP)
-            LdkLogLevel.TRACE -> delegate.verbose(msg, path = path, line = line, level = LogLevel.TRACE)
-            LdkLogLevel.DEBUG -> delegate.debug(msg, path = path, line = line)
-            LdkLogLevel.INFO -> delegate.info(msg, path = path, line = line)
-            LdkLogLevel.WARN -> delegate.warn(msg, path = path, line = line)
-            LdkLogLevel.ERROR -> delegate.error(msg, path = path, line = line)
-        }
     }
 }
 
