@@ -138,6 +138,7 @@ class LightningService @Inject constructor(
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
+            configureScorerSource()
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -184,6 +185,12 @@ class LightningService @Inject constructor(
             Logger.info("Using gossip source: P2P", context = TAG)
             setGossipSourceP2p()
         }
+    }
+
+    private fun Builder.configureScorerSource() {
+        val scorerUrl = Env.ldkScorerUrl ?: return
+        Logger.info("Using pathfinding scores source: '$scorerUrl'", context = TAG)
+        setPathfindingScoresSource(scorerUrl)
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
@@ -652,27 +659,48 @@ class LightningService @Inject constructor(
     // endregion
 
     // region probing
-    suspend fun sendProbes(invoice: Bolt11Invoice): Result<Unit> {
+    suspend fun sendProbes(bolt11: String): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
+
+        val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
+        Logger.debug(
+            "sendProbes: invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            context = TAG
+        )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbes(invoice, null)
+                node.bolt11Payment().sendProbes(bolt11Invoice, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
     }
 
-    suspend fun sendProbesUsingAmount(invoice: Bolt11Invoice, amountMsat: ULong): Result<Unit> {
+    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
+
+        val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
+        Logger.debug(
+            "sendProbesUsingAmount: customAmountMsat=$amountMsat (${amountMsat / 1000u} sats), " +
+                "invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            context = TAG
+        )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbesUsingAmount(invoice, amountMsat, null)
+                node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
@@ -969,6 +997,28 @@ class LightningService @Inject constructor(
 
         sb.appendLine("  Total nodes: ${allNodes.size}")
         sb.appendLine("  Total channels: ${allChannels.size}")
+
+        // Payee and route hints check
+        runCatching {
+            val invoice = Bolt11Invoice.fromStr(bolt11)
+            val payeeNodeId = invoice.recoverPayeePubKey()
+            sb.appendLine("\nInvoice Payee & Route Hints:")
+            sb.appendLine("  - Amount: ${invoice.amountMilliSatoshis()} msat")
+            sb.appendLine("  - Payee Node ID: $payeeNodeId")
+            sb.appendLine("  - Payee in graph: ${allNodes.any { it == payeeNodeId }}")
+
+            val routeHints = invoice.routeHints()
+            sb.appendLine("  - Route hints: ${routeHints.size} group(s)")
+            routeHints.forEachIndexed { groupIdx, hops ->
+                hops.forEachIndexed { hopIdx, hop ->
+                    val hopInGraph = allNodes.any { it == hop.srcNodeId }
+                    sb.appendLine(
+                        "    Hint[$groupIdx][$hopIdx]: src=${hop.srcNodeId.take(nodeIdPreviewLength)}... " +
+                            "scid=${hop.shortChannelId} inGraph=$hopInGraph"
+                    )
+                }
+            }
+        }
 
         // Check for trusted peers in graph
         sb.appendLine("\n  Checking for trusted peers in network graph:")
