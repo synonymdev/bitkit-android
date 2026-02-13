@@ -45,7 +45,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -93,7 +93,7 @@ class LightningRepo @Inject constructor(
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val connectivityRepo: ConnectivityRepo,
-    private val vssBackupClient: VssBackupClient,
+    private val vssBackupClientLdk: VssBackupClientLdk,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -325,19 +325,20 @@ class LightningRepo @Inject constructor(
                 updateGeoBlockState()
                 refreshChannelCache()
 
-                // Validate network graph has trusted peers (RGS cache can become stale)
-                if (shouldValidateGraph && !lightningService.validateNetworkGraph()) {
+                if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
+
                     lightningService.stop()
                     lightningService.resetNetworkGraph(walletIndex)
-                    // Also clear stale graph from VSS to prevent fallback restoration
+
                     runCatching {
-                        vssBackupClient.setup(walletIndex).getOrThrow()
-                        vssBackupClient.deleteObject("network_graph").getOrThrow()
-                        Logger.info("Cleared stale network graph from VSS", context = TAG)
+                        vssBackupClientLdk.setup(walletIndex).getOrThrow()
+                        vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
+                        Logger.info("Cleared stale network graph from VSS (first delete)", context = TAG)
                     }.onFailure {
-                        Logger.warn("Failed to clear graph from VSS", it, context = TAG)
+                        Logger.warn("Failed to clear graph from VSS (first delete)", it, context = TAG)
                     }
+
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                     shouldRestartForGraphReset = true
                     return@withLock Result.success(Unit)

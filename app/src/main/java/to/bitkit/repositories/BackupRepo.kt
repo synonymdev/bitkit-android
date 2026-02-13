@@ -31,6 +31,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
@@ -78,6 +79,7 @@ class BackupRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val cacheStore: CacheStore,
     private val vssBackupClient: VssBackupClient,
+    private val vssBackupClientLdk: VssBackupClientLdk,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
     private val blocktankRepo: BlocktankRepo,
@@ -107,6 +109,7 @@ class BackupRepo @Inject constructor(
     fun reset() {
         stopObservingBackups()
         vssBackupClient.reset()
+        vssBackupClientLdk.reset()
     }
 
     fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
@@ -134,6 +137,8 @@ class BackupRepo @Inject constructor(
                 onExhausted = { maxAttempts ->
                     Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
                 }
+            }.onSuccess {
+                scope.launch { vssBackupClientLdk.setup() }
             }
         }
 
