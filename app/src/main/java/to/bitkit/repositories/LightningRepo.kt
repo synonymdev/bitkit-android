@@ -32,7 +32,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -1099,13 +1098,16 @@ class LightningRepo @Inject constructor(
     // region probing
     suspend fun sendProbeForInvoice(bolt11: String, amountSats: ULong? = null): Result<Unit> =
         executeWhenNodeRunning("sendProbeForInvoice") {
+            Logger.debug(
+                "sendProbeForInvoice: amountSats=${amountSats ?: "null (using invoice amount)"}",
+                context = TAG
+            )
             runCatching {
-                val invoice = Bolt11Invoice.fromStr(bolt11)
                 if (amountSats != null) {
                     val amountMsat = amountSats * 1000u
-                    lightningService.sendProbesUsingAmount(invoice, amountMsat)
+                    lightningService.sendProbesUsingAmount(bolt11, amountMsat)
                 } else {
-                    lightningService.sendProbes(invoice)
+                    lightningService.sendProbes(bolt11)
                 }
             }.getOrElse {
                 Result.failure(it)

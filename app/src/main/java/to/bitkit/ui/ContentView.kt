@@ -892,7 +892,7 @@ private fun NavGraphBuilder.settings(
         LdkDebugScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ProbingTool> {
-        ProbingToolScreen(navController)
+        ProbingToolScreen(it.savedStateHandle, navController)
     }
     composableWithDefaultTransitions<Routes.FeeSettings> {
         FeeSettingsScreen(navController)

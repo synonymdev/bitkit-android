@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.maxSendableSat
+import to.bitkit.ext.minSendableSat
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
@@ -33,7 +35,8 @@ class ProbingToolViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     fun updateInvoice(invoice: String) {
-        _uiState.update { it.copy(invoice = invoice) }
+        _uiState.update { it.copy(invoice = invoice, probeResult = null) }
+        detectInputType(invoice)
     }
 
     fun updateAmountSats(amount: String) {
@@ -56,7 +59,7 @@ class ProbingToolViewModel @Inject constructor(
             return
         }
 
-        _uiState.update { it.copy(invoice = pastedInvoice) }
+        updateInvoice(pastedInvoice)
     }
 
     fun sendProbe() {
@@ -71,7 +74,8 @@ class ProbingToolViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true, probeResult = null) }
 
-            val bolt11 = extractBolt11Invoice(input)
+            val amountSats = _uiState.value.amountSats.toULongOrNull()
+            val bolt11 = extractBolt11Invoice(input, amountSats)
             if (bolt11 == null) {
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
@@ -82,7 +86,6 @@ class ProbingToolViewModel @Inject constructor(
                 return@launch
             }
 
-            val amountSats = _uiState.value.amountSats.toULongOrNull()
             val startTime = System.currentTimeMillis()
 
             lightningRepo.sendProbeForInvoice(bolt11, amountSats)
@@ -93,14 +96,36 @@ class ProbingToolViewModel @Inject constructor(
         }
     }
 
-    private suspend fun extractBolt11Invoice(input: String): String? = runCatching {
+    private fun detectInputType(input: String) {
+        viewModelScope.launch(bgDispatcher) {
+            val data = runCatching { coreService.decode(input.trim()) }.getOrNull()
+            if (data is Scanner.LnurlPay) {
+                val min = data.data.minSendableSat()
+                val max = data.data.maxSendableSat()
+                val isFixed = min == max && min > 0uL
+                _uiState.update {
+                    it.copy(
+                        isLnurlPay = true,
+                        amountSats = if (isFixed) min.toString() else it.amountSats,
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(isLnurlPay = false) }
+            }
+        }
+    }
+
+    private suspend fun extractBolt11Invoice(input: String, amountSats: ULong?): String? = runCatching {
         when (val decoded = coreService.decode(input)) {
             is Scanner.Lightning -> decoded.invoice.bolt11
             is Scanner.OnChain -> {
                 val lightningParam = decoded.invoice.params?.get("lightning") ?: return@runCatching null
                 (coreService.decode(lightningParam) as? Scanner.Lightning)?.invoice?.bolt11
             }
-
+            is Scanner.LnurlPay -> {
+                val amount = amountSats ?: return@runCatching null
+                lightningRepo.fetchLnurlInvoice(decoded.data.callback, amount).getOrThrow().bolt11
+            }
             else -> null
         }
     }.getOrNull()
@@ -144,6 +169,7 @@ data class ProbingToolUiState(
     val invoice: String = "",
     val amountSats: String = "",
     val isLoading: Boolean = false,
+    val isLnurlPay: Boolean = false,
     val probeResult: ProbeResult? = null,
 )
 
