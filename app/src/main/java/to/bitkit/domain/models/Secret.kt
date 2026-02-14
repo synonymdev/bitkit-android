@@ -7,10 +7,10 @@ private const val WIPE_CHAR = '\u0000'
 /**
  * A wrapper that stores sensitive data in a [CharArray] and provides APIs to safely wipe it from memory.
  *
- * Implements [CharSequence] so it can flow through internal APIs without materializing a [String].
+ * Exposed as [CharSequence] so it can replace the need of using an immutable [String].
  * [toString] is intentionally redacted — use [peek] or [use] to access the underlying data.
  *
- * ALWAYS access the wrapped value inside [use] blocks for auto cleanup.
+ * PREFER unwrapping the value via [use] blocks for auto cleanup.
  */
 class Secret internal constructor(initialValue: CharArray) : CharSequence, AutoCloseable {
     companion object {
