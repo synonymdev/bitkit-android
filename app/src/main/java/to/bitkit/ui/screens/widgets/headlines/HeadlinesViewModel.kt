@@ -98,6 +98,12 @@ class HeadlinesViewModel @Inject constructor(
         }
     }
 
+    fun refreshOnDisplay() {
+        viewModelScope.launch {
+            widgetsRepo.refreshWidget(WidgetType.NEWS)
+        }
+    }
+
     // MARK: - Private Methods
 
     private fun initializeCustomPreferences() {

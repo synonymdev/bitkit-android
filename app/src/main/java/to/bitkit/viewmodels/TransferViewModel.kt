@@ -28,6 +28,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -194,6 +195,18 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
 
+            // Calculate if change would be dust and we should use sendAll
+            val spendableBalance =
+                lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
+            val txFee = lightningRepo.calculateTotalFee(
+                amountSats = order.feeSat,
+                address = address,
+                speed = speed,
+            ).getOrElse { 0uL }
+
+            val expectedChange = spendableBalance.toLong() - order.feeSat.toLong() - txFee.toLong()
+            val shouldUseSendAll = expectedChange >= 0 && expectedChange < Defaults.dustLimit.toInt()
+
             lightningRepo
                 .sendOnChain(
                     address = address,
@@ -201,6 +214,7 @@ class TransferViewModel @Inject constructor(
                     speed = speed,
                     isTransfer = true,
                     channelId = order.channel?.shortChannelId,
+                    isMaxAmount = shouldUseSendAll,
                 )
                 .onSuccess { txId ->
                     cacheStore.addPaidOrder(orderId = order.id, txId = txId)
@@ -311,39 +325,77 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             _spendingUiState.update { it.copy(isLoading = true) }
 
-            // Get the max available balance discounting onChain fee
             val availableAmount = walletRepo.balanceState.value.maxSendOnchainSats
 
-            withTimeoutOrNull(1.minutes) {
-                isNodeRunning.first { it }
-            }
+            awaitNodeRunning()
 
-            // Calculate the LSP fee to the total balance
-            blocktankRepo.estimateOrderFee(
-                spendingBalanceSats = availableAmount,
-                receivingBalanceSats = _transferValues.value.maxLspBalance
-            ).onSuccess { estimate ->
-                maxLspFee = estimate.feeSat
-
-                // Calculate the available balance to send after LSP fee
-                val balanceAfterLspFee = availableAmount.safe() - maxLspFee.safe()
-
-                _spendingUiState.update {
-                    // Calculate the max available to send considering the current balance and LSP policy
-                    it.copy(
-                        maxAllowedToSend = min(
-                            _transferValues.value.maxClientBalance.toLong(),
-                            balanceAfterLspFee.toLong()
-                        ),
-                        isLoading = false,
-                        balanceAfterFee = availableAmount.toLong()
-                    )
-                }
-            }.onFailure { exception ->
+            val initialLspFees = estimateInitialLspFees(availableAmount)
+            if (initialLspFees == null) {
                 _spendingUiState.update { it.copy(isLoading = false) }
-                Logger.error("Failure", exception)
-                setTransferEffect(TransferEffect.ToastException(exception))
+                return@launch
             }
+
+            val balanceAfterLspFee = availableAmount.safe() - initialLspFees.safe()
+
+            estimateFinalMaxSendAmount(availableAmount, balanceAfterLspFee)
+        }
+    }
+
+    private suspend fun awaitNodeRunning() {
+        withTimeoutOrNull(1.minutes) {
+            isNodeRunning.first { it }
+        }
+    }
+
+    private suspend fun estimateInitialLspFees(availableAmount: ULong): ULong? {
+        val liquidity = blocktankRepo
+            .calculateLiquidityOptions(availableAmount)
+            .getOrNull() ?: return null
+
+        val lspBalance = maxOf(liquidity.defaultLspBalanceSat, liquidity.minLspBalanceSat)
+
+        val orderFee = blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = availableAmount,
+            receivingBalanceSats = lspBalance,
+        ).getOrNull() ?: return null
+
+        return orderFee.networkFeeSat.safe() + orderFee.serviceFeeSat.safe()
+    }
+
+    private suspend fun estimateFinalMaxSendAmount(
+        availableAmount: ULong,
+        balanceAfterLspFee: ULong,
+    ) {
+        val liquidity = blocktankRepo.calculateLiquidityOptions(balanceAfterLspFee).getOrNull()
+        if (liquidity == null || liquidity.maxLspBalanceSat == 0uL) {
+            _spendingUiState.update { it.copy(isLoading = false, maxAllowedToSend = 0) }
+            return
+        }
+
+        val receivingAmount = maxOf(liquidity.defaultLspBalanceSat, liquidity.minLspBalanceSat)
+
+        blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = balanceAfterLspFee,
+            receivingBalanceSats = receivingAmount,
+        ).onSuccess { estimate ->
+            maxLspFee = estimate.feeSat
+            val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
+            val maxClientBalance = availableAmount.safe() - lspFees.safe()
+
+            _spendingUiState.update {
+                it.copy(
+                    maxAllowedToSend = min(
+                        liquidity.maxClientBalanceSat.toLong(),
+                        maxClientBalance.toLong()
+                    ),
+                    isLoading = false,
+                    balanceAfterFee = availableAmount.toLong(),
+                )
+            }
+        }.onFailure {
+            _spendingUiState.update { it.copy(isLoading = false) }
+            Logger.error("Failure", it, context = TAG)
+            setTransferEffect(TransferEffect.ToastException(it))
         }
     }
 

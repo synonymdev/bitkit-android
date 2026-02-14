@@ -242,8 +242,18 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.walletExists()).thenReturn(true)
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
-        whenever(testLightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(Unit))
+        whenever(
+            testLightningRepo.start(
+                any(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+            ),
+        ).thenReturn(Result.success(Unit))
 
         val testSut = WalletViewModel(
             context = context,
@@ -263,7 +273,16 @@ class WalletViewModelTest : BaseUnitTest() {
         testSut.start()
         advanceUntilIdle()
 
-        verify(testLightningRepo).start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(testLightningRepo).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
         verify(testWalletRepo).refreshBip21()
     }
 
@@ -283,8 +302,18 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
-        whenever(testLightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(Unit))
+        whenever(
+            testLightningRepo.start(
+                any(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+            ),
+        ).thenReturn(Result.success(Unit))
 
         val testSut = WalletViewModel(
             context = context,
