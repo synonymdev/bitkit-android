@@ -172,4 +172,24 @@ class BlocktankRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertNull(result.getOrThrow())
     }
+
+    @Test
+    fun `refreshOrders returns failure when server throws`() {
+        sut = createSut()
+        whenever { coreService.blocktank.orders(refresh = true) }.thenThrow(RuntimeException("Network error"))
+        test {
+            val result = sut.refreshOrders()
+            assertTrue(result.isFailure)
+        }
+    }
+
+    @Test
+    fun `getOrder returns failure when refresh fails`() {
+        sut = createSut()
+        whenever { coreService.blocktank.orders(refresh = true) }.thenThrow(RuntimeException("Network error"))
+        test {
+            val result = sut.getOrder(testOrder1.id, refresh = true)
+            assertTrue(result.isFailure)
+        }
+    }
 }
