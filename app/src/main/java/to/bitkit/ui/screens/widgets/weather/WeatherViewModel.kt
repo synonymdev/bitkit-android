@@ -124,6 +124,12 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
+    fun refreshOnDisplay() {
+        viewModelScope.launch {
+            widgetsRepo.refreshWidget(WidgetType.WEATHER)
+        }
+    }
+
     // MARK: - Private Methods
 
     private fun initializeCustomPreferences() {

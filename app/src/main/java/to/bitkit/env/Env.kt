@@ -67,6 +67,13 @@ internal object Env {
             else -> null
         }
 
+    val ldkScorerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://api.blocktank.to/scorer.bin"
+            Network.REGTEST -> "https://api.stag0.blocktank.to/scorer"
+            else -> null
+        }
+
     val vssStoreIdPrefix get() = "bitkit_v1_${network.name.lowercase()}"
 
     val vssServerUrl
