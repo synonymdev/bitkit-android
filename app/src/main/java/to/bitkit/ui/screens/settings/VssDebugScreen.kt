@@ -5,10 +5,12 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,9 +24,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -35,9 +39,11 @@ import com.synonym.vssclient.LdkNamespace
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -46,6 +52,7 @@ import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.shared.util.shareFile
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Shapes
 import to.bitkit.viewmodels.VssDebugUiState
 import to.bitkit.viewmodels.VssDebugViewModel
 import to.bitkit.viewmodels.VssLdkKeyItem
@@ -116,11 +123,8 @@ private fun VssDebugContent(
             )
             when (VssTab.entries[selectedVssTab]) {
                 VssTab.APP -> {
-                    SettingsTextButtonRow(
-                        title = "List Keys",
-                        iconRes = R.drawable.ic_stack,
-                        iconSize = 24.dp,
-                        value = if (uiState.vssKeys.isNotEmpty()) "${uiState.vssKeys.size} found" else "",
+                    ListButton(
+                        text = if (uiState.vssKeys.isEmpty()) "List Keys" else "List Keys (Refresh)",
                         enabled = !uiState.isLoading,
                         onClick = onListVssKeys,
                     )
@@ -129,15 +133,11 @@ private fun VssDebugContent(
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically(),
                     ) {
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             uiState.vssKeys.forEach { keyVersion ->
-                                SettingsTextButtonRow(
+                                ListCard(
                                     title = keyVersion.key,
-                                    description = "v${keyVersion.version}",
-                                    iconRes = R.drawable.ic_note,
-                                    iconSize = 24.dp,
-                                    enabled = !uiState.isLoading,
-                                    height = 44.dp,
+                                    subtitle = "v${keyVersion.version}",
                                     trailingContent = {
                                         SecondaryButton(
                                             text = null,
@@ -158,21 +158,22 @@ private fun VssDebugContent(
                             }
                         }
                     }
-                    SettingsTextButtonRow(
-                        title = "Delete All",
-                        iconRes = R.drawable.ic_trash,
-                        iconSize = 24.dp,
-                        enabled = !uiState.isLoading && uiState.vssKeys.isNotEmpty(),
-                        onClick = { showDeleteAllConfirmation = true },
-                    )
+                    AnimatedVisibility(
+                        visible = uiState.vssKeys.isNotEmpty(),
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        ListButton(
+                            text = "Delete All",
+                            enabled = !uiState.isLoading,
+                            onClick = { showDeleteAllConfirmation = true },
+                        )
+                    }
                 }
 
                 VssTab.LDK -> {
-                    SettingsTextButtonRow(
-                        title = "List Keys",
-                        iconRes = R.drawable.ic_stack,
-                        iconSize = 24.dp,
-                        value = if (uiState.vssLdkKeys.isNotEmpty()) "${uiState.vssLdkKeys.size} found" else "",
+                    ListButton(
+                        text = if (uiState.vssLdkKeys.isEmpty()) "List Keys" else "List Keys (Refresh)",
                         enabled = !uiState.isLoading,
                         onClick = onListVssLdkKeys,
                     )
@@ -181,15 +182,11 @@ private fun VssDebugContent(
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically(),
                     ) {
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             uiState.vssLdkKeys.forEach { item ->
-                                SettingsTextButtonRow(
+                                ListCard(
                                     title = item.keyVersion.key,
-                                    description = "${item.namespace.displayName} (v${item.keyVersion.version})",
-                                    iconRes = R.drawable.ic_note,
-                                    iconSize = 24.dp,
-                                    enabled = !uiState.isLoading,
-                                    height = 44.dp,
+                                    subtitle = "${item.namespace.displayName} (v${item.keyVersion.version})",
                                     trailingContent = {
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             SecondaryButton(
@@ -255,6 +252,48 @@ private fun VssDebugContent(
     }
 }
 
+@Composable
+private fun ListButton(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    TertiaryButton(
+        text = text,
+        onClick = onClick,
+        enabled = enabled,
+        fullWidth = true,
+        size = ButtonSize.Small,
+        modifier = Modifier.padding(16.dp),
+    )
+}
+
+@Composable
+private fun ListCard(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    trailingContent: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .background(color = Colors.Gray6, shape = Shapes.medium)
+            .padding(16.dp)
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            BodySSB(text = title, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+            Caption(text = subtitle, color = Colors.White64)
+        }
+        trailingContent?.invoke()
+    }
+}
+
 private val LdkNamespace.displayName: String
     get() = when (this) {
         LdkNamespace.Default -> "default"
@@ -266,30 +305,18 @@ private val LdkNamespace.displayName: String
 private enum class VssTab : TabItem {
     APP, LDK;
 
-    override val uiText: String
-        @Composable get() = when (this) {
-            APP -> "App"
-            LDK -> "LDK"
-        }
+    override val uiText: String @Composable get() = this.name
 }
 
+@Suppress("SpellCheckingInspection")
 @Preview(showSystemUi = true)
 @Composable
-private fun Preview() {
+private fun PreviewApp() {
     val vssKeys = BackupCategory.entries.mapIndexed { i, key ->
         com.synonym.vssclient.KeyVersion(key.name, (i + 1).toLong())
     }
-    val vssLdkKeys = listOf(
-        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("manager", 1), LdkNamespace.Default),
-        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("3c14ccafc88ad68e3705d59f_0", 1), LdkNamespace.Monitors),
-    )
     var uiState by remember {
-        mutableStateOf(
-            VssDebugUiState(
-                vssKeys = vssKeys,
-                vssLdkKeys = vssLdkKeys,
-            )
-        )
+        mutableStateOf(VssDebugUiState(vssKeys = vssKeys))
     }
 
     AppThemeSurface {
@@ -298,6 +325,46 @@ private fun Preview() {
             onBackClick = {},
             onRefresh = {},
             onListVssKeys = { uiState = uiState.copy(vssKeys = vssKeys) },
+            onDeleteVssKey = {},
+            onDeleteAllVssKeys = {},
+            onListVssLdkKeys = {},
+            onDeleteVssLdkKey = { _, _ -> },
+            onShareVssLdkKey = { _, _, _ -> },
+        )
+    }
+}
+
+@Suppress("SpellCheckingInspection")
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewLdk() {
+    val vssLdkKeys = listOf(
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("events", 1), LdkNamespace.Default),
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("output_sweeper", 1), LdkNamespace.Default),
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("scorer", 1), LdkNamespace.Default),
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("external_pathfinding_scores_cache", 1), LdkNamespace.Default),
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("peers", 1), LdkNamespace.Default),
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("vss_schema_version", 1), LdkNamespace.Default),
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("node_metrics", 1), LdkNamespace.Default),
+        VssLdkKeyItem(com.synonym.vssclient.KeyVersion("manager", 1), LdkNamespace.Default),
+        VssLdkKeyItem(
+            com.synonym.vssclient.KeyVersion(
+                "78e33351f6fbf65d041108cc371e793ff5a0006366ab442e92caea83b2a3838b_0",
+                1,
+            ),
+            LdkNamespace.Monitors,
+        ),
+    )
+    var uiState by remember {
+        mutableStateOf(VssDebugUiState(vssLdkKeys = vssLdkKeys))
+    }
+
+    AppThemeSurface {
+        VssDebugContent(
+            uiState = uiState,
+            onBackClick = {},
+            onRefresh = {},
+            onListVssKeys = {},
             onDeleteVssKey = {},
             onDeleteAllVssKeys = {},
             onListVssLdkKeys = { uiState = uiState.copy(vssLdkKeys = vssLdkKeys) },
