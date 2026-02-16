@@ -663,7 +663,9 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        runCatching { lightningService.connectToTrustedPeers() }
+        runCatching { lightningService.connectToTrustedPeers() }.also {
+            syncState()
+        }
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("connectPeer") {
@@ -762,9 +764,21 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
+        waitForUsableChannels()
         runCatching { lightningService.send(bolt11, sats) }.also {
             syncState()
         }
+    }
+
+    private suspend fun waitForUsableChannels() {
+        if (lightningService.channels?.any { it.isUsable } == true) return
+
+        Logger.info("Waiting for usable channels before sending payment", context = TAG)
+        syncState()
+
+        withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+            _lightningState.first { state -> state.channels.any { it.isUsable } }
+        } ?: Logger.warn("Timeout waiting for usable channels", context = TAG)
     }
 
     @Suppress("LongParameterList")
@@ -944,12 +958,19 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true): Boolean {
-        return if (!_lightningState.value.nodeLifecycleState.isRunning() && fallbackToCachedBalance) {
-            amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
-        } else {
-            lightningService.canSend(amountSats)
+    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true) = withContext(bgDispatcher) {
+        if (!_lightningState.value.nodeLifecycleState.canRun()) {
+            return@withContext false
         }
+        if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
+            return@withContext amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
+        }
+        if (lightningService.channels == null) {
+            withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
+                _lightningState.first { lightningService.channels != null }
+            }
+        }
+        return@withContext lightningService.canSend(amountSats)
     }
 
     fun getNodeId(): String? =
@@ -1135,6 +1156,8 @@ class LightningRepo @Inject constructor(
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
+        private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
+        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
     }
 }
 

@@ -213,7 +213,7 @@ private fun UtxoRow(
             currency.convert(sats = amount)?.let { converted ->
                 val btcValue = converted.bitcoinDisplay(displayUnit).value
                 BodyMSB(text = btcValue)
-                BodySSB(text = "${converted.symbol} ${converted.formatted}", color = Colors.White64)
+                BodySSB(text = converted.formattedWithSymbol(), color = Colors.White64)
             }
         }
 
