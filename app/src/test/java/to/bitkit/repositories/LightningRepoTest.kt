@@ -28,7 +28,6 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
-import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -36,7 +35,6 @@ import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
-import to.bitkit.models.BalanceState
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
@@ -187,11 +185,29 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `payInvoice should succeed when node is running`() = test {
+    fun `payInvoice should succeed when node is running and channels are usable`() = test {
+        startNodeForTesting()
+        val usableChannel = createChannelDetails().copy(isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(usableChannel))
+        val testPaymentId = "testPaymentId"
+        whenever(lightningService.send("bolt11", 1000uL)).thenReturn(testPaymentId)
+
+        val result = sut.payInvoice("bolt11", 1000uL)
+        assertTrue(result.isSuccess)
+        assertEquals(testPaymentId, result.getOrNull())
+    }
+
+    @Test
+    fun `payInvoice should proceed after timeout when channels are not usable`() = test {
         startNodeForTesting()
         val testPaymentId = "testPaymentId"
         whenever(lightningService.send("bolt11", 1000uL)).thenReturn(testPaymentId)
 
+        // Channels are ready but not usable (peer disconnected)
+        val readyButNotUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(readyButNotUsable))
+
+        // payInvoice should wait, timeout, then still attempt to send
         val result = sut.payInvoice("bolt11", 1000uL)
         assertTrue(result.isSuccess)
         assertEquals(testPaymentId, result.getOrNull())
@@ -312,15 +328,8 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `canSend should use cached outbound when node is not running`() = test {
-        val cacheData = AppCacheData(
-            balance = BalanceState(
-                maxSendLightningSats = 2000uL
-            )
-        )
-        whenever(cacheStore.data).thenReturn(flowOf(cacheData))
-
-        assert(sut.canSend(1000uL, fallbackToCachedBalance = true))
+    fun `canSend should return false when node is stopped`() = test {
+        assertFalse(sut.canSend(1000uL, fallbackToCachedBalance = true))
     }
 
     @Test
