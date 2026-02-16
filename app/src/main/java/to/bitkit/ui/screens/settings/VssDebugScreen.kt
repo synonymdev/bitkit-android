@@ -123,17 +123,12 @@ private fun VssDebugContent(
             )
             when (VssTab.entries[selectedVssTab]) {
                 VssTab.APP -> {
-                    AnimatedVisibility(
+                    ListButton(
+                        text = "List Keys",
                         visible = uiState.vssKeys.isEmpty(),
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically(),
-                    ) {
-                        ListButton(
-                            text = "List Keys",
-                            enabled = !uiState.isLoading,
-                            onClick = onListVssKeys,
-                        )
-                    }
+                        enabled = !uiState.isLoading,
+                        onClick = onListVssKeys,
+                    )
                     AnimatedVisibility(
                         visible = uiState.vssKeys.isNotEmpty(),
                         enter = fadeIn() + expandVertically(),
@@ -164,31 +159,21 @@ private fun VssDebugContent(
                             }
                         }
                     }
-                    AnimatedVisibility(
+                    ListButton(
+                        text = "Delete All",
                         visible = uiState.vssKeys.isNotEmpty(),
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically(),
-                    ) {
-                        ListButton(
-                            text = "Delete All",
-                            enabled = !uiState.isLoading,
-                            onClick = { showDeleteAllConfirmation = true },
-                        )
-                    }
+                        enabled = !uiState.isLoading,
+                        onClick = { showDeleteAllConfirmation = true },
+                    )
                 }
 
                 VssTab.LDK -> {
-                    AnimatedVisibility(
+                    ListButton(
+                        text = "List Keys",
                         visible = uiState.vssLdkKeys.isEmpty(),
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically(),
-                    ) {
-                        ListButton(
-                            text = "List Keys",
-                            enabled = !uiState.isLoading,
-                            onClick = onListVssLdkKeys,
-                        )
-                    }
+                        enabled = !uiState.isLoading,
+                        onClick = onListVssLdkKeys,
+                    )
                     AnimatedVisibility(
                         visible = uiState.vssLdkKeys.isNotEmpty(),
                         enter = fadeIn() + expandVertically(),
@@ -267,17 +252,24 @@ private fun VssDebugContent(
 @Composable
 private fun ListButton(
     text: String,
+    visible: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    TertiaryButton(
-        text = text,
-        onClick = onClick,
-        enabled = enabled,
-        fullWidth = true,
-        size = ButtonSize.Small,
-        modifier = Modifier.padding(16.dp),
-    )
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+    ) {
+        TertiaryButton(
+            text = text,
+            onClick = onClick,
+            enabled = enabled,
+            fullWidth = true,
+            size = ButtonSize.Small,
+            modifier = Modifier.padding(16.dp),
+        )
+    }
 }
 
 @Composable
