@@ -51,6 +51,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.of
 import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NodeLifecycleState
@@ -64,6 +65,7 @@ import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.LspNotificationsService
+import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -73,6 +75,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
@@ -94,6 +97,7 @@ class LightningRepo @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
+    private val migrationServiceProvider: Provider<MigrationService>,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -348,6 +352,7 @@ class LightningRepo @Inject constructor(
                 connectToTrustedPeers().onFailure {
                     Logger.error("Failed to connect to trusted peers", it, context = TAG)
                 }
+                connectMigrationPeers()
 
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
@@ -664,6 +669,18 @@ class LightningRepo @Inject constructor(
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
         runCatching { lightningService.connectToTrustedPeers() }
+    }
+
+    private suspend fun connectMigrationPeers() {
+        val peerUris = migrationServiceProvider.get().tryFetchMigrationPeersFromBackup()
+        for (uri in peerUris) {
+            runCatching {
+                val peer = PeerDetails.of(uri)
+                lightningService.connectPeer(peer)
+            }.onFailure {
+                Logger.error("Failed to connect migration peer: $uri", it, context = TAG)
+            }
+        }
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("connectPeer") {
