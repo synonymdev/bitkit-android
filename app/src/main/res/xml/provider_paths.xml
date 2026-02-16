@@ -9,4 +9,7 @@
     <cache-path
         name="exports"
         path="exports/" />
+    <cache-path
+        name="vss_exports"
+        path="vss_exports/" />
 </paths>
