@@ -46,7 +46,6 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
-import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -68,7 +67,6 @@ class LightningRepoTest : BaseUnitTest() {
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
-    private val migrationService = mock<MigrationService>()
 
     @Before
     fun setUp() = runBlocking {
@@ -78,7 +76,6 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(true)
-        whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
@@ -92,7 +89,6 @@ class LightningRepoTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
-            migrationServiceProvider = { migrationService },
         )
     }
 
