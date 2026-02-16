@@ -146,8 +146,13 @@ private fun RowScope.Content(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            BodyMSB(text = converted.symbol)
-                            BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
+                            if (converted.isSymbolSuffix) {
+                                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
+                                BodyMSB(text = converted.symbol)
+                            } else {
+                                BodyMSB(text = converted.symbol)
+                                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
+                            }
                         }
                     }
                 }
