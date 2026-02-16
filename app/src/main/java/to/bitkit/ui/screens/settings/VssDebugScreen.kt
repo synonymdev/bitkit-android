@@ -123,11 +123,17 @@ private fun VssDebugContent(
             )
             when (VssTab.entries[selectedVssTab]) {
                 VssTab.APP -> {
-                    ListButton(
-                        text = if (uiState.vssKeys.isEmpty()) "List Keys" else "List Keys (Refresh)",
-                        enabled = !uiState.isLoading,
-                        onClick = onListVssKeys,
-                    )
+                    AnimatedVisibility(
+                        visible = uiState.vssKeys.isEmpty(),
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        ListButton(
+                            text = "List Keys",
+                            enabled = !uiState.isLoading,
+                            onClick = onListVssKeys,
+                        )
+                    }
                     AnimatedVisibility(
                         visible = uiState.vssKeys.isNotEmpty(),
                         enter = fadeIn() + expandVertically(),
@@ -172,11 +178,17 @@ private fun VssDebugContent(
                 }
 
                 VssTab.LDK -> {
-                    ListButton(
-                        text = if (uiState.vssLdkKeys.isEmpty()) "List Keys" else "List Keys (Refresh)",
-                        enabled = !uiState.isLoading,
-                        onClick = onListVssLdkKeys,
-                    )
+                    AnimatedVisibility(
+                        visible = uiState.vssLdkKeys.isEmpty(),
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        ListButton(
+                            text = "List Keys",
+                            enabled = !uiState.isLoading,
+                            onClick = onListVssLdkKeys,
+                        )
+                    }
                     AnimatedVisibility(
                         visible = uiState.vssLdkKeys.isNotEmpty(),
                         enter = fadeIn() + expandVertically(),
