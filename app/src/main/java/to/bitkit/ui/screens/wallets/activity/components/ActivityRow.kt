@@ -295,7 +295,11 @@ private fun AmountViewContent(
                 BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else title)
             }
             if (titleSymbol != null && isSymbolSuffix) {
-                BodyMSB(text = titleSymbol, color = Colors.White64)
+                BodyMSB(
+                    text = titleSymbol,
+                    color = Colors.White64,
+                    modifier = Modifier.padding(start = 2.dp),
+                )
             }
         }
 
