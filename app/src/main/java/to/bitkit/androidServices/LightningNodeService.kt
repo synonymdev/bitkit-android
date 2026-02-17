@@ -20,6 +20,8 @@ import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
+import to.bitkit.domain.commands.NotifyChannelReady
+import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.NewTransactionSheetDetails
@@ -52,6 +54,9 @@ class LightningNodeService : Service() {
     lateinit var notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler
 
     @Inject
+    lateinit var notifyChannelReadyHandler: NotifyChannelReadyHandler
+
+    @Inject
     lateinit var cacheStore: CacheStore
 
     override fun onCreate() {
@@ -66,6 +71,7 @@ class LightningNodeService : Service() {
                 eventHandler = { event ->
                     Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
                     handlePaymentReceived(event)
+                    if (event is Event.ChannelReady) handleChannelReady(event)
                 }
             ).onSuccess {
                 walletRepo.setWalletExistsState()
@@ -82,6 +88,15 @@ class LightningNodeService : Service() {
         notifyPaymentReceivedHandler(command).onSuccess {
             Logger.debug("Payment notification result: $it", context = TAG)
             if (it !is NotifyPaymentReceived.Result.ShowNotification) return
+            showPaymentNotification(it.sheet, it.notification)
+        }
+    }
+
+    private suspend fun handleChannelReady(event: Event.ChannelReady) {
+        val command = NotifyChannelReady.Command(event = event, includeNotification = true)
+        notifyChannelReadyHandler(command).onSuccess {
+            Logger.debug("Channel ready notification result: $it", context = TAG)
+            if (it !is NotifyChannelReady.Result.ShowNotification) return
             showPaymentNotification(it.sheet, it.notification)
         }
     }
