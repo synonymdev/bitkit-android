@@ -15,44 +15,56 @@ import to.bitkit.ui.theme.Insets
 import to.bitkit.ui.theme.TopBarHeight
 
 @Composable
-fun VerticalSpacer(height: Dp) {
-    Spacer(modifier = Modifier.height(height))
+fun VerticalSpacer(
+    height: Dp,
+    modifier: Modifier = Modifier,
+) {
+    Spacer(modifier = modifier then Modifier.height(height))
 }
 
 @Composable
-fun ColumnScope.VerticalSpacer(minHeight: Dp, maxHeight: Dp) {
+fun ColumnScope.VerticalSpacer(
+    minHeight: Dp,
+    maxHeight: Dp,
+    modifier: Modifier = Modifier,
+) {
     Spacer(
-        modifier = Modifier
+        modifier = modifier then Modifier
             .weight(1f)
             .sizeIn(minHeight = minHeight, maxHeight = maxHeight)
     )
 }
 
 @Composable
-fun HorizontalSpacer(width: Dp) {
-    Spacer(modifier = Modifier.width(width))
+fun HorizontalSpacer(
+    width: Dp,
+    modifier: Modifier = Modifier,
+) {
+    Spacer(modifier = modifier then Modifier.width(width))
 }
 
 @Suppress("ComposeMultipleContentEmitters")
 @Composable
 fun ColumnScope.FillHeight(
+    modifier: Modifier = Modifier,
     @FloatRange weight: Float = 1f,
     fill: Boolean = true,
     min: Dp = 0.dp,
 ) {
-    if (min > 0.dp) Spacer(modifier = Modifier.height(min))
-    Spacer(modifier = Modifier.weight(weight, fill = fill))
+    if (min > 0.dp) Spacer(modifier = modifier then Modifier.height(min))
+    Spacer(modifier = modifier then Modifier.weight(weight, fill = fill))
 }
 
 @Suppress("ComposeMultipleContentEmitters")
 @Composable
 fun RowScope.FillWidth(
+    modifier: Modifier = Modifier,
     @FloatRange weight: Float = 1f,
     fill: Boolean = true,
     min: Dp = 0.dp,
 ) {
-    if (min > 0.dp) Spacer(modifier = Modifier.width(min))
-    Spacer(modifier = Modifier.weight(weight, fill = fill))
+    if (min > 0.dp) Spacer(modifier = modifier then Modifier.width(min))
+    Spacer(modifier = modifier then Modifier.weight(weight, fill = fill))
 }
 
 @Composable
