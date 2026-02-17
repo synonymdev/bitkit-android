@@ -20,6 +20,7 @@ import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.USD_SYMBOL
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.isSuffixSymbolCurrency
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -48,6 +49,8 @@ fun NumberPadTextField(
         showPlaceholder = true,
         satoshis = uiState.value.sats,
         currencySymbol = currencies.currencySymbol,
+        isSymbolSuffix = currencies.primaryDisplay == PrimaryDisplay.FIAT &&
+            isSuffixSymbolCurrency(currencies.selectedCurrency),
         showSecondaryField = showSecondaryField,
     )
 }
@@ -60,11 +63,14 @@ private fun MoneyAmount(
     satoshis: Long,
     modifier: Modifier = Modifier,
     currencySymbol: String = BITCOIN_SYMBOL,
+    isSymbolSuffix: Boolean = false,
     showPlaceholder: Boolean = true,
     showSecondaryField: Boolean = true,
     valueStyle: SpanStyle = SpanStyle(color = Colors.White),
     placeholderStyle: SpanStyle = SpanStyle(color = Colors.White50),
 ) {
+    val symbol = if (unit == PrimaryDisplay.BITCOIN) BITCOIN_SYMBOL else currencySymbol
+
     Column(
         modifier = modifier.semantics { contentDescription = value },
         horizontalAlignment = Alignment.Start
@@ -76,11 +82,13 @@ private fun MoneyAmount(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Display(
-                text = if (unit == PrimaryDisplay.BITCOIN) BITCOIN_SYMBOL else currencySymbol,
-                color = Colors.White64,
-                modifier = Modifier.padding(end = 6.dp)
-            )
+            if (!isSymbolSuffix) {
+                Display(
+                    text = symbol,
+                    color = Colors.White64,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
             Display(
                 text = buildAnnotatedString {
                     if (value != placeholder) {
@@ -95,6 +103,13 @@ private fun MoneyAmount(
                     }
                 }
             )
+            if (isSymbolSuffix) {
+                Display(
+                    text = symbol,
+                    color = Colors.White64,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
         }
     }
 }

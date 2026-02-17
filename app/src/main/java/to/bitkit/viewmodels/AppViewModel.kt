@@ -1132,13 +1132,14 @@ class AppViewModel @Inject constructor(
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
         val lnInvoice = extractViableLightningInvoice(invoice.params)
+        val amount = lnInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: invoice.amountSatoshis
         _sendUiState.update {
             it.copy(
                 address = invoice.address,
                 addressInput = scanResult,
                 isAddressInputValid = true,
-                amount = invoice.amountSatoshis,
-                isUnified = lnInvoice != null && invoice.amountSatoshis <= maxSendOnchain && maxSendOnchain > 0u,
+                amount = amount,
+                isUnified = lnInvoice != null && amount <= maxSendOnchain && maxSendOnchain > 0u,
                 decodedInvoice = lnInvoice,
                 payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
             )
@@ -1192,7 +1193,7 @@ class AppViewModel @Inject constructor(
         }
 
         Logger.info(
-            when (invoice.amountSatoshis > 0u) {
+            when (amount > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
                 else -> "No amount found in invoice, proceeding to enter amount"
             },
