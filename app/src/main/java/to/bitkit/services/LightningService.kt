@@ -836,26 +836,28 @@ class LightningService @Inject constructor(
     ): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        Logger.verbose(
-            "Calculating fee for $amountSats sats to $address, ${utxosToSpend?.size} UTXOs, satsPerVByte=$satsPerVByte",
-            context = TAG,
-        )
-
         return ServiceQueue.LDK.background {
-            return@background try {
-                val fee = node.onchainPayment().calculateTotalFee(
+            return@background runCatching {
+                node.onchainPayment().calculateTotalFee(
                     address = address,
                     amountSats = amountSats,
                     feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                     utxosToSpend = utxosToSpend,
-                )
-                Logger.debug(
-                    "Calculated fee='$fee' for $amountSats sats to $address, satsPerVByte=$satsPerVByte",
+                ).also {
+                    Logger.debug(
+                        "Calculated fee='$it' for $amountSats sats to $address, satsPerVByte=$satsPerVByte",
+                        context = TAG,
+                    )
+                }
+            }.getOrElse {
+                Logger.warn(
+                    "Error calculating fee for $amountSats sats to $address, " +
+                        "${utxosToSpend?.size} UTXOs, satsPerVByte=$satsPerVByte",
                     context = TAG,
+                    e = it,
                 )
-                fee
-            } catch (e: NodeException) {
-                throw LdkError(e)
+
+                throw if (it is NodeException) LdkError(it) else it
             }
         }
     }
