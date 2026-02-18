@@ -291,6 +291,11 @@ class HomeViewModel @Inject constructor(
             }
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
-        baseSuggestions.filterNot { it in dismissedList }
+        baseSuggestions.filterNot { it in dismissedList }.take(MAX_SUGGESTIONS)
+    }
+
+    companion object {
+        private const val TAG = "HomeViewModel"
+        private const val MAX_SUGGESTIONS = 4
     }
 }

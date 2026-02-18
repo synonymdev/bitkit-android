@@ -1,11 +1,11 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.snapping.SnapPosition
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -122,6 +122,7 @@ import to.bitkit.viewmodels.WalletViewModel
 private const val SMALL_SCREEN_HEIGHT_DP = 700
 private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
 private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
+private const val ANIMATION_DURATION_MS = 300
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -567,33 +568,44 @@ private fun SuggestionsSection(
     onClickSuggestion: (Suggestion) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state = rememberLazyListState()
-    val snapBehavior = rememberSnapFlingBehavior(
-        lazyListState = state,
-        snapPosition = SnapPosition.Start
-    )
+    val rows = (suggestions.size + 1) / 2
 
     Column(modifier = modifier.padding(bottom = 32.dp)) {
         Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
         VerticalSpacer(16.dp)
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            state = state,
-            flingBehavior = snapBehavior,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("Suggestions")
-        ) {
-            items(suggestions, key = { it.name }) { item ->
-                SuggestionCard(
-                    gradientColor = item.color,
-                    title = stringResource(item.title),
-                    description = stringResource(item.description),
-                    icon = item.icon,
-                    onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
-                    onClick = { onClickSuggestion(item) },
-                    modifier = Modifier.testTag("Suggestion-${item.name.lowercase()}")
-                )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val cardSize = (maxWidth - 16.dp) / 2
+            val gridHeight = (cardSize * rows) + (16.dp * (rows - 1))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                userScrollEnabled = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(gridHeight)
+                    .testTag("Suggestions")
+            ) {
+                items(
+                    items = suggestions,
+                    key = { it.name }
+                ) { item ->
+                    SuggestionCard(
+                        gradientColor = item.color,
+                        title = stringResource(item.title),
+                        description = stringResource(item.description),
+                        icon = item.icon,
+                        onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
+                        onClick = { onClickSuggestion(item) },
+                        modifier = Modifier
+                            .testTag("Suggestion-${item.name.lowercase()}")
+                            .animateItem(
+                                fadeInSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+                                fadeOutSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+                                placementSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+                            )
+                    )
+                }
             }
         }
     }
