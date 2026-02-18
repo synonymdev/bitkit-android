@@ -1000,4 +1000,5 @@
     <string name="widgets__widget__nav_title">Widget</string>
     <string name="widgets__widget__source">Source</string>
     <string name="widgets__widgets">Widgets</string>
+    <string name="widgets__onboarding_swipe">Swipe down\nto find your\n<accent>widgets</accent></string>
 </resources>
