@@ -904,7 +904,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `updateAddressType should fail when stop fails`() = test {
+    fun `updateAddressType should fail when setPrimaryAddressType fails`() = test {
         startNodeForTesting()
         whenever(
             settingsStore.data
@@ -912,26 +912,8 @@ class LightningRepoTest : BaseUnitTest() {
             flowOf(SettingsData(selectedAddressType = "nativeSegwit", addressTypesToMonitor = listOf("nativeSegwit")))
         )
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
-        whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.stop()).thenThrow(RuntimeException("stop failed"))
-
-        val result = sut.updateAddressType("taproot", listOf("taproot", "nativeSegwit"))
-
-        assertTrue(result.isFailure)
-    }
-
-    @Test
-    fun `updateAddressType should fail when start fails`() = test {
-        startNodeForTesting()
-        whenever(
-            settingsStore.data
-        ).thenReturn(
-            flowOf(SettingsData(selectedAddressType = "nativeSegwit", addressTypesToMonitor = listOf("nativeSegwit")))
-        )
-        whenever { settingsStore.update(any()) }.thenReturn(Unit)
-        whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.stop()).thenReturn(Unit)
-        whenever(lightningService.start(anyOrNull(), any())).thenThrow(RuntimeException("start failed"))
+        whenever(lightningService.setPrimaryAddressType(any()))
+            .thenThrow(RuntimeException("setPrimaryAddressType failed"))
 
         val result = sut.updateAddressType("taproot", listOf("taproot", "nativeSegwit"))
 

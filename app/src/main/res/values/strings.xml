@@ -534,6 +534,7 @@
     <string name="settings__addr__no_addrs_str">No addresses found when searching for \"{searchTxt}\"</string>
     <string name="settings__addr__path">Path: {path}</string>
     <string name="settings__addr__spend_number">{count, plural, one {Spend ₿ {fundsToSpend} From # address} other {Spend ₿ {fundsToSpend} From # addresses}}</string>
+    <string name="settings__addr_type__applying">Applying changes…</string>
     <string name="settings__addr_type__disabled_currently_selected">Cannot disable monitoring: address type is currently selected</string>
     <string name="settings__addr_type__disabled_has_balance">Cannot disable monitoring: address type has balance</string>
     <string name="settings__addr_type__disabled_native_required">At least one Native SegWit or Taproot wallet is required for Lightning channels.</string>
@@ -541,13 +542,6 @@
     <string name="settings__addr_type__monitoring">Monitor address types</string>
     <string name="settings__addr_type__primary">Primary address type</string>
     <string name="settings__addr_type__settings_updated">Settings updated</string>
-    <string name="settings__addr_type__loading_desc">Please wait while the wallet restarts…</string>
-    <string name="settings__addr_type__loading_headline">Switching to {type}</string>
-    <string name="settings__addr_type__loading_nav_address">Address Type</string>
-    <string name="settings__addr_type__loading_nav_monitoring">Address Monitoring</string>
-    <string name="settings__addr_type__loading_updating">Updating Wallet</string>
-    <string name="settings__addr_type__timeout">Operation timed out</string>
-    <string name="settings__addr_type__timeout_desc">The operation took too long. Please try again.</string>
     <string name="settings__addr_type__title">Address type</string>
     <string name="settings__adv__addr_type_currently_selected">Currently selected</string>
     <string name="settings__adv__address_viewer">Address Viewer</string>

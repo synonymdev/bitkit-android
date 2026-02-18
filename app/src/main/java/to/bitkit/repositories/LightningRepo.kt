@@ -676,6 +676,7 @@ class LightningRepo @Inject constructor(
         val previousSettings = settingsStore.data.first()
         val oldSelected = previousSettings.selectedAddressType
         val oldMonitored = previousSettings.addressTypesToMonitor
+        val addressType = selectedType.toAddressType() ?: AddressType.P2WPKH
 
         suspend fun rollback() =
             settingsStore.update { it.copy(selectedAddressType = oldSelected, addressTypesToMonitor = oldMonitored) }
@@ -684,7 +685,8 @@ class LightningRepo @Inject constructor(
             settingsStore.update {
                 it.copy(selectedAddressType = selectedType, addressTypesToMonitor = monitoredTypes)
             }
-            restartNodeOrRollback(onRollback = { rollback() })
+            lightningService.setPrimaryAddressType(addressType)
+            sync().onFailure { Logger.warn("Sync after address type change failed", it, context = TAG) }
             Unit
         }.onFailure {
             rollback()
@@ -717,7 +719,12 @@ class LightningRepo @Inject constructor(
 
         runCatching {
             settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
-            restartNodeOrRollback(onRollback = { rollback() })
+            if (enabled) {
+                lightningService.addAddressTypeToMonitor(addressType)
+            } else {
+                lightningService.removeAddressTypeFromMonitor(addressType)
+            }
+            sync().onFailure { Logger.warn("Sync after monitoring change failed", it, context = TAG) }
             Unit
         }.onFailure {
             rollback()
@@ -749,24 +756,6 @@ class LightningRepo @Inject constructor(
         return null
     }
 
-    @Suppress("ThrowsCount")
-    private suspend fun restartNodeOrRollback(onRollback: suspend () -> Unit) {
-        waitForNodeToStop().onFailure {
-            onRollback()
-            throw it
-        }
-        stop().onFailure {
-            onRollback()
-            throw it
-        }
-        start(shouldRetry = false).onFailure {
-            onRollback()
-            restartWithPreviousConfig()
-            throw it
-        }
-        sync().onFailure { Logger.warn("Sync after address type change failed", it, context = TAG) }
-    }
-
     fun isChangingAddressType(): Boolean = isChangingAddressType.get()
 
     suspend fun pruneEmptyAddressTypesAfterRestore(): Result<Unit> = withContext(bgDispatcher) {
@@ -791,12 +780,13 @@ class LightningRepo @Inject constructor(
 
         val newMonitored = monitored.filter { it !in toRemove }
         settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
-        stop().onFailure { return@withContext Result.failure(it) }
-        start(shouldRetry = false).onFailure {
-            settingsStore.update { it.copy(addressTypesToMonitor = monitored) }
-            return@withContext Result.failure(it)
+        for (typeStr in toRemove) {
+            val type = typeStr.toAddressType() ?: continue
+            runCatching { lightningService.removeAddressTypeFromMonitor(type) }.onFailure {
+                Logger.error("Failed to remove address type $typeStr from monitor", it, context = TAG)
+            }
         }
-        sync().onFailure { Logger.warn("Initial sync after prune failed", it, context = TAG) }
+        sync().onFailure { Logger.warn("Sync after prune failed", it, context = TAG) }
         Result.success(Unit)
     }
 

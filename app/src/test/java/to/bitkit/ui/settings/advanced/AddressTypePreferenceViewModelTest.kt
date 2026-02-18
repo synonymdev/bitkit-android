@@ -12,7 +12,6 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -32,9 +31,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
 
     private lateinit var sut: AddressTypePreferenceViewModel
 
+    private val applyingChanges = "Applying changes…"
     private val settingsUpdated = "Settings updated"
-    private val timeoutTitle = "Timeout"
-    private val timeoutDesc = "Operation timed out"
     private val errorTitle = "Error"
     private val disabledHasBalance = "Address type has balance"
     private val disabledVerifyFailed = "Failed to verify balance"
@@ -44,9 +42,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         runBlocking {
+            whenever(context.getString(R.string.settings__addr_type__applying)).thenReturn(applyingChanges)
             whenever(context.getString(R.string.settings__addr_type__settings_updated)).thenReturn(settingsUpdated)
-            whenever(context.getString(R.string.settings__addr_type__timeout)).thenReturn(timeoutTitle)
-            whenever(context.getString(R.string.settings__addr_type__timeout_desc)).thenReturn(timeoutDesc)
             whenever(context.getString(R.string.common__error)).thenReturn(errorTitle)
             whenever(context.getString(R.string.settings__addr_type__disabled_has_balance))
                 .thenReturn(disabledHasBalance)
@@ -95,10 +92,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `setMonitoring success sends success toast`() = test {
-        runBlocking {
-            wheneverBlocking { lightningRepo.setMonitoring(AddressType.P2TR, true) }
-                .thenReturn(Result.success(Unit))
-        }
+        whenever(lightningRepo.setMonitoring(AddressType.P2TR, true))
+            .thenReturn(Result.success(Unit))
         whenever(settingsStore.data).thenReturn(
             flowOf(
                 SettingsData(
@@ -117,17 +112,15 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(toasts.isNotEmpty())
-        assertEquals(Toast.ToastType.SUCCESS, toasts.first().type)
-        assertEquals(settingsUpdated, toasts.first().title)
+        assertEquals(Toast.ToastType.SUCCESS, toasts.last().type)
+        assertEquals(settingsUpdated, toasts.last().title)
         collectJob.cancel()
     }
 
     @Test
     fun `setMonitoring failure sends error toast with mapped message`() = test {
-        runBlocking {
-            wheneverBlocking { lightningRepo.setMonitoring(AddressType.P2TR, false) }
-                .thenReturn(Result.failure(Exception("Cannot disable monitoring: address type has balance")))
-        }
+        whenever(lightningRepo.setMonitoring(AddressType.P2TR, false))
+            .thenReturn(Result.failure(Exception("Cannot disable monitoring: address type has balance")))
         whenever(settingsStore.data).thenReturn(
             flowOf(
                 SettingsData(
@@ -146,18 +139,16 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(toasts.isNotEmpty())
-        assertEquals(Toast.ToastType.WARNING, toasts.first().type)
-        assertEquals(errorTitle, toasts.first().title)
-        assertEquals(disabledHasBalance, toasts.first().description)
+        assertEquals(Toast.ToastType.WARNING, toasts.last().type)
+        assertEquals(errorTitle, toasts.last().title)
+        assertEquals(disabledHasBalance, toasts.last().description)
         collectJob.cancel()
     }
 
     @Test
     fun `setMonitoring failure with currently selected sends mapped error toast`() = test {
-        runBlocking {
-            wheneverBlocking { lightningRepo.setMonitoring(AddressType.P2TR, false) }
-                .thenReturn(Result.failure(Exception("Cannot disable monitoring: address type is currently selected")))
-        }
+        whenever(lightningRepo.setMonitoring(AddressType.P2TR, false))
+            .thenReturn(Result.failure(Exception("Cannot disable monitoring: address type is currently selected")))
         whenever(settingsStore.data).thenReturn(
             flowOf(
                 SettingsData(
@@ -176,16 +167,14 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(toasts.isNotEmpty())
-        assertEquals(disabledCurrentlySelected, toasts.first().description)
+        assertEquals(disabledCurrentlySelected, toasts.last().description)
         collectJob.cancel()
     }
 
     @Test
     fun `updateAddressType success sends success toast`() = test {
-        runBlocking {
-            wheneverBlocking { lightningRepo.updateAddressType(any(), any()) }.thenReturn(Result.success(Unit))
-            wheneverBlocking { walletRepo.refreshReceiveAddressAfterTypeChange() }.thenReturn(Result.success(Unit))
-        }
+        whenever(lightningRepo.updateAddressType(any(), any())).thenReturn(Result.success(Unit))
+        whenever(walletRepo.refreshReceiveAddressAfterTypeChange()).thenReturn(Result.success(Unit))
         whenever(settingsStore.data).thenReturn(
             flowOf(
                 SettingsData(
@@ -204,17 +193,15 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(toasts.isNotEmpty())
-        assertEquals(Toast.ToastType.SUCCESS, toasts.first().type)
-        assertEquals(settingsUpdated, toasts.first().title)
+        assertEquals(Toast.ToastType.SUCCESS, toasts.last().type)
+        assertEquals(settingsUpdated, toasts.last().title)
         collectJob.cancel()
     }
 
     @Test
     fun `updateAddressType failure sends error toast`() = test {
-        runBlocking {
-            wheneverBlocking { lightningRepo.updateAddressType(any(), any()) }
-                .thenReturn(Result.failure(Exception("Node restart failed")))
-        }
+        whenever(lightningRepo.updateAddressType(any(), any()))
+            .thenReturn(Result.failure(Exception("Update failed")))
         whenever(settingsStore.data).thenReturn(
             flowOf(
                 SettingsData(
@@ -233,9 +220,9 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(toasts.isNotEmpty())
-        assertEquals(Toast.ToastType.WARNING, toasts.first().type)
-        assertEquals(errorTitle, toasts.first().title)
-        assertEquals("Node restart failed", toasts.first().description)
+        assertEquals(Toast.ToastType.WARNING, toasts.last().type)
+        assertEquals(errorTitle, toasts.last().title)
+        assertEquals("Update failed", toasts.last().description)
         collectJob.cancel()
     }
 }

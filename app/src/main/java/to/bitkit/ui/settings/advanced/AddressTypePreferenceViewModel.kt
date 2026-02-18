@@ -7,16 +7,12 @@ import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -39,9 +35,6 @@ class AddressTypePreferenceViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AddressTypePreferenceUiState())
     val uiState: StateFlow<AddressTypePreferenceUiState> = _uiState.asStateFlow()
-
-    private val _navigateToHome = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val navigateToHome: SharedFlow<Unit> = _navigateToHome.asSharedFlow()
 
     init {
         loadState()
@@ -68,37 +61,33 @@ class AddressTypePreferenceViewModel @Inject constructor(
         if (_uiState.value.selectedAddressType == addressType) return
 
         viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(isLoading = true, loadingAddressType = addressType, isMonitoringChange = false) }
+            _uiState.update { it.copy(isLoading = true) }
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.settings__addr_type__applying),
+                autoHide = false,
+            )
 
-            val result = withTimeoutOrNull(60_000L) {
-                runCatching {
-                    val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
-                    currentMonitored.add(addressType.toSettingsString())
-                    lightningRepo.updateAddressType(
-                        selectedType = addressType.toSettingsString(),
-                        monitoredTypes = currentMonitored.toList(),
-                    ).getOrThrow()
-                    walletRepo.refreshReceiveAddressAfterTypeChange()
-                }
+            val result = runCatching {
+                val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
+                currentMonitored.add(addressType.toSettingsString())
+                lightningRepo.updateAddressType(
+                    selectedType = addressType.toSettingsString(),
+                    monitoredTypes = currentMonitored.toList(),
+                ).getOrThrow()
+                walletRepo.refreshReceiveAddressAfterTypeChange()
             }
 
-            _uiState.update { it.copy(isLoading = false, loadingAddressType = null) }
+            _uiState.update { it.copy(isLoading = false) }
             loadState()
 
-            when {
-                result == null -> ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.settings__addr_type__timeout),
-                    description = context.getString(R.string.settings__addr_type__timeout_desc),
+            if (result.isSuccess) {
+                ToastEventBus.send(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.settings__addr_type__settings_updated),
                 )
-                result.isSuccess -> {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.settings__addr_type__settings_updated),
-                    )
-                    viewModelScope.launch { _navigateToHome.emit(Unit) }
-                }
-                else -> ToastEventBus.send(
+            } else {
+                ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.common__error),
                     description = result.exceptionOrNull()?.message,
@@ -114,44 +103,41 @@ class AddressTypePreferenceViewModel @Inject constructor(
         if (isMonitored == enabled) return
 
         viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(isLoading = true, loadingAddressType = addressType, isMonitoringChange = true) }
+            _uiState.update { it.copy(isLoading = true) }
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.settings__addr_type__applying),
+                autoHide = false,
+            )
 
-            val repoResult = withTimeoutOrNull(60_000L) {
-                lightningRepo.setMonitoring(addressType, enabled)
-            }
+            val repoResult = lightningRepo.setMonitoring(addressType, enabled)
 
-            _uiState.update { it.copy(isLoading = false, loadingAddressType = null) }
+            _uiState.update { it.copy(isLoading = false) }
             loadState()
 
-            when {
-                repoResult == null -> ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.settings__addr_type__timeout),
-                    description = context.getString(R.string.settings__addr_type__timeout_desc),
-                )
-                repoResult.isSuccess -> ToastEventBus.send(
+            if (repoResult.isSuccess) {
+                ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.settings__addr_type__settings_updated),
                 )
-                else -> {
-                    val ex = repoResult.exceptionOrNull()?.message
-                    val msg = when {
-                        ex?.contains("has balance") == true ->
-                            context.getString(R.string.settings__addr_type__disabled_has_balance)
-                        ex?.contains("verify") == true ->
-                            context.getString(R.string.settings__addr_type__disabled_verify_failed)
-                        ex?.contains("Native SegWit or Taproot") == true ->
-                            context.getString(R.string.settings__addr_type__disabled_native_required)
-                        ex?.contains("currently selected") == true ->
-                            context.getString(R.string.settings__addr_type__disabled_currently_selected)
-                        else -> ex
-                    }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.common__error),
-                        description = msg,
-                    )
+            } else {
+                val ex = repoResult.exceptionOrNull()?.message
+                val msg = when {
+                    ex?.contains("has balance") == true ->
+                        context.getString(R.string.settings__addr_type__disabled_has_balance)
+                    ex?.contains("verify") == true ->
+                        context.getString(R.string.settings__addr_type__disabled_verify_failed)
+                    ex?.contains("Native SegWit or Taproot") == true ->
+                        context.getString(R.string.settings__addr_type__disabled_native_required)
+                    ex?.contains("currently selected") == true ->
+                        context.getString(R.string.settings__addr_type__disabled_currently_selected)
+                    else -> ex
                 }
+                ToastEventBus.send(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.common__error),
+                    description = msg,
+                )
             }
         }
     }
@@ -162,6 +148,4 @@ data class AddressTypePreferenceUiState(
     val monitoredTypes: Set<String> = setOf("nativeSegwit"),
     val showMonitoredTypes: Boolean = false,
     val isLoading: Boolean = false,
-    val loadingAddressType: AddressType? = null,
-    val isMonitoringChange: Boolean = false,
 )
