@@ -19,6 +19,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 @Composable
 fun AddWidgetsScreen(
     onWidgetSelected: (WidgetType) -> Unit,
+    onSuggestionsClick: () -> Unit,
     onBackCLick: () -> Unit,
     fiatSymbol: String,
 ) {
@@ -32,6 +33,15 @@ fun AddWidgetsScreen(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
+            SettingsButtonRow(
+                title = stringResource(R.string.widgets__suggestions__name),
+                subtitle = stringResource(R.string.widgets__suggestions__description),
+                iconRes = R.drawable.widget_suggestions,
+                iconSize = 48.dp,
+                maxLinesSubtitle = 1,
+                onClick = onSuggestionsClick,
+                modifier = Modifier.testTag("WidgetListItem-suggestions")
+            )
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__price__name),
                 subtitle = stringResource(R.string.widgets__price__description),
@@ -100,8 +110,9 @@ private fun Preview() {
     AppThemeSurface {
         AddWidgetsScreen(
             onWidgetSelected = {},
+            onSuggestionsClick = {},
             fiatSymbol = "$",
-            onBackCLick = {}
+            onBackCLick = {},
         )
     }
 }
