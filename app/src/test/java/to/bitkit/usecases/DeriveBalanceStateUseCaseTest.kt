@@ -2,6 +2,7 @@ package to.bitkit.usecases
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
@@ -35,14 +36,24 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
-        wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
-        wheneverBlocking { lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull()) }
-            .thenReturn(Result.success(1000uL))
-
+        runBlocking {
+            whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+            whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+            whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+            wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
+            wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
+            wheneverBlocking {
+                lightningRepo.calculateTotalFee(
+                    any(),
+                    anyOrNull(),
+                    anyOrNull(),
+                    anyOrNull(),
+                    anyOrNull(),
+                )
+            }.thenReturn(Result.success(1000uL))
+        }
         sut = DeriveBalanceStateUseCase(
+            bgDispatcher = testDispatcher,
             lightningRepo = lightningRepo,
             transferRepo = transferRepo,
             settingsStore = settingsStore,
@@ -80,6 +91,27 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balanceState.totalLightningSats,
             "Lightning balance unchanged - channel not open yet"
         )
+    }
+
+    @Test
+    fun `should include channelFundableBalance from lightning repo in state`() = test {
+        val balance = BalanceDetails(
+            totalOnchainBalanceSats = 100_000u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 10_000u,
+            totalLightningBalanceSats = 50_000u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+        whenever(lightningRepo.getChannelFundableBalance()).thenReturn(25_000uL)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        assertEquals(25_000uL, result.getOrThrow().channelFundableBalance)
     }
 
     @Test

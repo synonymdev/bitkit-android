@@ -27,10 +27,12 @@ import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.synonym.bitkitcore.AddressType
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.AddressModel
 import to.bitkit.models.Toast
+import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyS
@@ -68,6 +70,7 @@ fun AddressViewerScreen(
         onSearchTextChanged = viewModel::updateSearchText,
         onAddressSelected = { address -> viewModel.selectAddress(address) },
         onSwitchAddressType = viewModel::switchAddressType,
+        onSelectAddressType = viewModel::selectAddressType,
         onClickOpenBlockExplorer = { address ->
             val url = getBlockExplorerUrl(address, BlockExplorerType.ADDRESS)
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
@@ -86,6 +89,13 @@ fun AddressViewerScreen(
     )
 }
 
+private val ADDRESS_TYPES = listOf(
+    AddressType.P2PKH,
+    AddressType.P2SH,
+    AddressType.P2WPKH,
+    AddressType.P2TR,
+)
+
 @Composable
 private fun AddressViewerContent(
     uiState: UiState,
@@ -93,6 +103,7 @@ private fun AddressViewerContent(
     onSearchTextChanged: (String) -> Unit = {},
     onAddressSelected: (AddressModel) -> Unit = {},
     onSwitchAddressType: (Boolean) -> Unit = {},
+    onSelectAddressType: (AddressType) -> Unit = {},
     onClickOpenBlockExplorer: (String) -> Unit = {},
     onClickCheckBalances: () -> Unit = {},
     onGenerateMoreAddresses: () -> Unit = {},
@@ -156,6 +167,23 @@ private fun AddressViewerContent(
                 modifier = Modifier.fillMaxWidth()
             )
             VerticalSpacer(16.dp)
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ADDRESS_TYPES.forEach { type ->
+                    val info = type.addressTypeInfo()
+                    PrimaryButton(
+                        text = info.shortName,
+                        size = ButtonSize.Small,
+                        onClick = { onSelectAddressType(type) },
+                        color = if (uiState.selectedAddressType == type) Colors.Brand else Colors.White16,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            VerticalSpacer(8.dp)
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -299,6 +327,7 @@ private fun Preview() {
     AppThemeSurface {
         AddressViewerContent(
             uiState = UiState(
+                selectedAddressType = AddressType.P2WPKH,
                 addresses = listOf(
                     AddressModel(
                         address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",

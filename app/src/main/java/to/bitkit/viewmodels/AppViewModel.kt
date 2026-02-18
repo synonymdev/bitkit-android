@@ -98,7 +98,6 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
-import to.bitkit.repositories.SweepRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.AppUpdaterService
@@ -150,7 +149,6 @@ class AppViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
-    private val sweepRepo: SweepRepo,
     private val coreService: CoreService,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
@@ -366,10 +364,17 @@ class AppViewModel @Inject constructor(
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
         val needsPostMigrationSync = migrationService.needsPostMigrationSync()
+        val pendingPrune = settingsStore.data.first().pendingRestoreAddressTypePrune
 
         when {
             (isShowingLoading || needsPostMigrationSync) && !isCompletingMigration -> completeMigration()
             isRestoringRemote -> completeRNRemoteBackupRestore()
+            pendingPrune -> {
+                settingsStore.update { it.copy(pendingRestoreAddressTypePrune = false) }
+                delay(POST_RESTORE_PRUNE_DELAY_MS)
+                lightningRepo.pruneEmptyAddressTypesAfterRestore()
+                walletRepo.debounceSyncByEvent()
+            }
             !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
             else -> Unit
         }
@@ -403,7 +408,6 @@ class AppViewModel @Inject constructor(
             migrationService.cleanupAfterMigration()
             migrationService.setRestoringFromRNRemoteBackup(false)
             migrationService.setShowingMigrationLoading(false)
-            checkForSweepableFunds()
         } else {
             Logger.info("Post-migration sync incomplete (remote restore), will retry on next sync", context = TAG)
             migrationService.setShowingMigrationLoading(false)
@@ -458,7 +462,6 @@ class AppViewModel @Inject constructor(
             migrationService.setShowingMigrationLoading(false)
             delay(MIGRATION_AUTH_RESET_DELAY_MS)
             resetIsAuthenticatedStateInternal()
-            checkForSweepableFunds()
         } else {
             Logger.info("Post-migration sync incomplete, will retry on next sync", context = TAG)
             migrationService.setShowingMigrationLoading(false)
@@ -478,7 +481,6 @@ class AppViewModel @Inject constructor(
             migrationService.setShowingMigrationLoading(false)
             delay(MIGRATION_AUTH_RESET_DELAY_MS)
             resetIsAuthenticatedStateInternal()
-            checkForSweepableFunds()
         } else {
             Logger.info("Post-migration sync incomplete (fallback), will retry on next sync", context = TAG)
             migrationService.setShowingMigrationLoading(false)
@@ -494,13 +496,6 @@ class AppViewModel @Inject constructor(
             title = "Migration Warning",
             description = "Migration completed but node restart failed. Please restart the app."
         )
-    }
-
-    fun checkForSweepableFunds() {
-        viewModelScope.launch(bgDispatcher) {
-            sweepRepo.hasSweepableFunds()
-                .onSuccess { hasFunds -> if (hasFunds) showSheet(Sheet.SweepPrompt) }
-        }
     }
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
@@ -2278,6 +2273,7 @@ class AppViewModel @Inject constructor(
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val SCREEN_TRANSITION_DELAY_MS = 300L
         private const val MIGRATION_LOADING_TIMEOUT_MS = 120_000L
+        private const val POST_RESTORE_PRUNE_DELAY_MS = 30_000L
         private const val MIGRATION_AUTH_RESET_DELAY_MS = 500L
         private const val REMOTE_RESTORE_NODE_RESTART_DELAY_MS = 500L
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L

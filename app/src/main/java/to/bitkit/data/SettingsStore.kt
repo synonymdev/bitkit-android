@@ -117,6 +117,9 @@ data class SettingsData(
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val electrumServer: String = Env.electrumServerUrl,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
+    val selectedAddressType: String = "nativeSegwit",
+    val addressTypesToMonitor: List<String> = listOf("nativeSegwit"),
+    val pendingRestoreAddressTypePrune: Boolean = false,
 )
 
 fun SettingsData.resetPin() = this.copy(

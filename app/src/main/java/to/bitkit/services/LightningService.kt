@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -48,6 +49,7 @@ import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.toAddressType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
@@ -61,6 +63,7 @@ import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
 import kotlin.time.Duration
+import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
@@ -142,11 +145,21 @@ class LightningService @Inject constructor(
         config: Config,
         channelMigration: ChannelDataMigration? = null,
     ): Node = ServiceQueue.LDK.background {
+        val settings = settingsStore.data.first()
+        val selectedType = settings.selectedAddressType.toAddressType()?.toLdkAddressType()
+            ?: LdkAddressType.NATIVE_SEGWIT
+        val monitoredTypes = settings.addressTypesToMonitor
+            .mapNotNull { it.toAddressType() }
+            .filter { it.toLdkAddressType() != selectedType }
+            .map { it.toLdkAddressType() }
+
         val builder = Builder.fromConfig(config).apply {
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
             configureScorerSource()
+            setAddressType(selectedType)
+            setAddressTypesToMonitor(monitoredTypes)
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -909,6 +922,20 @@ class LightningService @Inject constructor(
                 Logger.error("Error getting address balance for address: '$address'", it, context = TAG)
             }.getOrThrow()
         }
+    }
+
+    suspend fun getBalanceForAddressType(addressType: AddressType): org.lightningdevkit.ldknode.AddressTypeBalance =
+        ServiceQueue.LDK.background {
+            val n = node ?: throw ServiceError.NodeNotSetup()
+            n.getBalanceForAddressType(addressType.toLdkAddressType())
+        }
+
+    private fun AddressType.toLdkAddressType(): LdkAddressType = when (this) {
+        AddressType.P2PKH -> LdkAddressType.LEGACY
+        AddressType.P2SH -> LdkAddressType.NESTED_SEGWIT
+        AddressType.P2WPKH -> LdkAddressType.NATIVE_SEGWIT
+        AddressType.P2TR -> LdkAddressType.TAPROOT
+        else -> LdkAddressType.NATIVE_SEGWIT
     }
 
     // region state

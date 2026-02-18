@@ -839,6 +839,12 @@ class MigrationService @Inject constructor(
                 hasSeenTransferIntro = settings.transferIntroSeen ?: current.hasSeenTransferIntro,
                 hasSeenSpendingIntro = settings.spendingIntroSeen ?: current.hasSeenSpendingIntro,
                 hasSeenSavingsIntro = settings.savingsIntroSeen ?: current.hasSeenSavingsIntro,
+                selectedAddressType = settings.selectedAddressType ?: current.selectedAddressType,
+                addressTypesToMonitor = run {
+                    val selected = settings.selectedAddressType ?: current.selectedAddressType
+                    val monitored = settings.addressTypesToMonitor ?: current.addressTypesToMonitor
+                    if (selected in monitored) monitored else (monitored + selected).distinct()
+                },
             )
         }
     }
@@ -1970,6 +1976,8 @@ data class RNSettings(
     val transferIntroSeen: Boolean? = null,
     val spendingIntroSeen: Boolean? = null,
     val savingsIntroSeen: Boolean? = null,
+    val selectedAddressType: String? = null,
+    val addressTypesToMonitor: List<String>? = null,
 )
 
 @Serializable

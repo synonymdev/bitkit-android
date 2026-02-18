@@ -1,6 +1,9 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.GetAddressResponse
+import com.synonym.bitkitcore.GetAddressesResponse
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -11,6 +14,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -37,7 +41,6 @@ class WalletRepoTest : BaseUnitTest() {
 
     private val keychain = mock<Keychain>()
     private val coreService = mock<CoreService>()
-    private val onchainService = mock<OnchainService>()
     private val settingsStore = mock<SettingsStore>()
     private val lightningRepo = mock<LightningRepo>()
     private val cacheStore = mock<CacheStore>()
@@ -45,6 +48,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val deriveBalanceStateUseCase = mock<DeriveBalanceStateUseCase>()
     private val wipeWalletUseCase = mock<WipeWalletUseCase>()
     private val transferRepo = mock<TransferRepo>()
+    private val onchainService = mock<OnchainService>()
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -82,6 +86,7 @@ class WalletRepoTest : BaseUnitTest() {
             .thenReturn(Result.success(SATS))
         whenever(lightningRepo.canReceive()).thenReturn(false)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(BalanceState()))
 
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
@@ -95,6 +100,24 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(preActivityMetadataRepo.resetPreActivityMetadataTags(any())).thenReturn(Result.success(Unit))
         whenever(preActivityMetadataRepo.deletePreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        val mockAddressForGetAddresses = mock<GetAddressResponse> {
+            on { address } doReturn "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+            on { path } doReturn "m/84'/0'/0'/0/0"
+        }
+        val mockGetAddressesResponse = mock<GetAddressesResponse> {
+            on { addresses } doReturn listOf(mockAddressForGetAddresses)
+        }
+        whenever {
+            onchainService.deriveBitcoinAddresses(
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+            )
+        }.thenReturn(mockGetAddressesResponse)
         sut = createSut()
     }
 
@@ -167,14 +190,14 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restoreWallet should not call settingsStore`() = test {
+    fun `restoreWallet should monitor all address types for restore`() = test {
         val mnemonic = "restore mnemonic"
         whenever(keychain.saveString(any(), any())).thenReturn(Unit)
 
         val result = sut.restoreWallet(mnemonic, null)
 
         assertTrue(result.isSuccess)
-        verify(settingsStore, never()).update(any())
+        verify(settingsStore).update(any())
     }
 
     @Test
@@ -590,5 +613,39 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.wipeWallet()
 
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `getAddresses should call deriveBitcoinAddresses with P2WPKH path by default`() = test {
+        val result = sut.getAddresses()
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.getOrNull()?.size)
+        verify(onchainService).deriveBitcoinAddresses(
+            any(),
+            argThat { path -> path?.contains("m/84") == true },
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `getAddresses should call deriveBitcoinAddresses with P2TR path when addressType is Taproot`() = test {
+        val result = sut.getAddresses(addressType = AddressType.P2TR)
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.getOrNull()?.size)
+        verify(onchainService).deriveBitcoinAddresses(
+            any(),
+            argThat { path -> path?.contains("m/86") == true },
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
     }
 }

@@ -1,10 +1,13 @@
 package to.bitkit.usecases
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
+import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -19,40 +22,45 @@ import javax.inject.Singleton
 
 @Singleton
 class DeriveBalanceStateUseCase @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
 ) {
-    suspend operator fun invoke(): Result<BalanceState> = runCatching {
-        val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
-        val channels = lightningRepo.getChannels().orEmpty()
-        val activeTransfers = transferRepo.activeTransfers.first()
+    suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
+        runCatching {
+            val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
+            val channels = lightningRepo.getChannels().orEmpty()
+            val activeTransfers = transferRepo.activeTransfers.first()
 
-        val paidOrdersSats = getOrderPaymentsSats(activeTransfers)
-        val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
+            val paidOrdersSats = getOrderPaymentsSats(activeTransfers)
+            val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
 
-        val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
-        val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
+            val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
+            val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
 
-        val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
-        val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
-        val totalLightningSats = afterPendingChannels.safe() - toSavingsAmount.safe()
+            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
+            val channelFundableBalance = lightningRepo.getChannelFundableBalance()
+            val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
+            val totalLightningSats = afterPendingChannels.safe() - toSavingsAmount.safe()
 
-        val balanceState = BalanceState(
-            totalOnchainSats = totalOnchainSats,
-            totalLightningSats = totalLightningSats,
-            maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
-            maxSendOnchainSats = getMaxSendAmount(balanceDetails),
-            balanceInTransferToSavings = toSavingsAmount,
-            balanceInTransferToSpending = toSpendingAmount,
-        )
+            val balanceState = BalanceState(
+                totalOnchainSats = totalOnchainSats,
+                channelFundableBalance = channelFundableBalance,
+                totalLightningSats = totalLightningSats,
+                maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
+                maxSendOnchainSats = getMaxSendAmount(balanceDetails),
+                balanceInTransferToSavings = toSavingsAmount,
+                balanceInTransferToSpending = toSpendingAmount,
+            )
 
-        val height = lightningRepo.lightningState.value.block()?.height
-        Logger.verbose("Active transfers at block height=$height: ${jsonLogOf(activeTransfers)}", context = TAG)
-        Logger.verbose("Balances in ldk-node at block height=$height: ${jsonLogOf(balanceDetails)}", context = TAG)
-        Logger.verbose("Balances in state at block height=$height: ${jsonLogOf(balanceState)}", context = TAG)
+            val height = lightningRepo.lightningState.value.block()?.height
+            Logger.verbose("Active transfers at block height=$height: ${jsonLogOf(activeTransfers)}", context = TAG)
+            Logger.verbose("Balances in ldk-node at block height=$height: ${jsonLogOf(balanceDetails)}", context = TAG)
+            Logger.verbose("Balances in state at block height=$height: ${jsonLogOf(balanceState)}", context = TAG)
 
-        return@runCatching balanceState
+            return@runCatching balanceState
+        }
     }
 
     private fun getOrderPaymentsSats(transfers: List<TransferEntity>): ULong {
@@ -112,11 +120,17 @@ class DeriveBalanceStateUseCase @Inject constructor(
             Logger.debug("Could not calculate max send amount, using fallback of: $fallback", context = TAG)
         }.getOrDefault(fallback)
 
-        return spendableOnchainSats.safe() - fee.safe()
+        val feeWithBuffer = maxOf(fee, FEE_BUFFER_SATS)
+        return if (feeWithBuffer >= spendableOnchainSats) {
+            0uL
+        } else {
+            spendableOnchainSats.safe() - feeWithBuffer.safe()
+        }
     }
 
     companion object {
         const val TAG = "DeriveBalanceStateUseCase"
         const val FALLBACK_FEE_PERCENT = 0.1
+        const val FEE_BUFFER_SATS = 1000uL
     }
 }

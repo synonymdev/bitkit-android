@@ -44,8 +44,8 @@ fun FundingScreen(
     onBackClick: () -> Unit = {},
 ) {
     val balances = LocalBalances.current
-    val canTransfer = remember(balances.totalOnchainSats) {
-        balances.totalOnchainSats >= Defaults.recommendedBaseFee
+    val canTransfer = remember(balances.channelFundableBalance) {
+        balances.channelFundableBalance >= Defaults.recommendedBaseFee
     }
     var showNoFundsAlert by remember { mutableStateOf(false) }
 
@@ -85,12 +85,12 @@ fun FundingScreen(
                         onClick = onTransfer,
                         modifier = Modifier.testTag("FundTransfer")
                     )
-                    if (balances.totalOnchainSats == 0uL) {
+                    if (balances.channelFundableBalance == 0uL) {
                         Box(
                             modifier = Modifier
                                 .matchParentSize()
                                 .clickable(
-                                    enabled = balances.totalOnchainSats == 0uL,
+                                    enabled = balances.channelFundableBalance == 0uL,
                                     interactionSource = null,
                                     indication = null,
                                     onClick = { showNoFundsAlert = true }

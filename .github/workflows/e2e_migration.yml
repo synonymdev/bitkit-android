@@ -85,7 +85,6 @@ jobs:
           - { name: migration_1-restore, grep: "@migration_1" }
           - { name: migration_2-migration, grep: "@migration_2" }
           - { name: migration_3-with-passphrase, grep: "@migration_3" }
-          - { name: migration_4-with-sweep, grep: "@migration_4" }
 
     name: e2e-tests - ${{ matrix.rn_version }} - ${{ matrix.scenario.name }}
 

@@ -16,12 +16,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
@@ -35,12 +37,17 @@ fun AdvancedSettingsScreen(
     viewModel: AdvancedSettingsViewModel = hiltViewModel(),
 ) {
     var showResetSuggestionsDialog by remember { mutableStateOf(false) }
+    val selectedAddressTypeName by viewModel.selectedAddressTypeName.collectAsStateWithLifecycle()
 
     Content(
         showResetSuggestionsDialog = showResetSuggestionsDialog,
+        selectedAddressTypeName = selectedAddressTypeName,
         onBack = { navController.popBackStack() },
         onCoinSelectionClick = {
             navController.navigate(Routes.CoinSelectPreference)
+        },
+        onAddressTypePreferenceClick = {
+            navController.navigate(Routes.AddressTypePreference)
         },
         onLightningConnectionsClick = {
             navController.navigate(Routes.LightningConnections)
@@ -57,9 +64,6 @@ fun AdvancedSettingsScreen(
         onAddressViewerClick = {
             navController.navigate(Routes.AddressViewer)
         },
-        onSweepFundsClick = {
-            navController.navigate(Routes.SweepNav)
-        },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
         onResetSuggestionsDialogConfirm = {
             viewModel.resetSuggestions()
@@ -73,14 +77,15 @@ fun AdvancedSettingsScreen(
 @Composable
 private fun Content(
     showResetSuggestionsDialog: Boolean,
+    selectedAddressTypeName: String = "",
     onBack: () -> Unit = {},
     onCoinSelectionClick: () -> Unit = {},
+    onAddressTypePreferenceClick: () -> Unit = {},
     onLightningConnectionsClick: () -> Unit = {},
     onLightningNodeClick: () -> Unit = {},
     onElectrumServerClick: () -> Unit = {},
     onRgsServerClick: () -> Unit = {},
     onAddressViewerClick: () -> Unit = {},
-    onSweepFundsClick: () -> Unit = {},
     onSuggestionsResetClick: () -> Unit = {},
     onResetSuggestionsDialogConfirm: () -> Unit = {},
     onResetSuggestionsDialogCancel: () -> Unit = {},
@@ -100,6 +105,17 @@ private fun Content(
         ) {
             // Payments Section
             SectionHeader(title = stringResource(R.string.settings__adv__section_payments))
+
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__addr_type__title),
+                value = if (selectedAddressTypeName.isNotEmpty()) {
+                    SettingsButtonValue.StringValue(selectedAddressTypeName)
+                } else {
+                    SettingsButtonValue.None
+                },
+                onClick = onAddressTypePreferenceClick,
+                modifier = Modifier.testTag("AddressTypePreference"),
+            )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__coin_selection),
@@ -144,12 +160,6 @@ private fun Content(
             )
 
             SettingsButtonRow(
-                title = stringResource(R.string.sweep__nav_title),
-                onClick = onSweepFundsClick,
-                modifier = Modifier.testTag("SweepFunds"),
-            )
-
-            SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__suggestions_reset),
                 onClick = onSuggestionsResetClick,
                 modifier = Modifier.testTag("ResetSuggestions"),
@@ -177,6 +187,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             showResetSuggestionsDialog = false,
+            selectedAddressTypeName = "Taproot",
         )
     }
 }
@@ -187,6 +198,7 @@ private fun PreviewDialog() {
     AppThemeSurface {
         Content(
             showResetSuggestionsDialog = true,
+            selectedAddressTypeName = "Taproot",
         )
     }
 }

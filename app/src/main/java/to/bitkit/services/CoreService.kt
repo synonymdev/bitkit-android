@@ -69,9 +69,11 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.create
+import to.bitkit.models.addressTypeFromAddress
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -91,6 +93,7 @@ class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
+    private val settingsStore: SettingsStore,
 ) {
     private var walletIndex: Int = 0
 
@@ -98,7 +101,8 @@ class CoreService @Inject constructor(
         ActivityService(
             coreService = this,
             cacheStore = cacheStore,
-            lightningService = lightningService
+            lightningService = lightningService,
+            settingsStore = settingsStore,
         )
     }
     val blocktank: BlocktankService by lazy {
@@ -205,6 +209,7 @@ class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val cacheStore: CacheStore,
     private val lightningService: LightningService,
+    private val settingsStore: SettingsStore,
 ) {
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
@@ -511,7 +516,13 @@ class ActivityService(
     }.getOrNull()
 
     private suspend fun findAddressInPreActivityMetadata(details: BitkitCoreTransactionDetails): String? {
-        for (output in details.outputs) {
+        val selectedType = settingsStore.data.first().selectedAddressType
+        val outputsByPriority = details.outputs.sortedBy { output ->
+            val address = output.scriptpubkeyAddress ?: return@sortedBy Int.MAX_VALUE
+            val typeStr = address.addressTypeFromAddress() ?: return@sortedBy Int.MAX_VALUE
+            if (typeStr == selectedType) 0 else 1
+        }
+        for (output in outputsByPriority) {
             val address = output.scriptpubkeyAddress ?: continue
             val metadata = coreService.activity.getPreActivityMetadata(
                 searchKey = address,

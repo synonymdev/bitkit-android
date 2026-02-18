@@ -25,6 +25,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
+import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.toDerivationPath
@@ -286,6 +287,12 @@ class WalletRepo @Inject constructor(
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
+            settingsStore.update {
+                it.copy(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit"),
+                )
+            }
             setWalletExistsState()
         }.onFailure {
             Logger.error("createWallet error", it, context = TAG)
@@ -298,6 +305,12 @@ class WalletRepo @Inject constructor(
             keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+            }
+            settingsStore.update {
+                it.copy(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = ALL_ADDRESS_TYPE_STRINGS,
+                )
             }
             setWalletExistsState()
         }.onFailure {
@@ -331,10 +344,23 @@ class WalletRepo @Inject constructor(
             .onFailure { error -> Logger.error("Error generating new address", error, context = TAG) }
     }
 
+    suspend fun refreshReceiveAddressAfterTypeChange(): Result<Unit> = withContext(bgDispatcher) {
+        runCatching {
+            cacheStore.update { it.resetBip21() }
+            _walletState.update { it.copy(onchainAddress = "", bolt11 = "", bip21 = "") }
+            newAddress()
+            updateBip21Invoice()
+            Unit
+        }.onFailure {
+            Logger.error("refreshReceiveAddressAfterTypeChange failed", it, context = TAG)
+        }
+    }
+
     suspend fun getAddresses(
         startIndex: Int = 0,
         isChange: Boolean = false,
         count: Int = 20,
+        addressType: AddressType = AddressType.P2WPKH,
     ): Result<List<AddressModel>> = withContext(bgDispatcher) {
         runCatching {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
@@ -342,7 +368,7 @@ class WalletRepo @Inject constructor(
 
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
-            val baseDerivationPath = AddressType.P2WPKH.toDerivationPath(
+            val baseDerivationPath = addressType.toDerivationPath(
                 index = 0,
                 isChange = isChange,
             ).substringBeforeLast("/0")
