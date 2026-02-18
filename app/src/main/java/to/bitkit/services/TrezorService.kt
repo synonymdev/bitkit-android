@@ -33,6 +33,7 @@ import to.bitkit.async.ServiceQueue
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Suppress("TooManyFunctions")
 @Singleton
 class TrezorService @Inject constructor(
     private val transport: TrezorTransport,

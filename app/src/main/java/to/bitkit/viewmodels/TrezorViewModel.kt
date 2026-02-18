@@ -32,6 +32,7 @@ data class TrezorUiState(
     val isVerifyingMessage: Boolean = false,
 )
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class TrezorViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,

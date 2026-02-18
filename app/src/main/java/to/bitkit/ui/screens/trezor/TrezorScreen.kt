@@ -54,6 +54,7 @@ import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
+import to.bitkit.services.TrezorDebugLog
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -64,7 +65,6 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.services.TrezorDebugLog
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.viewmodels.TrezorUiState

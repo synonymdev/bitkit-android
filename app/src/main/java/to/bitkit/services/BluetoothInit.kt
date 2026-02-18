@@ -40,6 +40,7 @@ object BluetoothInit {
      * @return true if initialization succeeded, false otherwise
      */
     @Synchronized
+    @Suppress("TooGenericExceptionCaught")
     fun ensureInitialized(): Boolean {
         if (!initialized) {
             try {

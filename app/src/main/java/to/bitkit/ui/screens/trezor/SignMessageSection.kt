@@ -75,7 +75,9 @@ internal fun SignMessageSection(
             PrimaryButton(
                 text = if (uiState.isSigningMessage) "Signing..." else "Sign Message",
                 onClick = onSignMessage,
-                enabled = !uiState.isSigningMessage && !uiState.isVerifyingMessage && uiState.messageToSign.isNotBlank(),
+                enabled = !uiState.isSigningMessage &&
+                    !uiState.isVerifyingMessage &&
+                    uiState.messageToSign.isNotBlank(),
                 size = ButtonSize.Small,
                 modifier = Modifier.weight(1f)
             )

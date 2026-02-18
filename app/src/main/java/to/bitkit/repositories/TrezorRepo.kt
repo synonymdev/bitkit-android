@@ -42,12 +42,18 @@ data class TrezorState(
     val error: String? = null,
 )
 
+@Suppress("TooManyFunctions")
 @Singleton
 class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trezorService: TrezorService,
     private val trezorTransport: TrezorTransport,
 ) {
+    companion object {
+        private const val TAG = "TrezorRepo"
+        private const val KEY_KNOWN_DEVICES = "known_devices"
+    }
+
     private val prefs by lazy {
         context.getSharedPreferences("trezor_device", Context.MODE_PRIVATE)
     }
@@ -408,6 +414,7 @@ class TrezorRepo @Inject constructor(
         _state.update { it.copy(error = e.message) }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun connectWithThpRetry(deviceId: String): TrezorFeatures {
         TrezorDebugLog.log("THPRetry", "First connect attempt for: $deviceId")
         logCredentialFileState(deviceId, "BEFORE 1st attempt")
@@ -445,11 +452,6 @@ class TrezorRepo @Inject constructor(
     private fun isRetryableError(e: Exception): Boolean {
         val msg = e.message?.lowercase() ?: return false
         return "thp" in msg || "session" in msg || "timeout" in msg || "disconnect" in msg
-    }
-
-    companion object {
-        private const val TAG = "TrezorRepo"
-        private const val KEY_KNOWN_DEVICES = "known_devices"
     }
 }
 
