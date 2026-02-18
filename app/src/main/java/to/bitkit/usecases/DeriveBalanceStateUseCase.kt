@@ -120,17 +120,11 @@ class DeriveBalanceStateUseCase @Inject constructor(
             Logger.debug("Could not calculate max send amount, using fallback of: $fallback", context = TAG)
         }.getOrDefault(fallback)
 
-        val feeWithBuffer = maxOf(fee, FEE_BUFFER_SATS)
-        return if (feeWithBuffer >= spendableOnchainSats) {
-            0uL
-        } else {
-            spendableOnchainSats.safe() - feeWithBuffer.safe()
-        }
+        return spendableOnchainSats.safe() - fee.safe()
     }
 
     companion object {
         const val TAG = "DeriveBalanceStateUseCase"
         const val FALLBACK_FEE_PERCENT = 0.1
-        const val FEE_BUFFER_SATS = 1000uL
     }
 }
