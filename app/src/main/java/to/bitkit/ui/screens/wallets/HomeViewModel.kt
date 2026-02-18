@@ -71,6 +71,8 @@ class HomeViewModel @Inject constructor(
                     currentBlock = widgetsData.block?.toBlockModel(),
                     currentWeather = widgetsData.weather?.toWeatherModel(),
                     currentPrice = widgetsData.price,
+                    showWidgetsOnboardingHint = settings.showWidgets &&
+                        !settings.widgetsOnboardingHintDismissed,
                 )
             }.collect { newState ->
                 _uiState.update { newState }
@@ -140,6 +142,16 @@ class HomeViewModel @Inject constructor(
             delay(20.seconds)
         }
         _currentFact.value = null
+    }
+
+    fun onPageChanged(page: Int) {
+        _uiState.update { it.copy(currentPage = page) }
+    }
+
+    fun dismissWidgetsOnboardingHint() {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(widgetsOnboardingHintDismissed = true) }
+        }
     }
 
     fun dismissEmptyState() {
