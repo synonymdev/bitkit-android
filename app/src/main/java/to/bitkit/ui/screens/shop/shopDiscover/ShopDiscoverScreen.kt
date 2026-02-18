@@ -55,7 +55,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 
-private const val SHOP_CARD_SIZE = 164
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,7 +128,7 @@ private fun ShopTabContent(
                     description = stringResource(R.string.other__shop__discover__gift_cards__description),
                     icon = R.drawable.gift,
                     captionColor = Colors.Gray1,
-                    size = SHOP_CARD_SIZE,
+
                     disableGlow = true,
                     onClick = {
                         navigateWebView("gift-cards", title)
@@ -142,7 +142,7 @@ private fun ShopTabContent(
                     description = stringResource(R.string.other__shop__discover__esims__description),
                     icon = R.drawable.globe,
                     captionColor = Colors.Gray1,
-                    size = SHOP_CARD_SIZE,
+
                     disableGlow = true,
                     onClick = {
                         navigateWebView("esims", title2)
@@ -163,7 +163,7 @@ private fun ShopTabContent(
                     description = stringResource(R.string.other__shop__discover__refill__description),
                     icon = R.drawable.phone,
                     captionColor = Colors.Gray1,
-                    size = SHOP_CARD_SIZE,
+
                     disableGlow = true,
                     onClick = {
                         navigateWebView("refill", title)
@@ -176,7 +176,7 @@ private fun ShopTabContent(
                     title = title2,
                     description = stringResource(R.string.other__shop__discover__travel__description),
                     icon = R.drawable.rocket_2,
-                    size = SHOP_CARD_SIZE,
+
                     disableGlow = true,
                     captionColor = Colors.Gray1,
                     onClick = {

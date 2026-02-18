@@ -105,6 +105,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
@@ -1395,8 +1396,15 @@ private fun NavGraphBuilder.widgets(
                     WidgetType.WEATHER -> navController.navigate(Routes.WeatherPreview)
                 }
             },
+            onSuggestionsClick = { navController.navigate(Routes.SuggestionsPreview) },
             fiatSymbol = LocalCurrencies.current.currencySymbol,
-            onBackCLick = { navController.popBackStack() }
+            onBackCLick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SuggestionsPreview> {
+        SuggestionsPreviewScreen(
+            onBackClick = { navController.popBackStack() },
+            onAddWidget = { navController.navigateToHome() },
         )
     }
     composableWithDefaultTransitions<Routes.CalculatorPreview> {
@@ -1980,6 +1988,9 @@ sealed interface Routes {
 
     @Serializable
     data object AddWidget : Routes
+
+    @Serializable
+    data object SuggestionsPreview : Routes
 
     @Serializable
     data object Headlines : Routes
