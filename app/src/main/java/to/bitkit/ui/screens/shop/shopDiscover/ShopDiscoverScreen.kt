@@ -55,8 +55,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShopDiscoverScreen(

@@ -27,6 +27,7 @@ import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
@@ -295,7 +296,6 @@ class HomeViewModel @Inject constructor(
     }
 
     companion object {
-        private const val TAG = "HomeViewModel"
         private const val MAX_SUGGESTIONS = 4
     }
 }
