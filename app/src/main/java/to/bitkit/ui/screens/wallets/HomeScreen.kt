@@ -9,17 +9,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerState
@@ -44,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -75,7 +78,9 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.EmptyStateView
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
@@ -114,6 +119,10 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
+private const val SMALL_SCREEN_HEIGHT_DP = 700
+private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
+private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
+
 @Suppress("CyclomaticComplexMethod")
 @Composable
 fun HomeScreen(
@@ -130,7 +139,6 @@ fun HomeScreen(
     val context = LocalContext.current
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
-    val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
     val bgPaymentsIntroSeen: Boolean by settingsViewModel.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
@@ -256,8 +264,8 @@ fun HomeScreen(
         onMoveWidget = { fromIndex, toIndex ->
             homeViewModel.moveWidget(fromIndex, toIndex)
         },
-        onDismissEmptyState = homeViewModel::dismissEmptyState,
-        onClickEmptyActivityRow = { appViewModel.showSheet(Sheet.Receive) },
+        onPageChanged = homeViewModel::onPageChanged,
+        onDismissWidgetsOnboardingHint = homeViewModel::dismissWidgetsOnboardingHint,
     )
 }
 
@@ -280,192 +288,159 @@ private fun Content(
     onClickEditWidget: (WidgetType) -> Unit = {},
     onClickDeleteWidget: (WidgetType) -> Unit = {},
     onMoveWidget: (Int, Int) -> Unit = { _, _ -> },
-    onDismissEmptyState: () -> Unit = {},
-    onClickEmptyActivityRow: () -> Unit = {},
+    onPageChanged: (Int) -> Unit = {},
+    onDismissWidgetsOnboardingHint: () -> Unit = {},
     balances: BalanceState = LocalBalances.current,
 ) {
     val scope = rememberCoroutineScope()
+    val pageCount = if (homeUiState.showWidgets) 2 else 1
+    val pagerState = rememberPagerState(pageCount = { pageCount })
+
+    LaunchedEffect(pagerState.currentPage) {
+        onPageChanged(pagerState.currentPage)
+        if (pagerState.currentPage == 1 && !latestActivities.isNullOrEmpty()) {
+            onDismissWidgetsOnboardingHint()
+        }
+    }
+
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp
+    val activityCount = if (screenHeightDp < SMALL_SCREEN_HEIGHT_DP) {
+        SMALL_SCREEN_ACTIVITY_COUNT
+    } else {
+        LARGE_SCREEN_ACTIVITY_COUNT
+    }
 
     Box {
-        val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         TopBar(
             hazeState = hazeState,
             rootNavController = rootNavController,
             scope = scope,
             drawerState = drawerState,
+            showEditWidgets = homeUiState.currentPage == 1 && homeUiState.showWidgets,
+            isEditingWidgets = homeUiState.isEditingWidgets,
+            onClickEditWidgetList = onClickEditWidgetList,
         )
-        val pullToRefreshState = rememberPullToRefreshState()
-        PullToRefreshBox(
-            state = pullToRefreshState,
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            indicator = {
-                Indicator(
-                    isRefreshing = isRefreshing,
-                    state = pullToRefreshState,
-                    modifier = Modifier
-                        .padding(top = heightStatusBar)
-                        .align(Alignment.TopCenter)
-                )
-            },
+
+        VerticalPager(
+            state = pagerState,
+            userScrollEnabled = homeUiState.showWidgets,
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(state = hazeState)
                 .zIndex(0f)
-        ) {
-            Column(
+        ) { page ->
+            when (page) {
+                0 -> WalletPage(
+                    isRefreshing = isRefreshing,
+                    homeUiState = homeUiState,
+                    latestActivities = latestActivities?.take(activityCount),
+                    balances = balances,
+                    rootNavController = rootNavController,
+                    walletNavController = walletNavController,
+                    onRefresh = onRefresh,
+                )
+
+                1 -> WidgetsPage(
+                    homeUiState = homeUiState,
+                    onRemoveSuggestion = onRemoveSuggestion,
+                    onClickSuggestion = onClickSuggestion,
+                    onClickAddWidget = onClickAddWidget,
+                    onClickEditWidget = onClickEditWidget,
+                    onClickDeleteWidget = onClickDeleteWidget,
+                    onMoveWidget = onMoveWidget,
+                )
+            }
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WalletPage(
+    isRefreshing: Boolean,
+    homeUiState: HomeUiState,
+    latestActivities: List<Activity>?,
+    balances: BalanceState,
+    rootNavController: NavController,
+    walletNavController: NavController,
+    onRefresh: () -> Unit,
+) {
+    val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val pullToRefreshState = rememberPullToRefreshState()
+    val hasActivity = !latestActivities.isNullOrEmpty()
+
+    PullToRefreshBox(
+        state = pullToRefreshState,
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
+        indicator = {
+            Indicator(
+                isRefreshing = isRefreshing,
+                state = pullToRefreshState,
                 modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .testTag("HomeScrollView")
-            ) {
-                StatusBarSpacer()
-                TopBarSpacer()
-                VerticalSpacer(16.dp)
-                BalanceHeaderView(
-                    sats = balances.totalSats.toLong(),
-                    showEyeIcon = true,
-                    testTag = "TotalBalance",
+                    .padding(top = heightStatusBar)
+                    .align(Alignment.TopCenter)
+            )
+        },
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .testTag("HomeScrollView")
+        ) {
+            StatusBarSpacer()
+            TopBarSpacer()
+            VerticalSpacer(16.dp)
+
+            BalanceHeaderView(
+                sats = balances.totalSats.toLong(),
+                showEyeIcon = true,
+                testTag = "TotalBalance",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("TotalBalance")
+            )
+
+            if (!homeUiState.showEmptyState) {
+                VerticalSpacer(32.dp)
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("TotalBalance")
-                )
-                if (!homeUiState.showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Row(
+                        .height(IntrinsicSize.Min)
+                ) {
+                    WalletBalanceView(
+                        title = stringResource(R.string.wallet__savings__title),
+                        sats = balances.totalOnchainSats.toLong(),
+                        icon = painterResource(id = R.drawable.ic_btc_circle),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
-                    ) {
-                        WalletBalanceView(
-                            title = stringResource(R.string.wallet__savings__title),
-                            sats = balances.totalOnchainSats.toLong(),
-                            icon = painterResource(id = R.drawable.ic_btc_circle),
-                            modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(Routes.Savings) }
-                                .padding(vertical = 4.dp)
-                                .testTag("ActivitySavings")
-                        )
-                        VerticalDivider()
-                        HorizontalSpacer(16.dp)
-                        WalletBalanceView(
-                            title = stringResource(R.string.wallet__spending__title),
-                            sats = balances.totalLightningSats.toLong(),
-                            icon = painterResource(id = R.drawable.ic_ln_circle),
-                            modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(Routes.Spending) }
-                                .padding(vertical = 4.dp)
-                                .testTag("ActivitySpending")
-                        )
-                    }
+                            .clickableAlpha { walletNavController.navigate(Routes.Savings) }
+                            .padding(vertical = 4.dp)
+                            .testTag("ActivitySavings")
+                    )
+                    VerticalDivider()
+                    HorizontalSpacer(16.dp)
+                    WalletBalanceView(
+                        title = stringResource(R.string.wallet__spending__title),
+                        sats = balances.totalLightningSats.toLong(),
+                        icon = painterResource(id = R.drawable.ic_ln_circle),
+                        modifier = Modifier
+                            .clickableAlpha { walletNavController.navigate(Routes.Spending) }
+                            .padding(vertical = 4.dp)
+                            .testTag("ActivitySpending")
+                    )
+                }
 
-                    AnimatedVisibility(homeUiState.suggestions.isNotEmpty()) {
-                        val state = rememberLazyListState()
-                        val snapBehavior = rememberSnapFlingBehavior(
-                            lazyListState = state,
-                            snapPosition = SnapPosition.Start
-                        )
-
-                        Column {
-                            Spacer(modifier = Modifier.height(32.dp))
-                            Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                state = state,
-                                flingBehavior = snapBehavior,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("Suggestions")
-                            ) {
-                                items(homeUiState.suggestions, key = { it.name }) { item ->
-                                    SuggestionCard(
-                                        gradientColor = item.color,
-                                        title = stringResource(item.title),
-                                        description = stringResource(item.description),
-                                        icon = item.icon,
-                                        onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
-                                        onClick = { onClickSuggestion(item) },
-                                        modifier = Modifier.testTag("Suggestion-${item.name.lowercase()}")
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (homeUiState.showWidgets) {
-                        Spacer(modifier = Modifier.height(32.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text13Up(
-                                stringResource(R.string.widgets__widgets),
-                                color = Colors.White64
-                            )
-
-                            IconButton(
-                                onClick = onClickEditWidgetList,
-                                modifier = Modifier.testTag("WidgetsEdit")
-                            ) {
-                                Icon(
-                                    painter = when (homeUiState.isEditingWidgets) {
-                                        true -> painterResource(R.drawable.ic_check)
-                                        else -> painterResource(R.drawable.ic_sort_ascending)
-                                    },
-                                    contentDescription = null,
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (homeUiState.isEditingWidgets) {
-                            DragDropColumn(
-                                items = homeUiState.widgetsWithPosition,
-                                onMove = onMoveWidget,
-                                modifier = Modifier.fillMaxWidth()
-                            ) { widgetWithPosition, isDragging ->
-                                DragAndDropWidget(
-                                    iconRes = widgetWithPosition.type.iconRes,
-                                    title = stringResource(widgetWithPosition.type.title),
-                                    onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
-                                    onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .graphicsLayer {
-                                            alpha = if (isDragging) 0.8f else 1.0f
-                                        }
-                                )
-                            }
-                        } else {
-                            Widgets(homeUiState)
-                        }
-
-                        Spacer(modifier = Modifier.height(32.dp))
-                        TertiaryButton(
-                            text = stringResource(R.string.widgets__add),
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_plus),
-                                    contentDescription = null,
-                                    tint = Colors.White80,
-                                )
-                            },
-                            onClick = onClickAddWidget,
-                            modifier = Modifier.testTag("WidgetsAdd")
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(32.dp))
-
+                if (hasActivity) {
                     AnimatedVisibility(homeUiState.banners.isNotEmpty()) {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 18.dp)
+                                .padding(top = 32.dp, bottom = 18.dp)
                         ) {
                             homeUiState.banners.forEach { banner ->
                                 ActivityBanner(
@@ -474,7 +449,8 @@ private fun Content(
                                     icon = banner.icon,
                                     onClick = {
                                         when (banner) {
-                                            ActivityBannerType.SPENDING -> rootNavController.navigate(Routes.SettingUp)
+                                            ActivityBannerType.SPENDING ->
+                                                rootNavController.navigate(Routes.SettingUp)
                                             ActivityBannerType.SAVINGS -> Unit
                                         }
                                     },
@@ -484,26 +460,164 @@ private fun Content(
                         }
                     }
 
+                    VerticalSpacer(32.dp)
+
                     ActivityListSimple(
                         items = latestActivities,
                         onAllActivityClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                        onEmptyActivityRowClick = onClickEmptyActivityRow,
                     )
 
-                    VerticalSpacer(150.dp) // scrollable empty space behind footer
+                    FillHeight()
+
+                    if (homeUiState.showWidgetsOnboardingHint) {
+                        WidgetsOnboardingHint()
+                    }
                 }
+
+                VerticalSpacer(150.dp)
             }
-            if (homeUiState.showEmptyState) {
-                EmptyStateView(
-                    text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
-                    onClose = onDismissEmptyState,
+        }
+
+        if (homeUiState.showEmptyState) {
+            EmptyStateView(
+                text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp)
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Composable
+private fun WidgetsPage(
+    homeUiState: HomeUiState,
+    onRemoveSuggestion: (Suggestion) -> Unit,
+    onClickSuggestion: (Suggestion) -> Unit,
+    onClickAddWidget: () -> Unit,
+    onClickEditWidget: (WidgetType) -> Unit,
+    onClickDeleteWidget: (WidgetType) -> Unit,
+    onMoveWidget: (Int, Int) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+    ) {
+        StatusBarSpacer()
+        TopBarSpacer()
+        VerticalSpacer(16.dp)
+
+        AnimatedVisibility(homeUiState.suggestions.isNotEmpty()) {
+            SuggestionsSection(
+                suggestions = homeUiState.suggestions,
+                onRemoveSuggestion = onRemoveSuggestion,
+                onClickSuggestion = onClickSuggestion,
+            )
+        }
+
+        if (homeUiState.isEditingWidgets) {
+            DragDropColumn(
+                items = homeUiState.widgetsWithPosition,
+                onMove = onMoveWidget,
+                modifier = Modifier.fillMaxWidth()
+            ) { widgetWithPosition, isDragging ->
+                DragAndDropWidget(
+                    iconRes = widgetWithPosition.type.iconRes,
+                    title = stringResource(widgetWithPosition.type.title),
+                    onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
+                    onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 24.dp)
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = if (isDragging) 0.8f else 1.0f
+                        }
+                )
+            }
+        } else {
+            Widgets(homeUiState)
+        }
+
+        VerticalSpacer(32.dp)
+
+        TertiaryButton(
+            text = stringResource(R.string.widgets__add),
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_plus),
+                    contentDescription = null,
+                    tint = Colors.White80,
+                )
+            },
+            onClick = onClickAddWidget,
+            modifier = Modifier.testTag("WidgetsAdd")
+        )
+
+        VerticalSpacer(150.dp)
+    }
+}
+
+@Composable
+private fun SuggestionsSection(
+    suggestions: List<Suggestion>,
+    onRemoveSuggestion: (Suggestion) -> Unit,
+    onClickSuggestion: (Suggestion) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val state = rememberLazyListState()
+    val snapBehavior = rememberSnapFlingBehavior(
+        lazyListState = state,
+        snapPosition = SnapPosition.Start
+    )
+
+    Column(modifier = modifier.padding(bottom = 32.dp)) {
+        Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
+        VerticalSpacer(16.dp)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            state = state,
+            flingBehavior = snapBehavior,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("Suggestions")
+        ) {
+            items(suggestions, key = { it.name }) { item ->
+                SuggestionCard(
+                    gradientColor = item.color,
+                    title = stringResource(item.title),
+                    description = stringResource(item.description),
+                    icon = item.icon,
+                    onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
+                    onClick = { onClickSuggestion(item) },
+                    modifier = Modifier.testTag("Suggestion-${item.name.lowercase()}")
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp)
+    ) {
+        Display(
+            text = stringResource(R.string.widgets__onboarding_swipe).withAccent(),
+            modifier = Modifier.weight(1f)
+        )
+        HorizontalSpacer(16.dp)
+        Icon(
+            painter = painterResource(R.drawable.ic_swipe_hint),
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(40.dp)
+        )
     }
 }
 
@@ -611,6 +725,9 @@ private fun TopBar(
     rootNavController: NavController,
     scope: CoroutineScope,
     drawerState: DrawerState,
+    showEditWidgets: Boolean = false,
+    isEditingWidgets: Boolean = false,
+    onClickEditWidgetList: () -> Unit = {},
 ) {
     val topbarGradient = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -631,6 +748,21 @@ private fun TopBar(
         TopAppBar(
             title = {},
             actions = {
+                if (showEditWidgets) {
+                    IconButton(
+                        onClick = onClickEditWidgetList,
+                        modifier = Modifier.testTag("WidgetsEdit")
+                    ) {
+                        Icon(
+                            painter = if (isEditingWidgets) {
+                                painterResource(R.drawable.ic_check)
+                            } else {
+                                painterResource(R.drawable.ic_sort_ascending)
+                            },
+                            contentDescription = null,
+                        )
+                    }
+                }
                 AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
                 HorizontalSpacer(4.dp)
                 IconButton(
