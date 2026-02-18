@@ -9,6 +9,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.env.Env
+import to.bitkit.services.BluetoothInit
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -25,6 +26,8 @@ internal open class App : Application(), Configuration.Provider {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         Env.initAppStoragePath(filesDir.absolutePath)
+        // Initialize btleplug for Bluetooth support (required before any BLE usage)
+        BluetoothInit.ensureInitialized()
     }
 
     companion object {

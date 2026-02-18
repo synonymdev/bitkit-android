@@ -560,7 +560,9 @@
     <string name="settings__adv__section_networks">Networks</string>
     <string name="settings__adv__section_other">Other</string>
     <string name="settings__adv__section_payments">Payments</string>
+    <string name="settings__adv__section_hardware_wallet">Hardware Wallet</string>
     <string name="settings__adv__suggestions_reset">Reset Suggestions</string>
+    <string name="settings__adv__trezor">Trezor</string>
     <string name="settings__advanced_title">Advanced</string>
     <string name="settings__backup__category_connection_receipts">Connection Receipts</string>
     <string name="settings__backup__category_connections">Connections</string>

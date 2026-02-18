@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -34,9 +35,11 @@ fun AdvancedSettingsScreen(
     navController: NavController,
     viewModel: AdvancedSettingsViewModel = hiltViewModel(),
 ) {
+    val isDevModeEnabled by viewModel.isDevModeEnabled.collectAsStateWithLifecycle()
     var showResetSuggestionsDialog by remember { mutableStateOf(false) }
 
     Content(
+        isDevModeEnabled = isDevModeEnabled,
         showResetSuggestionsDialog = showResetSuggestionsDialog,
         onBack = { navController.popBackStack() },
         onCoinSelectionClick = {
@@ -60,6 +63,9 @@ fun AdvancedSettingsScreen(
         onSweepFundsClick = {
             navController.navigate(Routes.SweepNav)
         },
+        onTrezorClick = {
+            navController.navigate(Routes.Trezor)
+        },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
         onResetSuggestionsDialogConfirm = {
             viewModel.resetSuggestions()
@@ -72,6 +78,7 @@ fun AdvancedSettingsScreen(
 
 @Composable
 private fun Content(
+    isDevModeEnabled: Boolean = false,
     showResetSuggestionsDialog: Boolean,
     onBack: () -> Unit = {},
     onCoinSelectionClick: () -> Unit = {},
@@ -81,6 +88,7 @@ private fun Content(
     onRgsServerClick: () -> Unit = {},
     onAddressViewerClick: () -> Unit = {},
     onSweepFundsClick: () -> Unit = {},
+    onTrezorClick: () -> Unit = {},
     onSuggestionsResetClick: () -> Unit = {},
     onResetSuggestionsDialogConfirm: () -> Unit = {},
     onResetSuggestionsDialogCancel: () -> Unit = {},
@@ -133,6 +141,17 @@ private fun Content(
                 onClick = onRgsServerClick,
                 modifier = Modifier.testTag("RGSServer"),
             )
+
+            // Hardware Wallet Section
+            if (isDevModeEnabled) {
+                SectionHeader(title = stringResource(R.string.settings__adv__section_hardware_wallet))
+
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__adv__trezor),
+                    onClick = onTrezorClick,
+                    modifier = Modifier.testTag("Trezor"),
+                )
+            }
 
             // Other Section
             SectionHeader(title = stringResource(R.string.settings__adv__section_other))

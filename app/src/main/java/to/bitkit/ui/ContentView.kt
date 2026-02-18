@@ -65,6 +65,7 @@ import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
@@ -1060,6 +1061,9 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.NodeInfo> {
         NodeInfoScreen(navController)
     }
+    composableWithDefaultTransitions<Routes.Trezor> {
+        TrezorScreen(navController)
+    }
 }
 
 private fun NavGraphBuilder.aboutSettings(navController: NavHostController) {
@@ -1750,6 +1754,10 @@ sealed interface Routes {
 
     @Serializable
     data object AddressViewer : Routes
+
+    @Serializable
+    data object Trezor : Routes
+
 
     @Serializable
     data object SweepNav : Routes
