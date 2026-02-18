@@ -973,12 +973,15 @@ class LightningRepo @Inject constructor(
         val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
         val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
 
-        // use passed utxos if specified, otherwise run auto coin select if enabled
-        val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(sats, satsPerVByte)
+        // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
+        val utxosForSend = when {
+            isTransfer && isMaxAmount -> null
+            else -> utxosToSpend ?: determineUtxosToSpend(sats, satsPerVByte)
+        }
 
-        Logger.debug("UTXOs selected to spend: $finalUtxosToSpend", context = TAG)
+        Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
-        val txId = lightningService.send(address, sats, satsPerVByte, finalUtxosToSpend, isMaxAmount)
+        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
 
         val preActivityMetadata = PreActivityMetadata(
             paymentId = txId,
