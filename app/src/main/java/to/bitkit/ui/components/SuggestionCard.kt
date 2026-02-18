@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -54,7 +55,6 @@ fun SuggestionCard(
     description: String,
     @DrawableRes icon: Int,
     onClose: (() -> Unit)? = null,
-    size: Int = 152,
     disableGlow: Boolean = false,
     captionColor: Color = Colors.White64,
     onClick: () -> Unit,
@@ -75,7 +75,8 @@ fun SuggestionCard(
 
     Box(
         modifier = modifier
-            .size(size.dp)
+            .fillMaxWidth()
+            .aspectRatio(1f)
             .clip(ShapeDefaults.Large)
             .then(
                 if (isDismissible || disableGlow) {
