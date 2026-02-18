@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.minSendableSat
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
@@ -74,13 +75,27 @@ class ProbingToolViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true, probeResult = null) }
 
-            val amountSats = _uiState.value.amountSats.toULongOrNull()
+            val userAmount = _uiState.value.amountSats.toULongOrNull()
+            val amountSats = userAmount ?: if (_uiState.value.isZeroAmountInvoice) 1uL else null
+
             val bolt11 = extractBolt11Invoice(input, amountSats)
             if (bolt11 == null) {
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
                     title = "Invalid invoice format",
                     description = "Could not extract Lightning invoice",
+                )
+                _uiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
+            val effectiveAmount = amountSats ?: getInvoiceAmount(input)
+            if (effectiveAmount != null && effectiveAmount > 0uL && !lightningRepo.canSend(effectiveAmount)) {
+                val outbound = lightningRepo.lightningState.value.channels.totalNextOutboundHtlcLimitSats()
+                ToastEventBus.send(
+                    type = Toast.ToastType.WARNING,
+                    title = "Amount exceeds outbound capacity",
+                    description = "Available: $outbound sats",
                 )
                 _uiState.update { it.copy(isLoading = false) }
                 return@launch
@@ -99,18 +114,25 @@ class ProbingToolViewModel @Inject constructor(
     private fun detectInputType(input: String) {
         viewModelScope.launch(bgDispatcher) {
             val data = runCatching { coreService.decode(input.trim()) }.getOrNull()
-            if (data is Scanner.LnurlPay) {
-                val min = data.data.minSendableSat()
-                val max = data.data.maxSendableSat()
-                val isFixed = min == max && min > 0uL
-                _uiState.update {
-                    it.copy(
-                        isLnurlPay = true,
-                        amountSats = if (isFixed) min.toString() else it.amountSats,
-                    )
+            when {
+                data is Scanner.LnurlPay -> {
+                    val min = data.data.minSendableSat()
+                    val max = data.data.maxSendableSat()
+                    val isFixed = min == max && min > 0uL
+                    _uiState.update {
+                        it.copy(
+                            isLnurlPay = true,
+                            isZeroAmountInvoice = false,
+                            amountSats = if (isFixed) min.toString() else it.amountSats,
+                        )
+                    }
                 }
-            } else {
-                _uiState.update { it.copy(isLnurlPay = false) }
+                data is Scanner.Lightning && data.invoice.amountSatoshis == 0uL -> {
+                    _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = true) }
+                }
+                else -> {
+                    _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = false) }
+                }
             }
         }
     }
@@ -145,11 +167,19 @@ class ProbingToolViewModel @Inject constructor(
         val durationMs = System.currentTimeMillis() - startTime
         Logger.error("Probe failed in ${durationMs}ms", error, context = TAG)
 
+        val friendlyMessage = getFriendlyErrorMessage(error)
         _uiState.update {
-            it.copy(probeResult = ProbeResult(success = false, durationMs = durationMs, errorMessage = error.message))
+            it.copy(probeResult = ProbeResult(success = false, durationMs = durationMs, errorMessage = friendlyMessage))
         }
-        ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Probe failed", description = error.message)
+        ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Probe failed", description = friendlyMessage)
     }
+
+    private suspend fun getInvoiceAmount(input: String): ULong? = runCatching {
+        when (val decoded = coreService.decode(input.trim())) {
+            is Scanner.Lightning -> decoded.invoice.amountSatoshis.takeIf { it > 0uL }
+            else -> null
+        }
+    }.getOrNull()
 
     private suspend fun getEstimatedFee(invoice: String, amountSats: ULong?): ULong? = run {
         if (amountSats != null) {
@@ -161,6 +191,17 @@ class ProbingToolViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "ProbingToolViewModel"
+
+        private fun getFriendlyErrorMessage(error: Throwable): String {
+            val msg = error.message ?: return "Unknown error"
+            return when {
+                msg.contains("RouteNotFound", ignoreCase = true) -> "No route found to destination"
+                msg.contains("InsufficientFunds", ignoreCase = true) -> "Insufficient funds for this probe"
+                msg.contains("PaymentPathFailed", ignoreCase = true) -> "Payment path failed"
+                msg.contains("SendingFailed", ignoreCase = true) -> "Probe sending failed"
+                else -> msg
+            }
+        }
     }
 }
 
@@ -170,6 +211,7 @@ data class ProbingToolUiState(
     val amountSats: String = "",
     val isLoading: Boolean = false,
     val isLnurlPay: Boolean = false,
+    val isZeroAmountInvoice: Boolean = false,
     val probeResult: ProbeResult? = null,
 )
 
