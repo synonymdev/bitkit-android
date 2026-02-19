@@ -114,8 +114,8 @@ class ProbingToolViewModel @Inject constructor(
     private fun detectInputType(input: String) {
         viewModelScope.launch(bgDispatcher) {
             val data = runCatching { coreService.decode(input.trim()) }.getOrNull()
-            when {
-                data is Scanner.LnurlPay -> {
+            when (data) {
+                is Scanner.LnurlPay -> {
                     val min = data.data.minSendableSat()
                     val max = data.data.maxSendableSat()
                     val isFixed = min == max && min > 0uL
@@ -128,7 +128,7 @@ class ProbingToolViewModel @Inject constructor(
                     }
                 }
 
-                data is Scanner.Lightning && data.invoice.amountSatoshis == 0uL -> {
+                is Scanner.Lightning if data.invoice.amountSatoshis == 0uL -> {
                     _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = true) }
                 }
 
