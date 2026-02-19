@@ -76,7 +76,7 @@ class ProbingToolViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, probeResult = null) }
 
             val userAmount = _uiState.value.amountSats.toULongOrNull()
-            val amountSats = userAmount ?: if (_uiState.value.isZeroAmountInvoice) 1uL else null
+            val amountSats = userAmount ?: 1uL.takeIf { _uiState.value.isZeroAmountInvoice }
 
             val bolt11 = extractBolt11Invoice(input, amountSats)
             if (bolt11 == null) {
@@ -127,9 +127,11 @@ class ProbingToolViewModel @Inject constructor(
                         )
                     }
                 }
+
                 data is Scanner.Lightning && data.invoice.amountSatoshis == 0uL -> {
                     _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = true) }
                 }
+
                 else -> {
                     _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = false) }
                 }
@@ -144,10 +146,12 @@ class ProbingToolViewModel @Inject constructor(
                 val lightningParam = decoded.invoice.params?.get("lightning") ?: return@runCatching null
                 (coreService.decode(lightningParam) as? Scanner.Lightning)?.invoice?.bolt11
             }
+
             is Scanner.LnurlPay -> {
                 val amount = amountSats ?: return@runCatching null
                 lightningRepo.fetchLnurlInvoice(decoded.data.callback, amount).getOrThrow().bolt11
             }
+
             else -> null
         }
     }.getOrNull()
