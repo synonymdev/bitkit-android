@@ -68,13 +68,12 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 autoHide = false,
             )
 
-            val result = runCatching {
-                val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
-                currentMonitored.add(addressType.toSettingsString())
-                lightningRepo.updateAddressType(
-                    selectedType = addressType.toSettingsString(),
-                    monitoredTypes = currentMonitored.toList(),
-                ).getOrThrow()
+            val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
+            currentMonitored.add(addressType.toSettingsString())
+            val result = lightningRepo.updateAddressType(
+                selectedType = addressType.toSettingsString(),
+                monitoredTypes = currentMonitored.toList(),
+            ).onSuccess {
                 walletRepo.refreshReceiveAddressAfterTypeChange()
             }
 

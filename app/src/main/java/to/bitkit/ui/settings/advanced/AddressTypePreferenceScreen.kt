@@ -74,54 +74,50 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
         Column(
-            content = {
-                SectionHeader(title = stringResource(R.string.settings__addr_type__primary))
-
-                ADDRESS_TYPES.forEach { type ->
-                    val info = type.addressTypeInfo()
-                    SettingsButtonRow(
-                        title = "${info.shortName} ${info.example}",
-                        subtitle = info.description,
-                        value = SettingsButtonValue.BooleanValue(uiState.selectedAddressType == type),
-                        onClick = { onSelectAddressType(type) },
-                        modifier = Modifier.testTag(type.toAddressTypeE2eId()),
-                    )
-                }
-
-                if (uiState.showMonitoredTypes) {
-                    SectionHeader(title = stringResource(R.string.settings__addr_type__monitoring))
-
-                    ADDRESS_TYPES.forEach { type ->
-                        val info = type.addressTypeInfo()
-                        val isMonitored = type.toSettingsString() in uiState.monitoredTypes
-                        val isSelectedType = uiState.selectedAddressType == type
-                        Column(
-                            content = {
-                                SettingsSwitchRow(
-                                    title = "${info.shortName} ${info.shortExample}",
-                                    subtitle = if (isSelectedType) {
-                                        stringResource(R.string.settings__adv__addr_type_currently_selected)
-                                    } else {
-                                        null
-                                    },
-                                    isChecked = isMonitored,
-                                    onClick = { if (!isSelectedType) onSetMonitoring(type, !isMonitored) },
-                                    modifier = Modifier.testTag("MonitorToggle-${type.toAddressTypeE2eId()}"),
-                                )
-                            },
-                            modifier = Modifier.alpha(if (isSelectedType) 0.5f else 1f),
-                        )
-                    }
-                }
-
-                VerticalSpacer(16.dp)
-            },
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .testTag("AddressTypePreference"),
-        )
+        ) {
+            SectionHeader(title = stringResource(R.string.settings__addr_type__primary))
+
+            ADDRESS_TYPES.forEach { type ->
+                val info = type.addressTypeInfo()
+                SettingsButtonRow(
+                    title = "${info.shortName} ${info.example}",
+                    subtitle = info.description,
+                    value = SettingsButtonValue.BooleanValue(uiState.selectedAddressType == type),
+                    onClick = { onSelectAddressType(type) },
+                    modifier = Modifier.testTag(type.toAddressTypeE2eId()),
+                )
+            }
+
+            if (uiState.showMonitoredTypes) {
+                SectionHeader(title = stringResource(R.string.settings__addr_type__monitoring))
+
+                ADDRESS_TYPES.forEach { type ->
+                    val info = type.addressTypeInfo()
+                    val isMonitored = type.toSettingsString() in uiState.monitoredTypes
+                    val isSelectedType = uiState.selectedAddressType == type
+                    SettingsSwitchRow(
+                        title = "${info.shortName} ${info.shortExample}",
+                        subtitle = if (isSelectedType) {
+                            stringResource(R.string.settings__adv__addr_type_currently_selected)
+                        } else {
+                            null
+                        },
+                        isChecked = isMonitored,
+                        onClick = { if (!isSelectedType) onSetMonitoring(type, !isMonitored) },
+                        modifier = Modifier
+                            .alpha(if (isSelectedType) 0.5f else 1f)
+                            .testTag("MonitorToggle-${type.toAddressTypeE2eId()}"),
+                    )
+                }
+            }
+
+            VerticalSpacer(16.dp)
+        }
     }
 }
 

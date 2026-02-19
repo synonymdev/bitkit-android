@@ -5,12 +5,14 @@ import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
@@ -41,31 +43,29 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        runBlocking {
-            whenever(context.getString(R.string.settings__addr_type__applying)).thenReturn(applyingChanges)
-            whenever(context.getString(R.string.settings__addr_type__settings_updated)).thenReturn(settingsUpdated)
-            whenever(context.getString(R.string.common__error)).thenReturn(errorTitle)
-            whenever(context.getString(R.string.settings__addr_type__disabled_has_balance))
-                .thenReturn(disabledHasBalance)
-            whenever(
-                context.getString(R.string.settings__addr_type__disabled_verify_failed)
-            ).thenReturn(disabledVerifyFailed)
-            whenever(
-                context.getString(R.string.settings__addr_type__disabled_native_required)
-            ).thenReturn(disabledNativeRequired)
-            whenever(
-                context.getString(R.string.settings__addr_type__disabled_currently_selected)
-            ).thenReturn(disabledCurrentlySelected)
-            whenever(settingsStore.data).thenReturn(
-                flowOf(
-                    SettingsData(
-                        selectedAddressType = "nativeSegwit",
-                        addressTypesToMonitor = listOf("nativeSegwit"),
-                        isDevModeEnabled = true,
-                    )
+        whenever(context.getString(R.string.settings__addr_type__applying)).thenReturn(applyingChanges)
+        whenever(context.getString(R.string.settings__addr_type__settings_updated)).thenReturn(settingsUpdated)
+        whenever(context.getString(R.string.common__error)).thenReturn(errorTitle)
+        whenever(context.getString(R.string.settings__addr_type__disabled_has_balance))
+            .thenReturn(disabledHasBalance)
+        whenever(
+            context.getString(R.string.settings__addr_type__disabled_verify_failed)
+        ).thenReturn(disabledVerifyFailed)
+        whenever(
+            context.getString(R.string.settings__addr_type__disabled_native_required)
+        ).thenReturn(disabledNativeRequired)
+        whenever(
+            context.getString(R.string.settings__addr_type__disabled_currently_selected)
+        ).thenReturn(disabledCurrentlySelected)
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit"),
+                    isDevModeEnabled = true,
                 )
             )
-        }
+        )
     }
 
     private fun createSut(): AddressTypePreferenceViewModel =
@@ -111,7 +111,9 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         sut.setMonitoring(AddressType.P2TR, true)
         advanceUntilIdle()
 
-        assertTrue(toasts.isNotEmpty())
+        assertTrue(toasts.size >= 2)
+        assertEquals(Toast.ToastType.INFO, toasts.first().type)
+        assertEquals(applyingChanges, toasts.first().title)
         assertEquals(Toast.ToastType.SUCCESS, toasts.last().type)
         assertEquals(settingsUpdated, toasts.last().title)
         collectJob.cancel()
@@ -167,6 +169,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(toasts.isNotEmpty())
+        assertEquals(Toast.ToastType.WARNING, toasts.last().type)
+        assertEquals(errorTitle, toasts.last().title)
         assertEquals(disabledCurrentlySelected, toasts.last().description)
         collectJob.cancel()
     }
@@ -192,9 +196,12 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         sut.updateAddressType(AddressType.P2TR)
         advanceUntilIdle()
 
-        assertTrue(toasts.isNotEmpty())
+        assertTrue(toasts.size >= 2)
+        assertEquals(Toast.ToastType.INFO, toasts.first().type)
+        assertEquals(applyingChanges, toasts.first().title)
         assertEquals(Toast.ToastType.SUCCESS, toasts.last().type)
         assertEquals(settingsUpdated, toasts.last().title)
+        verify(walletRepo).refreshReceiveAddressAfterTypeChange()
         collectJob.cancel()
     }
 
@@ -223,6 +230,55 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         assertEquals(Toast.ToastType.WARNING, toasts.last().type)
         assertEquals(errorTitle, toasts.last().title)
         assertEquals("Update failed", toasts.last().description)
+        verify(walletRepo, times(0)).refreshReceiveAddressAfterTypeChange()
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `updateAddressType no-op when same type already selected`() = test {
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit"),
+                    isDevModeEnabled = true,
+                )
+            )
+        )
+        sut = createSut()
+        advanceUntilIdle()
+
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        sut.updateAddressType(AddressType.P2WPKH) // same as selected
+        advanceUntilIdle()
+
+        assertTrue(toasts.isEmpty(), "No toast should be sent for no-op")
+        verify(lightningRepo, never()).updateAddressType(any(), any())
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `setMonitoring no-op when type already in desired state`() = test {
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit"),
+                    isDevModeEnabled = true,
+                )
+            )
+        )
+        sut = createSut()
+        advanceUntilIdle()
+
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        sut.setMonitoring(AddressType.P2WPKH, true) // already monitored
+        advanceUntilIdle()
+
+        assertTrue(toasts.isEmpty(), "No toast should be sent for no-op")
+        verify(lightningRepo, never()).setMonitoring(any(), any())
         collectJob.cancel()
     }
 }
