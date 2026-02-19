@@ -2,9 +2,7 @@ package to.bitkit.ui.screens.transfer
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -29,6 +27,7 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -109,14 +108,14 @@ private fun SettingUpScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            VerticalSpacer(12.dp)
             if (inProgress) {
                 Display(
                     text = stringResource(R.string.lightning__savings_progress__title)
                         .withAccent(accentColor = Colors.Purple),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                VerticalSpacer(8.dp)
                 BodyM(
                     text = stringResource(R.string.lightning__setting_up_text).withAccentBoldBright(),
                     color = Colors.White64,
@@ -127,20 +126,20 @@ private fun SettingUpScreen(
                         .withAccent(accentColor = Colors.Purple),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                VerticalSpacer(8.dp)
                 BodyM(
                     text = stringResource(R.string.lightning__transfer_success__text_spending),
                     color = Colors.White64,
                 )
             }
-            Spacer(modifier = Modifier.height(28.dp))
+            VerticalSpacer(28.dp)
             if (inProgress) {
                 TransferAnimationView(
                     largeCircleRes = R.drawable.ln_sync_large,
                     smallCircleRes = R.drawable.ln_sync_small,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 val steps = listOf(
                     stringResource(R.string.lightning__setting_up_step1),
                     stringResource(R.string.lightning__setting_up_step2),
@@ -175,7 +174,7 @@ private fun SettingUpScreen(
                 onClick = onContinueClick,
                 modifier = Modifier.testTag("TransferSuccess-button")
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

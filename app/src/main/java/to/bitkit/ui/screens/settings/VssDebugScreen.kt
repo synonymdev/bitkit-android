@@ -9,9 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -44,6 +42,7 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TertiaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -231,7 +230,7 @@ private fun VssDebugContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
         }
     }
 

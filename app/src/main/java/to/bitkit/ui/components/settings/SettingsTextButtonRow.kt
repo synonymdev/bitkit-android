@@ -3,9 +3,7 @@ package to.bitkit.ui.components.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +23,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
@@ -73,7 +72,7 @@ fun SettingsTextButtonRow(
                 ) {
                     BodyM(text = title)
                     if (description != null) {
-                        Spacer(modifier = Modifier.height(2.dp))
+                        VerticalSpacer(2.dp)
                         Caption(text = description, color = Colors.White64)
                     }
                 }

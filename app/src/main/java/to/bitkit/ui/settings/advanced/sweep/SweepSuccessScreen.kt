@@ -3,7 +3,6 @@ package to.bitkit.ui.settings.advanced.sweep
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,6 +25,7 @@ import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
@@ -90,7 +90,7 @@ private fun Content(
 
                 BalanceHeaderView(sats = amountSats)
 
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
 
                 Box(
                     contentAlignment = Alignment.Center,
@@ -104,7 +104,7 @@ private fun Content(
                     )
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
 
                 PrimaryButton(
                     text = stringResource(R.string.sweep__success_wallet_overview),

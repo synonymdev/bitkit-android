@@ -5,11 +5,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +30,7 @@ import to.bitkit.data.dto.FeeCondition
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.Subtitle
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -71,7 +70,7 @@ fun WeatherCard(
                             .testTag("weather_card_condition_icon"),
                         tint = Color.Unspecified
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
+                    HorizontalSpacer(16.dp)
                     BodyMSB(
                         text = stringResource(R.string.widgets__weather__name),
                         modifier = Modifier.testTag("weather_card_widget_title_text")

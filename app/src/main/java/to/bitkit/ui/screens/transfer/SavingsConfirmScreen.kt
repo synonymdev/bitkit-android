@@ -2,9 +2,7 @@ package to.bitkit.ui.screens.transfer
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -31,9 +29,11 @@ import to.bitkit.ext.filterOpen
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -110,16 +110,16 @@ private fun SavingsConfirmContent(
                 .fillMaxSize()
 
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent())
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Caption13Up(text = stringResource(R.string.lightning__savings_confirm__label), color = Colors.White64)
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             MoneyDisplay(sats = amount.toLong(), onClick = onAmountClick)
 
             if (hasMultiple) {
-                Spacer(modifier = Modifier.height(24.dp))
+                VerticalSpacer(24.dp)
                 if (hasSelected) {
                     PrimaryButton(
                         text = stringResource(R.string.lightning__savings_confirm__transfer_all),
@@ -137,7 +137,7 @@ private fun SavingsConfirmContent(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
             Image(
                 painter = painterResource(R.drawable.piggybank),
                 contentDescription = null,
@@ -148,7 +148,7 @@ private fun SavingsConfirmContent(
                     .align(alignment = CenterHorizontally)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
@@ -163,7 +163,7 @@ private fun SavingsConfirmContent(
                     }
                 }
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

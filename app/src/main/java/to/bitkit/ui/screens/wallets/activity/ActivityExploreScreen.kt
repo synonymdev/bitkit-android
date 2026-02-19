@@ -6,10 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -51,7 +49,9 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -212,7 +212,7 @@ private fun ActivityExploreContent(
             ActivityIcon(activity = item, size = 48.dp)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         when (item) {
             is Activity.Onchain -> {
@@ -222,7 +222,7 @@ private fun ActivityExploreContent(
                     txDetails = txDetails,
                     boostTxDoesExist = boostTxDoesExist,
                 )
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explorer),
                     onClick = { onClickExplore(item.v1.txId) },
@@ -231,7 +231,7 @@ private fun ActivityExploreContent(
 
             is Activity.Lightning -> {
                 LightningDetails(lightning = item, onCopy = onCopy)
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
             }
         }
     }
@@ -375,7 +375,7 @@ private fun Section(
         } else if (value != null) {
             BodySSB(text = value)
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         HorizontalDivider()
     }
 }

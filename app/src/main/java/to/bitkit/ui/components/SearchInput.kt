@@ -4,12 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -145,7 +143,7 @@ private fun PreviewWithTrailingIcons() {
                         isActive = true,
                         onClick = {}
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    HorizontalSpacer(12.dp)
                     SearchInputIconButton(
                         iconRes = R.drawable.ic_calendar,
                         isActive = false,

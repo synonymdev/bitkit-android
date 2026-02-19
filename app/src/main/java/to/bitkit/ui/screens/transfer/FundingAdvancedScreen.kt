@@ -2,9 +2,7 @@ package to.bitkit.ui.screens.transfer
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -16,6 +14,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.RectangleButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -40,15 +39,15 @@ fun FundingAdvancedScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(
                 text = stringResource(
                     R.string.lightning__funding_advanced__title
                 ).withAccent(accentColor = Colors.Purple)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(text = stringResource(R.string.lightning__funding_advanced__text), color = Colors.White64)
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),

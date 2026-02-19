@@ -3,9 +3,7 @@ package to.bitkit.ui.settings.support
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -21,6 +19,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.Links
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
@@ -63,11 +62,11 @@ private fun Content(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             BodyM(text = stringResource(R.string.settings__support__text), color = Colors.White64)
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             SettingsButtonRow(title = stringResource(R.string.settings__support__report), onClick = onClickReportIssue)
             SettingsButtonRow(title = stringResource(R.string.settings__support__help), onClick = onClickHelpCenter)
@@ -87,7 +86,7 @@ private fun Content(
 
             Links(modifier = Modifier.fillMaxWidth())
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

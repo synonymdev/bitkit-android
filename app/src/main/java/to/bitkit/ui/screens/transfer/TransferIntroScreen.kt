@@ -4,10 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +22,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.theme.AppThemeSurface
@@ -62,16 +61,16 @@ fun TransferIntroScreen(
                 .align(Alignment.BottomCenter)
         ) {
             Display(stringResource(R.string.lightning__transfer_intro__title).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(stringResource(R.string.lightning__transfer_intro__text), color = Colors.White64)
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.lightning__transfer_intro__button),
                 onClick = onContinueClick,
                 modifier = Modifier.testTag("TransferIntro-button")
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

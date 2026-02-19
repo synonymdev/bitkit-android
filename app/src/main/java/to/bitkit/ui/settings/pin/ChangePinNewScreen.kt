@@ -1,7 +1,6 @@
 package to.bitkit.ui.settings.pin
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -20,10 +19,12 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.navigateToChangePinConfirm
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -82,14 +83,14 @@ private fun ChangePinNewContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             PinDots(
                 pin = pin,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             NumberPad(
                 onPress = onKeyPress,

@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.wallets.suggestion
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -22,6 +20,7 @@ import to.bitkit.models.Suggestion
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.HomeViewModel
@@ -70,9 +69,9 @@ fun BuyIntroContent(
                 text = stringResource(R.string.other__buy_header).withAccent(accentColor = Colors.Brand),
                 color = Colors.White
             )
-            Spacer(Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(text = stringResource(R.string.other__buy_text), color = Colors.White64)
-            Spacer(Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.other__buy_button),
                 onClick = {
@@ -81,7 +80,7 @@ fun BuyIntroContent(
                     context.startActivity(intent)
                 }
             )
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

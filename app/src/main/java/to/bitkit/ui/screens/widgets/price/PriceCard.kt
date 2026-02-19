@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
@@ -47,6 +45,8 @@ import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySB
 import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -83,7 +83,7 @@ fun PriceCard(
                             .testTag("price_card_widget_title_icon"),
                         tint = Color.Unspecified
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
+                    HorizontalSpacer(16.dp)
                     BodyMSB(
                         text = stringResource(R.string.widgets__price__name),
                         modifier = Modifier.testTag("price_card_widget_title_text")
@@ -116,7 +116,7 @@ fun PriceCard(
                         modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
                     )
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                    HorizontalSpacer(16.dp)
 
                     BodySB(
                         text = widgetData.price,
@@ -141,7 +141,7 @@ fun PriceCard(
             }
 
             if (pricePreferences.showSource) {
-                Spacer(modifier = Modifier.height(8.dp))
+                VerticalSpacer(8.dp)
 
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,

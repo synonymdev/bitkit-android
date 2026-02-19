@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.wallets.send
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -27,10 +26,12 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -95,7 +96,7 @@ private fun PinCheckContent(
             titleText = stringResource(R.string.security__pin_send_title),
             onBack = onBack,
         )
-        Spacer(Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -106,7 +107,7 @@ private fun PinCheckContent(
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             AnimatedVisibility(visible = attemptsRemaining < Env.PIN_ATTEMPTS) {
                 if (isLastAttempt) {
@@ -130,7 +131,7 @@ private fun PinCheckContent(
                             .testTag("AttemptsRemaining")
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
             }
 
             PinDots(
@@ -138,7 +139,7 @@ private fun PinCheckContent(
                 modifier = Modifier.padding(vertical = 16.dp),
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             NumberPad(
                 onPress = onKeyPress,

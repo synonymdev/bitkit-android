@@ -4,9 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
@@ -22,6 +20,7 @@ import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
@@ -117,7 +116,7 @@ private fun AllActivityScreenContent(
             modifier = Modifier.padding(horizontal = 16.dp)
 
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         // List
         Box(

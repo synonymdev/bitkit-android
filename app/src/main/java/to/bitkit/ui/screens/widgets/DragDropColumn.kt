@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.widgets
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -19,6 +17,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.ui.components.VerticalSpacer
 
 @Composable
 fun DragDropColumn(
@@ -84,7 +83,7 @@ fun DragDropColumn(
 
             // Add spacing between items (except after the last item)
             if (index < items.size - 1) {
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
             }
         }
     }

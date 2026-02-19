@@ -10,10 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -45,9 +43,11 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.MnemonicWordsGrid
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -125,7 +125,7 @@ private fun ShowMnemonicContent(
             .testTag("backup_show_mnemonic_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__mnemonic_your))
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         Column(
             modifier = Modifier
@@ -147,7 +147,7 @@ private fun ShowMnemonicContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Box(
                 modifier = Modifier.fillMaxWidth()
@@ -189,15 +189,15 @@ private fun ShowMnemonicContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             BodyS(
                 text = stringResource(R.string.security__mnemonic_never_share).withAccent(accentColor = Colors.Brand),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.height(24.dp))
+            FillHeight()
+            VerticalSpacer(24.dp)
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
@@ -206,7 +206,7 @@ private fun ShowMnemonicContent(
                 modifier = Modifier.testTag("ContinueShowMnemonic")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

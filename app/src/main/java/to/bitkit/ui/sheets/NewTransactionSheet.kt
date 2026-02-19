@@ -5,10 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,8 +35,10 @@ import to.bitkit.ui.LocalSettingsViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -152,7 +152,7 @@ fun NewTransactionSheetView(
 
             SheetTopBar(titleText)
 
-            Spacer(modifier = Modifier.height(24.dp))
+            VerticalSpacer(24.dp)
 
             BalanceHeaderView(
                 sats = details.sats,
@@ -161,7 +161,7 @@ fun NewTransactionSheetView(
                     .testTag("ReceivedTransaction")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             if (details.direction == NewTransactionSheetDirection.SENT) {
                 Row(
@@ -193,7 +193,7 @@ fun NewTransactionSheetView(
                     modifier = Modifier.testTag("ReceivedTransactionButton")
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
         }
     }
 }

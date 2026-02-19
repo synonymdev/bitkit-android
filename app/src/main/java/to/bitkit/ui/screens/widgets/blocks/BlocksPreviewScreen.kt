@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.widgets.blocks
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,10 +26,12 @@ import to.bitkit.R
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.AppTopBar
@@ -99,7 +99,7 @@ fun BlocksPreviewContent(
                 .padding(horizontal = 16.dp)
                 .testTag("main_content")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            VerticalSpacer(26.dp)
 
             Row(
                 modifier = Modifier
@@ -149,7 +149,7 @@ fun BlocksPreviewContent(
                 modifier = Modifier.testTag("WidgetEdit")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Text13Up(
                 stringResource(R.string.common__preview),

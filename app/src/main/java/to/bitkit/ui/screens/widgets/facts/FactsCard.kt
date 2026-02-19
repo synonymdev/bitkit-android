@@ -5,13 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -29,6 +26,8 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -62,13 +61,13 @@ fun FactsCard(
                             .testTag("widget_title_icon"),
                         tint = Color.Unspecified
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
+                    HorizontalSpacer(16.dp)
                     BodyMSB(
                         text = stringResource(R.string.widgets__facts__name),
                         modifier = Modifier.testTag("widget_title_text")
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
             }
 
             BodyMB(
@@ -79,7 +78,7 @@ fun FactsCard(
             )
 
             if (showSource) {
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
 
                 Row(
                     modifier = Modifier

@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.widgets.weather
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,10 +27,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.AppTopBar
@@ -103,7 +103,7 @@ fun WeatherPreviewContent(
                 .verticalScroll(rememberScrollState())
                 .testTag("main_content")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            VerticalSpacer(26.dp)
 
             Row(
                 modifier = Modifier
@@ -153,7 +153,7 @@ fun WeatherPreviewContent(
                 modifier = Modifier.testTag("WidgetEdit")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Text13Up(
                 stringResource(R.string.common__preview),

@@ -4,9 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -33,6 +31,7 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -116,14 +115,14 @@ private fun SavingsAdvancedContent(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__savings_advanced__title).withAccent())
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(R.string.lightning__savings_advanced__text),
                 color = Colors.White64,
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             LazyColumn(
                 modifier = Modifier.weight(1f)
@@ -142,9 +141,9 @@ private fun SavingsAdvancedContent(
             }
 
             Caption13Up(text = stringResource(R.string.lightning__savings_advanced__total), color = Colors.White64)
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             MoneyDisplay(sats = totalAmount.toLong(), onClick = onAmountClick)
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
@@ -152,7 +151,7 @@ private fun SavingsAdvancedContent(
                 enabled = channelItems.any { it.isSelected },
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

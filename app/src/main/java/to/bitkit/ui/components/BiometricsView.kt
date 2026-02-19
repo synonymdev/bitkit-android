@@ -2,9 +2,7 @@ package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -61,7 +59,7 @@ fun BiometricsView(
             contentDescription = null,
             modifier = Modifier.size(64.dp),
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Subtitle(
             text = run {
                 val biometricsName = stringResource(R.string.security__bio)

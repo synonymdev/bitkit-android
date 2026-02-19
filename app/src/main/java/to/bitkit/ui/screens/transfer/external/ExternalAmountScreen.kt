@@ -3,10 +3,8 @@ package to.bitkit.ui.screens.transfer.external
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
@@ -125,7 +123,7 @@ private fun Content(
                         text = stringResource(R.string.wallet__send_available),
                         color = Colors.White64,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    VerticalSpacer(8.dp)
                     MoneySSB(sats = amountState.max, showSymbol = true)
                 }
                 FillWidth()

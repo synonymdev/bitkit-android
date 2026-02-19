@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,8 +19,10 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -62,11 +63,11 @@ private fun Content(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             BodyM(text = errorText, color = Colors.White64)
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
             Image(
                 painter = painterResource(R.drawable.cross),
                 contentDescription = null,
@@ -74,7 +75,7 @@ private fun Content(
                     .fillMaxWidth()
                     .height(256.dp)
             )
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -94,7 +95,7 @@ private fun Content(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

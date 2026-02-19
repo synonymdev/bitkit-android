@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -23,8 +21,10 @@ import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -68,14 +68,14 @@ private fun Content(
     ) {
         SheetTopBar(stringResource(R.string.wallet__tags_filter_title))
 
-        Spacer(modifier = Modifier.height(42.dp))
+        VerticalSpacer(42.dp)
 
         Caption13Up(
             text = stringResource(R.string.wallet__tags_filter),
             color = Colors.White64,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         FlowRow(
             modifier = Modifier
@@ -93,7 +93,7 @@ private fun Content(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
     }
 }
 

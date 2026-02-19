@@ -1,10 +1,8 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -23,7 +21,9 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.SyncNodeView
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -93,23 +93,23 @@ private fun Content(
                         .fillMaxSize()
                         .padding(horizontal = 16.dp)
                 ) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    VerticalSpacer(16.dp)
                     BalanceHeaderView(sats = amount.toLong(), modifier = Modifier.fillMaxWidth())
 
-                    Spacer(modifier = Modifier.weight(1f))
+                    FillHeight()
                     TransferAnimationView(
                         largeCircleRes = R.drawable.ln_sync_large,
                         smallCircleRes = R.drawable.ln_sync_small,
                         contentRes = R.drawable.coin_stack_4,
                     )
-                    Spacer(modifier = Modifier.weight(1f))
+                    FillHeight()
 
                     Display(
                         text = stringResource(R.string.wallet__send_quickpay__title)
                             .withAccent(accentColor = Colors.Purple)
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    VerticalSpacer(16.dp)
                 }
             }
 

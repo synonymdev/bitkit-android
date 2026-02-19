@@ -5,10 +5,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,7 +24,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -70,7 +70,7 @@ private fun PinResultContent(
     ) {
         SheetTopBar(stringResource(R.string.security__success_title))
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -88,7 +88,7 @@ private fun PinResultContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Image(
                 painter = painterResource(R.drawable.check),
@@ -97,7 +97,7 @@ private fun PinResultContent(
                     .size(256.dp)
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -115,7 +115,7 @@ private fun PinResultContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             PrimaryButton(
                 text = stringResource(R.string.common__ok),
@@ -124,7 +124,7 @@ private fun PinResultContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
     }
 }
 

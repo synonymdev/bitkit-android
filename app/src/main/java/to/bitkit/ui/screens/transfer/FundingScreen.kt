@@ -4,9 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +26,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.RectangleButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -60,9 +59,9 @@ fun FundingScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__funding__title).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
 
             val text = if (isGeoBlocked) {
                 stringResource(R.string.lightning__funding__text_blocked)
@@ -71,7 +70,7 @@ fun FundingScreen(
             }
             BodyM(text = text, color = Colors.White64)
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),

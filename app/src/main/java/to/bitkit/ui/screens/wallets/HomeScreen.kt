@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -332,7 +331,7 @@ private fun Content(
                         .testTag("TotalBalance")
                 )
                 if (!homeUiState.showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -368,9 +367,9 @@ private fun Content(
                         )
 
                         Column {
-                            Spacer(modifier = Modifier.height(32.dp))
+                            VerticalSpacer(32.dp)
                             Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
-                            Spacer(modifier = Modifier.height(16.dp))
+                            VerticalSpacer(16.dp)
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 state = state,
@@ -395,7 +394,7 @@ private fun Content(
                     }
 
                     if (homeUiState.showWidgets) {
-                        Spacer(modifier = Modifier.height(32.dp))
+                        VerticalSpacer(32.dp)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -420,7 +419,7 @@ private fun Content(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
 
                         if (homeUiState.isEditingWidgets) {
                             DragDropColumn(
@@ -444,7 +443,7 @@ private fun Content(
                             Widgets(homeUiState)
                         }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                        VerticalSpacer(32.dp)
                         TertiaryButton(
                             text = stringResource(R.string.widgets__add),
                             icon = {
@@ -458,7 +457,7 @@ private fun Content(
                             modifier = Modifier.testTag("WidgetsAdd")
                         )
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
 
                     AnimatedVisibility(homeUiState.banners.isNotEmpty()) {
                         Column(

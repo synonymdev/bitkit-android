@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.wallets.send
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
@@ -28,6 +26,7 @@ import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.TextInput
@@ -96,9 +95,9 @@ fun AddTagContent(
         ) {
             VerticalSpacer(16.dp)
             if (uiState.tagsSuggestions.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 Caption13Up(text = stringResource(R.string.wallet__tags_previously), color = Colors.White64)
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -114,9 +113,9 @@ fun AddTagContent(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             Caption13Up(text = stringResource(R.string.wallet__tags_new), color = Colors.White64)
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             TextInput(
                 placeholder = stringResource(R.string.wallet__tags_new_enter),
                 value = uiState.tagInput,
@@ -135,8 +134,8 @@ fun AddTagContent(
                     .then(tagInputTestTag?.let { Modifier.testTag(it) } ?: Modifier)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Spacer(modifier = Modifier.weight(1f))
+            VerticalSpacer(16.dp)
+            FillHeight()
             PrimaryButton(
                 text = stringResource(R.string.wallet__tags_add_button),
                 onClick = { onTagConfirmed(uiState.tagInput) },
@@ -144,7 +143,7 @@ fun AddTagContent(
                 modifier = Modifier
                     .then(addButtonTestTag?.let { Modifier.testTag(it) } ?: Modifier)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

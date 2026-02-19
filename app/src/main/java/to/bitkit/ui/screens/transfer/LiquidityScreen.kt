@@ -1,9 +1,7 @@
 package to.bitkit.ui.screens.transfer
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,8 +16,10 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -69,15 +69,15 @@ private fun LiquidityScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__liquidity__title).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(text = stringResource(R.string.lightning__liquidity__text), color = Colors.White64)
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             BodyMB(text = stringResource(R.string.lightning__liquidity__label))
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             LightningChannel(
                 capacity = channelSize,
@@ -87,13 +87,13 @@ private fun LiquidityScreen(
                 showLabels = true,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__understood),
                 onClick = onContinueClick,
                 modifier = Modifier.testTag("LiquidityContinue")
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

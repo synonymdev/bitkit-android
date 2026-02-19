@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.widgets.facts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
@@ -25,9 +23,11 @@ import to.bitkit.R
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -80,7 +80,7 @@ fun FactsEditContent(
                 .padding(horizontal = 16.dp)
                 .testTag("WidgetEditScrollView")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            VerticalSpacer(26.dp)
 
             BodyM(
                 text = stringResource(R.string.widgets__widget__edit_description).replace(
@@ -91,7 +91,7 @@ fun FactsEditContent(
                 modifier = Modifier.testTag("edit_description")
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -169,7 +169,7 @@ fun FactsEditContent(
                 modifier = Modifier.testTag("source_divider")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Row(
                 modifier = Modifier
@@ -211,7 +211,7 @@ private fun Preview() {
             onClickReset = {},
             onClickPreview = {},
             factsPreferences = FactsPreferences(),
-            fact = "Bitcoin doesn’t need your personal information",
+            fact = "Bitcoin doesn't need your personal information",
         )
     }
 }
@@ -226,7 +226,7 @@ private fun Preview2() {
             onClickReset = {},
             onClickPreview = {},
             factsPreferences = FactsPreferences(showSource = true),
-            fact = "Bitcoin doesn’t need your personal information",
+            fact = "Bitcoin doesn't need your personal information",
         )
     }
 }

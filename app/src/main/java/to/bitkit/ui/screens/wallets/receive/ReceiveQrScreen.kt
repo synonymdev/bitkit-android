@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -191,7 +189,7 @@ fun ReceiveQrScreen(
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
         Column {
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             // Tab row
             CustomTabRowWithSpacing(
@@ -213,7 +211,7 @@ fun ReceiveQrScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            Spacer(Modifier.height(24.dp))
+            VerticalSpacer(24.dp)
 
             // Content area (QR or Details) with LazyRow
             LazyRow(
@@ -273,7 +271,7 @@ fun ReceiveQrScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            VerticalSpacer(24.dp)
 
             AnimatedVisibility(visible = lightningState.nodeLifecycleState.isRunning()) {
                 val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
@@ -316,7 +314,7 @@ fun ReceiveQrScreen(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -348,7 +346,7 @@ private fun ReceiveQrView(
             modifier = Modifier.weight(1f, fill = false)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
@@ -419,7 +417,7 @@ private fun ReceiveQrView(
                 modifier = Modifier.weight(1f)
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
     }
 }
 
@@ -562,12 +560,12 @@ private fun CopyAddressCard(
             .padding(24.dp)
     ) {
         Caption13Up(text = title, color = Colors.White64)
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         BodyS(
             text = (body ?: address).truncate(32).uppercase(),
             modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {

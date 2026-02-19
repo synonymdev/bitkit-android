@@ -2,7 +2,6 @@ package to.bitkit.ui.settings.pin
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -19,10 +18,12 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -44,7 +45,7 @@ fun PinChooseScreen(
     ) {
         SheetTopBar(titleText = stringResource(R.string.security__pin_choose_header), onBack = onBack)
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         BodyM(
             text = stringResource(R.string.security__pin_choose_text),
@@ -52,12 +53,12 @@ fun PinChooseScreen(
             modifier = Modifier.padding(horizontal = 32.dp),
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-        Spacer(modifier = Modifier.weight(1f))
+        VerticalSpacer(32.dp)
+        FillHeight()
 
         PinDots(pin = pin)
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         NumberPad(
             onPress = { key ->

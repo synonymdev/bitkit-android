@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.SwipeToConfirm
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -81,9 +82,9 @@ private fun Content(
             val serviceFee = 0L
             val totalFee = uiState.amount.sats + networkFee
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             Display(stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -112,7 +113,7 @@ private fun Content(
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Image(
                 painter = painterResource(id = R.drawable.coin_stack_x),
@@ -131,7 +132,7 @@ private fun Content(
                 onConfirm = onConfirm,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

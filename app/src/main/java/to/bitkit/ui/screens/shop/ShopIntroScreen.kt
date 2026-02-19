@@ -2,9 +2,7 @@ package to.bitkit.ui.screens.shop
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -16,6 +14,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -50,14 +49,14 @@ fun ShopIntroScreen(
                 text = stringResource(R.string.other__shop__intro__title).withAccent(accentColor = Colors.Brand),
                 color = Colors.Yellow
             )
-            Spacer(Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(text = stringResource(R.string.other__shop__intro__description), color = Colors.White64)
-            Spacer(Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue
             )
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

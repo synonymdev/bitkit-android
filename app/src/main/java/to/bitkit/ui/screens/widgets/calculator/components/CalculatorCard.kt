@@ -5,13 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -35,6 +32,7 @@ import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -110,7 +108,7 @@ fun CalculatorCardContent(
         ) {
             if (showWidgetTitle) {
                 WidgetTitleRow()
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
             }
 
             // Bitcoin input with visual transformation
@@ -156,7 +154,7 @@ private fun WidgetTitleRow() {
                 .testTag("widget_title_icon"),
             tint = Color.Unspecified
         )
-        Spacer(modifier = Modifier.width(16.dp))
+        HorizontalSpacer(16.dp)
         BodyMSB(
             text = stringResource(R.string.widgets__calculator__name),
             modifier = Modifier.testTag("widget_title_text")

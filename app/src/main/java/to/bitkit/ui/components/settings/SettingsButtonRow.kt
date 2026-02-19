@@ -4,13 +4,10 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,6 +27,8 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -74,7 +73,7 @@ fun SettingsButtonRow(
                         tint = iconTint,
                         modifier = Modifier.size(iconSize),
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    HorizontalSpacer(10.dp)
                 }
                 Column(
                     verticalArrangement = Arrangement.Center,
@@ -84,7 +83,7 @@ fun SettingsButtonRow(
                 ) {
                     if (subtitle != null) {
                         BodyMSB(text = title)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        VerticalSpacer(4.dp)
                         BodySSB(
                             text = subtitle,
                             maxLines = maxLinesSubtitle,
@@ -120,7 +119,7 @@ fun SettingsButtonRow(
 
                     is SettingsButtonValue.StringValue -> {
                         BodyM(text = value.value, modifier = Modifier.testTag("Value"))
-                        Spacer(modifier = Modifier.width(8.dp))
+                        HorizontalSpacer(8.dp)
                         Icon(
                             painter = painterResource(R.drawable.ic_chevron_right),
                             contentDescription = null,

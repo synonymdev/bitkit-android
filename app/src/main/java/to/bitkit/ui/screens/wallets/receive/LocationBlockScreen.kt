@@ -2,10 +2,8 @@ package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -18,7 +16,9 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -39,7 +39,7 @@ fun LocationBlockScreen(
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBackPressed)
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         Column(
             modifier = Modifier
@@ -48,7 +48,7 @@ fun LocationBlockScreen(
         ) {
             BodyM(text = stringResource(R.string.lightning__funding__text_blocked_cjit), color = Colors.White64)
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Image(
                 painter = painterResource(R.drawable.globe),
@@ -59,10 +59,10 @@ fun LocationBlockScreen(
                     .padding(horizontal = 60.dp)
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             PrimaryButton(text = stringResource(R.string.onboarding__advanced_setup), onClick = navigateAdvancedSetup)
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

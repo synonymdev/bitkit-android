@@ -1,9 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -98,7 +96,7 @@ private fun Content(
             ),
             onBack = onBack
         )
-        Spacer(Modifier.height(24.dp))
+        VerticalSpacer(24.dp)
 
         Column(
             modifier = Modifier
@@ -128,7 +126,7 @@ private fun Content(
                     }
                 )
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             LightningChannel(
                 capacity = channelSize,
@@ -138,7 +136,7 @@ private fun Content(
                 showLabels = true,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             FillHeight()
 
@@ -164,7 +162,7 @@ private fun Content(
                 onClick = onContinue,
                 modifier = Modifier.testTag("LiquidityContinue")
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
         }
     }
 }

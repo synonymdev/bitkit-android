@@ -4,9 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -90,14 +88,14 @@ fun CreateWalletWithPassphraseScreen(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.onboarding__passphrase_header).withAccent())
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(R.string.onboarding__passphrase_text),
                 color = Colors.White64,
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             OutlinedTextField(
                 value = bip39Passphrase,
                 onValueChange = { bip39Passphrase = it },
@@ -115,7 +113,7 @@ fun CreateWalletWithPassphraseScreen(
                     .padding(top = 4.dp)
                     .testTag("PassphraseInput")
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.onboarding__create_new_wallet),
                 onClick = { onCreateClick(bip39Passphrase) },

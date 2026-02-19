@@ -8,11 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,8 +32,10 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -99,7 +99,7 @@ private fun AskForBiometricsContent(
     ) {
         SheetTopBar(stringResource(R.string.security__bio))
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         if (!isBiometrySupported) {
             BioNotAvailableView(onSkip = onSkip)
@@ -120,7 +120,7 @@ private fun AskForBiometricsContent(
                     color = Colors.White64,
                 )
 
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
 
                 Icon(
                     painter = painterResource(R.drawable.ic_touch_id),
@@ -129,7 +129,7 @@ private fun AskForBiometricsContent(
                     modifier = Modifier.size(134.dp),
                 )
 
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
 
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -152,7 +152,7 @@ private fun AskForBiometricsContent(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                VerticalSpacer(32.dp)
 
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
@@ -164,7 +164,7 @@ private fun AskForBiometricsContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
     }
 }
 
@@ -185,7 +185,7 @@ private fun ColumnScope.BioNotAvailableView(
             color = Colors.White64,
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Image(
             painter = painterResource(R.drawable.cog),
@@ -195,7 +195,7 @@ private fun ColumnScope.BioNotAvailableView(
                 .aspectRatio(1f),
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -22,8 +20,10 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
@@ -47,15 +47,15 @@ fun SavingsAvailabilityScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__availability__title).withAccent())
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(
                 text = stringResource(R.string.lightning__availability__text).withAccentBoldBright(),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -69,7 +69,7 @@ fun SavingsAvailabilityScreen(
                     modifier = Modifier.size(256.dp)
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -88,7 +88,7 @@ fun SavingsAvailabilityScreen(
                         .testTag("AvailabilityContinue")
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

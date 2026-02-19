@@ -4,13 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -32,7 +29,10 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.util.gradientBackground
@@ -137,7 +137,7 @@ private fun ConfirmMnemonicContent(
             .testTag("backup_confirm_mnemonic_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__mnemonic_confirm), onBack = onBack)
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         Column(
             modifier = Modifier
@@ -150,7 +150,7 @@ private fun ConfirmMnemonicContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             // Shuffled word buttons
             FlowRow(
@@ -174,7 +174,7 @@ private fun ConfirmMnemonicContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             // Selected words display (2 columns)
             Row(
@@ -208,8 +208,8 @@ private fun ConfirmMnemonicContent(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.height(24.dp))
+            FillHeight()
+            VerticalSpacer(24.dp)
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
@@ -218,7 +218,7 @@ private fun ConfirmMnemonicContent(
                 modifier = Modifier.testTag("ContinueConfirmMnemonic")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -231,7 +231,7 @@ private fun SelectedWordItem(
 ) {
     Row {
         BodyMSB(text = "$number.", color = Colors.White64)
-        Spacer(modifier = Modifier.width(4.dp))
+        HorizontalSpacer(4.dp)
         BodyMSB(
             text = word.ifEmpty { "" },
             color = if (word.isEmpty()) Colors.White64 else if (isCorrect) Colors.Green else Colors.Red

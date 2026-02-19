@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -92,7 +90,7 @@ private fun WordItem(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BodyMSB(text = "$number.", color = Colors.White64)
-        Spacer(modifier = Modifier.width(8.dp))
+        HorizontalSpacer(8.dp)
         BodyMSB(text = word, color = Colors.White)
     }
 }

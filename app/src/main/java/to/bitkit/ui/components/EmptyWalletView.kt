@@ -4,9 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -42,7 +40,7 @@ fun EmptyStateView(
             modifier = Modifier
                 .padding(bottom = 130.dp)
         ) {
-            Spacer(modifier = Modifier.height(6.dp))
+            VerticalSpacer(6.dp)
             Row(
                 verticalAlignment = Alignment.Bottom,
                 modifier = Modifier
@@ -61,7 +59,7 @@ fun EmptyStateView(
                         .heightIn(max = 144.dp)
                         .offset(x = (-10).dp)
                 )
-                Spacer(modifier = Modifier.weight(1f))
+                FillWidth()
             }
         }
         if (onClose != null) {

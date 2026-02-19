@@ -1,7 +1,6 @@
 package to.bitkit.ui.settings.transactionSpeed
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,11 +24,13 @@ import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.LargeRow
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -114,7 +115,7 @@ private fun CustomFeeSettingsContent(
         ) {
             Caption13Up(text = stringResource(R.string.common__sat_vbyte), color = Colors.White64)
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             LargeRow(
                 prefix = null,
                 text = input.ifEmpty { "0" },
@@ -123,11 +124,11 @@ private fun CustomFeeSettingsContent(
             )
 
             if (isValid) {
-                Spacer(modifier = Modifier.height(8.dp))
+                VerticalSpacer(8.dp)
                 BodyM(totalFeeText, color = Colors.White64)
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             NumberPad(
                 onPress = onKeyPress,
@@ -140,7 +141,7 @@ private fun CustomFeeSettingsContent(
                 text = stringResource(R.string.common__continue),
                 modifier = Modifier.testTag("Continue")
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

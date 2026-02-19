@@ -3,10 +3,8 @@ package to.bitkit.ui.screens.transfer.external
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,9 +42,11 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -130,15 +130,15 @@ private fun ExternalConnectionContent(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             Display(stringResource(R.string.lightning__external_manual__title).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(stringResource(R.string.lightning__external_manual__text), color = Colors.White64)
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             Caption13Up(text = stringResource(R.string.lightning__external_manual__node_id), color = Colors.White64)
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             TextInput(
                 placeholder = "00000000000000000000000000000000000000000000000000000000000000",
                 value = nodeId,
@@ -154,9 +154,9 @@ private fun ExternalConnectionContent(
                     .testTag("NodeIdInput")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             Caption13Up(text = stringResource(R.string.lightning__external_manual__host), color = Colors.White64)
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             TextInput(
                 placeholder = "00.00.00.00",
                 value = host,
@@ -172,9 +172,9 @@ private fun ExternalConnectionContent(
                     .testTag("HostInput")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             Caption13Up(text = stringResource(R.string.lightning__external_manual__port), color = Colors.White64)
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             TextInput(
                 placeholder = "9735",
                 value = port,
@@ -191,7 +191,7 @@ private fun ExternalConnectionContent(
                     .testTag("PortInput")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.lightning__external_manual__paste),
                 size = ButtonSize.Small,
@@ -206,8 +206,8 @@ private fun ExternalConnectionContent(
                 fullWidth = false,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Spacer(modifier = Modifier.weight(1f))
+            VerticalSpacer(16.dp)
+            FillHeight()
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -228,7 +228,7 @@ private fun ExternalConnectionContent(
                         .testTag("ExternalContinue")
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

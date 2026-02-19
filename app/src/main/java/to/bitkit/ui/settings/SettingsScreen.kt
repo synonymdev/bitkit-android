@@ -2,7 +2,6 @@ package to.bitkit.ui.settings
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +28,7 @@ import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.navigateToAboutSettings
 import to.bitkit.ui.navigateToAdvancedSettings
@@ -167,7 +167,7 @@ fun SettingsScreenContent(
                     modifier = Modifier.testTag("DevSettings")
                 )
             }
-            Spacer(Modifier.weight(1f))
+            FillHeight()
             Image(
                 painter = painterResource(R.drawable.cog),
                 contentDescription = null,
@@ -177,7 +177,7 @@ fun SettingsScreenContent(
                     .clickableAlpha(1f) { onCogTap() }
                     .testTag("DevOptions")
             )
-            Spacer(Modifier.weight(1f))
+            FillHeight()
         }
     }
 }

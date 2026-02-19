@@ -8,13 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,10 +66,12 @@ import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityAddTagSheet
@@ -394,7 +394,7 @@ private fun ActivityDetailContent(
             ) // TODO Display the user avatar when selfSend
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         StatusSection(item, accentColor, feeRates)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
@@ -417,10 +417,10 @@ private fun ActivityDetailContent(
                         tint = accentColor,
                         modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    HorizontalSpacer(4.dp)
                     BodySSB(text = timestamp.toActivityItemDate())
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 HorizontalDivider()
             }
 
@@ -438,10 +438,10 @@ private fun ActivityDetailContent(
                         tint = accentColor,
                         modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    HorizontalSpacer(4.dp)
                     BodySSB(text = timestamp.toActivityItemTime())
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 HorizontalDivider()
             }
         }
@@ -475,7 +475,7 @@ private fun ActivityDetailContent(
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        HorizontalSpacer(4.dp)
                         AnimatedContent(
                             targetState = hideBalance,
                             transitionSpec = { BalanceAnimations.activityAmountTransition },
@@ -488,7 +488,7 @@ private fun ActivityDetailContent(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+                    VerticalSpacer(16.dp)
                     HorizontalDivider()
                 }
                 if (fee != null) {
@@ -512,7 +512,7 @@ private fun ActivityDetailContent(
                                 tint = accentColor,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            HorizontalSpacer(4.dp)
                             AnimatedContent(
                                 targetState = hideBalance,
                                 transitionSpec = { BalanceAnimations.activityAmountTransition },
@@ -525,7 +525,7 @@ private fun ActivityDetailContent(
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
                         HorizontalDivider()
                     }
                 }
@@ -553,7 +553,7 @@ private fun ActivityDetailContent(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 HorizontalDivider()
             }
         }
@@ -596,7 +596,7 @@ private fun ActivityDetailContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         // Action buttons
         Column(

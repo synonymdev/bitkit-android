@@ -2,10 +2,8 @@ package to.bitkit.ui.settings.backups
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -21,7 +19,9 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.util.gradientBackground
@@ -58,7 +58,7 @@ private fun ShowPassphraseContent(
             .testTag("backup_show_passphrase_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__pass_your), onBack = onBack)
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         Column(
             modifier = Modifier
@@ -70,7 +70,7 @@ private fun ShowPassphraseContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Column(
                 modifier = Modifier
@@ -85,7 +85,7 @@ private fun ShowPassphraseContent(
                     color = Colors.White64,
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                VerticalSpacer(8.dp)
 
                 BodyMSB(
                     text = bip39Passphrase,
@@ -94,14 +94,14 @@ private fun ShowPassphraseContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             BodyS(
                 text = stringResource(R.string.security__pass_never_share).withAccent(accentColor = Colors.Brand),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.height(24.dp))
+            FillHeight()
+            VerticalSpacer(24.dp)
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
@@ -109,7 +109,7 @@ private fun ShowPassphraseContent(
                 modifier = Modifier.testTag("backup_show_passphrase_continue_button")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

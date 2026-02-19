@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,6 +31,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Title
@@ -122,7 +122,7 @@ private fun LoadingView() {
             color = Colors.White64,
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Box(
             contentAlignment = Alignment.Center,
@@ -138,7 +138,7 @@ private fun LoadingView() {
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -220,7 +220,7 @@ private fun FoundFundsView(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         PrimaryButton(
             text = stringResource(R.string.sweep__to_wallet),
@@ -270,7 +270,7 @@ private fun NoFundsView(onBack: () -> Unit) {
             color = Colors.White64,
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Box(
             contentAlignment = Alignment.Center,
@@ -286,7 +286,7 @@ private fun NoFundsView(onBack: () -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         PrimaryButton(
             text = stringResource(R.string.common__ok),
@@ -307,7 +307,7 @@ private fun ErrorView(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxSize()
     ) {
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Icon(
             painter = painterResource(id = R.drawable.ic_warning),
@@ -327,7 +327,7 @@ private fun ErrorView(
             color = Colors.White64,
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         PrimaryButton(
             text = stringResource(R.string.common__retry),

@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -62,7 +60,7 @@ fun LightningChannel(
                 Caption13Up(text = stringResource(R.string.lightning__spending_label), color = Colors.White64)
                 Caption13Up(text = stringResource(R.string.lightning__receiving_label), color = Colors.White64)
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
         }
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -93,7 +91,7 @@ fun LightningChannel(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
         Row(
             verticalAlignment = CenterVertically,
             modifier = Modifier
@@ -114,7 +112,7 @@ fun LightningChannel(
                         .background(spendingAvailableColor, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
                 )
             }
-            Spacer(modifier = Modifier.width(4.dp))
+            HorizontalSpacer(4.dp)
             Box(
                 modifier = Modifier
                     .weight(1f)

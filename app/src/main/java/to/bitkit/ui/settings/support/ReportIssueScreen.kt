@@ -1,9 +1,7 @@
 package to.bitkit.ui.settings.support
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -23,6 +21,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -75,7 +74,7 @@ fun ReportIssueContent(
                 .padding(horizontal = 16.dp)
                 .testTag(ReportIssueTestTags.SCREEN)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             BodyM(
                 text = stringResource(R.string.settings__support__report_text),
@@ -83,7 +82,7 @@ fun ReportIssueContent(
                 modifier = Modifier.testTag(ReportIssueTestTags.DESCRIPTION)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             BodyM(
                 text = stringResource(R.string.settings__support__label_address),
@@ -91,7 +90,7 @@ fun ReportIssueContent(
                 modifier = Modifier.testTag(ReportIssueTestTags.EMAIL_LABEL)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
 
             TextInput(
                 placeholder = stringResource(R.string.settings__support__placeholder_address),
@@ -110,7 +109,7 @@ fun ReportIssueContent(
                     .testTag(ReportIssueTestTags.EMAIL_INPUT)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             BodyM(
                 text = stringResource(R.string.settings__support__label_message),
@@ -118,7 +117,7 @@ fun ReportIssueContent(
                 modifier = Modifier.testTag(ReportIssueTestTags.MESSAGE_LABEL)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
 
             TextInput(
                 placeholder = stringResource(R.string.settings__support__placeholder_message),
@@ -131,7 +130,7 @@ fun ReportIssueContent(
                     .testTag(ReportIssueTestTags.MESSAGE_INPUT)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             PrimaryButton(
                 text = stringResource(R.string.settings__support__text_button),
@@ -141,7 +140,7 @@ fun ReportIssueContent(
                 modifier = Modifier.testTag(ReportIssueTestTags.SEND_BUTTON)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

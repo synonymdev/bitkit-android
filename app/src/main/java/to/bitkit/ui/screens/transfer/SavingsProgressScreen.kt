@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.transfer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -29,8 +27,10 @@ import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -129,13 +129,13 @@ private fun Content(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            VerticalSpacer(12.dp)
             when (progressState) {
                 SavingsProgressState.PROGRESS -> {
                     Display(
                         text = stringResource(R.string.lightning__savings_progress__title).withAccent(),
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    VerticalSpacer(8.dp)
                     BodyM(
                         text = stringResource(R.string.lightning__savings_progress__text).withAccentBoldBright(),
                         color = Colors.White64,
@@ -144,7 +144,7 @@ private fun Content(
 
                 SavingsProgressState.SUCCESS -> {
                     Display(text = stringResource(R.string.lightning__transfer_success__title_savings).withAccent())
-                    Spacer(modifier = Modifier.height(8.dp))
+                    VerticalSpacer(8.dp)
                     BodyM(
                         text = stringResource(R.string.lightning__transfer_success__text_savings),
                         color = Colors.White64,
@@ -153,14 +153,14 @@ private fun Content(
 
                 SavingsProgressState.INTERRUPTED -> {
                     Display(text = stringResource(R.string.lightning__savings_interrupted__title).withAccent())
-                    Spacer(modifier = Modifier.height(8.dp))
+                    VerticalSpacer(8.dp)
                     BodyM(
                         text = stringResource(R.string.lightning__savings_interrupted__text).withAccentBoldBright(),
                         color = Colors.White64,
                     )
                 }
             }
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
             if (progressState == SavingsProgressState.PROGRESS) {
                 TransferAnimationView(
                     largeCircleRes = R.drawable.onchain_sync_large,
@@ -189,7 +189,7 @@ private fun Content(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             if (!inProgress) {
                 PrimaryButton(
@@ -198,7 +198,7 @@ private fun Content(
                     modifier = Modifier.testTag("TransferSuccess-button")
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

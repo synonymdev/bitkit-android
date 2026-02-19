@@ -4,12 +4,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,9 +17,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.SearchInputIconButton
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
@@ -65,7 +64,7 @@ fun ActivityListFilter(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    HorizontalSpacer(12.dp)
                 }
 
                 SearchInputIconButton(
@@ -77,7 +76,7 @@ fun ActivityListFilter(
                     },
                     modifier = Modifier.testTag("TagsPrompt")
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                HorizontalSpacer(12.dp)
                 SearchInputIconButton(
                     iconRes = R.drawable.ic_calendar,
                     isActive = hasDateRangeFilter,
@@ -90,7 +89,7 @@ fun ActivityListFilter(
             }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         CustomTabRowWithSpacing(
             tabs = tabs,

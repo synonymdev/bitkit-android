@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -197,7 +196,7 @@ private fun Content(
                 onBack = onBack.takeIf { canGoBack },
             )
 
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             if (isNodeRunning) {
                 ContentRunning(
@@ -270,7 +269,7 @@ fun ContentRunning(
                 .testTag("ReviewAmount")
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         when (uiState.payMethod) {
             SendMethod.ONCHAIN -> OnChainDescription(uiState = uiState, onEvent = onEvent)
@@ -307,9 +306,9 @@ private fun LnurlCommentSection(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
 ) {
-    Spacer(modifier = Modifier.height(16.dp))
+    VerticalSpacer(16.dp)
     Caption13Up(stringResource(R.string.wallet__lnurl_pay_confirm__comment), color = Colors.White64)
-    Spacer(modifier = Modifier.height(8.dp))
+    VerticalSpacer(8.dp)
 
     TextInput(
         value = uiState.comment,
@@ -329,9 +328,9 @@ private fun TagsSection(
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
 ) {
-    Spacer(modifier = Modifier.height(16.dp))
+    VerticalSpacer(16.dp)
     Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-    Spacer(modifier = Modifier.height(8.dp))
+    VerticalSpacer(8.dp)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -372,7 +371,7 @@ private fun OnChainDescription(
     val fee by remember(uiState.speed) { mutableStateOf(FeeRate.fromSpeed(uiState.speed)) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Caption13Up(text = stringResource(R.string.wallet__send_to), color = Colors.White64)
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
         BodySSB(
             text = uiState.address,
             maxLines = 1,
@@ -448,7 +447,7 @@ private fun OnChainDescription(
                 ) {
                     VerticalSpacer(16.dp)
                     Caption13Up(text = stringResource(R.string.wallet__send_confirming_in), color = Colors.White64)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    VerticalSpacer(8.dp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -489,7 +488,7 @@ private fun LightningDescription(
             else -> uiState.decodedInvoice?.bolt11.orEmpty()
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
         BodySSB(
             text = destination,
             maxLines = 1,
@@ -511,7 +510,7 @@ private fun LightningDescription(
             ) {
                 VerticalSpacer(16.dp)
                 Caption13Up(text = stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
-                Spacer(modifier = Modifier.height(8.dp))
+                VerticalSpacer(8.dp)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -537,7 +536,7 @@ private fun LightningDescription(
                             )
                         } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
                 }
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
             if (!isLnurlPay && expirySeconds != null) {
@@ -551,7 +550,7 @@ private fun LightningDescription(
                         text = stringResource(R.string.wallet__send_invoice_expiration),
                         color = Colors.White64,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    VerticalSpacer(8.dp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -567,7 +566,7 @@ private fun LightningDescription(
 
                         BodySSB(text = invoiceExpiryTimestamp)
                     }
-                    Spacer(modifier = Modifier.weight(1f))
+                    FillHeight()
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                 }
             }
@@ -576,7 +575,7 @@ private fun LightningDescription(
         if (!isLnurlPay && description != null) {
             Column {
                 Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
-                Spacer(modifier = Modifier.height(8.dp))
+                VerticalSpacer(8.dp)
                 BodySSB(text = description)
                 HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
             }
