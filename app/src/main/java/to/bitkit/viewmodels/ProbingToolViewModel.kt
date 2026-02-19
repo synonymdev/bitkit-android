@@ -132,6 +132,15 @@ class ProbingToolViewModel @Inject constructor(
                     _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = true) }
                 }
 
+                is Scanner.OnChain -> {
+                    val lightningParam = data.invoice.params?.get("lightning")
+                    val lightning = lightningParam?.let {
+                        runCatching { coreService.decode(it) }.getOrNull() as? Scanner.Lightning
+                    }
+                    val isZeroAmount = lightning?.invoice?.amountSatoshis == 0uL
+                    _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = isZeroAmount) }
+                }
+
                 else -> {
                     _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = false) }
                 }
