@@ -1,5 +1,6 @@
 {
   "platforms": {
+    "ios": null,
     "android": {
       "version": "v2.0.2",
       "buildNumber": 176,
