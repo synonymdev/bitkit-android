@@ -120,6 +120,7 @@ class VssBackupClient @Inject constructor(
         vssStoreIdProvider.clearCache()
         Logger.debug("VSS client reset", context = TAG)
     }
+
     suspend fun putObject(
         key: String,
         data: ByteArray,

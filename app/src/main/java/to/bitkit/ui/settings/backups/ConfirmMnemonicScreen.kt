@@ -73,8 +73,10 @@ fun ConfirmMnemonicScreen(
         pressedStates = pressedStates,
         isComplete = isComplete,
         onWordPress = { word, shuffledIndex ->
-            // Find index of the last filled word
-            val lastIndex = selectedWords.indexOfFirst { it == null } - 1
+            val firstNullIndex = selectedWords.indexOfFirst { it == null }
+            if (firstNullIndex == -1) return@ConfirmMnemonicContent
+
+            val lastIndex = firstNullIndex - 1
             val nextIndex = if (lastIndex == -1) 0 else lastIndex + 1
 
             // If the word is correct and pressed, do nothing

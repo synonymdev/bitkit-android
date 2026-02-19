@@ -48,9 +48,11 @@ import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
 import to.bitkit.utils.Logger
+import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import java.io.File
@@ -69,7 +71,13 @@ class LightningService @Inject constructor(
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
+    private val loggerLdk: LoggerLdk,
 ) : BaseCoroutineScope(bgDispatcher) {
+
+    companion object {
+        private const val TAG = "LightningService"
+        private const val NODE_ID_PREVIEW_LEN = 20
+    }
 
     @Volatile
     var node: Node? = null
@@ -138,6 +146,7 @@ class LightningService @Inject constructor(
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
+            configureScorerSource()
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -184,6 +193,12 @@ class LightningService @Inject constructor(
             Logger.info("Using gossip source: P2P", context = TAG)
             setGossipSourceP2p()
         }
+    }
+
+    private fun Builder.configureScorerSource() {
+        val scorerUrl = Env.ldkScorerUrl ?: return
+        Logger.info("Using pathfinding scores source: '$scorerUrl'", context = TAG)
+        setPathfindingScoresSource(scorerUrl)
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
@@ -262,11 +277,6 @@ class LightningService @Inject constructor(
         Logger.info("LDK storage wiped", context = TAG)
     }
 
-    /**
-     * Resets the network graph cache, forcing a full RGS sync on next startup.
-     * This is useful when the cached graph is stale or missing nodes.
-     * Note: Node must be stopped before calling this.
-     */
     fun resetNetworkGraph(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning()
         Logger.warn("Resetting network graph cache…", context = TAG)
@@ -280,15 +290,13 @@ class LightningService @Inject constructor(
         }
     }
 
-    /**
-     * Validates that all trusted peers are present in the network graph.
-     * Returns false if all trusted peers are missing, indicating the graph cache is stale.
-     */
-    fun validateNetworkGraph(): Boolean {
+    @Suppress("ReturnCount")
+    fun aresRequiredPeersInNetworkGraph(): Boolean {
         val node = this.node ?: return true
         val graph = node.networkGraph()
-        val graphNodes = graph.listNodes().toSet()
-        if (graphNodes.isEmpty()) {
+
+        val nodes = graph.listNodes().toSet()
+        if (nodes.isEmpty()) {
             val rgsTimestamp = node.status().latestRgsSnapshotTimestamp
             if (rgsTimestamp != null) {
                 Logger.warn("Network graph is empty despite RGS timestamp $rgsTimestamp", context = TAG)
@@ -297,23 +305,46 @@ class LightningService @Inject constructor(
             Logger.debug("Network graph is empty, skipping validation", context = TAG)
             return true
         }
-        val missingPeers = trustedPeers.filter { it.nodeId !in graphNodes }
-        if (missingPeers.size == trustedPeers.size) {
+
+        // reset graph if missing trusted peers
+        val missing = trustedPeers.filter { it.nodeId !in nodes }
+        if (missing.size == trustedPeers.size) {
+            val rgsTimestamp = node.status().latestRgsSnapshotTimestamp
+            val missingIds = missing.joinToString { it.nodeId.take(NODE_ID_PREVIEW_LEN) }
             Logger.warn(
-                "Network graph missing all ${trustedPeers.size} trusted peers",
+                "Network graph missing all ${trustedPeers.size} trusted peers: [$missingIds] " +
+                    "(graphNodes=${nodes.size}, channels=${graph.listChannels().size}, " +
+                    "rgsTimestamp=$rgsTimestamp)",
                 context = TAG,
             )
             return false
         }
-        if (missingPeers.isNotEmpty()) {
+
+        // reset graph if missing channel counterparty
+        val channels = node.listChannels().filter { it.isUsable }
+        val missingCounterparties = channels.filter { it.counterpartyNodeId !in nodes }
+        if (missingCounterparties.isNotEmpty()) {
+            val ids = missingCounterparties.joinToString { it.counterpartyNodeId.take(NODE_ID_PREVIEW_LEN) }
+            Logger.warn(
+                "Network graph missing ${missingCounterparties.size} active channel counterparties: [$ids] " +
+                    "(graphNodes=${nodes.size}, channels=${graph.listChannels().size})",
+                context = TAG,
+            )
+            return false
+        }
+
+        if (missing.isNotEmpty()) {
+            val ids = missing.joinToString { it.nodeId }
             Logger.debug(
-                "Network graph missing ${missingPeers.size}/${trustedPeers.size} trusted peers",
+                "Network graph missing ${missing.size}/${trustedPeers.size} trusted peers: [$ids]",
                 context = TAG,
             )
         }
-        val presentCount = trustedPeers.size - missingPeers.size
+
+        val total = trustedPeers.size
+        val count = total - missing.size
         Logger.debug(
-            "Network graph validated: $presentCount/${trustedPeers.size} trusted peers present",
+            "Network graph validated: $count/$total trusted peers present",
             context = TAG,
         )
         return true
@@ -615,7 +646,7 @@ class LightningService @Inject constructor(
                 }
             }
         }.onFailure {
-            dumpNetworkGraphInfo(bolt11)
+            loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
         }.getOrThrow()
     }
 
@@ -652,27 +683,48 @@ class LightningService @Inject constructor(
     // endregion
 
     // region probing
-    suspend fun sendProbes(invoice: Bolt11Invoice): Result<Unit> {
+    suspend fun sendProbes(bolt11: String): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
+
+        val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
+        Logger.debug(
+            "sendProbes: invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            context = TAG
+        )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbes(invoice, null)
+                node.bolt11Payment().sendProbes(bolt11Invoice, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
     }
 
-    suspend fun sendProbesUsingAmount(invoice: Bolt11Invoice, amountMsat: ULong): Result<Unit> {
+    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { throw LdkError(it as NodeException) }
+
+        val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
+        Logger.debug(
+            "sendProbesUsingAmount: customAmountMsat=$amountMsat (${amountMsat / 1000u} sats), " +
+                "invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            context = TAG
+        )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbesUsingAmount(invoice, amountMsat, null)
+                node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
                 Result.success(Unit)
             }.getOrElse {
+                dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
@@ -784,26 +836,28 @@ class LightningService @Inject constructor(
     ): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        Logger.verbose(
-            "Calculating fee for $amountSats sats to $address, ${utxosToSpend?.size} UTXOs, satsPerVByte=$satsPerVByte",
-            context = TAG,
-        )
-
         return ServiceQueue.LDK.background {
-            return@background try {
-                val fee = node.onchainPayment().calculateTotalFee(
+            return@background runCatching {
+                node.onchainPayment().calculateTotalFee(
                     address = address,
                     amountSats = amountSats,
                     feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                     utxosToSpend = utxosToSpend,
-                )
-                Logger.debug(
-                    "Calculated fee='$fee' for $amountSats sats to $address, satsPerVByte=$satsPerVByte",
+                ).also {
+                    Logger.debug(
+                        "Calculated fee='$it' for $amountSats sats to $address, satsPerVByte=$satsPerVByte",
+                        context = TAG,
+                    )
+                }
+            }.getOrElse {
+                Logger.warn(
+                    "Error calculating fee for $amountSats sats to $address, " +
+                        "${utxosToSpend?.size} UTXOs, satsPerVByte=$satsPerVByte",
                     context = TAG,
+                    e = it,
                 )
-                fee
-            } catch (e: NodeException) {
-                throw LdkError(e)
+
+                throw if (it is NodeException) LdkError(it) else it
             }
         }
     }
@@ -868,136 +922,6 @@ class LightningService @Inject constructor(
     // endregion
 
     // region debug
-    @Suppress("LongMethod")
-    fun dumpNetworkGraphInfo(bolt11: String) {
-        val node = this.node ?: run {
-            Logger.error("Node not available for network graph dump", context = TAG)
-            return
-        }
-        val nodeIdPreviewLength = 20
-
-        val sb = StringBuilder()
-        sb.appendLine("\n\n=== ROUTE NOT FOUND - NETWORK GRAPH DUMP ===\n")
-
-        // 1. Invoice Info
-        runCatching {
-            val invoice = Bolt11Invoice.fromStr(bolt11)
-            sb.appendLine("Invoice Info:")
-            sb.appendLine("  - Payment Hash: ${invoice.paymentHash()}")
-            sb.appendLine("  - Invoice: $bolt11")
-        }.getOrElse {
-            sb.appendLine("Failed to parse bolt11 invoice: $it")
-        }
-
-        // 2. Our Node Info
-        sb.appendLine("\nOur Node Info:")
-        sb.appendLine("  - Node ID: ${node.nodeId()}")
-
-        // 3. Our Channels
-        sb.appendLine("\nOur Channels:")
-        val channels = node.listChannels()
-        sb.appendLine("  Total channels: ${channels.size}")
-
-        var totalOutboundMsat = 0UL
-        var totalInboundMsat = 0UL
-        var usableChannels = 0
-        var announcedChannels = 0
-
-        channels.forEachIndexed { index, channel ->
-            totalOutboundMsat += channel.outboundCapacityMsat
-            totalInboundMsat += channel.inboundCapacityMsat
-            if (channel.isUsable) usableChannels++
-            if (channel.isAnnounced) announcedChannels++
-
-            sb.appendLine("  Channel ${index + 1}:")
-            sb.appendLine("    - Channel ID: ${channel.channelId}")
-            sb.appendLine("    - Counterparty: ${channel.counterpartyNodeId}")
-            sb.appendLine(
-                "    - Ready: ${channel.isChannelReady}, Usable: ${channel.isUsable}, " +
-                    "Announced: ${channel.isAnnounced}"
-            )
-            sb.appendLine(
-                "    - Outbound: ${channel.outboundCapacityMsat} msat, " +
-                    "Inbound: ${channel.inboundCapacityMsat} msat"
-            )
-        }
-
-        sb.appendLine("\n  Channel Summary:")
-        sb.appendLine("    - Usable channels: $usableChannels/${channels.size}")
-        sb.appendLine("    - Announced channels: $announcedChannels/${channels.size}")
-        sb.appendLine("    - Total Outbound: $totalOutboundMsat msat")
-        sb.appendLine("    - Total Inbound: $totalInboundMsat msat")
-
-        // 4. Our Peers
-        sb.appendLine("\nOur Peers:")
-        val peers = node.listPeers()
-        sb.appendLine("  Total peers: ${peers.size}")
-
-        peers.forEachIndexed { index, peer ->
-            sb.appendLine("  Peer ${index + 1}: ${peer.nodeId.take(nodeIdPreviewLength)}... @ ${peer.address}")
-            sb.appendLine("    - Connected: ${peer.isConnected}, Persisted: ${peer.isPersisted}")
-        }
-
-        // 5. RGS Configuration
-        sb.appendLine("\nRGS Configuration:")
-        sb.appendLine("  - RGS Server URL: ${Env.ldkRgsServerUrl ?: "Not configured"}")
-
-        val nodeStatus = node.status()
-        nodeStatus.latestRgsSnapshotTimestamp?.let { rgsTimestamp ->
-            val date = java.util.Date(rgsTimestamp.toLong() * 1000)
-            val timeAgoMs = System.currentTimeMillis() - date.time
-            val hoursAgo = (timeAgoMs / 3600000).toInt()
-            val minutesAgo = ((timeAgoMs % 3600000) / 60000).toInt()
-
-            sb.appendLine("  - Last RGS Snapshot: $date")
-            if (hoursAgo > 0) {
-                sb.appendLine("  - Time since update: ${hoursAgo}h ${minutesAgo}m ago")
-            } else {
-                sb.appendLine("  - Time since update: ${minutesAgo}m ago")
-            }
-            sb.appendLine("  - Timestamp: $rgsTimestamp")
-        } ?: run {
-            sb.appendLine("  - Last RGS Snapshot: Never synced")
-            sb.appendLine("  - WARNING: Network graph may be empty or stale!")
-        }
-
-        // 6. Network Graph Data
-        sb.appendLine("\nRGS Network Graph Data:")
-        val networkGraph = node.networkGraph()
-        val allNodes = networkGraph.listNodes()
-        val allChannels = networkGraph.listChannels()
-
-        sb.appendLine("  Total nodes: ${allNodes.size}")
-        sb.appendLine("  Total channels: ${allChannels.size}")
-
-        // Check for trusted peers in graph
-        sb.appendLine("\n  Checking for trusted peers in network graph:")
-        var foundTrustedNodes = 0
-        trustedPeers.forEach { peer ->
-            val nodeId = peer.nodeId
-            if (allNodes.any { it == nodeId }) {
-                foundTrustedNodes++
-                sb.appendLine("    OK: ${nodeId.take(nodeIdPreviewLength)}... found in graph")
-            } else {
-                sb.appendLine("    MISSING: ${nodeId.take(nodeIdPreviewLength)}... NOT in graph")
-            }
-        }
-        sb.appendLine("  Summary: $foundTrustedNodes/${trustedPeers.size} trusted peers found in graph")
-
-        // Show first 10 nodes
-        val nodesToShow = minOf(10, allNodes.size)
-        sb.appendLine("\n  First $nodesToShow nodes:")
-        allNodes.take(nodesToShow).forEachIndexed { index, nodeId ->
-            sb.appendLine("    ${index + 1}. $nodeId")
-        }
-        if (allNodes.size > nodesToShow) {
-            sb.appendLine("    ... and ${allNodes.size - nodesToShow} more nodes")
-        }
-
-        sb.appendLine("\n=== END NETWORK GRAPH DUMP ===\n")
-
-        Logger.info(sb.toString(), context = TAG)
-    }
 
     fun getNetworkGraphInfo(): NetworkGraphInfo? {
         val node = this.node ?: return null
@@ -1014,37 +938,20 @@ class LightningService @Inject constructor(
         }.getOrNull()
     }
 
-    suspend fun exportNetworkGraphToFile(outputDir: String): Result<File> {
+    private fun dumpNetworkGraphInfo(bolt11: String) {
+        val node = this.node ?: return
+        loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
+    }
+
+    suspend fun exportNetworkGraphToFile(
+        outputDir: String,
+        fileName: String = "network_graph_nodes.txt",
+    ): Result<File> {
         val node = this.node ?: return Result.failure(ServiceError.NodeNotSetup())
-
-        return withContext(bgDispatcher) {
-            runCatching {
-                val graph = node.networkGraph()
-                val nodes = graph.listNodes()
-
-                val outputFile = File(outputDir, "network_graph_nodes.txt")
-                outputFile.bufferedWriter().use { writer ->
-                    writer.write("Network Graph Nodes Export\n")
-                    writer.write("Total nodes: ${nodes.size}\n")
-                    writer.write("Exported at: ${System.currentTimeMillis()}\n")
-                    writer.write("---\n")
-                    nodes.forEachIndexed { index, nodeId ->
-                        writer.write("${index + 1}. $nodeId\n")
-                    }
-                }
-
-                Logger.info("Exported ${nodes.size} nodes to ${outputFile.absolutePath}", context = TAG)
-                outputFile
-            }.onFailure {
-                Logger.error("Failed to export network graph to file", it, context = TAG)
-            }
-        }
+        return loggerLdk.exportNetworkGraphToFile(node, outputDir, fileName)
     }
+
     // endregion
-
-    companion object {
-        private const val TAG = "LightningService"
-    }
 }
 
 @Serializable
@@ -1054,6 +961,6 @@ data class NetworkGraphInfo(
     val latestRgsSyncTimestamp: ULong?,
 )
 
-class TrustedPeerForceCloseException : Exception(
+class TrustedPeerForceCloseException : AppError(
     "Cannot force close channel with trusted peer. Force close is disabled for Blocktank LSP channels."
 )

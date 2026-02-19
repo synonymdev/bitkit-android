@@ -139,8 +139,8 @@ class WeatherService @Inject constructor(
     }
 
     private fun formatFeeForDisplay(sats: Long): String {
-        val usdValue = currencyRepo.convertSatsToFiat(sats, USD).getOrNull()
-        return usdValue?.formatted.orEmpty()
+        val selectedFiatValue = currencyRepo.convertSatsToFiat(sats).getOrNull()
+        return selectedFiatValue?.formattedWithSymbol(withSpace = true).orEmpty()
     }
 }
 

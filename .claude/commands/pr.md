@@ -1,5 +1,5 @@
 ---
-description: Create a PR on GitHub for the current branch
+description: "Create a PR on GitHub, e.g. /pr --draft -- focus on the new wallet sync logic"
 argument_hint: "[branch] [--dry] [--draft] [-- instructions]"
 allowed_tools: Bash, Read, Glob, Grep, Write, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents, mcp__github__issue_read
 ---
@@ -49,6 +49,15 @@ If no base branch argument provided, detect the repo's default branch:
   - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
     - Read full commit message: `git log -1 --format='%B' <commit_sha>`
   - Store instructions for use in description generation
+- **Read instruction files from `.ai/pr/`:**
+  - Scan `.ai/pr/` for markdown files: `ls .ai/pr/*.md 2>/dev/null`
+  - Read each `.md` file found (using the Read tool)
+  - Treat their contents as supplementary instructions for description generation, merged with any `--` instructions
+  - These file-based instructions follow the same priority rules as custom `--` instructions (see Step 6, "Custom Instructions")
+- **Scan for media files in `.ai/pr/`:**
+  - List non-markdown files: `ls .ai/pr/* 2>/dev/null | grep -vE '\.md$'`
+  - Supported types: `.png`, `.jpg`, `.jpeg`, `.gif`, `.mp4`, `.mov`, `.webm`, `.webp`
+  - Store the list of found media files with their paths for use in Preview section (Step 6)
 
 ### 4. Extract Linked Issues
 Scan commits for issue references:
@@ -142,9 +151,22 @@ Example:
 
 **Preview Section (conditional):**
 Only include if the PR template (`.github/pull_request_template.md`) contains a `### Preview` heading:
-- Create placeholders for media: `IMAGE_1`, `VIDEO_2`, etc.
-- Add code comment under each placeholder describing what it should show
-- Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
+
+- **If media files were found in `.ai/pr/`:**
+  - For each media file, add a labeled markdown placeholder in the Preview section
+  - Use format: `<!-- MEDIA: .ai/pr/filename.ext — Upload this file here via GitHub web UI -->` as a marker
+  - Add a brief description comment based on the filename (e.g., `pay2blink.mp4` -> "Pay to Blink flow recording")
+  - Example output:
+    ```
+    ### Preview
+
+    <!-- MEDIA: .ai/pr/pay2blink.mp4 — Upload this file here via GitHub web UI -->
+    ```
+
+- **If no media files found in `.ai/pr/`:**
+  - Fall back to generated placeholders: `IMAGE_1`, `VIDEO_2`, etc.
+  - Add code comment under each placeholder describing what it should show
+  - Example: `<!-- VIDEO_1: Record the send flow by scanning a LN invoice and setting amount to 5000 sats -->`
 
 ### 7. Save PR Description
 Before creating the PR:
@@ -159,6 +181,10 @@ gh pr create --base $base --title "..." --body "..." [--draft]
 ```
 - Add `--draft` flag if draft mode selected
 - If actual PR number differs from predicted, rename the saved file
+- **If media files exist in `.ai/pr/`:**
+  - Output the PR edit URL for easy access (append `/edit` to the PR URL)
+  - Instruct the user to drag-and-drop each media file into the Preview section via the GitHub web UI
+  - Note: GitHub does not support programmatic media upload to PR bodies
 
 ### 9. Output Summary
 
@@ -185,7 +211,16 @@ Suggested reviewers:
 ```
 
 **Media TODOs (only if Preview section was included):**
-If the PR description includes a Preview section with media placeholders, append:
+If the PR description includes a Preview section, append media action items:
+
+If media files were found in `.ai/pr/`:
+```
+Media to upload (drag-and-drop into Preview section on GitHub):
+- .ai/pr/pay2blink.mp4
+- .ai/pr/screenshot.png
+```
+
+If no media files were found (generated placeholders):
 ```
 ## TODOs
 - [ ] IMAGE_1: [description]

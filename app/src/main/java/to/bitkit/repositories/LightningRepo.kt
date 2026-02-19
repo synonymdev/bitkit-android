@@ -32,7 +32,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -46,7 +45,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -94,7 +93,7 @@ class LightningRepo @Inject constructor(
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val connectivityRepo: ConnectivityRepo,
-    private val vssBackupClient: VssBackupClient,
+    private val vssBackupClientLdk: VssBackupClientLdk,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -326,19 +325,20 @@ class LightningRepo @Inject constructor(
                 updateGeoBlockState()
                 refreshChannelCache()
 
-                // Validate network graph has trusted peers (RGS cache can become stale)
-                if (shouldValidateGraph && !lightningService.validateNetworkGraph()) {
+                if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
+
                     lightningService.stop()
                     lightningService.resetNetworkGraph(walletIndex)
-                    // Also clear stale graph from VSS to prevent fallback restoration
+
                     runCatching {
-                        vssBackupClient.setup(walletIndex).getOrThrow()
-                        vssBackupClient.deleteObject("network_graph").getOrThrow()
-                        Logger.info("Cleared stale network graph from VSS", context = TAG)
+                        vssBackupClientLdk.setup(walletIndex).getOrThrow()
+                        vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
+                        Logger.info("Cleared stale network graph from VSS (first delete)", context = TAG)
                     }.onFailure {
-                        Logger.warn("Failed to clear graph from VSS", it, context = TAG)
+                        Logger.warn("Failed to clear graph from VSS (first delete)", it, context = TAG)
                     }
+
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                     shouldRestartForGraphReset = true
                     return@withLock Result.success(Unit)
@@ -663,7 +663,9 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        runCatching { lightningService.connectToTrustedPeers() }
+        runCatching { lightningService.connectToTrustedPeers() }.also {
+            syncState()
+        }
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("connectPeer") {
@@ -763,9 +765,21 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
+        waitForUsableChannels()
         runCatching { lightningService.send(bolt11, sats) }.also {
             syncState()
         }
+    }
+
+    private suspend fun waitForUsableChannels() {
+        if (lightningService.channels?.any { it.isUsable } == true) return
+
+        Logger.info("Waiting for usable channels before sending payment", context = TAG)
+        syncState()
+
+        withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+            _lightningState.first { state -> state.channels.any { it.isUsable } }
+        } ?: Logger.warn("Timeout waiting for usable channels", context = TAG)
     }
 
     @Suppress("LongParameterList")
@@ -945,12 +959,19 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true): Boolean {
-        return if (!_lightningState.value.nodeLifecycleState.isRunning() && fallbackToCachedBalance) {
-            amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
-        } else {
-            lightningService.canSend(amountSats)
+    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true) = withContext(bgDispatcher) {
+        if (!_lightningState.value.nodeLifecycleState.canRun()) {
+            return@withContext false
         }
+        if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
+            return@withContext amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
+        }
+        if (lightningService.channels == null) {
+            withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
+                _lightningState.first { lightningService.channels != null }
+            }
+        }
+        return@withContext lightningService.canSend(amountSats)
     }
 
     fun getNodeId(): String? =
@@ -1100,13 +1121,16 @@ class LightningRepo @Inject constructor(
     // region probing
     suspend fun sendProbeForInvoice(bolt11: String, amountSats: ULong? = null): Result<Unit> =
         executeWhenNodeRunning("sendProbeForInvoice") {
+            Logger.debug(
+                "sendProbeForInvoice: amountSats=${amountSats ?: "null (using invoice amount)"}",
+                context = TAG
+            )
             runCatching {
-                val invoice = Bolt11Invoice.fromStr(bolt11)
                 if (amountSats != null) {
                     val amountMsat = amountSats * 1000u
-                    lightningService.sendProbesUsingAmount(invoice, amountMsat)
+                    lightningService.sendProbesUsingAmount(bolt11, amountMsat)
                 } else {
-                    lightningService.sendProbes(invoice)
+                    lightningService.sendProbes(bolt11)
                 }
             }.getOrElse {
                 Result.failure(it)
@@ -1133,6 +1157,8 @@ class LightningRepo @Inject constructor(
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
+        private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
+        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
     }
 }
 

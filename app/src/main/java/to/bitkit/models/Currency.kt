@@ -76,6 +76,8 @@ data class ConvertedAmount(
     val sats: Long,
     val locale: Locale = Locale.getDefault(),
 ) {
+    val isSymbolSuffix: Boolean get() = currency in SUFFIX_SYMBOL_CURRENCIES
+
     data class BitcoinDisplayComponents(
         val symbol: String,
         val value: String,
@@ -88,6 +90,12 @@ data class ConvertedAmount(
             value = formattedValue,
         )
     }
+
+    fun formattedWithSymbol(withSpace: Boolean = false): String = value.formatCurrencyWithSymbol(
+        currencyCode = currency,
+        currencySymbol = symbol,
+        withSpace = withSpace,
+    )
 }
 
 fun Long.formatMoney(
@@ -144,6 +152,43 @@ fun BigDecimal.formatCurrency(decimalPlaces: Int = FIAT_DECIMALS, locale: Locale
 
     return runCatching { formatter.format(this) }.getOrNull()
 }
+
+fun BigDecimal.formatCurrencyWithSymbol(
+    currencyCode: String,
+    currencySymbol: String? = null,
+    withSpace: Boolean = false,
+    decimalPlaces: Int = FIAT_DECIMALS,
+): String {
+    val formatted = formatCurrency(decimalPlaces) ?: "0.00"
+    val symbol = currencySymbol
+        ?: runCatching { java.util.Currency.getInstance(currencyCode) }.getOrNull()?.symbol
+        ?: currencyCode
+    val separator = if (withSpace) " " else ""
+
+    return if (currencyCode in SUFFIX_SYMBOL_CURRENCIES) {
+        "$formatted$separator$symbol"
+    } else {
+        "$symbol$separator$formatted"
+    }
+}
+
+fun isSuffixSymbolCurrency(currencyCode: String): Boolean = currencyCode in SUFFIX_SYMBOL_CURRENCIES
+
+private val SUFFIX_SYMBOL_CURRENCIES = setOf(
+    "BGN",
+    "CHF",
+    "CZK",
+    "DKK",
+    "HRK",
+    "HUF",
+    "ISK",
+    "NOK",
+    "PLN",
+    "RON",
+    "RUB",
+    "SEK",
+    "TRY",
+)
 
 /** Represent this sat value in Bitcoin BigDecimal. */
 fun Long.asBtc(): BigDecimal = BigDecimal(this).divide(BigDecimal(SATS_IN_BTC), BTC_SCALE, RoundingMode.HALF_UP)
