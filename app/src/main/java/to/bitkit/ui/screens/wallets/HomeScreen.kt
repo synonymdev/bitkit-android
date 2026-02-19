@@ -452,6 +452,7 @@ private fun WalletPage(
                                         when (banner) {
                                             ActivityBannerType.SPENDING ->
                                                 rootNavController.navigate(Routes.SettingUp)
+
                                             ActivityBannerType.SAVINGS -> Unit
                                         }
                                     },
@@ -625,7 +626,7 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
         )
         HorizontalSpacer(16.dp)
         Icon(
-            painter = painterResource(R.drawable.ic_swipe_hint),
+            painter = painterResource(R.drawable.swipe_instruction),
             contentDescription = null,
             tint = Colors.White64,
             modifier = Modifier.size(40.dp)

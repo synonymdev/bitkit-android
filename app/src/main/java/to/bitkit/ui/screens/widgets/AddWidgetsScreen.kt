@@ -34,15 +34,6 @@ fun AddWidgetsScreen(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
             SettingsButtonRow(
-                title = stringResource(R.string.widgets__suggestions__name),
-                subtitle = stringResource(R.string.widgets__suggestions__description),
-                iconRes = R.drawable.widget_suggestions,
-                iconSize = 48.dp,
-                maxLinesSubtitle = 1,
-                onClick = onSuggestionsClick,
-                modifier = Modifier.testTag("WidgetListItem-suggestions")
-            )
-            SettingsButtonRow(
                 title = stringResource(R.string.widgets__price__name),
                 subtitle = stringResource(R.string.widgets__price__description),
                 iconRes = R.drawable.widget_chart_line,
@@ -99,6 +90,15 @@ fun AddWidgetsScreen(
                 maxLinesSubtitle = 1,
                 onClick = { onWidgetSelected(WidgetType.CALCULATOR) },
                 modifier = Modifier.testTag("WidgetListItem-calculator")
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.widgets__suggestions__name),
+                subtitle = stringResource(R.string.widgets__suggestions__description),
+                iconRes = R.drawable.widget_suggestions,
+                iconSize = 48.dp,
+                maxLinesSubtitle = 1,
+                onClick = onSuggestionsClick,
+                modifier = Modifier.testTag("WidgetListItem-suggestions")
             )
         }
     }
