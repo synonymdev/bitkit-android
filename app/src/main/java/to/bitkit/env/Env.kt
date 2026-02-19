@@ -128,7 +128,7 @@ internal object Env {
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
 
-    const val REPO_URL = "https://github.com/synonymdev/bitkit-android/"
+    const val REPO_URL = "https://github.com/synonymdev/bitkit-android"
     const val RELEASE_URL = "$REPO_URL/releases/updater/release.json"
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BTC_MAP_URL = "https://btcmap.org/map"
