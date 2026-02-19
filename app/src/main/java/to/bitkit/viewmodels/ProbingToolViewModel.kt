@@ -17,6 +17,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
@@ -90,15 +91,20 @@ class ProbingToolViewModel @Inject constructor(
             }
 
             val effectiveAmount = amountSats ?: getInvoiceAmount(input)
-            if (effectiveAmount != null && effectiveAmount > 0uL && !lightningRepo.canSend(effectiveAmount)) {
-                val outbound = lightningRepo.lightningState.value.channels.totalNextOutboundHtlcLimitSats()
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = "Amount exceeds outbound capacity",
-                    description = "Available: $outbound sats",
-                )
-                _uiState.update { it.copy(isLoading = false) }
-                return@launch
+            if (effectiveAmount != null && effectiveAmount > 0uL) {
+                val estimatedFee = getEstimatedFee(bolt11, amountSats) ?: 0uL
+                val totalRequired = effectiveAmount + estimatedFee
+                if (!lightningRepo.canSend(totalRequired)) {
+                    val outbound = lightningRepo.lightningState.value.channels.totalNextOutboundHtlcLimitSats()
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = "Amount + fees exceed capacity",
+                        description = "Needed: $BITCOIN_SYMBOL $totalRequired" +
+                            "(includes ~$estimatedFee fee), available: $BITCOIN_SYMBOL $outbound",
+                    )
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@launch
+                }
             }
 
             val startTime = System.currentTimeMillis()
