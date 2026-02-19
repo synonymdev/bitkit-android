@@ -92,15 +92,30 @@ class ProbingToolViewModel @Inject constructor(
 
             val effectiveAmount = amountSats ?: getInvoiceAmount(input)
             if (effectiveAmount != null && effectiveAmount > 0uL) {
-                val estimatedFee = getEstimatedFee(bolt11, amountSats) ?: 0uL
-                val totalRequired = effectiveAmount + estimatedFee
+                val outbound = lightningRepo.lightningState.value.channels
+                    .totalNextOutboundHtlcLimitSats()
+                val estimatedFee = getEstimatedFee(bolt11, amountSats)
+
+                val nearCapacityThreshold = outbound * 95uL / 100uL
+                if (estimatedFee == null && effectiveAmount >= nearCapacityThreshold) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = "Amount too close to capacity",
+                        description = "Available: $BITCOIN_SYMBOL $outbound. " +
+                            "Reduce amount to leave room for routing fees.",
+                    )
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@launch
+                }
+
+                val totalRequired = effectiveAmount + (estimatedFee ?: 0uL)
                 if (!lightningRepo.canSend(totalRequired)) {
-                    val outbound = lightningRepo.lightningState.value.channels.totalNextOutboundHtlcLimitSats()
                     ToastEventBus.send(
                         type = Toast.ToastType.WARNING,
                         title = "Amount + fees exceed capacity",
                         description = "Needed: $BITCOIN_SYMBOL $totalRequired" +
-                            "(includes ~$estimatedFee fee), available: $BITCOIN_SYMBOL $outbound",
+                            "(includes ~${estimatedFee ?: 0uL} fee), " +
+                            "available: $BITCOIN_SYMBOL $outbound",
                     )
                     _uiState.update { it.copy(isLoading = false) }
                     return@launch
