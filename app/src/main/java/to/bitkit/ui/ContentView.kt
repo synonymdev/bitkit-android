@@ -106,6 +106,7 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewScreen
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsViewModel
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
@@ -1394,17 +1395,19 @@ private fun NavGraphBuilder.widgets(
                     WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
                     WidgetType.PRICE -> navController.navigate(Routes.PricePreview)
                     WidgetType.WEATHER -> navController.navigate(Routes.WeatherPreview)
+                    WidgetType.SUGGESTIONS -> navController.navigate(Routes.SuggestionsPreview)
                 }
             },
-            onSuggestionsClick = { navController.navigate(Routes.SuggestionsPreview) },
             fiatSymbol = LocalCurrencies.current.currencySymbol,
             onBackCLick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.SuggestionsPreview> {
+        val viewModel = hiltViewModel<SuggestionsViewModel>()
         SuggestionsPreviewScreen(
-            onBackClick = { navController.popBackStack() },
-            onAddWidget = { navController.navigateToHome() },
+            suggestionsViewModel = viewModel,
+            onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.CalculatorPreview> {

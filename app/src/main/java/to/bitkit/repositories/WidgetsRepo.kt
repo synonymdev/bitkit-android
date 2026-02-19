@@ -84,7 +84,7 @@ class WidgetsRepo @Inject constructor(
 
     private fun updateWidgetJobs(enabledWidgetTypes: Set<WidgetType>) {
         val widgetTypesWithServices = WidgetType.entries.filter {
-            it != WidgetType.CALCULATOR
+            it != WidgetType.CALCULATOR && it != WidgetType.SUGGESTIONS
         }
 
         widgetTypesWithServices.forEach { widgetType ->
@@ -138,7 +138,9 @@ class WidgetsRepo @Inject constructor(
                 }
             }
 
-            WidgetType.CALCULATOR -> throw NotImplementedError("Calculator widget doesn't need a service")
+            WidgetType.CALCULATOR,
+            WidgetType.SUGGESTIONS,
+            -> throw NotImplementedError("Widget doesn't need a service")
         }
 
         widgetJobs[widgetType] = job
@@ -226,8 +228,10 @@ class WidgetsRepo @Inject constructor(
                 widgetsStore.updateBlock(block)
             }
 
-            WidgetType.CALCULATOR -> {
-                throw NotImplementedError("Calculator widget doesn't need a service")
+            WidgetType.CALCULATOR,
+            WidgetType.SUGGESTIONS,
+            -> {
+                throw NotImplementedError("Widget doesn't need a service")
             }
 
             WidgetType.FACTS -> updateWidget(factsService) { facts ->

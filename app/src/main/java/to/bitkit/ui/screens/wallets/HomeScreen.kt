@@ -87,7 +87,6 @@ import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
@@ -257,6 +256,7 @@ fun HomeScreen(
                 WidgetType.NEWS -> rootNavController.navigate(Routes.HeadlinesPreview)
                 WidgetType.PRICE -> rootNavController.navigate(Routes.PricePreview)
                 WidgetType.WEATHER -> rootNavController.navigate(Routes.WeatherPreview)
+                WidgetType.SUGGESTIONS -> rootNavController.navigate(Routes.SuggestionsPreview)
             }
         },
         onClickDeleteWidget = { widgetType ->
@@ -513,14 +513,6 @@ private fun WidgetsPage(
         TopBarSpacer()
         VerticalSpacer(16.dp)
 
-        AnimatedVisibility(homeUiState.suggestions.isNotEmpty()) {
-            SuggestionsSection(
-                suggestions = homeUiState.suggestions,
-                onRemoveSuggestion = onRemoveSuggestion,
-                onClickSuggestion = onClickSuggestion,
-            )
-        }
-
         if (homeUiState.isEditingWidgets) {
             DragDropColumn(
                 items = homeUiState.widgetsWithPosition,
@@ -540,7 +532,11 @@ private fun WidgetsPage(
                 )
             }
         } else {
-            Widgets(homeUiState)
+            Widgets(
+                homeUiState = homeUiState,
+                onRemoveSuggestion = onRemoveSuggestion,
+                onClickSuggestion = onClickSuggestion,
+            )
         }
 
         VerticalSpacer(32.dp)
@@ -571,42 +567,38 @@ private fun SuggestionsSection(
 ) {
     val rows = (suggestions.size + 1) / 2
 
-    Column(modifier = modifier.padding(bottom = 32.dp)) {
-        Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
-        VerticalSpacer(16.dp)
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val cardSize = (maxWidth - 16.dp) / 2
-            val gridHeight = (cardSize * rows) + (16.dp * (rows - 1))
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                userScrollEnabled = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(gridHeight)
-                    .testTag("Suggestions")
-            ) {
-                items(
-                    items = suggestions,
-                    key = { it.name }
-                ) { item ->
-                    SuggestionCard(
-                        gradientColor = item.color,
-                        title = stringResource(item.title),
-                        description = stringResource(item.description),
-                        icon = item.icon,
-                        onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
-                        onClick = { onClickSuggestion(item) },
-                        modifier = Modifier
-                            .testTag("Suggestion-${item.name.lowercase()}")
-                            .animateItem(
-                                fadeInSpec = tween(durationMillis = ANIMATION_DURATION_MS),
-                                fadeOutSpec = tween(durationMillis = ANIMATION_DURATION_MS),
-                                placementSpec = tween(durationMillis = ANIMATION_DURATION_MS),
-                            )
-                    )
-                }
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val cardSize = (maxWidth - 16.dp) / 2
+        val gridHeight = (cardSize * rows) + (16.dp * (rows - 1))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            userScrollEnabled = false,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(gridHeight)
+                .testTag("Suggestions")
+        ) {
+            items(
+                items = suggestions,
+                key = { it.name }
+            ) { item ->
+                SuggestionCard(
+                    gradientColor = item.color,
+                    title = stringResource(item.title),
+                    description = stringResource(item.description),
+                    icon = item.icon,
+                    onClose = { onRemoveSuggestion(item) }.takeIf { item.dismissible },
+                    onClick = { onClickSuggestion(item) },
+                    modifier = Modifier
+                        .testTag("Suggestion-${item.name.lowercase()}")
+                        .animateItem(
+                            fadeInSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+                            fadeOutSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+                            placementSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+                        )
+                )
             }
         }
     }
@@ -634,8 +626,13 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
     }
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
-private fun Widgets(homeUiState: HomeUiState) {
+private fun Widgets(
+    homeUiState: HomeUiState,
+    onRemoveSuggestion: (Suggestion) -> Unit,
+    onClickSuggestion: (Suggestion) -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -723,6 +720,16 @@ private fun Widgets(homeUiState: HomeUiState) {
                             weatherModel = this,
                             preferences = homeUiState.weatherPreferences,
                             modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                WidgetType.SUGGESTIONS -> {
+                    if (homeUiState.suggestions.isNotEmpty()) {
+                        SuggestionsSection(
+                            suggestions = homeUiState.suggestions,
+                            onRemoveSuggestion = onRemoveSuggestion,
+                            onClickSuggestion = onClickSuggestion,
                         )
                     }
                 }

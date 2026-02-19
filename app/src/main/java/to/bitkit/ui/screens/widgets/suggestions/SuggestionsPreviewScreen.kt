@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,12 +22,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.Suggestion
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
@@ -40,24 +43,38 @@ private val previewSuggestions = listOf(Suggestion.BUY, Suggestion.BACK_UP)
 
 @Composable
 fun SuggestionsPreviewScreen(
-    onBackClick: () -> Unit,
-    onAddWidget: () -> Unit,
+    suggestionsViewModel: SuggestionsViewModel,
+    onClose: () -> Unit,
+    onBack: () -> Unit,
 ) {
+    val isSuggestionsWidgetEnabled by suggestionsViewModel.isSuggestionsWidgetEnabled
+        .collectAsStateWithLifecycle()
+
     Content(
-        onBackClick = onBackClick,
-        onAddWidget = onAddWidget,
+        onBack = onBack,
+        isSuggestionsWidgetEnabled = isSuggestionsWidgetEnabled,
+        onClickDelete = {
+            suggestionsViewModel.removeWidget()
+            onClose()
+        },
+        onClickSave = {
+            suggestionsViewModel.addWidget()
+            onClose()
+        },
     )
 }
 
 @Composable
 private fun Content(
-    onBackClick: () -> Unit,
-    onAddWidget: () -> Unit,
+    onBack: () -> Unit,
+    isSuggestionsWidgetEnabled: Boolean,
+    onClickDelete: () -> Unit,
+    onClickSave: () -> Unit,
 ) {
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.widgets__widget__nav_title),
-            onBackClick = onBackClick,
+            onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
 
@@ -121,15 +138,28 @@ private fun Content(
                 }
             }
 
-            VerticalSpacer(21.dp)
+            Row(
+                modifier = Modifier
+                    .padding(vertical = 21.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (isSuggestionsWidgetEnabled) {
+                    SecondaryButton(
+                        text = stringResource(R.string.common__delete),
+                        fullWidth = false,
+                        onClick = onClickDelete,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
 
-            PrimaryButton(
-                text = stringResource(R.string.widgets__add),
-                onClick = onAddWidget,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            VerticalSpacer(21.dp)
+                PrimaryButton(
+                    text = stringResource(R.string.common__save),
+                    fullWidth = false,
+                    onClick = onClickSave,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
@@ -139,8 +169,23 @@ private fun Content(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            onBackClick = {},
-            onAddWidget = {},
+            onBack = {},
+            isSuggestionsWidgetEnabled = false,
+            onClickDelete = {},
+            onClickSave = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewWithDelete() {
+    AppThemeSurface {
+        Content(
+            onBack = {},
+            isSuggestionsWidgetEnabled = true,
+            onClickDelete = {},
+            onClickSave = {},
         )
     }
 }
