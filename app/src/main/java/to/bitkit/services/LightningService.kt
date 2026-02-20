@@ -930,6 +930,25 @@ class LightningService @Inject constructor(
             n.getBalanceForAddressType(addressType.toLdkAddressType())
         }
 
+    suspend fun setPrimaryAddressType(addressType: AddressType) = ServiceQueue.LDK.background {
+        val n = node ?: throw ServiceError.NodeNotSetup()
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        n.setPrimaryAddressTypeWithMnemonic(addressType.toLdkAddressType(), mnemonic, passphrase)
+    }
+
+    suspend fun addAddressTypeToMonitor(addressType: AddressType) = ServiceQueue.LDK.background {
+        val n = node ?: throw ServiceError.NodeNotSetup()
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        n.addAddressTypeToMonitorWithMnemonic(addressType.toLdkAddressType(), mnemonic, passphrase)
+    }
+
+    suspend fun removeAddressTypeFromMonitor(addressType: AddressType) = ServiceQueue.LDK.background {
+        val n = node ?: throw ServiceError.NodeNotSetup()
+        n.removeAddressTypeFromMonitor(addressType.toLdkAddressType())
+    }
+
     private fun AddressType.toLdkAddressType(): LdkAddressType = when (this) {
         AddressType.P2PKH -> LdkAddressType.LEGACY
         AddressType.P2SH -> LdkAddressType.NESTED_SEGWIT

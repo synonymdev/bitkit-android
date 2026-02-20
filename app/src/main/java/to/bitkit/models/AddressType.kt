@@ -106,8 +106,8 @@ fun String.toAddressType(): AddressType? = when (this) {
 val ALL_ADDRESS_TYPE_STRINGS = listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot")
 
 fun String.addressTypeFromAddress(): String? = when {
-    startsWith("bc1p") || startsWith("tb1p") -> "taproot"
-    startsWith("bc1") || startsWith("tb1") -> "nativeSegwit"
+    startsWith("bc1p") || startsWith("tb1p") || startsWith("bcrt1p") -> "taproot"
+    startsWith("bc1") || startsWith("tb1") || startsWith("bcrt1") -> "nativeSegwit"
     startsWith("3") || startsWith("2") -> "nestedSegwit"
     startsWith("1") || startsWith("m") || startsWith("n") -> "legacy"
     else -> null

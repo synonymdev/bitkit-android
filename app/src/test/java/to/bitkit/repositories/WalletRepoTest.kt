@@ -193,11 +193,20 @@ class WalletRepoTest : BaseUnitTest() {
     fun `restoreWallet should monitor all address types for restore`() = test {
         val mnemonic = "restore mnemonic"
         whenever(keychain.saveString(any(), any())).thenReturn(Unit)
+        var capturedSettings: SettingsData? = null
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            capturedSettings = transform(SettingsData())
+        }
 
         val result = sut.restoreWallet(mnemonic, null)
 
         assertTrue(result.isSuccess)
-        verify(settingsStore).update(any())
+        assertEquals("nativeSegwit", capturedSettings?.selectedAddressType)
+        assertEquals(
+            listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot"),
+            capturedSettings?.addressTypesToMonitor,
+        )
     }
 
     @Test
