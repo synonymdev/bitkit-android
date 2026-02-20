@@ -66,6 +66,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 type = Toast.ToastType.INFO,
                 title = context.getString(R.string.settings__addr_type__applying),
                 autoHide = false,
+                testTag = "AddressTypeApplyingToast",
             )
 
             val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
@@ -84,6 +85,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.settings__addr_type__settings_updated),
+                    testTag = "AddressTypeSettingsUpdatedToast",
                 )
             } else {
                 ToastEventBus.send(

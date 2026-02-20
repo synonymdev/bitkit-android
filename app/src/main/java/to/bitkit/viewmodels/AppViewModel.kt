@@ -239,7 +239,7 @@ class AppViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             ToastEventBus.events.collect {
-                toast(it.type, it.title, it.description, it.autoHide, it.visibilityTime)
+                toast(it)
             }
         }
         viewModelScope.launch {
@@ -2069,7 +2069,8 @@ class AppViewModel @Inject constructor(
             title = toast.title,
             description = toast.description,
             autoHide = toast.autoHide,
-            visibilityTime = toast.visibilityTime
+            visibilityTime = toast.visibilityTime,
+            testTag = toast.testTag,
         )
     }
 
