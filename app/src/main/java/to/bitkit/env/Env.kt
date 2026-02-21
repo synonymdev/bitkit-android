@@ -212,7 +212,7 @@ object Peers {
     val stag = PeerDetails.of("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400")
     val lnd1 = PeerDetails.of("039b8b4dd1d88c2c5db374290cda397a8f5d79f312d6ea5d5bfdfc7c6ff363eae3@34.65.111.104:9735")
     val lnd3 = PeerDetails.of("03816141f1dce7782ec32b66a300783b1d436b19777e7c686ed00115bd4b88ff4b@34.65.191.64:9735")
-    val lnd4 = PeerDetails.of("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.186.40:9735")
+    val lnd4 = PeerDetails.of("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.153.174:9735")
 }
 
 private object ElectrumServers {
