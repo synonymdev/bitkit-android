@@ -774,12 +774,13 @@ private fun TopBar(
                         onClick = onClickEditWidgetList,
                         modifier = Modifier.testTag("WidgetsEdit")
                     ) {
-                        Image(
+                        Icon(
                             painter = if (isEditingWidgets) {
                                 painterResource(R.drawable.ic_check)
                             } else {
                                 painterResource(R.drawable.ic_edit)
                             },
+                            tint = Colors.White,
                             contentDescription = null,
                         )
                     }
