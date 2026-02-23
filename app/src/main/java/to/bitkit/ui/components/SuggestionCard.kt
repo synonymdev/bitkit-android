@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -125,7 +126,9 @@ fun SuggestionCard(
                     contentDescription = null,
                     alignment = Alignment.CenterStart,
                     contentScale = ContentScale.FillHeight,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 96.dp)
+                        .weight(1f)
                 )
 
                 if (onClose != null) {
