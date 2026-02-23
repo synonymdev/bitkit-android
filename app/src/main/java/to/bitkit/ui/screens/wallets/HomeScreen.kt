@@ -97,6 +97,7 @@ import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
+import to.bitkit.ui.theme.Insets
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
@@ -478,7 +479,7 @@ private fun WalletPage(
                     }
                 }
 
-                VerticalSpacer(150.dp)
+                VerticalSpacer(116.dp + Insets.Bottom)
             }
         }
 
@@ -611,7 +612,7 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.Bottom,
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 32.dp)
+            .padding(top = 32.dp)
     ) {
         Headline24(
             text = stringResource(R.string.widgets__onboarding_swipe).withAccent(),
