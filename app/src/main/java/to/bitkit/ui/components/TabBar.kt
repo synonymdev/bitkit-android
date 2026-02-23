@@ -51,6 +51,7 @@ private val iconToTextGap = 4.dp
 private val iconSize = 20.dp
 
 const val TAB_BAR_HEIGHT = 56
+const val TAB_BAR_PADDING_BOTTOM = 8
 
 private val buttonLeftShape = RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50)
 private val buttonRightShape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50)
@@ -69,7 +70,7 @@ fun BoxScope.TabBar(
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .padding(bottom = 16.dp)
+            .padding(bottom = TAB_BAR_PADDING_BOTTOM.dp)
             .navigationBarsPadding()
     ) {
         Row(

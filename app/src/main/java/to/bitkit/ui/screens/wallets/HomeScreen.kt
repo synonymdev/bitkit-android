@@ -87,6 +87,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TAB_BAR_HEIGHT
+import to.bitkit.ui.components.TAB_BAR_PADDING_BOTTOM
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.TopBarSpacer
@@ -480,7 +481,7 @@ private fun WalletPage(
                     }
                 }
 
-                VerticalSpacer(TAB_BAR_HEIGHT.dp + 56.dp + Insets.Bottom)
+                VerticalSpacer(TAB_BAR_HEIGHT.dp + TAB_BAR_PADDING_BOTTOM.dp + 36.dp + Insets.Bottom)
             }
         }
 
