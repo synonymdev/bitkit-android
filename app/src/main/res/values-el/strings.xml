@@ -796,7 +796,7 @@
     <string name="wallet__activity_removed">Αφαιρέθηκε από το Mempool</string>
     <string name="wallet__activity_sent">Στάλθηκε</string>
     <string name="wallet__activity_sent_self">Στάλθηκε στον εαυτό μου</string>
-    <string name="wallet__activity_show_all">Εμφάνιση όλης της δραστηριότητας</string>
+    <string name="wallet__activity_show_all">Εμφάνιση όλων</string>
     <string name="wallet__activity_status">Κατάσταση</string>
     <string name="wallet__activity_successful">Επιτυχής</string>
     <string name="wallet__activity_tabs__all">Όλα</string>

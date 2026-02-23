@@ -811,7 +811,7 @@
     <string name="wallet__receive_will">Você receberá</string>
     <string name="wallet__minimum">MÍNIMO</string>
     <string name="wallet__activity">Atividade</string>
-    <string name="wallet__activity_show_all">Mostrar Todas as Atividades</string>
+    <string name="wallet__activity_show_all">Mostrar Tudo</string>
     <string name="wallet__activity_no">Nenhuma atividade ainda</string>
     <string name="wallet__activity_no_explain">Receba alguns bitcoins para começar</string>
     <string name="wallet__activity_sent">Enviado</string>

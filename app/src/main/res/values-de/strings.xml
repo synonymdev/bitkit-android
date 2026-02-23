@@ -866,7 +866,7 @@
     <string name="wallet__receive_will">Du wirst empfangen</string>
     <string name="wallet__minimum">MINIMUM</string>
     <string name="wallet__activity">Aktivität</string>
-    <string name="wallet__activity_show_all">Alle Aktivitäten anzeigen</string>
+    <string name="wallet__activity_show_all">Alle anzeigen</string>
     <string name="wallet__activity_no">Noch keine Aktivitäten</string>
     <string name="wallet__activity_no_explain">Empfange einige Gelder, um zu starten</string>
     <string name="wallet__activity_sent">Gesendet</string>

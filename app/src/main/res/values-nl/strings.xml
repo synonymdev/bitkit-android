@@ -796,7 +796,7 @@
     <string name="wallet__activity_removed">Verwijderd uit mempool</string>
     <string name="wallet__activity_sent">Verzonden</string>
     <string name="wallet__activity_sent_self">Naar mezelf verzonden</string>
-    <string name="wallet__activity_show_all">Alle activiteit tonen</string>
+    <string name="wallet__activity_show_all">Alles tonen</string>
     <string name="wallet__activity_status">Status</string>
     <string name="wallet__activity_successful">Succesvol</string>
     <string name="wallet__activity_tabs__all">Alles</string>
