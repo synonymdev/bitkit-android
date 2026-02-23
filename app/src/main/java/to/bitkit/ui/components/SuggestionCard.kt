@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -122,6 +123,7 @@ fun SuggestionCard(
                 Image(
                     painter = painterResource(icon),
                     contentDescription = null,
+                    alignment = Alignment.CenterStart,
                     contentScale = ContentScale.FillHeight,
                     modifier = Modifier.weight(1f)
                 )
