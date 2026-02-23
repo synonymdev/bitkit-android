@@ -17,6 +17,7 @@ import to.bitkit.R
 import to.bitkit.env.Peers
 import to.bitkit.models.NodePeer
 import to.bitkit.models.Toast
+import to.bitkit.models.alias
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -25,8 +26,8 @@ import javax.inject.Inject
 @HiltViewModel
 class NodeInfoViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
+    blocktankRepo: BlocktankRepo,
     private val lightningRepo: LightningRepo,
-    private val blocktankRepo: BlocktankRepo,
 ) : ViewModel() {
     val peers: StateFlow<List<NodePeer>> = combine(
         lightningRepo.lightningState.map { it.peers },
@@ -38,7 +39,7 @@ class NodeInfoViewModel @Inject constructor(
                 lspNode = lspNodes?.firstOrNull { it.pubkey == peer.nodeId },
                 name = Peers.Known.find(peer)?.name,
             )
-        }
+        }.sortedBy { it.alias() }
     }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -61,5 +62,12 @@ class NodeInfoViewModel @Inject constructor(
                     )
                 }
         }
+    }
+    fun onCopy(text: String) = viewModelScope.launch {
+        ToastEventBus.send(
+            type = Toast.ToastType.SUCCESS,
+            title = context.getString(R.string.common__copied),
+            description = text,
+        )
     }
 }

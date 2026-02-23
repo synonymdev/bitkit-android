@@ -50,7 +50,6 @@ import to.bitkit.ext.formatToString
 import to.bitkit.ext.uri
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodePeer
-import to.bitkit.models.Toast
 import to.bitkit.models.alias
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningState
@@ -84,8 +83,6 @@ fun NodeInfoScreen(
     viewModel: NodeInfoViewModel = hiltViewModel(),
 ) {
     val wallet = walletViewModel ?: return
-    val app = appViewModel ?: return
-    val context = LocalContext.current
 
     val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
@@ -95,16 +92,10 @@ fun NodeInfoScreen(
         lightningState = lightningState,
         peers = peers,
         isRefreshing = isRefreshing,
-        onBack = { navController.popBackStack() },
-        onRefresh = { wallet.onPullToRefresh() },
-        onDisconnectPeer = { viewModel.disconnectPeer(it) },
-        onCopy = { text ->
-            app.toast(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
-                description = text
-            )
-        },
+        onBack = navController::popBackStack,
+        onRefresh = wallet::onPullToRefresh,
+        onDisconnectPeer = viewModel::disconnectPeer,
+        onCopy = viewModel::onCopy,
     )
 }
 
@@ -138,12 +129,10 @@ private fun Content(
                     nodeId = lightningState.nodeId,
                     onCopy = onCopy,
                 )
-
                 NodeStateSection(
                     nodeLifecycleState = lightningState.nodeLifecycleState,
                     nodeStatus = lightningState.nodeStatus,
                 )
-
                 lightningState.balances?.let { details ->
                     WalletBalancesSection(balanceDetails = details)
 
@@ -151,14 +140,12 @@ private fun Content(
                         LightningBalancesSection(balances = details.lightningBalances)
                     }
                 }
-
                 if (lightningState.channels.isNotEmpty()) {
                     ChannelsSection(
                         channels = lightningState.channels,
                         onCopy = onCopy,
                     )
                 }
-
                 if (peers.isNotEmpty()) {
                     PeersSection(
                         peers = peers,
@@ -166,7 +153,6 @@ private fun Content(
                         onCopy = onCopy,
                     )
                 }
-
                 VerticalSpacer(16.dp)
             }
         }
