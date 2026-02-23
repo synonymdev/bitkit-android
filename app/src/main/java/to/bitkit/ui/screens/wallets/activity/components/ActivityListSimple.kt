@@ -38,7 +38,6 @@ fun ActivityListSimple(
             onClick = onAllActivityClick,
             modifier = Modifier
                 .wrapContentWidth()
-                .padding(top = 8.dp)
                 .testTag("ActivityShowAll")
         )
     }
