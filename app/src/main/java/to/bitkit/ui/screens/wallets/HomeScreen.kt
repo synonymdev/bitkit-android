@@ -769,7 +769,7 @@ private fun TopBar(
         TopAppBar(
             title = {},
             actions = {
-                if (showEditWidgets) {
+                AnimatedVisibility(showEditWidgets) {
                     IconButton(
                         onClick = onClickEditWidgetList,
                         modifier = Modifier.testTag("WidgetsEdit")
@@ -784,8 +784,9 @@ private fun TopBar(
                         )
                     }
                 }
-                AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
-                HorizontalSpacer(4.dp)
+                AppStatus(
+                    onClick = { rootNavController.navigate(Routes.AppStatus) },
+                )
                 IconButton(
                     onClick = { scope.launch { drawerState.open() } },
                     modifier = Modifier.testTag("HeaderMenu")
