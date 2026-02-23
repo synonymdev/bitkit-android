@@ -621,6 +621,7 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
         Image(
             painter = painterResource(R.drawable.swipe_instruction),
             contentDescription = null,
+            modifier = Modifier.padding(bottom = 12.dp)
         )
     }
 }
