@@ -160,9 +160,9 @@ class WidgetsStore @Inject constructor(
 @Serializable
 data class WidgetsData(
     val widgets: List<WidgetWithPosition> = listOf(
-        WidgetWithPosition(type = WidgetType.PRICE, position = 0),
-        WidgetWithPosition(type = WidgetType.BLOCK, position = 1),
-        WidgetWithPosition(type = WidgetType.NEWS, position = 2),
+        WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 0),
+        WidgetWithPosition(type = WidgetType.PRICE, position = 1),
+        WidgetWithPosition(type = WidgetType.BLOCK, position = 2),
     ),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val factsPreferences: FactsPreferences = FactsPreferences(),
