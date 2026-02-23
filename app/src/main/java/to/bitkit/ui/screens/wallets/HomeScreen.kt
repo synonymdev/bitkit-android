@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -79,9 +78,9 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
-import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
@@ -99,7 +98,6 @@ import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
-import to.bitkit.ui.theme.Insets
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
@@ -116,6 +114,7 @@ import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -793,6 +792,7 @@ private fun TopBar(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_list),
+                        tint = Colors.White,
                         contentDescription = stringResource(R.string.settings__settings),
                     )
                 }
