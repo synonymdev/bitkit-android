@@ -50,7 +50,14 @@ dependencyResolutionManagement {
                 password = pass
             }
         }
-        maven("https://jitpack.io")
+        maven {
+            url = uri("https://maven.pkg.github.com/synonymdev/ldk-node")
+            credentials {
+                val (user, pass) = getGithubCredentials()
+                username = user
+                password = pass
+            }
+        }
     }
 }
 rootProject.name = "bitkit-android"
