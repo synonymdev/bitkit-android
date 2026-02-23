@@ -490,7 +490,6 @@ private fun WalletPage(
                 text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
             )
         }
     }
