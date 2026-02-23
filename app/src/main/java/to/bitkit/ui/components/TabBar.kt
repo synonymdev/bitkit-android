@@ -50,6 +50,8 @@ import to.bitkit.ui.theme.Colors
 private val iconToTextGap = 4.dp
 private val iconSize = 20.dp
 
+const val TAB_BAR_HEIGHT = 56
+
 private val buttonLeftShape = RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50)
 private val buttonRightShape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50)
 
@@ -81,7 +83,7 @@ fun BoxScope.TabBar(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .weight(1f)
-                    .height(60.dp)
+                    .height(TAB_BAR_HEIGHT.dp)
                     .clip(buttonLeftShape)
                     .clickable { onSendClick() }
                     .testTag("Send")
@@ -102,7 +104,7 @@ fun BoxScope.TabBar(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .weight(1f)
-                    .height(60.dp)
+                    .height(TAB_BAR_HEIGHT.dp)
                     .clip(buttonRightShape)
                     .clickable { onReceiveClick() }
                     .testTag("Receive")
