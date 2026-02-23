@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -617,11 +618,9 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
             modifier = Modifier.weight(1f)
         )
         HorizontalSpacer(16.dp)
-        Icon(
+        Image(
             painter = painterResource(R.drawable.swipe_instruction),
             contentDescription = null,
-            tint = Colors.White64,
-            modifier = Modifier.size(40.dp)
         )
     }
 }
