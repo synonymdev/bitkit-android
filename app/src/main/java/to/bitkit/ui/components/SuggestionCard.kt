@@ -138,7 +138,7 @@ fun SuggestionCard(
                         Icon(
                             painter = painterResource(R.drawable.ic_x),
                             contentDescription = null,
-                            tint = Colors.White,
+                            tint = Colors.White64,
                         )
                     }
                 }
