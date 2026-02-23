@@ -14,7 +14,7 @@ data class ReleaseInfoDTO(
 @Serializable
 data class Platforms(
     val android: PlatformDetails,
-    val ios: PlatformDetails?,
+    val ios: PlatformDetails? = null,
 )
 
 /**
