@@ -79,7 +79,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
-import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
@@ -613,7 +613,7 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(vertical = 32.dp)
     ) {
-        Display(
+        Headline24(
             text = stringResource(R.string.widgets__onboarding_swipe).withAccent(),
             modifier = Modifier.weight(1f)
         )
