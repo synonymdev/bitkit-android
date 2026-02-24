@@ -425,6 +425,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(flowOf(mockSettingsData))
 
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(coreService.activity).thenReturn(mock())
 
         whenever(
             lightningService.send(
