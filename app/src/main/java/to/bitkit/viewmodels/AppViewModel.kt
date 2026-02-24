@@ -205,6 +205,9 @@ class AppViewModel @Inject constructor(
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
+
+    @Volatile
+    private var isPerformingChannelRecovery = false
     private var addressValidationJob: Job? = null
 
     fun setShowForgotPin(value: Boolean) {
@@ -370,7 +373,10 @@ class AppViewModel @Inject constructor(
         when {
             (isShowingLoading || needsPostMigrationSync) && !isCompletingMigration -> completeMigration()
             isRestoringRemote -> completeRNRemoteBackupRestore()
-            !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
+            !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> {
+                walletRepo.debounceSyncByEvent()
+                checkForOrphanedChannelMonitorRecovery()
+            }
             else -> Unit
         }
     }
@@ -500,6 +506,55 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             sweepRepo.hasSweepableFunds()
                 .onSuccess { hasFunds -> if (hasFunds) showSheet(Sheet.SweepPrompt) }
+        }
+    }
+
+    private fun checkForOrphanedChannelMonitorRecovery() {
+        if (isPerformingChannelRecovery) return
+        viewModelScope.launch(bgDispatcher) {
+            if (migrationService.isChannelRecoveryChecked()) return@launch
+            if (!migrationService.isMigrationCompleted()) {
+                migrationService.markChannelRecoveryChecked()
+                return@launch
+            }
+
+            isPerformingChannelRecovery = true
+            Logger.info("Running one-time channel monitor recovery check", context = TAG)
+
+            runCatching {
+                migrationService.fetchChannelRecoveryData()
+                val channelMigration = buildChannelMigrationIfAvailable()
+
+                if (channelMigration == null) {
+                    Logger.info("No channel monitors found on RN backup", context = TAG)
+                    return@runCatching
+                }
+
+                Logger.info(
+                    "Found ${channelMigration.channelMonitors.size} monitors on RN backup, attempting recovery",
+                    context = TAG,
+                )
+
+                lightningRepo.stop().onFailure {
+                    Logger.error("Failed to stop node for channel recovery", it, context = TAG)
+                }
+                delay(REMOTE_RESTORE_NODE_RESTART_DELAY_MS)
+                lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
+                    .onSuccess {
+                        migrationService.consumePendingChannelMigration()
+                        walletRepo.syncNodeAndWallet()
+                        walletRepo.syncBalances()
+                        Logger.info("Channel monitor recovery complete", context = TAG)
+                    }
+                    .onFailure {
+                        Logger.error("Failed to restart node after channel recovery", it, context = TAG)
+                    }
+            }.onFailure {
+                Logger.error("Channel monitor recovery check failed", it, context = TAG)
+            }
+
+            migrationService.markChannelRecoveryChecked()
+            isPerformingChannelRecovery = false
         }
     }
 

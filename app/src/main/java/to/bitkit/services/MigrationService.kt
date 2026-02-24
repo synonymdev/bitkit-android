@@ -90,6 +90,7 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_METADATA_KEY = "rnPendingMetadata"
         private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
+        private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
@@ -346,6 +347,25 @@ class MigrationService @Inject constructor(
     suspend fun markMigrationChecked() {
         val key = stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)
         rnMigrationStore.edit { it[key] = "true" }
+    }
+
+    suspend fun isMigrationCompleted(): Boolean {
+        val key = stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    suspend fun isChannelRecoveryChecked(): Boolean {
+        val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    suspend fun markChannelRecoveryChecked() {
+        val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
+        rnMigrationStore.edit { it[key] = "true" }
+    }
+
+    suspend fun fetchChannelRecoveryData() {
+        fetchRNRemoteLdkData()
     }
 
     suspend fun hasRNWalletData(): Boolean {
