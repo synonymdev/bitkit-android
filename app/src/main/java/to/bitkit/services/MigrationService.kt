@@ -366,9 +366,7 @@ class MigrationService @Inject constructor(
         rnMigrationStore.edit { it[key] = "true" }
     }
 
-    suspend fun fetchChannelRecoveryData() {
-        fetchRNRemoteLdkData()
-    }
+    suspend fun fetchChannelRecoveryData(): Boolean = fetchRNRemoteLdkData()
 
     suspend fun hasRNWalletData(): Boolean {
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
@@ -1301,13 +1299,13 @@ class MigrationService @Inject constructor(
         return null
     }
 
-    private suspend fun fetchRNRemoteLdkData() {
-        runCatching {
-            val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching
-            if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching
+    private suspend fun fetchRNRemoteLdkData(): Boolean {
+        return runCatching {
+            val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching true
+            if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching true
 
             val managerData = rnBackupClient.retrieve("channel_manager", fileGroup = "ldk")
-                ?: return@runCatching
+                ?: return@runCatching true
 
             val expectedCount = files.channelMonitors.size
             val monitorResults = coroutineScope {
@@ -1344,9 +1342,11 @@ class MigrationService @Inject constructor(
                     channelMonitors = monitors,
                 )
             }
+
+            failedMonitors.isEmpty()
         }.onFailure { e ->
             Logger.error("Failed to fetch remote LDK data", e, context = TAG)
-        }
+        }.getOrDefault(false)
     }
 
     private suspend fun applyRNRemoteSettings(data: ByteArray) {

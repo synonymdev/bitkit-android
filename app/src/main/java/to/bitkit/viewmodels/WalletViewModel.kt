@@ -315,13 +315,13 @@ class WalletViewModel @Inject constructor(
 
         Logger.info("Running one-time channel monitor recovery check", context = TAG)
 
-        runCatching {
-            migrationService.fetchChannelRecoveryData()
+        val allMonitorsRetrieved = runCatching {
+            val allRetrieved = migrationService.fetchChannelRecoveryData()
             val channelMigration = buildChannelMigrationIfAvailable()
 
             if (channelMigration == null) {
                 Logger.info("No channel monitors found on RN backup", context = TAG)
-                return@runCatching
+                return@runCatching true
             }
 
             Logger.info(
@@ -343,11 +343,15 @@ class WalletViewModel @Inject constructor(
                 .onFailure {
                     Logger.error("Failed to restart node after channel recovery", it, context = TAG)
                 }
-        }.onFailure {
-            Logger.error("Channel monitor recovery check failed", it, context = TAG)
-        }
 
-        migrationService.markChannelRecoveryChecked()
+            allRetrieved
+        }.getOrDefault(false)
+
+        if (allMonitorsRetrieved) {
+            migrationService.markChannelRecoveryChecked()
+        } else {
+            Logger.warn("Some monitors failed to download, will retry on next startup", context = TAG)
+        }
     }
 
     fun stop() {
