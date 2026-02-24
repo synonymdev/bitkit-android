@@ -317,7 +317,7 @@ class WalletViewModel @Inject constructor(
 
             if (channelMigration == null) {
                 Logger.info("No channel monitors found on RN backup", context = TAG)
-                return@runCatching true
+                return@runCatching allRetrieved
             }
 
             Logger.info(
