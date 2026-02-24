@@ -308,10 +308,6 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun checkForOrphanedChannelMonitorRecovery() {
         if (migrationService.isChannelRecoveryChecked()) return
-        if (!migrationService.isMigrationCompleted()) {
-            migrationService.markChannelRecoveryChecked()
-            return
-        }
 
         Logger.info("Running one-time channel monitor recovery check", context = TAG)
 

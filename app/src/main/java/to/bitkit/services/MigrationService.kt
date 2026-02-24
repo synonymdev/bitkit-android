@@ -351,11 +351,6 @@ class MigrationService @Inject constructor(
         rnMigrationStore.edit { it[key] = "true" }
     }
 
-    suspend fun isMigrationCompleted(): Boolean {
-        val key = stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)
-        return rnMigrationStore.data.first()[key] == "true"
-    }
-
     suspend fun isChannelRecoveryChecked(): Boolean {
         val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
         return rnMigrationStore.data.first()[key] == "true"
