@@ -5,6 +5,7 @@ import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
+import to.bitkit.BuildConfig.VERSION_NAME
 import to.bitkit.ext.ensureDir
 import to.bitkit.ext.of
 import to.bitkit.models.BlocktankNotificationType
@@ -22,7 +23,7 @@ internal object Env {
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
-    const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+    const val version = "$VERSION_NAME (${BuildConfig.VERSION_CODE})"
 
     val ldkLogLevel = LogLevel.TRACE
 
@@ -64,6 +65,13 @@ internal object Env {
             Network.BITCOIN -> "https://rgs.blocktank.to/snapshot"
             Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
             Network.REGTEST -> "https://bitkit.stag0.blocktank.to/rgs/snapshot"
+            else -> null
+        }
+
+    val ldkScorerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://api.blocktank.to/scorer.bin"
+            Network.REGTEST -> "https://api.stag0.blocktank.to/scorer"
             else -> null
         }
 
@@ -120,7 +128,8 @@ internal object Env {
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
 
-    const val RELEASE_URL = "https://github.com/synonymdev/bitkit-android/releases/download/updater/release.json"
+    const val REPO_URL = "https://github.com/synonymdev/bitkit-android"
+    const val RELEASE_URL = "$REPO_URL/releases/download/updater/release.json"
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BTC_MAP_URL = "https://btcmap.org/map"
     const val BITKIT_WEBSITE = "https://bitkit.to/"

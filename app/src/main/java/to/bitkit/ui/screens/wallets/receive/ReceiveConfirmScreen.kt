@@ -64,13 +64,13 @@ fun ReceiveConfirmScreen(
 
     val networkFeeFormatted = remember(entry.networkFeeSat) {
         currency.convert(entry.networkFeeSat)
-            ?.let { converted -> "${converted.symbol}${converted.formatted}" }
+            ?.let { converted -> converted.formattedWithSymbol() }
             ?: entry.networkFeeSat.toString()
     }
 
     val serviceFeeFormatted = remember(entry.serviceFeeSat) {
         currency.convert(entry.serviceFeeSat)
-            ?.let { converted -> "${converted.symbol}${converted.formatted}" }
+            ?.let { converted -> converted.formattedWithSymbol() }
             ?: entry.serviceFeeSat.toString()
     }
 
@@ -84,7 +84,7 @@ fun ReceiveConfirmScreen(
                 val btcComponents = converted.bitcoinDisplay(displayUnit)
                 "${btcComponents.symbol} ${btcComponents.value}"
             } else {
-                "${converted.symbol} ${converted.formatted}"
+                converted.formattedWithSymbol()
             }
         } ?: sats.toString()
     }

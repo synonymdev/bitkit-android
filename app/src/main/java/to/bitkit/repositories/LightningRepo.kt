@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -44,6 +45,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -66,6 +68,7 @@ import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -90,6 +93,7 @@ class LightningRepo @Inject constructor(
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val connectivityRepo: ConnectivityRepo,
+    private val vssBackupClientLdk: VssBackupClientLdk,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -108,6 +112,7 @@ class LightningRepo @Inject constructor(
     private val syncMutex = Mutex()
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
+    private val lifecycleMutex = Mutex()
 
     init {
         observeConnectivityForSyncRetry()
@@ -262,6 +267,7 @@ class LightningRepo @Inject constructor(
         customRgsServerUrl: String? = null,
         eventHandler: NodeEventHandler? = null,
         channelMigration: ChannelDataMigration? = null,
+        shouldValidateGraph: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
@@ -269,88 +275,133 @@ class LightningRepo @Inject constructor(
 
         eventHandler?.let { _eventHandlers.add(it) }
 
-        val initialLifecycleState = _lightningState.value.nodeLifecycleState
-        if (initialLifecycleState.isRunningOrStarting()) {
-            Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
-            return@withContext Result.success(Unit)
-        }
+        // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)
+        var shouldRetryStart = false
+        var shouldRestartForGraphReset = false
+        var initialLifecycleState: NodeLifecycleState
 
-        runCatching {
-            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
+        val result = lifecycleMutex.withLock {
+            initialLifecycleState = _lightningState.value.nodeLifecycleState
+            if (initialLifecycleState.isRunningOrStarting()) {
+                Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
+                lightningService.startEventListener(::onEvent)
+                return@withLock Result.success(Unit)
+            }
 
-            // Setup if needed
-            if (lightningService.node == null) {
-                val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
-                if (setupResult.isFailure) {
-                    _lightningState.update {
-                        it.copy(
-                            nodeLifecycleState = NodeLifecycleState.ErrorStarting(
-                                setupResult.exceptionOrNull() ?: NodeSetupError()
+            runCatching {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
+
+                // Setup if needed
+                if (lightningService.node == null) {
+                    val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
+                    if (setupResult.isFailure) {
+                        _lightningState.update {
+                            it.copy(
+                                nodeLifecycleState = NodeLifecycleState.ErrorStarting(
+                                    setupResult.exceptionOrNull() ?: NodeSetupError()
+                                )
                             )
-                        )
+                        }
+                        return@withLock setupResult
                     }
-                    return@withContext setupResult
                 }
-            }
 
-            if (getStatus()?.isRunning == true) {
-                Logger.info("LDK node already running", context = TAG)
+                if (getStatus()?.isRunning == true) {
+                    Logger.info("LDK node already running", context = TAG)
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                    lightningService.startEventListener(::onEvent).onFailure {
+                        Logger.warn("Failed to start event listener", it, context = TAG)
+                        return@withLock Result.failure(it)
+                    }
+                    return@withLock Result.success(Unit)
+                }
+
+                lightningService.start(timeout, ::onEvent)
+
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                lightningService.startEventListener(::onEvent).onFailure {
-                    Logger.warn("Failed to start event listener", it, context = TAG)
-                    return@withContext Result.failure(it)
+
+                // Initial state sync
+                syncState()
+                updateGeoBlockState()
+                refreshChannelCache()
+
+                if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
+                    Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
+
+                    lightningService.stop()
+                    lightningService.resetNetworkGraph(walletIndex)
+
+                    runCatching {
+                        vssBackupClientLdk.setup(walletIndex).getOrThrow()
+                        vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
+                        Logger.info("Cleared stale network graph from VSS (first delete)", context = TAG)
+                    }.onFailure {
+                        Logger.warn("Failed to clear graph from VSS (first delete)", it, context = TAG)
+                    }
+
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                    shouldRestartForGraphReset = true
+                    return@withLock Result.success(Unit)
                 }
-                return@withContext Result.success(Unit)
-            }
 
-            // Start node
-            lightningService.start(timeout, ::onEvent)
-
-            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-
-            // Initial state sync
-            syncState()
-            updateGeoBlockState()
-            refreshChannelCache()
-
-            // Post-startup tasks (non-blocking)
-            connectToTrustedPeers().onFailure {
-                Logger.error("Failed to connect to trusted peers", it, context = TAG)
-            }
-
-            sync().onFailure { e ->
-                Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
-            }
-            scope.launch { registerForNotifications() }
-            Unit
-        }.onFailure { e ->
-            val currentLifecycleState = _lightningState.value.nodeLifecycleState
-            if (currentLifecycleState.isRunning()) {
-                Logger.warn("Start error occurred but node is $currentLifecycleState, skipping retry", e, context = TAG)
-                return@withContext Result.success(Unit)
-            }
-
-            if (shouldRetry) {
-                val retryDelay = 2.seconds
-                Logger.warn("Start error, retrying after $retryDelay...", e, context = TAG)
-                _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
-
-                delay(retryDelay)
-                return@withContext start(
-                    walletIndex = walletIndex,
-                    timeout = timeout,
-                    shouldRetry = false,
-                    customServerUrl = customServerUrl,
-                    customRgsServerUrl = customRgsServerUrl,
-                    channelMigration = channelMigration,
-                )
-            } else {
-                _lightningState.update {
-                    it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
+                // Post-startup tasks (non-blocking)
+                connectToTrustedPeers().onFailure {
+                    Logger.error("Failed to connect to trusted peers", it, context = TAG)
                 }
-                return@withContext Result.failure(e)
+
+                sync().onFailure { e ->
+                    Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
+                }
+                scope.launch { registerForNotifications() }
+                Result.success(Unit)
+            }.getOrElse { e ->
+                val currentState = _lightningState.value.nodeLifecycleState
+                if (currentState.isRunning()) {
+                    Logger.warn("Start error but node is $currentState, skipping retry", e, context = TAG)
+                    return@withLock Result.success(Unit)
+                }
+
+                if (shouldRetry) {
+                    Logger.warn("Start error, will retry...", e, context = TAG)
+                    _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
+                    shouldRetryStart = true
+                    Result.failure(e)
+                } else {
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e)) }
+                    Result.failure(e)
+                }
             }
         }
+
+        // Retry OUTSIDE the mutex to avoid deadlock (Kotlin Mutex is non-reentrant)
+        if (shouldRetryStart) {
+            delay(2.seconds)
+            return@withContext start(
+                walletIndex = walletIndex,
+                timeout = timeout,
+                shouldRetry = false,
+                customServerUrl = customServerUrl,
+                customRgsServerUrl = customRgsServerUrl,
+                channelMigration = channelMigration,
+                shouldValidateGraph = shouldValidateGraph,
+            )
+        }
+
+        // Restart after graph reset OUTSIDE the mutex to avoid deadlock
+        if (shouldRestartForGraphReset) {
+            return@withContext start(
+                walletIndex = walletIndex,
+                timeout = timeout,
+                shouldRetry = shouldRetry,
+                customServerUrl = customServerUrl,
+                customRgsServerUrl = customRgsServerUrl,
+                eventHandler = eventHandler,
+                channelMigration = channelMigration,
+                shouldValidateGraph = false, // Prevent infinite loop
+            )
+        }
+
+        result
     }
 
     private suspend fun onEvent(event: Event) {
@@ -374,16 +425,27 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
-            return@withContext Result.success(Unit)
-        }
+        lifecycleMutex.withLock {
+            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
+                return@withLock Result.success(Unit)
+            }
 
-        runCatching {
-            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
-            lightningService.stop()
-            _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-        }.onFailure {
-            Logger.error("Node stop error", it, context = TAG)
+            runCatching {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+                lightningService.stop()
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            }.onFailure {
+                Logger.error("Node stop error", it, context = TAG)
+                // On failure, check actual node state and update accordingly
+                // If node is still running, revert to Running state to allow retry
+                if (lightningService.node != null && lightningService.status?.isRunning == true) {
+                    Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                } else {
+                    // Node appears stopped, update state
+                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                }
+            }
         }
     }
 
@@ -601,7 +663,9 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        runCatching { lightningService.connectToTrustedPeers() }
+        runCatching { lightningService.connectToTrustedPeers() }.also {
+            syncState()
+        }
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("connectPeer") {
@@ -700,9 +764,21 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
+        waitForUsableChannels()
         runCatching { lightningService.send(bolt11, sats) }.also {
             syncState()
         }
+    }
+
+    private suspend fun waitForUsableChannels() {
+        if (lightningService.channels?.any { it.isUsable } == true) return
+
+        Logger.info("Waiting for usable channels before sending payment", context = TAG)
+        syncState()
+
+        withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+            _lightningState.first { state -> state.channels.any { it.isUsable } }
+        } ?: Logger.warn("Timeout waiting for usable channels", context = TAG)
     }
 
     @Suppress("LongParameterList")
@@ -882,12 +958,19 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true): Boolean {
-        return if (!_lightningState.value.nodeLifecycleState.isRunning() && fallbackToCachedBalance) {
-            amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
-        } else {
-            lightningService.canSend(amountSats)
+    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true) = withContext(bgDispatcher) {
+        if (!_lightningState.value.nodeLifecycleState.canRun()) {
+            return@withContext false
         }
+        if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
+            return@withContext amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
+        }
+        if (lightningService.channels == null) {
+            withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
+                _lightningState.first { lightningService.channels != null }
+            }
+        }
+        return@withContext lightningService.canSend(amountSats)
     }
 
     fun getNodeId(): String? =
@@ -1028,9 +1111,29 @@ class LightningRepo @Inject constructor(
     // region debug
     fun getNetworkGraphInfo() = lightningService.getNetworkGraphInfo()
 
-    suspend fun exportNetworkGraphToFile(outputDir: String): Result<java.io.File> =
+    suspend fun exportNetworkGraphToFile(outputDir: String): Result<File> =
         executeWhenNodeRunning("exportNetworkGraphToFile") {
             lightningService.exportNetworkGraphToFile(outputDir)
+        }
+    // endregion
+
+    // region probing
+    suspend fun sendProbeForInvoice(bolt11: String, amountSats: ULong? = null): Result<Unit> =
+        executeWhenNodeRunning("sendProbeForInvoice") {
+            Logger.debug(
+                "sendProbeForInvoice: amountSats=${amountSats ?: "null (using invoice amount)"}",
+                context = TAG
+            )
+            runCatching {
+                if (amountSats != null) {
+                    val amountMsat = amountSats * 1000u
+                    lightningService.sendProbesUsingAmount(bolt11, amountMsat)
+                } else {
+                    lightningService.sendProbes(bolt11)
+                }
+            }.getOrElse {
+                Result.failure(it)
+            }
         }
     // endregion
 
@@ -1053,6 +1156,8 @@ class LightningRepo @Inject constructor(
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
+        private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
+        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
     }
 }
 

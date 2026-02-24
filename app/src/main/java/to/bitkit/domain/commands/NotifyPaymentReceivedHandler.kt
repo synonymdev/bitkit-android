@@ -111,9 +111,9 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         val amountText = converted?.let {
             val btcDisplay = it.bitcoinDisplay(settings.displayUnit)
             if (settings.primaryDisplay == PrimaryDisplay.BITCOIN) {
-                "${btcDisplay.symbol} ${btcDisplay.value} (${it.symbol}${it.formatted})"
+                "${btcDisplay.symbol} ${btcDisplay.value} (${it.formattedWithSymbol()})"
             } else {
-                "${it.symbol}${it.formatted} (${btcDisplay.symbol} ${btcDisplay.value})"
+                "${it.formattedWithSymbol()} (${btcDisplay.symbol} ${btcDisplay.value})"
             }
         } ?: "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}"
 

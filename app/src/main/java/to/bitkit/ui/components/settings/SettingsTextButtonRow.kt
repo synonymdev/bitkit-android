@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +38,7 @@ fun SettingsTextButtonRow(
     description: String? = null,
     iconRes: Int? = null,
     iconTint: Color = Color.Unspecified,
+    iconSize: Dp = 32.dp,
     enabled: Boolean = true,
     height: Dp = 52.dp,
     showDivider: Boolean = true,
@@ -51,7 +53,7 @@ fun SettingsTextButtonRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(height)
+                    .heightIn(min = height)
                     .clickableAlpha(onClick = if (enabled) onClick else null)
             ) {
                 if (iconRes != null) {
@@ -59,7 +61,7 @@ fun SettingsTextButtonRow(
                         painter = painterResource(iconRes),
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(iconSize),
                     )
                     HorizontalSpacer(10.dp)
                 }
@@ -90,6 +92,7 @@ fun SettingsTextButtonRow(
     }
 }
 
+@Suppress("SpellCheckingInspection")
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
@@ -115,6 +118,27 @@ private fun Preview() {
                     description = "Description",
                     value = "Value",
                     onClick = {},
+                )
+                SettingsTextButtonRow(
+                    title = "Title",
+                    description = "Duis incididunt voluptate Lorem consectetur incididunt. Sint eiusmod amet aute " +
+                        "adipisicing laboris deserunt cupidatat ut.",
+                    value = "Value",
+                    onClick = {},
+                    trailingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_share_purple),
+                            contentDescription = null,
+                            tint = Colors.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Icon(
+                            painter = painterResource(R.drawable.ic_trash),
+                            contentDescription = null,
+                            tint = Colors.Red,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 )
                 SettingsTextButtonRow(
                     title = "Disabled",

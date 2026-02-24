@@ -144,8 +144,9 @@ fun rememberMoneyText(
             }
         } else {
             buildString {
-                if (showSymbol) append("<accent>${converted.symbol}</accent> ")
+                if (showSymbol && !converted.isSymbolSuffix) append("<accent>${converted.symbol}</accent> ")
                 append(converted.formatted)
+                if (showSymbol && converted.isSymbolSuffix) append("<accent>${converted.symbol}</accent>")
             }
         }
     }

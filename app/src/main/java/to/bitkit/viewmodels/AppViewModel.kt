@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -74,6 +75,7 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
+import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.FeeRate
@@ -537,7 +539,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
         }
-        notifyPaymentFailed()
+        notifyPaymentFailed(event.reason)
     }
 
     private suspend fun handlePaymentReceived(event: Event.PaymentReceived) {
@@ -625,10 +627,10 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun notifyPaymentFailed() = toast(
+    private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(
         type = Toast.ToastType.ERROR,
         title = context.getString(R.string.wallet__toast_payment_failed_title),
-        description = context.getString(R.string.wallet__toast_payment_failed_description),
+        description = reason.toUserMessage(context),
         testTag = "PaymentFailedToast",
     )
 
@@ -750,7 +752,7 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        val scanResult = runCatching { coreService.decode(input) }
+        val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
         if (scanResult.isFailure) {
             showAddressValidationError(
@@ -1067,8 +1069,10 @@ class AppViewModel @Inject constructor(
         resetSendState()
         resetQuickPay()
 
+        val input = result.removeLightningSchemes()
+
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
-        if (Bip21Utils.isDuplicatedBip21(result)) {
+        if (Bip21Utils.isDuplicatedBip21(input)) {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1078,14 +1082,14 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        val scan = runCatching { coreService.decode(result) }
-            .onFailure { Logger.error("Failed to decode scan data: '$result'", it, context = TAG) }
+        val scan = runCatching { coreService.decode(input) }
+            .onFailure { Logger.error("Failed to decode scan data: '$input'", it, context = TAG) }
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
         when (scan) {
-            is Scanner.OnChain -> onScanOnchain(scan.invoice, result)
-            is Scanner.Lightning -> onScanLightning(scan.invoice, result)
+            is Scanner.OnChain -> onScanOnchain(scan.invoice, input)
+            is Scanner.Lightning -> onScanLightning(scan.invoice, input)
             is Scanner.LnurlPay -> onScanLnurlPay(scan.data)
             is Scanner.LnurlWithdraw -> onScanLnurlWithdraw(scan.data)
             is Scanner.LnurlAuth -> onScanLnurlAuth(scan.data)
@@ -1096,8 +1100,8 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Unhandled scan data: $scan", context = TAG)
                 toast(
                     type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.other__scan_err_decoding),
-                    description = context.getString(R.string.other__scan_err_interpret_title),
+                    title = context.getString(R.string.other__qr_error_header),
+                    description = context.getString(R.string.other__qr_error_text),
                 )
             }
         }
@@ -1128,13 +1132,14 @@ class AppViewModel @Inject constructor(
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
         val lnInvoice = extractViableLightningInvoice(invoice.params)
+        val amount = lnInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: invoice.amountSatoshis
         _sendUiState.update {
             it.copy(
                 address = invoice.address,
                 addressInput = scanResult,
                 isAddressInputValid = true,
-                amount = invoice.amountSatoshis,
-                isUnified = lnInvoice != null && invoice.amountSatoshis <= maxSendOnchain && maxSendOnchain > 0u,
+                amount = amount,
+                isUnified = lnInvoice != null && amount <= maxSendOnchain && maxSendOnchain > 0u,
                 decodedInvoice = lnInvoice,
                 payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
             )
@@ -1188,7 +1193,7 @@ class AppViewModel @Inject constructor(
         }
 
         Logger.info(
-            when (invoice.amountSatoshis > 0u) {
+            when (amount > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
                 else -> "No amount found in invoice, proceeding to enter amount"
             },
@@ -1788,7 +1793,7 @@ class AppViewModel @Inject constructor(
 
                     is Event.PaymentFailed -> {
                         if (event.paymentHash == hash) {
-                            val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                            val error = Exception(event.reason.toUserMessage(context))
                             WatchResult.Complete(Result.failure(error))
                         } else {
                             WatchResult.Continue()
@@ -2221,17 +2226,18 @@ class AppViewModel @Inject constructor(
 
         val data = uri.toString()
         delay(SCREEN_TRANSITION_DELAY_MS)
-        handleScan(data.removeLightningSchemes())
+        handleScan(data)
     }
 
-    // TODO Temporary fix while these schemes can't be decoded
+    // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
     @Suppress("SpellCheckingInspection")
     private fun String.removeLightningSchemes(): String {
         return this
-            .replace("lnurl:", "")
-            .replace("lnurlw:", "")
-            .replace("lnurlc:", "")
-            .replace("lnurlp:", "")
+            .replace(Regex("^lightning:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurl:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurlw:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurlc:", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^lnurlp:", RegexOption.IGNORE_CASE), "")
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
