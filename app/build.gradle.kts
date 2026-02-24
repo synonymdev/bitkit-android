@@ -170,7 +170,7 @@ android {
             reset()
             // Only architectures supported by native libs (ldk-node, bitkit-core)
             // x86 not supported; x86_64 only for debug/emulator
-            include("armeabi-v7a", "arm64-v8a")
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
             isUniversalApk = true
         }
     }
