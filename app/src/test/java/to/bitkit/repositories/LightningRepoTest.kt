@@ -734,11 +734,9 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `updateAddressType should fail when already in progress`() = test {
         startNodeForTesting()
-        val settingsFlow = MutableSharedFlow<SettingsData>()
+        val settingsFlow = MutableSharedFlow<SettingsData>(replay = 1)
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
-        whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.stop()).thenReturn(Unit)
 
         val scope = CoroutineScope(testDispatcher)
         val job1 = scope.async {
