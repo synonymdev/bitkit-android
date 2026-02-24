@@ -949,6 +949,18 @@ class LightningService @Inject constructor(
         n.removeAddressTypeFromMonitor(addressType.toLdkAddressType())
     }
 
+    suspend fun listMonitoredAddressTypes(): List<AddressType> = ServiceQueue.LDK.background {
+        val n = node ?: throw ServiceError.NodeNotSetup()
+        n.listMonitoredAddressTypes().map { it.toBitkitAddressType() }
+    }
+
+    private fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
+        LdkAddressType.LEGACY -> AddressType.P2PKH
+        LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
+        LdkAddressType.NATIVE_SEGWIT -> AddressType.P2WPKH
+        LdkAddressType.TAPROOT -> AddressType.P2TR
+    }
+
     private fun AddressType.toLdkAddressType(): LdkAddressType = when (this) {
         AddressType.P2PKH -> LdkAddressType.LEGACY
         AddressType.P2SH -> LdkAddressType.NESTED_SEGWIT

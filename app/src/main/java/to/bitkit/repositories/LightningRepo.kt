@@ -62,6 +62,8 @@ import to.bitkit.models.safe
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
+import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.toSettingsString
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -686,6 +688,7 @@ class LightningRepo @Inject constructor(
                 it.copy(selectedAddressType = selectedType, addressTypesToMonitor = monitoredTypes)
             }
             lightningService.setPrimaryAddressType(addressType)
+            syncMonitoredTypesFromNode()
             sync().onFailure { Logger.warn("Sync after address type change failed", it, context = TAG) }
             Unit
         }.onFailure {
@@ -756,6 +759,22 @@ class LightningRepo @Inject constructor(
         return null
     }
 
+    private suspend fun syncMonitoredTypesFromNode() {
+        runCatching {
+            val nodeMonitored = lightningService.listMonitoredAddressTypes()
+            val settings = settingsStore.data.first()
+            val selectedType = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
+            val combined = (nodeMonitored + selectedType).distinct()
+            val allOrdered = ALL_ADDRESS_TYPE_STRINGS
+            val newMonitored = allOrdered.filter { typeStr ->
+                typeStr.toAddressType() in combined
+            }
+            settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
+        }.onFailure {
+            Logger.warn("syncMonitoredTypesFromNode failed", it, context = TAG)
+        }
+    }
+
     fun isChangingAddressType(): Boolean = isChangingAddressType.get()
 
     suspend fun pruneEmptyAddressTypesAfterRestore(): Result<Unit> = withContext(bgDispatcher) {
@@ -764,15 +783,14 @@ class LightningRepo @Inject constructor(
         val settings = settingsStore.data.first()
         val selectedType = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
         val monitored = settings.addressTypesToMonitor.toMutableList()
-        val nativeWitnessTypes = setOf(AddressType.P2WPKH, AddressType.P2TR)
 
         val toRemove = monitored.filter { typeStr ->
             if (typeStr == settings.selectedAddressType) return@filter false
             val type = typeStr.toAddressType() ?: return@filter false
             val balance = getBalanceForAddressType(type).getOrNull() ?: return@filter false
             if (balance != 0uL) return@filter false
-            val wouldLeaveNativeWitness = (selectedType in nativeWitnessTypes) ||
-                monitored.any { it != typeStr && it.toAddressType() in nativeWitnessTypes }
+            val wouldLeaveNativeWitness = (selectedType in NATIVE_WITNESS_TYPES) ||
+                monitored.any { it != typeStr && it.toAddressType() in NATIVE_WITNESS_TYPES }
             wouldLeaveNativeWitness
         }
 
@@ -791,10 +809,9 @@ class LightningRepo @Inject constructor(
     }
 
     private fun isLastRequiredNativeWitnessWallet(addressType: AddressType, monitoredTypes: List<String>): Boolean {
-        val nativeWitnessTypes = setOf(AddressType.P2WPKH, AddressType.P2TR)
-        if (addressType !in nativeWitnessTypes) return false
+        if (addressType !in NATIVE_WITNESS_TYPES) return false
         val monitored = monitoredTypes.mapNotNull { it.toAddressType() }
-        val remaining = monitored.filter { it != addressType && it in nativeWitnessTypes }
+        val remaining = monitored.filter { it != addressType && it in NATIVE_WITNESS_TYPES }
         return remaining.isEmpty()
     }
 
@@ -996,6 +1013,16 @@ class LightningRepo @Inject constructor(
             channelId = channelId ?: "",
         )
         preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
+
+        coreService.activity.createSentOnchainActivityFromSendResult(
+            txid = txId,
+            address = address,
+            amount = sats,
+            fee = 0u,
+            feeRate = satsPerVByte,
+            isTransfer = isTransfer,
+            channelId = channelId,
+        )
 
         syncState()
         Result.success(txId)

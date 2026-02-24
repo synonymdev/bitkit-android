@@ -103,7 +103,11 @@ fun String.toAddressType(): AddressType? = when (this) {
     else -> null
 }
 
-val ALL_ADDRESS_TYPE_STRINGS = listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot")
+val ALL_ADDRESS_TYPES = listOf(AddressType.P2PKH, AddressType.P2SH, AddressType.P2WPKH, AddressType.P2TR)
+
+val ALL_ADDRESS_TYPE_STRINGS = ALL_ADDRESS_TYPES.map { it.toSettingsString() }
+
+val NATIVE_WITNESS_TYPES = setOf(AddressType.P2WPKH, AddressType.P2TR)
 
 fun String.addressTypeFromAddress(): String? = when {
     startsWith("bc1p") || startsWith("tb1p") || startsWith("bcrt1p") -> "taproot"

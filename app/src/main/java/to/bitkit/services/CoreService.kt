@@ -581,6 +581,7 @@ class ActivityService(
         existingActivity: Activity.Onchain,
         confirmationData: ConfirmationData,
         ldkValue: ULong,
+        ldkFeeMsat: ULong,
         channelId: String? = null,
     ): OnchainActivity {
         var preservedIsTransfer = existingActivity.v1.isTransfer
@@ -599,6 +600,9 @@ class ActivityService(
             ldkValue
         }
 
+        val ldkFeeSats = ldkFeeMsat / 1000u
+        val updatedFee = if (existingActivity.v1.fee == 0uL && ldkFeeSats > 0uL) ldkFeeSats else existingActivity.v1.fee
+
         val updatedOnChain = existingActivity.v1.copy(
             confirmed = confirmationData.isConfirmed,
             confirmTimestamp = confirmationData.confirmedTimestamp,
@@ -607,6 +611,7 @@ class ActivityService(
             isTransfer = preservedIsTransfer,
             channelId = preservedChannelId,
             value = preservedValue,
+            fee = updatedFee,
         )
 
         return updatedOnChain
@@ -692,6 +697,7 @@ class ActivityService(
                 existingActivity = existingActivity as Activity.Onchain,
                 confirmationData = confirmationData,
                 ldkValue = ldkValue,
+                ldkFeeMsat = payment.feePaidMsat ?: 0u,
                 channelId = resolvedChannelId,
             )
         } else {
@@ -805,6 +811,46 @@ class ActivityService(
                     val tags = (0 until numTags).map { possibleTags.random() }
                     appendTags(id, tags)
                 }
+            }
+        }
+    }
+
+    suspend fun createSentOnchainActivityFromSendResult(
+        txid: String,
+        address: String,
+        amount: ULong,
+        fee: ULong,
+        feeRate: ULong,
+        isTransfer: Boolean,
+        channelId: String?,
+    ) {
+        ServiceQueue.CORE.background {
+            runCatching {
+                if (getOnchainActivityByTxId(txId = txid) != null) {
+                    Logger.debug("Activity already exists for txid $txid, skipping immediate creation", context = TAG)
+                    return@background
+                }
+                val now = System.currentTimeMillis().toULong() / 1000u
+                val onchain = OnchainActivity.create(
+                    id = txid,
+                    txType = PaymentType.SENT,
+                    txId = txid,
+                    value = amount,
+                    fee = fee,
+                    feeRate = feeRate,
+                    address = address,
+                    confirmed = false,
+                    isTransfer = isTransfer,
+                    channelId = channelId,
+                    timestamp = now,
+                    createdAt = now,
+                    updatedAt = 0u,
+                    seenAt = now,
+                )
+                upsertActivity(Activity.Onchain(onchain))
+                Logger.info("Created sent onchain activity for txid $txid from send result", context = TAG)
+            }.onFailure {
+                Logger.error("Failed to create sent onchain activity for txid $txid", it, context = TAG)
             }
         }
     }

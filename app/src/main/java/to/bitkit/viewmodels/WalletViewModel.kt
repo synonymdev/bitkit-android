@@ -223,7 +223,9 @@ class WalletViewModel @Inject constructor(
 
     fun onRestoreContinue() {
         viewModelScope.launch(bgDispatcher) {
-            settingsStore.update { it.copy(pendingRestoreAddressTypePrune = true) }
+            if (!settingsStore.restoredMonitoredTypesFromBackup) {
+                settingsStore.update { it.copy(pendingRestoreAddressTypePrune = true) }
+            }
         }
         _restoreState.update { RestoreState.Settled }
     }
