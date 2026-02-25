@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDataMigration
+import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
@@ -65,6 +66,8 @@ import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.amountSats
+import to.bitkit.ext.channelId
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.maxSendableSat
@@ -84,6 +87,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.TransferType
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
@@ -319,7 +323,7 @@ class AppViewModel @Inject constructor(
             runCatching {
                 when (event) {
                     is Event.BalanceChanged -> handleBalanceChanged()
-                    is Event.ChannelClosed -> handleChannelClosed()
+                    is Event.ChannelClosed -> handleChannelClosed(event)
                     is Event.ChannelPending -> handleChannelPending()
                     is Event.ChannelReady -> handleChannelReady(event)
                     is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(event)
@@ -357,9 +361,52 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleChannelPending() = transferRepo.syncTransferStates()
 
-    private suspend fun handleChannelClosed() {
+    private suspend fun handleChannelClosed(event: Event.ChannelClosed) {
+        val reason = event.reason
+        if (reason != null) {
+            val (isCounterpartyClose, isForceClose) = classifyClosureReason(reason)
+            if (isCounterpartyClose) {
+                createTransferForCounterpartyClose(event.channelId, isForceClose)
+                showSheet(Sheet.ConnectionClosed)
+            }
+        }
         transferRepo.syncTransferStates()
         walletRepo.syncBalances()
+    }
+
+    private suspend fun createTransferForCounterpartyClose(channelId: String, isForceClose: Boolean) {
+        val transferType = if (isForceClose) TransferType.FORCE_CLOSE else TransferType.COOP_CLOSE
+
+        val balances = lightningRepo.getBalancesAsync().getOrNull()
+        val lightningBalance = balances?.lightningBalances?.find { it.channelId() == channelId }
+        var channelBalance = lightningBalance?.amountSats() ?: 0uL
+
+        if (channelBalance == 0uL) {
+            val closedChannels = runCatching {
+                coreService.activity.closedChannels(com.synonym.bitkitcore.SortDirection.DESC)
+            }.getOrNull()
+            channelBalance = closedChannels
+                ?.firstOrNull { it.channelId == channelId }
+                ?.channelValueSats ?: 0uL
+        }
+
+        if (channelBalance > 0uL) {
+            transferRepo.createTransfer(
+                type = transferType,
+                amountSats = channelBalance.toLong(),
+                channelId = channelId,
+            )
+        }
+    }
+
+    private fun classifyClosureReason(reason: ClosureReason): Pair<Boolean, Boolean> {
+        return when (reason) {
+            is ClosureReason.CounterpartyForceClosed -> true to true
+            is ClosureReason.CommitmentTxConfirmed -> true to true
+            is ClosureReason.CounterpartyInitiatedCooperativeClosure -> true to false
+            is ClosureReason.CounterpartyCoopClosedUnfundedChannel -> true to false
+            else -> false to false
+        }
     }
 
     private suspend fun handleSyncCompleted() {
