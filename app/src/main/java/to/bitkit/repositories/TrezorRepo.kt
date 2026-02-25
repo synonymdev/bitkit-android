@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
+import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
@@ -162,7 +163,7 @@ class TrezorRepo @Inject constructor(
         ensureConnected()
         val response = trezorService.getAddress(
             path = path,
-            coin = "Bitcoin",
+            coin = TrezorCoinType.BITCOIN,
             showOnTrezor = showOnTrezor,
             scriptType = scriptType,
         )
@@ -180,7 +181,7 @@ class TrezorRepo @Inject constructor(
         ensureConnected()
         val response = trezorService.getPublicKey(
             path = path,
-            coin = "Bitcoin",
+            coin = TrezorCoinType.BITCOIN,
             showOnTrezor = showOnTrezor,
         )
         _state.update { it.copy(lastPublicKey = response, error = null) }
@@ -211,7 +212,7 @@ class TrezorRepo @Inject constructor(
         val response = trezorService.signMessage(
             path = path,
             message = message,
-            coin = "Bitcoin",
+            coin = TrezorCoinType.BITCOIN,
         )
         _state.update { it.copy(error = null) }
         response
@@ -230,7 +231,7 @@ class TrezorRepo @Inject constructor(
             address = address,
             signature = signature,
             message = message,
-            coin = "Bitcoin",
+            coin = TrezorCoinType.BITCOIN,
         )
         _state.update { it.copy(error = null) }
         result
@@ -387,7 +388,7 @@ class TrezorRepo @Inject constructor(
     suspend fun signTx(
         inputs: List<TrezorTxInput>,
         outputs: List<TrezorTxOutput>,
-        coin: String = "Bitcoin",
+        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
         lockTime: UInt? = null,
         version: UInt? = null,
     ): Result<TrezorSignedTx> = runCatching {

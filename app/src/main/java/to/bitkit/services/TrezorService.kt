@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
@@ -91,7 +92,7 @@ class TrezorService @Inject constructor(
 
     suspend fun getAddress(
         path: String,
-        coin: String? = "Bitcoin",
+        coin: TrezorCoinType? = TrezorCoinType.BITCOIN,
         showOnTrezor: Boolean = false,
         scriptType: TrezorScriptType? = null,
     ): TrezorAddressResponse {
@@ -109,7 +110,7 @@ class TrezorService @Inject constructor(
 
     suspend fun getPublicKey(
         path: String,
-        coin: String? = "Bitcoin",
+        coin: TrezorCoinType? = TrezorCoinType.BITCOIN,
         showOnTrezor: Boolean = false,
     ): TrezorPublicKeyResponse {
         return ServiceQueue.CORE.background {
@@ -138,7 +139,7 @@ class TrezorService @Inject constructor(
     suspend fun signMessage(
         path: String,
         message: String,
-        coin: String? = "Bitcoin",
+        coin: TrezorCoinType? = TrezorCoinType.BITCOIN,
     ): TrezorSignedMessageResponse {
         return ServiceQueue.CORE.background {
             trezorSignMessage(
@@ -155,7 +156,7 @@ class TrezorService @Inject constructor(
         address: String,
         signature: String,
         message: String,
-        coin: String? = "Bitcoin",
+        coin: TrezorCoinType? = TrezorCoinType.BITCOIN,
     ): Boolean {
         return ServiceQueue.CORE.background {
             trezorVerifyMessage(
@@ -172,7 +173,7 @@ class TrezorService @Inject constructor(
     suspend fun signTx(
         inputs: List<TrezorTxInput>,
         outputs: List<TrezorTxOutput>,
-        coin: String? = "Bitcoin",
+        coin: TrezorCoinType? = TrezorCoinType.BITCOIN,
         lockTime: UInt? = null,
         version: UInt? = null,
     ): TrezorSignedTx {
@@ -184,6 +185,7 @@ class TrezorService @Inject constructor(
                     coin = coin,
                     lockTime = lockTime,
                     version = version,
+                    prevTxs = emptyList(),
                 )
             )
         }

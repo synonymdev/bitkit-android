@@ -3,6 +3,7 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.TrezorScriptType
+import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorTxInput
 import com.synonym.bitkitcore.TrezorTxOutput
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -271,7 +272,7 @@ class TrezorViewModel @Inject constructor(
     fun signTx(
         inputs: List<TrezorTxInput>,
         outputs: List<TrezorTxOutput>,
-        coin: String = "Bitcoin",
+        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
         lockTime: UInt? = null,
         version: UInt? = null,
     ) {
