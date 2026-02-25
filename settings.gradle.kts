@@ -27,6 +27,9 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
 @Suppress("UnstableApiUsage")
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
@@ -50,7 +53,14 @@ dependencyResolutionManagement {
                 password = pass
             }
         }
-        maven("https://jitpack.io")
+        maven {
+            url = uri("https://maven.pkg.github.com/synonymdev/ldk-node")
+            credentials {
+                val (user, pass) = getGithubCredentials()
+                username = user
+                password = pass
+            }
+        }
     }
 }
 rootProject.name = "bitkit-android"
