@@ -87,8 +87,8 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
-import to.bitkit.models.TransferType
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork

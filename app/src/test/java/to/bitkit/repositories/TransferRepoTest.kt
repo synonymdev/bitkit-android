@@ -34,6 +34,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+@Suppress("LargeClass")
 @OptIn(ExperimentalTime::class)
 class TransferRepoTest : BaseUnitTest() {
     private lateinit var sut: TransferRepo

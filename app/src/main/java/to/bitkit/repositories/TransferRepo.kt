@@ -5,10 +5,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.PendingSweepBalance
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
-import org.lightningdevkit.ldknode.PendingSweepBalance
 import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.models.TransferType
@@ -106,7 +106,10 @@ class TransferRepo @Inject constructor(
                         settleForceClose(transfer, channelId, balances?.pendingBalancesFromChannelClosures)
                     } else {
                         markSettled(transfer.id)
-                        Logger.debug("Channel $channelId balance swept, settled transfer: ${transfer.id}", context = TAG)
+                        Logger.debug(
+                            "Channel $channelId balance swept, settled transfer: ${transfer.id}",
+                            context = TAG
+                        )
                     }
                 }
             }

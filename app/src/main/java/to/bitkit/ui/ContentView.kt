@@ -171,6 +171,7 @@ import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
+import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.GiftSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
@@ -178,7 +179,6 @@ import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendSheet
-import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.SweepPromptSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.theme.TRANSITION_SHEET_MS
