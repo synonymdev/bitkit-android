@@ -30,7 +30,7 @@ class AppUpdaterService @Inject constructor(
             }
 
             else -> throw AppUpdaterError.InvalidResponse(
-                "Failed to fetch release info: ${response.status.description}"
+                "Failed to fetch release info: ${response.status}"
             )
         }
     }

@@ -29,6 +29,7 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
@@ -94,6 +95,7 @@ private fun LdkDebugContent(
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
             )
+            VerticalSpacer(height = 4.dp)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
