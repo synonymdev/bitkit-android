@@ -12,6 +12,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
@@ -23,6 +24,8 @@ import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.TransferType
+import to.bitkit.services.ActivityService
+import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -38,6 +41,10 @@ class TransferRepoTest : BaseUnitTest() {
     private val transferDao = mock<TransferDao>()
     private val lightningRepo = mock<LightningRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
+    private val activityService = mock<ActivityService>()
+    private val coreService = mock<CoreService> {
+        on { activity } doReturn activityService
+    }
     private val clock = mock<Clock>()
 
     companion object Fixtures {
@@ -55,6 +62,7 @@ class TransferRepoTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             lightningRepo = lightningRepo,
             blocktankRepo = blocktankRepo,
+            coreService = coreService,
             transferDao = transferDao,
             clock = clock,
         )
@@ -446,6 +454,152 @@ class TransferRepoTest : BaseUnitTest() {
         assertEquals(exception, result.exceptionOrNull())
     }
 
+    // MARK: - syncTransferStates (force close sweep handling)
+
+    @Test
+    fun `syncTransferStates settles FORCE_CLOSE when on-chain activity exists for channel`() = test {
+        val settledAt = setupClockNowMock()
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.FORCE_CLOSE,
+            amountSats = 75000L,
+            channelId = ID_CHANNEL,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 0u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(true)
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
+    fun `syncTransferStates settles FORCE_CLOSE when no pending sweeps remain`() = test {
+        val settledAt = setupClockNowMock()
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.FORCE_CLOSE,
+            amountSats = 75000L,
+            channelId = ID_CHANNEL,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 0u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
+    fun `syncTransferStates does not settle FORCE_CLOSE when pending sweep still exists`() = test {
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.FORCE_CLOSE,
+            amountSats = 75000L,
+            channelId = ID_CHANNEL,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        val pendingSweep = PendingSweepBalance.PendingBroadcast(
+            channelId = ID_CHANNEL,
+            amountSatoshis = 75000u,
+        )
+
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 0u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = listOf(pendingSweep),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `syncTransferStates settles FORCE_CLOSE via batched sweep txid`() = test {
+        val settledAt = setupClockNowMock()
+        val sweepTxid = "batched-sweep-txid"
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.FORCE_CLOSE,
+            amountSats = 75000L,
+            channelId = ID_CHANNEL,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
+            channelId = ID_CHANNEL,
+            latestBroadcastHeight = 800000u,
+            latestSpendingTxid = sweepTxid,
+            amountSatoshis = 75000u,
+        )
+
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 0u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = listOf(pendingSweep),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
+        whenever(activityService.hasOnchainActivityForTxid(sweepTxid)).thenReturn(true)
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
     // MARK: - resolveChannelIdForTransfer
 
     @Test
@@ -629,6 +783,7 @@ class TransferRepoTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             lightningRepo = lightningRepo,
             blocktankRepo = blocktankRepo,
+            coreService = coreService,
             transferDao = transferDao,
             clock = clock,
         )
