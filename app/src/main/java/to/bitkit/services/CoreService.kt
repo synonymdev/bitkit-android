@@ -283,6 +283,14 @@ class ActivityService(
         getActivityByTxId(txId = txId)
     }
 
+    suspend fun hasOnchainActivityForChannel(channelId: String): Boolean {
+        val activities = get(filter = ActivityFilter.ONCHAIN, limit = 50u, sortDirection = SortDirection.DESC)
+        return activities.any { it is Activity.Onchain && it.v1.channelId == channelId }
+    }
+
+    suspend fun hasOnchainActivityForTxid(txid: String): Boolean =
+        getOnchainActivityByTxId(txid) != null
+
     @Suppress("LongParameterList")
     suspend fun get(
         filter: ActivityFilter? = null,

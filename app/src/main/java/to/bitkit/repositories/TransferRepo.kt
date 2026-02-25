@@ -8,8 +8,11 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
+import org.lightningdevkit.ldknode.PendingSweepBalance
 import to.bitkit.ext.channelId
+import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.models.TransferType
+import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
 import java.util.UUID
 import javax.inject.Inject
@@ -23,6 +26,7 @@ class TransferRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val coreService: CoreService,
     private val transferDao: TransferDao,
     private val clock: Clock,
 ) {
@@ -98,8 +102,12 @@ class TransferRepo @Inject constructor(
                 } ?: false
 
                 if (!hasBalance) {
-                    markSettled(transfer.id)
-                    Logger.debug("Channel $channelId balance swept, settled transfer: ${transfer.id}", context = TAG)
+                    if (transfer.type == TransferType.FORCE_CLOSE) {
+                        settleForceClose(transfer, channelId, balances?.pendingBalancesFromChannelClosures)
+                    } else {
+                        markSettled(transfer.id)
+                        Logger.debug("Channel $channelId balance swept, settled transfer: ${transfer.id}", context = TAG)
+                    }
                 }
             }
         }.onSuccess {
@@ -107,6 +115,48 @@ class TransferRepo @Inject constructor(
         }.onFailure { e ->
             Logger.error("syncTransferStates error", e, context = TAG)
         }
+    }
+
+    private suspend fun settleForceClose(
+        transfer: TransferEntity,
+        channelId: String?,
+        pendingSweeps: List<PendingSweepBalance>?,
+    ) {
+        if (channelId == null) return
+
+        if (coreService.activity.hasOnchainActivityForChannel(channelId)) {
+            markSettled(transfer.id)
+            Logger.debug("Force close sweep detected, settled transfer: ${transfer.id}", context = TAG)
+            return
+        }
+
+        // When LDK batches sweeps from multiple channels into one transaction,
+        // the on-chain activity may only be linked to one channel. Fall back to
+        // checking if there are no remaining pending sweep balances for this channel.
+        val pendingSweep = pendingSweeps?.find { it.channelId() == channelId }
+
+        if (pendingSweep == null) {
+            markSettled(transfer.id)
+            Logger.debug(
+                "Force close sweep completed (no pending sweeps), settled transfer: ${transfer.id}",
+                context = TAG,
+            )
+            return
+        }
+
+        val sweepTxid = pendingSweep.latestSpendingTxid()
+        if (sweepTxid != null && coreService.activity.hasOnchainActivityForTxid(sweepTxid)) {
+            // The sweep tx was already synced as an on-chain activity (linked to another
+            // channel in the same batched sweep). Safe to settle this transfer.
+            markSettled(transfer.id)
+            Logger.debug(
+                "Force close batched sweep detected via txid $sweepTxid, settled transfer: ${transfer.id}",
+                context = TAG,
+            )
+            return
+        }
+
+        Logger.debug("Force close awaiting sweep detection for transfer: ${transfer.id}", context = TAG)
     }
 
     /** Resolve channelId: for LSP orders: via order->fundingTx match, for manual: directly. */
