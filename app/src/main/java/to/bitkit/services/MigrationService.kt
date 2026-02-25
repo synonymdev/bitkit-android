@@ -361,8 +361,6 @@ class MigrationService @Inject constructor(
         rnMigrationStore.edit { it[key] = "true" }
     }
 
-    suspend fun fetchChannelRecoveryData(): Boolean = fetchRNRemoteLdkData()
-
     suspend fun hasRNWalletData(): Boolean {
         val mnemonic = loadStringFromRNKeychain(RNKeychainKey.MNEMONIC)
         if (mnemonic?.isNotEmpty() == true) return true
@@ -1294,7 +1292,7 @@ class MigrationService @Inject constructor(
         return null
     }
 
-    private suspend fun fetchRNRemoteLdkData(): Boolean {
+    suspend fun fetchRNRemoteLdkData(): Boolean {
         return runCatching {
             val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching true
             if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching true

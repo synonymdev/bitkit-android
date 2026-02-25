@@ -312,7 +312,7 @@ class WalletViewModel @Inject constructor(
         Logger.info("Running one-time channel monitor recovery check", context = TAG)
 
         val allMonitorsRetrieved = runCatching {
-            val allRetrieved = migrationService.fetchChannelRecoveryData()
+            val allRetrieved = migrationService.fetchRNRemoteLdkData()
             val channelMigration = buildChannelMigrationIfAvailable()
 
             if (channelMigration == null) {
