@@ -15,7 +15,9 @@ import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -1263,6 +1265,28 @@ class MigrationService @Inject constructor(
         Logger.info("Post-migration cleanup completed", context = TAG)
     }
 
+    private suspend fun retrieveChannelMonitorWithRetry(
+        channelId: String,
+        maxAttempts: Int = 3,
+        baseDelayMs: Long = 1000L,
+    ): ByteArray? {
+        repeat(maxAttempts) { attempt ->
+            val result = rnBackupClient.retrieveChannelMonitor(channelId)
+            if (result != null) return result
+
+            if (attempt < maxAttempts - 1) {
+                val delayMs = baseDelayMs * (attempt + 1)
+                Logger.debug(
+                    "Retrying channel monitor retrieval for $channelId " +
+                        "(attempt ${attempt + 2}/$maxAttempts) after ${delayMs}ms",
+                    context = TAG
+                )
+                delay(delayMs)
+            }
+        }
+        return null
+    }
+
     private suspend fun fetchRNRemoteLdkData() {
         runCatching {
             val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching
@@ -1271,13 +1295,33 @@ class MigrationService @Inject constructor(
             val managerData = rnBackupClient.retrieve("channel_manager", fileGroup = "ldk")
                 ?: return@runCatching
 
-            val monitors = coroutineScope {
+            val expectedCount = files.channelMonitors.size
+            val monitorResults = coroutineScope {
                 files.channelMonitors.map { monitorFile ->
                     async {
                         val channelId = monitorFile.replace(".bin", "")
-                        rnBackupClient.retrieveChannelMonitor(channelId)
+                        channelId to retrieveChannelMonitorWithRetry(channelId)
                     }
-                }.mapNotNull { it.await() }
+                }.awaitAll()
+            }
+
+            val failedMonitors = monitorResults.filter { it.second == null }.map { it.first }
+            if (failedMonitors.isNotEmpty()) {
+                Logger.error(
+                    "Failed to retrieve ${failedMonitors.size}/$expectedCount channel monitors " +
+                        "after retries: ${failedMonitors.joinToString()}",
+                    context = TAG
+                )
+            }
+
+            val monitors = monitorResults.mapNotNull { it.second }
+
+            if (monitors.size < expectedCount) {
+                Logger.warn(
+                    "Channel monitor count mismatch: expected $expectedCount, got ${monitors.size}. " +
+                        "Some channels may not be recoverable.",
+                    context = TAG
+                )
             }
 
             if (monitors.isNotEmpty()) {
