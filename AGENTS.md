@@ -184,6 +184,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER wrap methods returning `Result<T>` in try-catch
 - PREFER to use `it` instead of explicit named parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
 - NEVER inject ViewModels as dependencies - Only android activities and composable functions can use viewmodels
+- ALWAYS co-locate screen-specific ViewModels in the same package as their screen; only place ViewModels in `viewmodels/` when shared across multiple screens
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
 - ALWAYS use `remember` for expensive Compose computations
