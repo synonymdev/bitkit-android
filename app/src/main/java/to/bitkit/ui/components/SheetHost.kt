@@ -46,6 +46,7 @@ sealed interface Sheet {
     data object ForceTransfer : Sheet
     data class Gift(val code: String, val amount: ULong) : Sheet
     data object SweepPrompt : Sheet
+    data object ConnectionClosed : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet
 }

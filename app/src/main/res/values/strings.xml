@@ -111,6 +111,8 @@
     <string name="lightning__conn_open">Open connections</string>
     <string name="lightning__conn_pending">Pending connections</string>
     <string name="lightning__connection">Connection</string>
+    <string name="lightning__connection_closed__description">The funds on your spending balance have been transferred to your savings.</string>
+    <string name="lightning__connection_closed__title">Connection Closed</string>
     <string name="lightning__connections">Lightning Connections</string>
     <string name="lightning__created_on">Created on</string>
     <string name="lightning__error_add">Bitkit could not add the Lightning peer.</string>

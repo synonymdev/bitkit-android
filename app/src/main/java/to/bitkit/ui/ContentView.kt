@@ -178,6 +178,7 @@ import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendSheet
+import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.SweepPromptSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.theme.TRANSITION_SHEET_MS
@@ -411,6 +412,10 @@ fun ContentView(
                                 navController.navigate(Routes.SweepNav)
                             },
                             onCancel = { appViewModel.hideSheet() },
+                        )
+
+                        Sheet.ConnectionClosed -> ConnectionClosedSheet(
+                            onDismiss = { appViewModel.hideSheet() },
                         )
 
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
