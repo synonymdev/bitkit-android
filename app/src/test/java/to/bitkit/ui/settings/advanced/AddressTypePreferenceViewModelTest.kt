@@ -34,6 +34,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     private lateinit var sut: AddressTypePreferenceViewModel
 
     private val applyingChanges = "Applying changes…"
+    private val addressTypeChanged = "Address Type Changed"
+    private val nowUsing = "Now using {type} addresses."
     private val settingsUpdated = "Settings updated"
     private val errorTitle = "Error"
     private val disabledHasBalance = "Address type has balance"
@@ -44,6 +46,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(context.getString(R.string.settings__addr_type__applying)).thenReturn(applyingChanges)
+        whenever(context.getString(R.string.settings__addr_type__changed)).thenReturn(addressTypeChanged)
+        whenever(context.getString(R.string.settings__addr_type__now_using)).thenReturn(nowUsing)
         whenever(context.getString(R.string.settings__addr_type__settings_updated)).thenReturn(settingsUpdated)
         whenever(context.getString(R.string.common__error)).thenReturn(errorTitle)
         whenever(context.getString(R.string.settings__addr_type__disabled_has_balance))
@@ -200,7 +204,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         assertEquals(Toast.ToastType.INFO, toasts.first().type)
         assertEquals(applyingChanges, toasts.first().title)
         assertEquals(Toast.ToastType.SUCCESS, toasts.last().type)
-        assertEquals(settingsUpdated, toasts.last().title)
+        assertEquals(addressTypeChanged, toasts.last().title)
+        assertEquals("Now using Taproot addresses.", toasts.last().description)
         verify(walletRepo).refreshReceiveAddressAfterTypeChange()
         collectJob.cancel()
     }

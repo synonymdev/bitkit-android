@@ -17,6 +17,7 @@ import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.Toast
+import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toSettingsString
 import to.bitkit.repositories.LightningRepo
@@ -82,9 +83,12 @@ class AddressTypePreferenceViewModel @Inject constructor(
             loadState()
 
             if (result.isSuccess) {
+                val typeName = addressType.addressTypeInfo().shortName
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.settings__addr_type__settings_updated),
+                    title = context.getString(R.string.settings__addr_type__changed),
+                    description = context.getString(R.string.settings__addr_type__now_using)
+                        .replace("{type}", typeName),
                     testTag = "AddressTypeSettingsUpdatedToast",
                 )
             } else {

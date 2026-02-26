@@ -194,9 +194,9 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
 
-            val spendableBalance =
-                lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
             val allUtxos = lightningRepo.listSpendableOutputs().getOrNull()
+            val spendableBalance = allUtxos?.sumOf { it.valueSats }
+                ?: lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
             val sendAllFee = lightningRepo.calculateTotalFee(
                 amountSats = spendableBalance,
                 address = address,
