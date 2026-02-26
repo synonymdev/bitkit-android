@@ -20,6 +20,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -41,7 +42,9 @@ private fun Content(
 ) {
     Column(
         modifier = modifier
-            .sheetHeight()
+            .sheetHeight(
+                size = SheetSize.MEDIUM
+            )
             .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
