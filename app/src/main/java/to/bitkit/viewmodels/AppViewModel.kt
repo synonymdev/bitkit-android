@@ -22,6 +22,7 @@ import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.validateBitcoinAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -383,7 +384,7 @@ class AppViewModel @Inject constructor(
 
         if (channelBalance == 0uL) {
             val closedChannels = runCatching {
-                coreService.activity.closedChannels(com.synonym.bitkitcore.SortDirection.DESC)
+                coreService.activity.closedChannels(SortDirection.DESC)
             }.getOrNull()
             channelBalance = closedChannels
                 ?.firstOrNull { it.channelId == channelId }
@@ -2277,7 +2278,6 @@ class AppViewModel @Inject constructor(
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
-    @Suppress("SpellCheckingInspection")
     private fun String.removeLightningSchemes(): String {
         return this
             .replace(Regex("^lightning:", RegexOption.IGNORE_CASE), "")
