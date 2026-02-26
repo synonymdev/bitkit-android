@@ -1,5 +1,8 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -128,6 +131,7 @@ class TransferRepo @Inject constructor(
         if (channelId == null) return
 
         if (coreService.activity.hasOnchainActivityForChannel(channelId)) {
+            markActivityAsTransferByChannel(channelId)
             markSettled(transfer.id)
             Logger.debug("Force close sweep detected, settled transfer: ${transfer.id}", context = TAG)
             return
@@ -151,6 +155,7 @@ class TransferRepo @Inject constructor(
         if (sweepTxid != null && coreService.activity.hasOnchainActivityForTxid(sweepTxid)) {
             // The sweep tx was already synced as an on-chain activity (linked to another
             // channel in the same batched sweep). Safe to settle this transfer.
+            markActivityAsTransfer(sweepTxid, channelId)
             markSettled(transfer.id)
             Logger.debug(
                 "Force close batched sweep detected via txid $sweepTxid, settled transfer: ${transfer.id}",
@@ -160,6 +165,28 @@ class TransferRepo @Inject constructor(
         }
 
         Logger.debug("Force close awaiting sweep detection for transfer: ${transfer.id}", context = TAG)
+    }
+
+    private suspend fun markActivityAsTransfer(txid: String, channelId: String) {
+        val activity = coreService.activity.getOnchainActivityByTxId(txid) ?: return
+        if (activity.isTransfer) return
+        val updated = activity.copy(isTransfer = true, channelId = channelId)
+        coreService.activity.update(activity.id, Activity.Onchain(updated))
+        Logger.debug("Marked activity ${activity.id} as transfer for channel $channelId", context = TAG)
+    }
+
+    private suspend fun markActivityAsTransferByChannel(channelId: String) {
+        val activities = coreService.activity.get(
+            filter = ActivityFilter.ONCHAIN,
+            limit = 50u,
+            sortDirection = SortDirection.DESC,
+        )
+        val activity = activities.firstOrNull { it is Activity.Onchain && it.v1.channelId == channelId }
+            as? Activity.Onchain ?: return
+        if (activity.v1.isTransfer) return
+        val updated = activity.v1.copy(isTransfer = true, channelId = channelId)
+        coreService.activity.update(activity.v1.id, Activity.Onchain(updated))
+        Logger.debug("Marked activity ${activity.v1.id} as transfer for channel $channelId", context = TAG)
     }
 
     /** Resolve channelId: for LSP orders: via order->fundingTx match, for manual: directly. */

@@ -1,9 +1,12 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.FundingTx
 import com.synonym.bitkitcore.IBtChannel
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
@@ -14,6 +17,7 @@ import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -22,6 +26,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
+import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.TransferType
 import to.bitkit.services.ActivityService
@@ -469,6 +474,18 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
+        val sweepActivity = OnchainActivity.create(
+            id = "sweep-activity-id",
+            txType = PaymentType.RECEIVED,
+            txId = "sweep-txid",
+            value = 75000u,
+            fee = 0u,
+            address = "bc1test",
+            timestamp = 1000u,
+            isTransfer = false,
+            channelId = ID_CHANNEL,
+        )
+
         val balances = BalanceDetails(
             totalOnchainBalanceSats = 0u,
             spendableOnchainBalanceSats = 0u,
@@ -482,12 +499,29 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
         whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(true)
+        whenever(
+            activityService.get(
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull()
+            )
+        )
+            .thenReturn(listOf(Activity.Onchain(sweepActivity)))
         whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
 
         val result = sut.syncTransferStates()
 
         assertTrue(result.isSuccess)
         verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+        verify(activityService).update(
+            eq(sweepActivity.id),
+            eq(Activity.Onchain(sweepActivity.copy(isTransfer = true, channelId = ID_CHANNEL))),
+        )
     }
 
     @Test
@@ -572,6 +606,17 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
+        val sweepActivity = OnchainActivity.create(
+            id = "sweep-activity-id",
+            txType = PaymentType.RECEIVED,
+            txId = sweepTxid,
+            value = 75000u,
+            fee = 0u,
+            address = "bc1test",
+            timestamp = 1000u,
+            isTransfer = false,
+        )
+
         val pendingSweep = PendingSweepBalance.BroadcastAwaitingConfirmation(
             channelId = ID_CHANNEL,
             latestBroadcastHeight = 800000u,
@@ -593,12 +638,17 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
         whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
         whenever(activityService.hasOnchainActivityForTxid(sweepTxid)).thenReturn(true)
+        whenever(activityService.getOnchainActivityByTxId(sweepTxid)).thenReturn(sweepActivity)
         whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
 
         val result = sut.syncTransferStates()
 
         assertTrue(result.isSuccess)
         verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+        verify(activityService).update(
+            eq(sweepActivity.id),
+            eq(Activity.Onchain(sweepActivity.copy(isTransfer = true, channelId = ID_CHANNEL))),
+        )
     }
 
     // MARK: - resolveChannelIdForTransfer
