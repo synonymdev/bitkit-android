@@ -12,7 +12,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import to.bitkit.R
 import to.bitkit.models.ActivityBannerType
+import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
@@ -29,6 +33,7 @@ import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val walletRepo: WalletRepo,
     private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
@@ -215,18 +220,28 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun createBannersFlow() {
-        transferRepo.activeTransfers
-            .collect { transfers ->
-                val banners = listOfNotNull(
-                    ActivityBannerType.SPENDING.takeIf {
-                        transfers.any { it.type.isToSpending() }
-                    },
-                    ActivityBannerType.SAVINGS.takeIf {
-                        transfers.any { it.type.isToSavings() }
-                    },
-                )
-                _uiState.update { it.copy(banners = banners) }
-            }
+        combine(
+            transferRepo.activeTransfers,
+            walletRepo.balanceState,
+        ) { transfers, balanceState ->
+            val defaultTitle = context.getString(R.string.lightning__transfer_in_progress)
+            val savingsTitle = balanceState.forceCloseRemainingDuration?.let {
+                context.getString(R.string.lightning__transfer_ready_in, it)
+            } ?: defaultTitle
+
+            listOfNotNull(
+                BannerItem(
+                    type = ActivityBannerType.SPENDING,
+                    title = defaultTitle,
+                ).takeIf { transfers.any { it.type.isToSpending() } },
+                BannerItem(
+                    type = ActivityBannerType.SAVINGS,
+                    title = savingsTitle,
+                ).takeIf { transfers.any { it.type.isToSavings() } },
+            )
+        }.collect { banners ->
+            _uiState.update { it.copy(banners = banners) }
+        }
     }
 
     private fun createSuggestionsFlow() = combine(

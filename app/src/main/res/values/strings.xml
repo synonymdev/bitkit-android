@@ -246,6 +246,7 @@
     <string name="lightning__transfer__nav_title">Transfer Funds</string>
     <string name="lightning__transfer__swipe">Swipe To Transfer</string>
     <string name="lightning__transfer_in_progress">TRANSFER IN PROGRESS</string>
+    <string name="lightning__transfer_ready_in">TRANSFER READY IN %s</string>
     <string name="lightning__transfer_intro__button">Get Started</string>
     <string name="lightning__transfer_intro__text">Fund your spending balance to enjoy instant and cheap transactions with friends, family, and merchants.</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
