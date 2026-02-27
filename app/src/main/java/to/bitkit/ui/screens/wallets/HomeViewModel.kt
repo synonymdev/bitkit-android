@@ -221,9 +221,9 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun createBannersFlow() {
         combine(
-            transferRepo.activeTransfers,
+            walletRepo.balanceState,
             transferRepo.forceCloseRemainingDuration,
-        ) { transfers, remainingDuration ->
+        ) { balanceState, remainingDuration ->
             val defaultTitle = context.getString(R.string.lightning__transfer_in_progress)
             val savingsTitle = remainingDuration?.let {
                 context.getString(R.string.lightning__transfer_ready_in, it)
@@ -233,11 +233,11 @@ class HomeViewModel @Inject constructor(
                 BannerItem(
                     type = ActivityBannerType.SPENDING,
                     title = defaultTitle,
-                ).takeIf { transfers.any { it.type.isToSpending() } },
+                ).takeIf { balanceState.balanceInTransferToSpending > 0uL },
                 BannerItem(
                     type = ActivityBannerType.SAVINGS,
                     title = savingsTitle,
-                ).takeIf { transfers.any { it.type.isToSavings() } },
+                ).takeIf { balanceState.balanceInTransferToSavings > 0uL },
             )
         }.collect { banners ->
             _uiState.update { it.copy(banners = banners) }
