@@ -55,7 +55,7 @@ class TransferRepo @Inject constructor(
                     lspOrderId = lspOrderId,
                     isSettled = false,
                     createdAt = clock.now().epochSeconds,
-                    claimableAtHeight = claimableAtHeight,
+                    claimableAtHeight = claimableAtHeight?.toInt(),
                 )
             )
             Logger.info("Created transfer: id=$id type=$type channelId=$channelId", context = TAG)

@@ -123,7 +123,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private fun getForceCloseRemainingDuration(transfers: List<TransferEntity>): String? {
         val forceClose = transfers.firstOrNull { it.type == TransferType.FORCE_CLOSE }
             ?: return null
-        val targetHeight = forceClose.claimableAtHeight ?: return null
+        val targetHeight = forceClose.claimableAtHeight?.toUInt() ?: return null
         val currentHeight = lightningRepo.lightningState.value.block()?.height ?: return null
         val remaining = BlockTimeHelpers.blocksRemaining(targetHeight, currentHeight)
         if (remaining <= 0) return null
