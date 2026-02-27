@@ -9,6 +9,7 @@ import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BalanceState
+import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -86,7 +87,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         balanceDetails: BalanceDetails,
     ): ULong {
         var toSavingsAmount = 0uL
-        val toSavings = transfers.filter { it.type.isToSavings() }
+        val toSavings = transfers.filter { it.type.isToSavings() && it.type != TransferType.COOP_CLOSE }
 
         for (transfer in toSavings) {
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)

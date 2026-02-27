@@ -164,7 +164,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         val transfers = listOf(
             newTransferEntity(
-                type = TransferType.COOP_CLOSE,
+                type = TransferType.FORCE_CLOSE,
                 amountSats = amountSats.toLong(),
                 channelId = channelId,
                 lspOrderId = null
@@ -189,6 +189,42 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balance.totalLightningBalanceSats - amountSats,
             balanceState.totalLightningSats,
             "Lightning balance reduced - channel closing balance"
+        )
+    }
+
+    @Test
+    fun `should not count coop close channel balance for transfer to savings`() = test {
+        val channelId = "closing-channel-id"
+        val amountSats = 40_000uL
+        val closingChannelBalance = newClosingChannelBalance(channelId, amountSats)
+
+        val balance = newBalanceDetails().copy(
+            lightningBalances = listOf(closingChannelBalance),
+            totalLightningBalanceSats = amountSats,
+        )
+        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+
+        val transfers = listOf(
+            newTransferEntity(
+                type = TransferType.COOP_CLOSE,
+                amountSats = amountSats.toLong(),
+                channelId = channelId,
+                lspOrderId = null
+            )
+        )
+
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        val balanceState = result.getOrThrow()
+        assertEquals(0uL, balanceState.balanceInTransferToSavings)
+        assertEquals(
+            amountSats,
+            balanceState.totalLightningSats,
+            "Lightning balance not reduced - coop close funds are immediately spendable"
         )
     }
 
@@ -292,7 +328,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
                 lspOrderId = null
             ),
             newTransferEntity(
-                type = TransferType.COOP_CLOSE,
+                type = TransferType.FORCE_CLOSE,
                 amountSats = toSavings.toLong(),
                 channelId = savingsChannelId,
                 lspOrderId = null
