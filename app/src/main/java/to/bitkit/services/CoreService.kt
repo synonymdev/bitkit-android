@@ -1046,6 +1046,16 @@ class ActivityService(
             runCatching {
                 val onchain = getOnchainActivityByTxId(txid) ?: return@background true
 
+                if (onchain.isTransfer) {
+                    Logger.info("Skipping received sheet for transfer transaction $txid", context = TAG)
+                    return@background false
+                }
+
+                if (onchain.channelId != null) {
+                    Logger.info("Skipping received sheet for channel transaction $txid", context = TAG)
+                    return@background false
+                }
+
                 // Check if activity has already been seen
                 if (onchain.seenAt != null) {
                     Logger.info(
