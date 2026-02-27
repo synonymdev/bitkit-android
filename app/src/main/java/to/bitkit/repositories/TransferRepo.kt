@@ -35,6 +35,7 @@ class TransferRepo @Inject constructor(
 ) {
     val activeTransfers: Flow<List<TransferEntity>> = transferDao.getActiveTransfers()
 
+    @Suppress("LongParameterList")
     suspend fun createTransfer(
         type: TransferType,
         amountSats: Long,
