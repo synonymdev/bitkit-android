@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -111,6 +112,15 @@ class TransferRepo @Inject constructor(
                 if (channel != null && channel.isChannelReady) {
                     markSettled(transfer.id)
                     Logger.debug("Channel $channelId ready, settled transfer: ${transfer.id}", context = TAG)
+                } else if (channelId == null && transfer.lspOrderId != null) {
+                    val order = blocktankRepo.getOrder(transfer.lspOrderId, refresh = false).getOrNull()
+                    if (order?.state2 == BtOrderState2.EXPIRED) {
+                        markSettled(transfer.id)
+                        Logger.info(
+                            "Order ${transfer.lspOrderId} expired, settled transfer: ${transfer.id}",
+                            context = TAG,
+                        )
+                    }
                 }
             }
 
