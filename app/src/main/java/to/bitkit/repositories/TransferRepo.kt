@@ -117,12 +117,6 @@ class TransferRepo @Inject constructor(
             val toSavings = activeTransfers.filter { it.type.isToSavings() }
 
             for (transfer in toSavings) {
-                if (transfer.type == TransferType.COOP_CLOSE) {
-                    markSettled(transfer.id)
-                    Logger.debug("Coop close settled immediately: ${transfer.id}", context = TAG)
-                    continue
-                }
-
                 val channelId = resolveChannelIdForTransfer(transfer, channels)
                 val hasBalance = balances?.lightningBalances?.any {
                     it.channelId() == channelId

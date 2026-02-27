@@ -461,8 +461,7 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncTransferStates settles COOP_CLOSE immediately without waiting for balance sweep`() = test {
-        val settledAt = setupClockNowMock()
+    fun `syncTransferStates does not settle COOP_CLOSE while LDK balance exists`() = test {
         val transfer = TransferEntity(
             id = ID_TRANSFER,
             type = TransferType.COOP_CLOSE,
@@ -486,6 +485,37 @@ class TransferRepoTest : BaseUnitTest() {
             totalAnchorChannelsReserveSats = 0u,
             totalLightningBalanceSats = 75000u,
             lightningBalances = listOf(lightningBalance),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
+    fun `syncTransferStates settles COOP_CLOSE when LDK balance is gone`() = test {
+        val settledAt = setupClockNowMock()
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.COOP_CLOSE,
+            amountSats = 75000L,
+            channelId = ID_CHANNEL,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 75000u,
+            spendableOnchainBalanceSats = 75000u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
             pendingBalancesFromChannelClosures = emptyList(),
         )
 

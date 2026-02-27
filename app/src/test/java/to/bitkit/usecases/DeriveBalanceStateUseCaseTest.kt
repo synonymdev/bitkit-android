@@ -193,7 +193,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should not count coop close channel balance for transfer to savings`() = test {
+    fun `should subtract coop close balance from lightning without showing transfer in progress`() = test {
         val channelId = "closing-channel-id"
         val amountSats = 40_000uL
         val closingChannelBalance = newClosingChannelBalance(channelId, amountSats)
@@ -215,16 +215,17 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
+        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
 
         val result = sut()
 
         assertTrue(result.isSuccess)
         val balanceState = result.getOrThrow()
-        assertEquals(0uL, balanceState.balanceInTransferToSavings)
+        assertEquals(0uL, balanceState.balanceInTransferToSavings, "No transfer in progress for coop close")
         assertEquals(
-            amountSats,
+            0uL,
             balanceState.totalLightningSats,
-            "Lightning balance not reduced - coop close funds are immediately spendable"
+            "Lightning balance reduced - coop close balance subtracted"
         )
     }
 

@@ -33,6 +33,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
 
         val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
+        val coopCloseSavingsSats = getCoopCloseTransferSats(activeTransfers, channels, balanceDetails)
         val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
 
         val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
@@ -44,7 +45,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             totalLightningSats = totalLightningSats,
             maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
             maxSendOnchainSats = getMaxSendAmount(balanceDetails),
-            balanceInTransferToSavings = toSavingsAmount,
+            balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
             balanceInTransferToSpending = toSpendingAmount,
         )
 
@@ -87,7 +88,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         balanceDetails: BalanceDetails,
     ): ULong {
         var toSavingsAmount = 0uL
-        val toSavings = transfers.filter { it.type.isToSavings() && it.type != TransferType.COOP_CLOSE }
+        val toSavings = transfers.filter { it.type.isToSavings() }
 
         for (transfer in toSavings) {
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
@@ -96,6 +97,20 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }
 
         return toSavingsAmount
+    }
+
+    private suspend fun getCoopCloseTransferSats(
+        transfers: List<TransferEntity>,
+        channels: List<ChannelDetails>,
+        balanceDetails: BalanceDetails,
+    ): ULong {
+        var amount = 0uL
+        for (transfer in transfers.filter { it.type == TransferType.COOP_CLOSE }) {
+            val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
+            val channelBalance = balanceDetails.lightningBalances.find { it.channelId() == channelId }
+            amount += channelBalance?.amountSats() ?: 0u
+        }
+        return amount
     }
 
     private suspend fun getMaxSendAmount(balanceDetails: BalanceDetails): ULong {
