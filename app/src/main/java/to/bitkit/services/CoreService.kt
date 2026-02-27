@@ -71,7 +71,9 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
+import to.bitkit.ext.channelId
 import to.bitkit.ext.create
+import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -1257,10 +1259,13 @@ class ActivityService(
         transactionDetails: BitkitCoreTransactionDetails? = null,
     ): String? {
         return runCatching {
+            // Check if this transaction is a pending sweep from a channel closure
+            val pendingSweeps = lightningService.balances?.pendingBalancesFromChannelClosures
+            val matchingSweep = pendingSweeps?.firstOrNull { it.latestSpendingTxid() == txid }
+            if (matchingSweep != null) return matchingSweep.channelId()
+
             val closedChannelsList = closedChannels(SortDirection.DESC)
-            if (closedChannelsList.isEmpty()) {
-                return null
-            }
+            if (closedChannelsList.isEmpty()) return null
 
             // Use provided transaction details if available, otherwise fetch from bitkitcore
             val details = transactionDetails ?: fetchTransactionDetails(txid) ?: run {
@@ -1268,22 +1273,37 @@ class ActivityService(
                 return null
             }
 
-            for (input in details.inputs) {
-                val inputTxid = input.txid
-                val inputVout = input.vout.toInt()
-
-                val matchingChannel = closedChannelsList.firstOrNull { channel ->
-                    channel.fundingTxoTxid == inputTxid && channel.fundingTxoIndex == inputVout.toUInt()
-                }
-
-                if (matchingChannel != null) {
-                    return matchingChannel.channelId
-                }
-            }
-            null
+            // Check if any input spends a closed channel's funding UTXO (commitment tx)
+            findChannelByFundingUtxo(details, closedChannelsList)
+                // Check if any input's parent transaction is a channel-related activity
+                // (e.g., sweep tx spending from commitment tx)
+                ?: findChannelByParentActivity(details)
         }.onFailure { e ->
             Logger.warn("Failed to check if transaction $txid spends closed channel funding UTXO", e, context = TAG)
         }.getOrNull()
+    }
+
+    private fun findChannelByFundingUtxo(
+        details: BitkitCoreTransactionDetails,
+        closedChannels: List<ClosedChannelDetails>,
+    ): String? {
+        for (input in details.inputs) {
+            val matchingChannel = closedChannels.firstOrNull { channel ->
+                channel.fundingTxoTxid == input.txid && channel.fundingTxoIndex == input.vout
+            }
+            if (matchingChannel != null) return matchingChannel.channelId
+        }
+        return null
+    }
+
+    private suspend fun findChannelByParentActivity(
+        details: BitkitCoreTransactionDetails,
+    ): String? {
+        for (input in details.inputs) {
+            val parentActivity = getOnchainActivityByTxId(input.txid)
+            if (parentActivity?.channelId != null) return parentActivity.channelId
+        }
+        return null
     }
 
     companion object {
