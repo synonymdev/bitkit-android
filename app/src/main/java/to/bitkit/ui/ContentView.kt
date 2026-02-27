@@ -809,6 +809,7 @@ private fun NavGraphBuilder.home(
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
+        val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
         SavingsWalletScreen(
             isGeoBlocked = isGeoBlocked,
@@ -824,6 +825,7 @@ private fun NavGraphBuilder.home(
                 }
             },
             onBackClick = { navController.popBackStack() },
+            forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
     composable<Routes.Spending>(

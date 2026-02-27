@@ -222,10 +222,10 @@ class HomeViewModel @Inject constructor(
     private suspend fun createBannersFlow() {
         combine(
             transferRepo.activeTransfers,
-            walletRepo.balanceState,
-        ) { transfers, balanceState ->
+            transferRepo.forceCloseRemainingDuration,
+        ) { transfers, remainingDuration ->
             val defaultTitle = context.getString(R.string.lightning__transfer_in_progress)
-            val savingsTitle = balanceState.forceCloseRemainingDuration?.let {
+            val savingsTitle = remainingDuration?.let {
                 context.getString(R.string.lightning__transfer_ready_in, it)
             } ?: defaultTitle
 

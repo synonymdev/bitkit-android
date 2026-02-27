@@ -13,7 +13,6 @@ import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
-import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import javax.inject.Inject
@@ -40,8 +39,6 @@ class DeriveBalanceStateUseCase @Inject constructor(
         val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
         val totalLightningSats = afterPendingChannels.safe() - toSavingsAmount.safe()
 
-        val forceCloseRemainingDuration = getForceCloseRemainingDuration(activeTransfers)
-
         val balanceState = BalanceState(
             totalOnchainSats = totalOnchainSats,
             totalLightningSats = totalLightningSats,
@@ -49,7 +46,6 @@ class DeriveBalanceStateUseCase @Inject constructor(
             maxSendOnchainSats = getMaxSendAmount(balanceDetails),
             balanceInTransferToSavings = toSavingsAmount,
             balanceInTransferToSpending = toSpendingAmount,
-            forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
 
         val height = lightningRepo.lightningState.value.block()?.height
@@ -118,16 +114,6 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }.getOrDefault(fallback)
 
         return spendableOnchainSats.safe() - fee.safe()
-    }
-
-    private fun getForceCloseRemainingDuration(transfers: List<TransferEntity>): String? {
-        val forceClose = transfers.firstOrNull { it.type == TransferType.FORCE_CLOSE }
-            ?: return null
-        val targetHeight = forceClose.claimableAtHeight?.toUInt() ?: return null
-        val currentHeight = lightningRepo.lightningState.value.block()?.height ?: return null
-        val remaining = BlockTimeHelpers.blocksRemaining(targetHeight, currentHeight)
-        if (remaining <= 0) return null
-        return BlockTimeHelpers.getDurationForBlocks(remaining)
     }
 
     companion object {

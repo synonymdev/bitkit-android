@@ -52,6 +52,7 @@ fun SavingsWalletScreen(
     onActivityItemClick: (String) -> Unit,
     onTransferToSpendingClick: () -> Unit,
     onBackClick: () -> Unit,
+    forceCloseRemainingDuration: String? = null,
     balances: BalanceState = LocalBalances.current,
 ) {
     val showEmptyState by remember(balances.totalOnchainSats, onchainActivities.size) {
@@ -102,7 +103,7 @@ fun SavingsWalletScreen(
                 if (balances.balanceInTransferToSavings > 0u) {
                     IncomingTransfer(
                         amount = balances.balanceInTransferToSavings,
-                        remainingDuration = balances.forceCloseRemainingDuration,
+                        remainingDuration = forceCloseRemainingDuration,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }

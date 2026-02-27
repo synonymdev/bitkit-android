@@ -176,6 +176,9 @@ class AppViewModel @Inject constructor(
     val isGeoBlocked = lightningRepo.lightningState.map { it.isGeoBlocked }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val forceCloseRemainingDuration = transferRepo.forceCloseRemainingDuration
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 

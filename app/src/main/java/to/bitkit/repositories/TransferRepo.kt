@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -16,6 +17,7 @@ import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.models.TransferType
 import to.bitkit.services.CoreService
+import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
 import java.util.UUID
 import javax.inject.Inject
@@ -34,6 +36,19 @@ class TransferRepo @Inject constructor(
     private val clock: Clock,
 ) {
     val activeTransfers: Flow<List<TransferEntity>> = transferDao.getActiveTransfers()
+
+    val forceCloseRemainingDuration: Flow<String?> = combine(
+        activeTransfers,
+        lightningRepo.lightningState,
+    ) { transfers, lightningState ->
+        val forceClose = transfers.firstOrNull { it.type == TransferType.FORCE_CLOSE }
+            ?: return@combine null
+        val targetHeight = forceClose.claimableAtHeight?.toUInt() ?: return@combine null
+        val currentHeight = lightningState.block()?.height ?: return@combine null
+        val remaining = BlockTimeHelpers.blocksRemaining(targetHeight, currentHeight)
+        if (remaining <= 0) return@combine null
+        BlockTimeHelpers.getDurationForBlocks(remaining)
+    }
 
     @Suppress("LongParameterList")
     suspend fun createTransfer(
