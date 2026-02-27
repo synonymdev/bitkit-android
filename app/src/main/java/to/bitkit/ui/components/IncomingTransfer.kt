@@ -24,9 +24,16 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun IncomingTransfer(
     amount: ULong,
+    remainingDuration: String? = null,
     modifier: Modifier = Modifier,
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
+    val subtitle = if (remainingDuration != null) {
+        stringResource(R.string.wallet__activity_transfer_savings_pending)
+            .replace("{duration}", "±$remainingDuration")
+    } else {
+        stringResource(R.string.wallet__details_transfer_subtitle)
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -39,7 +46,7 @@ fun IncomingTransfer(
             tint = Colors.White64,
         )
         CaptionB(
-            text = stringResource(R.string.wallet__details_transfer_subtitle),
+            text = subtitle,
             color = Colors.White64,
         )
         CaptionB(

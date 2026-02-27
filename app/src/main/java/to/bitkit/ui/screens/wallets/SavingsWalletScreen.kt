@@ -102,7 +102,8 @@ fun SavingsWalletScreen(
                 if (balances.balanceInTransferToSavings > 0u) {
                     IncomingTransfer(
                         amount = balances.balanceInTransferToSavings,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        remainingDuration = balances.forceCloseRemainingDuration,
+                        modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
 
