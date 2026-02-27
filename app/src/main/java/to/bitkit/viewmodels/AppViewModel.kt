@@ -355,7 +355,6 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleBalanceChanged() {
         walletRepo.syncBalances()
-        migrationService.cleanupInvalidMigrationTransfers()
         transferRepo.syncTransferStates()
     }
 
@@ -504,7 +503,6 @@ class AppViewModel @Inject constructor(
         lightningRepo.getPayments().onSuccess { payments ->
             activityRepo.syncLdkNodePayments(payments)
         }
-        migrationService.cleanupInvalidMigrationTransfers()
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
@@ -525,7 +523,6 @@ class AppViewModel @Inject constructor(
         lightningRepo.getPayments().onSuccess { payments ->
             activityRepo.syncLdkNodePayments(payments)
         }
-        migrationService.cleanupInvalidMigrationTransfers()
         transferRepo.syncTransferStates()
         migrationService.reapplyMetadataAfterSync()
 
