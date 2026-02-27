@@ -17,4 +17,5 @@ data class TransferEntity(
     val isSettled: Boolean = false,
     val createdAt: Long,
     val settledAt: Long? = null,
+    val claimableAtHeight: UInt? = null,
 )
