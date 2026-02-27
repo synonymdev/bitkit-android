@@ -460,6 +460,46 @@ class TransferRepoTest : BaseUnitTest() {
         assertEquals(exception, result.exceptionOrNull())
     }
 
+    @Test
+    fun `syncTransferStates settles COOP_CLOSE immediately without waiting for balance sweep`() = test {
+        val settledAt = setupClockNowMock()
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.COOP_CLOSE,
+            amountSats = 75000L,
+            channelId = ID_CHANNEL,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        val lightningBalance = LightningBalance.ClaimableAwaitingConfirmations(
+            channelId = ID_CHANNEL,
+            counterpartyNodeId = "node123",
+            amountSatoshis = 75000u,
+            confirmationHeight = 344u,
+            source = org.lightningdevkit.ldknode.BalanceSource.COOP_CLOSE,
+        )
+
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 0u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 75000u,
+            lightningBalances = listOf(lightningBalance),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
     // MARK: - syncTransferStates (force close sweep handling)
 
     @Test
