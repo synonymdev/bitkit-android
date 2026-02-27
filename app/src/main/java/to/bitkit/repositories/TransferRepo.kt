@@ -41,6 +41,7 @@ class TransferRepo @Inject constructor(
         channelId: String? = null,
         fundingTxId: String? = null,
         lspOrderId: String? = null,
+        claimableAtHeight: UInt? = null,
     ): Result<String> = withContext(bgDispatcher) {
         runCatching {
             val id = UUID.randomUUID().toString()
@@ -54,6 +55,7 @@ class TransferRepo @Inject constructor(
                     lspOrderId = lspOrderId,
                     isSettled = false,
                     createdAt = clock.now().epochSeconds,
+                    claimableAtHeight = claimableAtHeight,
                 )
             )
             Logger.info("Created transfer: id=$id type=$type channelId=$channelId", context = TAG)

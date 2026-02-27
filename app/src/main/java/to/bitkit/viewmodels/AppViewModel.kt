@@ -69,6 +69,7 @@ import to.bitkit.ext.WatchResult
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
+import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.maxSendableSat
@@ -396,6 +397,7 @@ class AppViewModel @Inject constructor(
                 type = transferType,
                 amountSats = channelBalance.toLong(),
                 channelId = channelId,
+                claimableAtHeight = lightningBalance?.claimableAtHeight(),
             )
         }
     }
