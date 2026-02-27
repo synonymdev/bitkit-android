@@ -93,6 +93,7 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
         private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
+        private const val RN_DID_ATTEMPT_PEER_RECOVERY_KEY = "rnDidAttemptMigrationPeerRecovery"
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
@@ -1264,6 +1265,44 @@ class MigrationService @Inject constructor(
         Logger.info("RN migration completed, marked for post-migration sync", context = TAG)
     }
 
+    private suspend fun isRnMigrationCompleted(): Boolean {
+        val key = stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    private suspend fun didAttemptPeerRecovery(): Boolean {
+        val key = stringPreferencesKey(RN_DID_ATTEMPT_PEER_RECOVERY_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    private suspend fun setDidAttemptPeerRecovery() {
+        val key = stringPreferencesKey(RN_DID_ATTEMPT_PEER_RECOVERY_KEY)
+        rnMigrationStore.edit { it[key] = "true" }
+    }
+
+    suspend fun tryFetchMigrationPeersFromBackup(): List<String> {
+        if (!isRnMigrationCompleted()) return emptyList()
+        if (didAttemptPeerRecovery()) return emptyList()
+
+        setDidAttemptPeerRecovery()
+
+        return runCatching {
+            val data = rnBackupClient.retrieve("peers", fileGroup = "ldk") ?: return emptyList()
+            val peers = json.decodeFromString<List<BackupPeerEntry>>(String(data))
+            if (peers.isEmpty()) return emptyList()
+
+            val trustedIds = Env.trustedLnPeers.map { it.nodeId }.toSet()
+            val uris = peers
+                .filter { it.pubKey !in trustedIds }
+                .map { "${it.pubKey}@${it.address}:${it.port}" }
+
+            Logger.info("Migration peer recovery: fetched ${uris.size} peer(s) from remote backup", context = TAG)
+            uris
+        }.onFailure {
+            Logger.warn("Migration peer recovery failed (will not retry)", it, context = TAG)
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()
         setNeedsPostMigrationSync(false)
@@ -2131,6 +2170,13 @@ data class RNWidgets(
 data class RNWidgetsWithOptions(
     val widgets: RNWidgets,
     val widgetOptions: Map<String, ByteArray>,
+)
+
+@Serializable
+data class BackupPeerEntry(
+    val pubKey: String,
+    val address: String,
+    val port: UShort,
 )
 
 private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore("rn_migration")
