@@ -43,13 +43,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
             wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
             wheneverBlocking {
-                lightningRepo.calculateTotalFee(
-                    any(),
-                    anyOrNull(),
-                    anyOrNull(),
-                    anyOrNull(),
-                    anyOrNull(),
-                )
+                lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
             }.thenReturn(Result.success(1000uL))
         }
         sut = DeriveBalanceStateUseCase(
@@ -248,7 +242,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         wheneverBlocking {
-            lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+            lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(feeAmount))
 
         val result = sut()
@@ -268,8 +262,9 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.failure(Exception("Fee estimation failed")))
+        wheneverBlocking {
+            lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
+        }.thenReturn(Result.failure(Exception("Fee estimation failed")))
 
         val result = sut()
 
@@ -288,7 +283,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         wheneverBlocking {
-            lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+            lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(excessiveFee))
 
         val result = sut()
