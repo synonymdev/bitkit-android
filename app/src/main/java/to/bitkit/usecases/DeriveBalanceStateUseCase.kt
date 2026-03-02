@@ -40,7 +40,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
 
             val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
-            val channelFundableBalance = lightningRepo.getChannelFundableBalance()
+            val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val totalLightningSats = afterPendingChannels.safe() - toSavingsAmount.safe()
 
@@ -103,6 +103,19 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }
 
         return toSavingsAmount
+    }
+
+    private suspend fun getMaxChannelFundableAmount(fundableBalance: ULong): ULong {
+        if (fundableBalance == 0uL) return 0u
+
+        val fallback = (fundableBalance.toDouble() * FALLBACK_FEE_PERCENT).toULong()
+        val fee = lightningRepo.calculateTotalFee(
+            amountSats = fundableBalance,
+        ).onFailure {
+            Logger.debug("Could not calculate channel funding fee, using fallback of: $fallback", context = TAG)
+        }.getOrDefault(fallback)
+
+        return fundableBalance.safe() - fee.safe()
     }
 
     private suspend fun getMaxSendAmount(balanceDetails: BalanceDetails): ULong {

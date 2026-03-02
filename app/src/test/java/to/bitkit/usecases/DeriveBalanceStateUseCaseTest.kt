@@ -43,6 +43,9 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
             wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
             wheneverBlocking {
+                lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+            }.thenReturn(Result.success(1000uL))
+            wheneverBlocking {
                 lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
             }.thenReturn(Result.success(1000uL))
         }
@@ -88,7 +91,9 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should include channelFundableBalance from lightning repo in state`() = test {
+    fun `should subtract estimated fee from channelFundableBalance`() = test {
+        val fundableBalance = 75_000uL
+        val fee = 2_000uL
         val balance = BalanceDetails(
             totalOnchainBalanceSats = 100_000u,
             spendableOnchainBalanceSats = 0u,
@@ -97,7 +102,57 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             lightningBalances = emptyList(),
             pendingBalancesFromChannelClosures = emptyList(),
         )
-        whenever(lightningRepo.getChannelFundableBalance()).thenReturn(25_000uL)
+        whenever(lightningRepo.getChannelFundableBalance()).thenReturn(fundableBalance)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        wheneverBlocking {
+            lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        }.thenReturn(Result.success(fee))
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        assertEquals(fundableBalance - fee, result.getOrThrow().channelFundableBalance)
+    }
+
+    @Test
+    fun `should use fallback fee for channelFundableBalance when fee estimation fails`() = test {
+        val fundableBalance = 100_000uL
+        val expectedFallback = (fundableBalance.toDouble() * DeriveBalanceStateUseCase.FALLBACK_FEE_PERCENT).toULong()
+        val balance = BalanceDetails(
+            totalOnchainBalanceSats = 100_000u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 10_000u,
+            totalLightningBalanceSats = 50_000u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+        whenever(lightningRepo.getChannelFundableBalance()).thenReturn(fundableBalance)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        wheneverBlocking {
+            lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        }.thenReturn(Result.failure(Exception("Fee estimation failed")))
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        assertEquals(fundableBalance - expectedFallback, result.getOrThrow().channelFundableBalance)
+    }
+
+    @Test
+    fun `should return zero channelFundableBalance when fundable balance is zero`() = test {
+        val balance = BalanceDetails(
+            totalOnchainBalanceSats = 100_000u,
+            spendableOnchainBalanceSats = 0u,
+            totalAnchorChannelsReserveSats = 10_000u,
+            totalLightningBalanceSats = 50_000u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+        whenever(lightningRepo.getChannelFundableBalance()).thenReturn(0uL)
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -105,7 +160,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val result = sut()
 
         assertTrue(result.isSuccess)
-        assertEquals(25_000uL, result.getOrThrow().channelFundableBalance)
+        assertEquals(0uL, result.getOrThrow().channelFundableBalance)
     }
 
     @Test
