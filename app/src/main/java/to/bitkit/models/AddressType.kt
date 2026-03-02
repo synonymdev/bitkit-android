@@ -103,6 +103,10 @@ fun String.toAddressType(): AddressType? = when (this) {
     else -> null
 }
 
+val DEFAULT_ADDRESS_TYPE = AddressType.P2WPKH
+
+val DEFAULT_ADDRESS_TYPE_STRING = DEFAULT_ADDRESS_TYPE.toSettingsString()
+
 val ALL_ADDRESS_TYPES = listOf(AddressType.P2PKH, AddressType.P2SH, AddressType.P2WPKH, AddressType.P2TR)
 
 val ALL_ADDRESS_TYPE_STRINGS = ALL_ADDRESS_TYPES.map { it.toSettingsString() }

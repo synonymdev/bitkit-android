@@ -10,6 +10,7 @@ import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Suggestion
@@ -127,8 +128,8 @@ data class SettingsData(
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val electrumServer: String = Env.electrumServerUrl,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
-    val selectedAddressType: String = "nativeSegwit",
-    val addressTypesToMonitor: List<String> = listOf("nativeSegwit"),
+    val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
+    val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,
 )
 

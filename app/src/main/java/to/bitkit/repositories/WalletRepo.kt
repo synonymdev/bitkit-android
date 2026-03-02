@@ -28,6 +28,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
@@ -289,8 +290,8 @@ class WalletRepo @Inject constructor(
             }
             settingsStore.update {
                 it.copy(
-                    selectedAddressType = "nativeSegwit",
-                    addressTypesToMonitor = listOf("nativeSegwit"),
+                    selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
+                    addressTypesToMonitor = listOf(DEFAULT_ADDRESS_TYPE_STRING),
                 )
             }
             setWalletExistsState()
@@ -308,7 +309,7 @@ class WalletRepo @Inject constructor(
             }
             settingsStore.update {
                 it.copy(
-                    selectedAddressType = "nativeSegwit",
+                    selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
                     addressTypesToMonitor = ALL_ADDRESS_TYPE_STRINGS,
                 )
             }

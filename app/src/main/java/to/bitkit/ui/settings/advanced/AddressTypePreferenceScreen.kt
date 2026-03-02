@@ -127,8 +127,6 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = AddressTypePreferenceUiState(
-                selectedAddressType = AddressType.P2WPKH,
-                monitoredTypes = setOf("nativeSegwit"),
                 showMonitoredTypes = true,
             ),
         )

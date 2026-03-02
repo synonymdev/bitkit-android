@@ -1104,6 +1104,20 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Estimates the fee for a send-all (drain) transaction */
+    suspend fun estimateSendAllFee(
+        address: Address? = null,
+        speed: TransactionSpeed? = null,
+        feeRates: FeeRates? = null,
+    ): Result<ULong> = withContext(bgDispatcher) {
+        runCatching {
+            val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
+            val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
+            lightningService.estimateSendAllFee(address = addressOrDefault, satsPerVByte = satsPerVByte)
+        }
+    }
+
     suspend fun getFeeRateForSpeed(
         speed: TransactionSpeed,
         feeRates: FeeRates? = null,

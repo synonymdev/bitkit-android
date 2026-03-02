@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.Toast
 import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.toAddressType
@@ -126,31 +128,31 @@ class AddressTypePreferenceViewModel @Inject constructor(
                     title = context.getString(R.string.settings__addr_type__settings_updated),
                 )
             } else {
-                val ex = repoResult.exceptionOrNull()?.message
-                val msg = when {
-                    ex?.contains("has balance") == true ->
-                        context.getString(R.string.settings__addr_type__disabled_has_balance)
-                    ex?.contains("verify") == true ->
-                        context.getString(R.string.settings__addr_type__disabled_verify_failed)
-                    ex?.contains("Native SegWit or Taproot") == true ->
-                        context.getString(R.string.settings__addr_type__disabled_native_required)
-                    ex?.contains("currently selected") == true ->
-                        context.getString(R.string.settings__addr_type__disabled_currently_selected)
-                    else -> ex
-                }
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.common__error),
-                    description = msg,
+                    description = monitoringErrorMessage(repoResult.exceptionOrNull()?.message),
                 )
             }
         }
     }
+
+    private fun monitoringErrorMessage(errorMessage: String?): String? = when {
+        errorMessage?.contains("has balance") == true ->
+            context.getString(R.string.settings__addr_type__disabled_has_balance)
+        errorMessage?.contains("verify") == true ->
+            context.getString(R.string.settings__addr_type__disabled_verify_failed)
+        errorMessage?.contains("Native SegWit or Taproot") == true ->
+            context.getString(R.string.settings__addr_type__disabled_native_required)
+        errorMessage?.contains("currently selected") == true ->
+            context.getString(R.string.settings__addr_type__disabled_currently_selected)
+        else -> errorMessage
+    }
 }
 
 data class AddressTypePreferenceUiState(
-    val selectedAddressType: AddressType = AddressType.P2WPKH,
-    val monitoredTypes: Set<String> = setOf("nativeSegwit"),
+    val selectedAddressType: AddressType = DEFAULT_ADDRESS_TYPE,
+    val monitoredTypes: Set<String> = setOf(DEFAULT_ADDRESS_TYPE_STRING),
     val showMonitoredTypes: Boolean = false,
     val isLoading: Boolean = false,
 )

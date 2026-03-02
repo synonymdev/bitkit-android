@@ -112,10 +112,8 @@ class DeriveBalanceStateUseCase @Inject constructor(
         val fallback = (spendableOnchainSats.toDouble() * FALLBACK_FEE_PERCENT).toULong()
         val speed = settingsStore.data.first().defaultTransactionSpeed
 
-        val fee = lightningRepo.calculateTotalFee(
-            amountSats = spendableOnchainSats,
+        val fee = lightningRepo.estimateSendAllFee(
             speed = speed,
-            utxosToSpend = lightningRepo.listSpendableOutputs().getOrNull()
         ).onFailure {
             Logger.debug("Could not calculate max send amount, using fallback of: $fallback", context = TAG)
         }.getOrDefault(fallback)

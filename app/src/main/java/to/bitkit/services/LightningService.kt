@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Address
+import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
@@ -874,6 +875,22 @@ class LightningService @Inject constructor(
             }
         }
     }
+
+    /** Estimates the fee for a send-all (drain) transaction */
+    suspend fun estimateSendAllFee(
+        address: Address,
+        satsPerVByte: ULong,
+    ): ULong {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            node.onchainPayment().calculateSendAllFee(
+                address = address,
+                retainReserves = true,
+                feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
+            )
+        }
+    }
     // endregion
 
     // region events
@@ -924,7 +941,7 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun getBalanceForAddressType(addressType: AddressType): org.lightningdevkit.ldknode.AddressTypeBalance =
+    suspend fun getBalanceForAddressType(addressType: AddressType): AddressTypeBalance =
         ServiceQueue.LDK.background {
             val n = node ?: throw ServiceError.NodeNotSetup()
             n.getBalanceForAddressType(addressType.toLdkAddressType())

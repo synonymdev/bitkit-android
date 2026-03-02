@@ -194,15 +194,17 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
 
-            val allUtxos = lightningRepo.listSpendableOutputs().getOrNull()
-            val spendableBalance = allUtxos?.sumOf { it.valueSats }
-                ?: lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
-            val sendAllFee = lightningRepo.calculateTotalFee(
-                amountSats = spendableBalance,
+            // Use spendableOnchainBalanceSats (not raw UTXO sum) to respect anchor reserves
+            val spendableBalance =
+                lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
+            val sendAllFee = lightningRepo.estimateSendAllFee(
                 address = address,
                 speed = speed,
-                utxosToSpend = allUtxos,
-            ).getOrElse { 0uL }
+            ).getOrElse {
+                Logger.error("Failed to estimate send-all fee", it, context = TAG)
+                ToastEventBus.send(it)
+                return@launch
+            }
 
             val expectedChange =
                 spendableBalance.toLong() - order.feeSat.toLong() - sendAllFee.toLong()
