@@ -60,7 +60,3 @@ jobs:
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # Allow Claude bot to trigger this workflow
-          allowed_bots: 'claude[bot]'
-          # Allow Claude to use GH CLI for reading external PR details and fetch web content
-          claude_args: '--allowed-tools Bash(gh:*) WebFetch'
