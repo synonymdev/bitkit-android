@@ -24,6 +24,13 @@ fun LightningBalance.channelId(): String {
     }
 }
 
+fun LightningBalance.claimableAtHeight(): UInt? = when (this) {
+    is LightningBalance.ClaimableAwaitingConfirmations -> this.confirmationHeight
+    is LightningBalance.ContentiousClaimable -> this.timeoutHeight
+    is LightningBalance.MaybeTimeoutClaimableHtlc -> this.claimableHeight
+    else -> null
+}
+
 fun LightningBalance.balanceUiText(): String {
     return when (this) {
         is LightningBalance.ClaimableOnChannelClose -> "Claimable on Channel Close"

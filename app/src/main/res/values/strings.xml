@@ -111,6 +111,8 @@
     <string name="lightning__conn_open">Open connections</string>
     <string name="lightning__conn_pending">Pending connections</string>
     <string name="lightning__connection">Connection</string>
+    <string name="lightning__connection_closed__description">The funds on your spending balance have been transferred to your savings.</string>
+    <string name="lightning__connection_closed__title">Connection Closed</string>
     <string name="lightning__connections">Lightning Connections</string>
     <string name="lightning__created_on">Created on</string>
     <string name="lightning__error_add">Bitkit could not add the Lightning peer.</string>
@@ -244,6 +246,7 @@
     <string name="lightning__transfer__nav_title">Transfer Funds</string>
     <string name="lightning__transfer__swipe">Swipe To Transfer</string>
     <string name="lightning__transfer_in_progress">TRANSFER IN PROGRESS</string>
+    <string name="lightning__transfer_ready_in">TRANSFER READY IN %s</string>
     <string name="lightning__transfer_intro__button">Get Started</string>
     <string name="lightning__transfer_intro__text">Fund your spending balance to enjoy instant and cheap transactions with friends, family, and merchants.</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>

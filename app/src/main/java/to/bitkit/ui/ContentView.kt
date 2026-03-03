@@ -171,6 +171,7 @@ import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
+import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.GiftSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
@@ -411,6 +412,10 @@ fun ContentView(
                                 navController.navigate(Routes.SweepNav)
                             },
                             onCancel = { appViewModel.hideSheet() },
+                        )
+
+                        Sheet.ConnectionClosed -> ConnectionClosedSheet(
+                            onDismiss = { appViewModel.hideSheet() },
                         )
 
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
@@ -804,6 +809,7 @@ private fun NavGraphBuilder.home(
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
+        val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
         SavingsWalletScreen(
             isGeoBlocked = isGeoBlocked,
@@ -819,6 +825,7 @@ private fun NavGraphBuilder.home(
                 }
             },
             onBackClick = { navController.popBackStack() },
+            forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
     composable<Routes.Spending>(
