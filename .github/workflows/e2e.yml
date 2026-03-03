@@ -8,6 +8,7 @@ on:
         required: false
         default: "default-feature-branch"
   pull_request:
+    types: [ opened, synchronize, reopened, ready_for_review ]
 
 env:
   TERM: xterm-256color
