@@ -2,8 +2,10 @@ package to.bitkit.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.synonym.bitkitcore.TrezorScriptType
+import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorCoinType
+import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorTxInput
 import com.synonym.bitkitcore.TrezorTxOutput
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,15 +17,19 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.models.Toast
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
 data class TrezorUiState(
+    val selectedNetwork: TrezorCoinType = Env.network.toTrezorCoinType(),
     val addressIndex: Int = 0,
-    val derivationPath: String = "m/84'/0'/0'/0/0",
+    val derivationPath: String =
+        "m/84'/${if (Env.network.toTrezorCoinType() == TrezorCoinType.BITCOIN) "0" else "1"}'/0'/0/0",
     val messageToSign: String = "Hello, Trezor!",
     val lastSignature: String? = null,
     val lastSigningAddress: String? = null,
@@ -31,6 +37,10 @@ data class TrezorUiState(
     val isGettingAddress: Boolean = false,
     val isGettingPublicKey: Boolean = false,
     val isVerifyingMessage: Boolean = false,
+    val lookupInput: String = "",
+    val isLookingUp: Boolean = false,
+    val accountInfoResult: AccountInfoResult? = null,
+    val addressInfoResult: SingleAddressInfoResult? = null,
 )
 
 @Suppress("TooManyFunctions")
@@ -129,11 +139,12 @@ class TrezorViewModel @Inject constructor(
     fun getAddress(showOnTrezor: Boolean = false) {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isGettingAddress = true) }
-            val path = _uiState.value.derivationPath
+            val state = _uiState.value
             trezorRepo.getAddress(
-                path = path,
+                path = state.derivationPath,
                 showOnTrezor = showOnTrezor,
                 scriptType = TrezorScriptType.SPEND_WITNESS,
+                coin = state.selectedNetwork,
             )
                 .onSuccess {
                     _uiState.update { it.copy(isGettingAddress = false) }
@@ -149,11 +160,12 @@ class TrezorViewModel @Inject constructor(
     fun getPublicKey(showOnTrezor: Boolean = false) {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isGettingPublicKey = true) }
-            val path = _uiState.value.derivationPath
-            val accountPath = path.split("/").take(4).joinToString("/")
+            val state = _uiState.value
+            val accountPath = state.derivationPath.split("/").take(4).joinToString("/")
             trezorRepo.getPublicKey(
                 path = accountPath,
                 showOnTrezor = showOnTrezor,
+                coin = state.selectedNetwork,
             )
                 .onSuccess {
                     _uiState.update { it.copy(isGettingPublicKey = false) }
@@ -170,12 +182,24 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(derivationPath = path) }
     }
 
+    fun setSelectedNetwork(network: TrezorCoinType) {
+        val coinType = if (network == TrezorCoinType.BITCOIN) "0" else "1"
+        _uiState.update {
+            it.copy(
+                selectedNetwork = network,
+                addressIndex = 0,
+                derivationPath = "m/84'/$coinType'/0'/0/0",
+            )
+        }
+    }
+
     fun incrementAddressIndex() {
         _uiState.update { state ->
             val newIndex = state.addressIndex + 1
+            val coinType = if (state.selectedNetwork == TrezorCoinType.BITCOIN) "0" else "1"
             state.copy(
                 addressIndex = newIndex,
-                derivationPath = "m/84'/0'/0'/0/$newIndex"
+                derivationPath = "m/84'/$coinType'/0'/0/$newIndex",
             )
         }
     }
@@ -194,6 +218,49 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(messageToSign = message) }
     }
 
+    fun setLookupInput(input: String) {
+        _uiState.update { it.copy(lookupInput = input) }
+    }
+
+    fun lookupBalanceInfo() {
+        viewModelScope.launch(bgDispatcher) {
+            val input = _uiState.value.lookupInput.trim()
+            if (input.isBlank()) {
+                ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter an address or xpub")
+                return@launch
+            }
+            _uiState.update { it.copy(isLookingUp = true, accountInfoResult = null, addressInfoResult = null) }
+
+            val network = _uiState.value.selectedNetwork
+            if (isExtendedKey(input)) {
+                trezorRepo.getAccountInfo(extendedKey = input, network = network)
+                    .onSuccess { result ->
+                        _uiState.update { it.copy(isLookingUp = false, accountInfoResult = result) }
+                        ToastEventBus.send(type = Toast.ToastType.INFO, title = "Account info retrieved")
+                    }
+                    .onFailure {
+                        _uiState.update { it.copy(isLookingUp = false) }
+                        ToastEventBus.send(it)
+                    }
+            } else {
+                trezorRepo.getAddressInfo(address = input, network = network)
+                    .onSuccess { result ->
+                        _uiState.update { it.copy(isLookingUp = false, addressInfoResult = result) }
+                        ToastEventBus.send(type = Toast.ToastType.INFO, title = "Address info retrieved")
+                    }
+                    .onFailure {
+                        _uiState.update { it.copy(isLookingUp = false) }
+                        ToastEventBus.send(it)
+                    }
+            }
+        }
+    }
+
+    private fun isExtendedKey(input: String): Boolean {
+        val prefixes = listOf("xpub", "ypub", "zpub", "tpub", "upub", "vpub")
+        return prefixes.any { input.lowercase().startsWith(it) }
+    }
+
     fun signMessage() {
         viewModelScope.launch(bgDispatcher) {
             val message = _uiState.value.messageToSign
@@ -203,8 +270,8 @@ class TrezorViewModel @Inject constructor(
             }
 
             _uiState.update { it.copy(isSigningMessage = true) }
-            val path = _uiState.value.derivationPath
-            trezorRepo.signMessage(path = path, message = message)
+            val state = _uiState.value
+            trezorRepo.signMessage(path = state.derivationPath, message = message, coin = state.selectedNetwork)
                 .onSuccess { response ->
                     _uiState.update {
                         it.copy(
@@ -234,7 +301,12 @@ class TrezorViewModel @Inject constructor(
             }
 
             _uiState.update { it.copy(isVerifyingMessage = true) }
-            trezorRepo.verifyMessage(address = address, signature = signature, message = message)
+            trezorRepo.verifyMessage(
+                address = address,
+                signature = signature,
+                message = message,
+                coin = _uiState.value.selectedNetwork,
+            )
                 .onSuccess { isValid ->
                     _uiState.update { it.copy(isVerifyingMessage = false) }
                     val msg = if (isValid) "Signature is valid!" else "Signature is invalid"

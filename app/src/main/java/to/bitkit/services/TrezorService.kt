@@ -1,5 +1,7 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -15,6 +17,8 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTxInput
 import com.synonym.bitkitcore.TrezorTxOutput
 import com.synonym.bitkitcore.TrezorVerifyMessageParams
+import com.synonym.bitkitcore.trezorGetAccountInfo
+import com.synonym.bitkitcore.trezorGetAddressInfo
 import com.synonym.bitkitcore.trezorClearCredentials
 import com.synonym.bitkitcore.trezorConnect
 import com.synonym.bitkitcore.trezorDisconnect
@@ -194,6 +198,36 @@ class TrezorService @Inject constructor(
     suspend fun clearCredentials(deviceId: String) {
         ServiceQueue.CORE.background {
             trezorClearCredentials(deviceId = deviceId)
+        }
+    }
+
+    suspend fun getAccountInfo(
+        extendedKey: String,
+        electrumUrl: String,
+        network: TrezorCoinType?,
+        gapLimit: UInt? = 20u,
+    ): AccountInfoResult {
+        return ServiceQueue.CORE.background {
+            trezorGetAccountInfo(
+                extendedKey = extendedKey,
+                electrumUrl = electrumUrl,
+                network = network,
+                gapLimit = gapLimit,
+            )
+        }
+    }
+
+    suspend fun getAddressInfo(
+        address: String,
+        electrumUrl: String,
+        network: TrezorCoinType?,
+    ): SingleAddressInfoResult {
+        return ServiceQueue.CORE.background {
+            trezorGetAddressInfo(
+                address = address,
+                electrumUrl = electrumUrl,
+                network = network,
+            )
         }
     }
 }

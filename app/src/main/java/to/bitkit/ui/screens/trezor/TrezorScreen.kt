@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
@@ -140,6 +142,9 @@ private fun TrezorScreenContent(
             onVerifyMessage = viewModel::verifyMessage,
             onMessageChange = viewModel::setMessageToSign,
             onClearError = viewModel::clearError,
+            onLookupInputChange = viewModel::setLookupInput,
+            onLookup = viewModel::lookupBalanceInfo,
+            onNetworkChange = viewModel::setSelectedNetwork,
             permissionsGranted = permissionsState.allPermissionsGranted,
         )
     }
@@ -162,15 +167,24 @@ private fun TrezorContent(
     onVerifyMessage: () -> Unit = {},
     onMessageChange: (String) -> Unit = {},
     onClearError: () -> Unit = {},
+    onLookupInputChange: (String) -> Unit = {},
+    onLookup: () -> Unit = {},
+    onNetworkChange: (TrezorCoinType) -> Unit = {},
     permissionsGranted: Boolean = true,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
         Text13Up("TREZOR TEST", color = Colors.White64)
-        VerticalSpacer(16.dp)
+        VerticalSpacer(8.dp)
+        NetworkSelectorRow(
+            selectedNetwork = uiState.selectedNetwork,
+            onNetworkChange = onNetworkChange,
+        )
+        VerticalSpacer(12.dp)
 
         Card(
             colors = CardDefaults.cardColors(containerColor = Colors.White08),
@@ -347,9 +361,44 @@ private fun TrezorContent(
                     }
                 }
 
+                // Balance Lookup (always visible, no device needed)
+                Spacer(modifier = Modifier.height(16.dp))
+                BalanceLookupSection(
+                    uiState = uiState,
+                    onInputChange = onLookupInputChange,
+                    onLookup = onLookup,
+                )
+
                 // Debug Log Window
                 DebugLogSection()
             }
+        }
+    }
+}
+
+@Composable
+private fun NetworkSelectorRow(
+    selectedNetwork: TrezorCoinType,
+    onNetworkChange: (TrezorCoinType) -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        TrezorCoinType.entries.filter { it != TrezorCoinType.SIGNET }.forEach { network ->
+            val isSelected = network == selectedNetwork
+            val color = if (isSelected) Colors.Brand else Colors.White32
+            Text(
+                text = network.name,
+                color = color,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(color.copy(alpha = 0.15f))
+                    .clickableAlpha(onClick = { onNetworkChange(network) })
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
         }
     }
 }

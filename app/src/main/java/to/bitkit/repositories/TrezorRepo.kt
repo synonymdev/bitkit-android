@@ -1,11 +1,13 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
+import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
-import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
@@ -22,6 +24,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.env.Env
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
@@ -159,11 +162,12 @@ class TrezorRepo @Inject constructor(
         path: String = "m/84'/0'/0'/0/0",
         showOnTrezor: Boolean = false,
         scriptType: TrezorScriptType? = TrezorScriptType.SPEND_WITNESS,
+        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
     ): Result<TrezorAddressResponse> = runCatching {
         ensureConnected()
         val response = trezorService.getAddress(
             path = path,
-            coin = TrezorCoinType.BITCOIN,
+            coin = coin,
             showOnTrezor = showOnTrezor,
             scriptType = scriptType,
         )
@@ -177,17 +181,46 @@ class TrezorRepo @Inject constructor(
     suspend fun getPublicKey(
         path: String = "m/84'/0'/0'",
         showOnTrezor: Boolean = false,
+        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
     ): Result<TrezorPublicKeyResponse> = runCatching {
         ensureConnected()
         val response = trezorService.getPublicKey(
             path = path,
-            coin = TrezorCoinType.BITCOIN,
+            coin = coin,
             showOnTrezor = showOnTrezor,
         )
         _state.update { it.copy(lastPublicKey = response, error = null) }
         response
     }.onFailure { e ->
         Logger.error("Trezor getPublicKey failed", e, context = TAG)
+        _state.update { it.copy(error = e.message) }
+    }
+
+    suspend fun getAccountInfo(
+        extendedKey: String,
+        network: TrezorCoinType = Env.network.toTrezorCoinType(),
+    ): Result<AccountInfoResult> = runCatching {
+        trezorService.getAccountInfo(
+            extendedKey = extendedKey,
+            electrumUrl = electrumUrlForNetwork(network),
+            network = keyFormatNetwork(network),
+        )
+    }.onFailure { e ->
+        Logger.error("Trezor getAccountInfo failed", e, context = TAG)
+        _state.update { it.copy(error = e.message) }
+    }
+
+    suspend fun getAddressInfo(
+        address: String,
+        network: TrezorCoinType = Env.network.toTrezorCoinType(),
+    ): Result<SingleAddressInfoResult> = runCatching {
+        trezorService.getAddressInfo(
+            address = address,
+            electrumUrl = electrumUrlForNetwork(network),
+            network = keyFormatNetwork(network),
+        )
+    }.onFailure { e ->
+        Logger.error("Trezor getAddressInfo failed", e, context = TAG)
         _state.update { it.copy(error = e.message) }
     }
 
@@ -207,12 +240,13 @@ class TrezorRepo @Inject constructor(
     suspend fun signMessage(
         path: String = "m/84'/0'/0'/0/0",
         message: String,
+        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
     ): Result<TrezorSignedMessageResponse> = runCatching {
         ensureConnected()
         val response = trezorService.signMessage(
             path = path,
             message = message,
-            coin = TrezorCoinType.BITCOIN,
+            coin = coin,
         )
         _state.update { it.copy(error = null) }
         response
@@ -225,13 +259,14 @@ class TrezorRepo @Inject constructor(
         address: String,
         signature: String,
         message: String,
+        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
     ): Result<Boolean> = runCatching {
         ensureConnected()
         val result = trezorService.verifyMessage(
             address = address,
             signature = signature,
             message = message,
-            coin = TrezorCoinType.BITCOIN,
+            coin = coin,
         )
         _state.update { it.copy(error = null) }
         result
@@ -368,6 +403,18 @@ class TrezorRepo @Inject constructor(
         runCatching {
             prefs.edit().putString(KEY_KNOWN_DEVICES, json.encodeToString(devices)).commit()
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
+    }
+
+    private fun keyFormatNetwork(network: TrezorCoinType): TrezorCoinType = when (network) {
+        TrezorCoinType.REGTEST -> TrezorCoinType.TESTNET
+        else -> network
+    }
+
+    private fun electrumUrlForNetwork(network: TrezorCoinType): String = when (network) {
+        TrezorCoinType.BITCOIN -> "ssl://bitkit.to:9999"
+        TrezorCoinType.TESTNET -> "ssl://electrum.blockstream.info:60002"
+        TrezorCoinType.REGTEST -> "ssl://electrs.bitkit.stag0.blocktank.to:9999"
+        TrezorCoinType.SIGNET -> "ssl://electrum.blockstream.info:60002"
     }
 
     private suspend fun ensureConnected() {

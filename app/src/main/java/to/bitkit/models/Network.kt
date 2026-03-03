@@ -1,6 +1,7 @@
 package to.bitkit.models
 
 import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.TrezorCoinType
 import org.lightningdevkit.ldknode.Network
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
@@ -9,6 +10,13 @@ fun Network.networkUiText(): String = when (this) {
     Network.TESTNET -> "Testnet"
     Network.SIGNET -> "Signet"
     Network.REGTEST -> "Regtest"
+}
+
+fun Network.toTrezorCoinType(): TrezorCoinType = when (this) {
+    Network.BITCOIN -> TrezorCoinType.BITCOIN
+    Network.TESTNET -> TrezorCoinType.TESTNET
+    Network.SIGNET -> TrezorCoinType.SIGNET
+    Network.REGTEST -> TrezorCoinType.REGTEST
 }
 
 fun Network.toCoreNetwork(): BitkitCoreNetwork = when (this) {
