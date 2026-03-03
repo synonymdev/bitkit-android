@@ -990,6 +990,11 @@ class LightningRepo @Inject constructor(
         val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
         val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
 
+        Logger.debug(
+            "sendOnChain: sats=$sats, isTransfer=$isTransfer, isMaxAmount=$isMaxAmount, satsPerVByte=$satsPerVByte",
+            context = TAG,
+        )
+
         // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
         val utxosForSend = when {
             isTransfer && isMaxAmount -> null

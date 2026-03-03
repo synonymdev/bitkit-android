@@ -194,9 +194,9 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
 
-            // Use spendableOnchainBalanceSats (not raw UTXO sum) to respect anchor reserves
+            // Use live spendableOnchainBalanceSats (not cached) to respect anchor reserves
             val spendableBalance =
-                lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
+                lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: 0uL
             val sendAllFee = lightningRepo.estimateSendAllFee(
                 address = address,
                 speed = speed,
@@ -210,6 +210,12 @@ class TransferViewModel @Inject constructor(
                 spendableBalance.toLong() - order.feeSat.toLong() - sendAllFee.toLong()
             val shouldUseSendAll =
                 expectedChange >= 0 && expectedChange < TRANSFER_SEND_ALL_THRESHOLD_SATS
+
+            Logger.debug(
+                "BT confirm: spendable=$spendableBalance, feeSat=${order.feeSat}, " +
+                    "sendAllFee=$sendAllFee, expectedChange=$expectedChange, sendAll=$shouldUseSendAll",
+                context = TAG,
+            )
 
             lightningRepo
                 .sendOnChain(
