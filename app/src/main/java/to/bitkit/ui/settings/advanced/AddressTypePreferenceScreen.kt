@@ -88,6 +88,7 @@ private fun Content(
                     title = "${info.shortName} ${info.example}",
                     subtitle = info.description,
                     value = SettingsButtonValue.BooleanValue(uiState.selectedAddressType == type),
+                    enabled = !uiState.isLoading,
                     onClick = { onSelectAddressType(type) },
                     modifier = Modifier.testTag(type.toAddressTypeE2eId()),
                 )
@@ -100,6 +101,7 @@ private fun Content(
                     val info = type.addressTypeInfo()
                     val isMonitored = type.toSettingsString() in uiState.monitoredTypes
                     val isSelectedType = uiState.selectedAddressType == type
+                    val isDisabled = isSelectedType || uiState.isLoading
                     SettingsSwitchRow(
                         title = "${info.shortName} ${info.shortExample}",
                         subtitle = if (isSelectedType) {
@@ -108,9 +110,9 @@ private fun Content(
                             null
                         },
                         isChecked = isMonitored,
-                        onClick = { if (!isSelectedType) onSetMonitoring(type, !isMonitored) },
+                        onClick = { if (!isDisabled) onSetMonitoring(type, !isMonitored) },
                         modifier = Modifier
-                            .alpha(if (isSelectedType) 0.5f else 1f)
+                            .alpha(if (isDisabled) 0.5f else 1f)
                             .testTag("MonitorToggle-${type.toAddressTypeE2eId()}"),
                     )
                 }
