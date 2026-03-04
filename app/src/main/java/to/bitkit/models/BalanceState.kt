@@ -1,7 +1,9 @@
 package to.bitkit.models
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class BalanceState(
     val totalOnchainSats: ULong = 0uL,
