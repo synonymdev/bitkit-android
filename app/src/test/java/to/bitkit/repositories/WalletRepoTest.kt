@@ -49,6 +49,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val wipeWalletUseCase = mock<WipeWalletUseCase>()
     private val transferRepo = mock<TransferRepo>()
     private val onchainService = mock<OnchainService>()
+    private val activityRepo = mock<ActivityRepo>()
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -132,6 +133,7 @@ class WalletRepoTest : BaseUnitTest() {
         deriveBalanceStateUseCase = deriveBalanceStateUseCase,
         wipeWalletUseCase = wipeWalletUseCase,
         transferRepo = transferRepo,
+        activityRepo = activityRepo,
     )
 
     @Test

@@ -245,7 +245,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         val transfers = listOf(
             newTransferEntity(
-                type = TransferType.COOP_CLOSE,
+                type = TransferType.FORCE_CLOSE,
                 amountSats = amountSats.toLong(),
                 channelId = channelId,
                 lspOrderId = null
@@ -270,6 +270,43 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balance.totalLightningBalanceSats - amountSats,
             balanceState.totalLightningSats,
             "Lightning balance reduced - channel closing balance"
+        )
+    }
+
+    @Test
+    fun `should subtract coop close balance from lightning without showing transfer in progress`() = test {
+        val channelId = "closing-channel-id"
+        val amountSats = 40_000uL
+        val closingChannelBalance = newClosingChannelBalance(channelId, amountSats)
+
+        val balance = newBalanceDetails().copy(
+            lightningBalances = listOf(closingChannelBalance),
+            totalLightningBalanceSats = amountSats,
+        )
+        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+
+        val transfers = listOf(
+            newTransferEntity(
+                type = TransferType.COOP_CLOSE,
+                amountSats = amountSats.toLong(),
+                channelId = channelId,
+                lspOrderId = null
+            )
+        )
+
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
+        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        val balanceState = result.getOrThrow()
+        assertEquals(0uL, balanceState.balanceInTransferToSavings, "No transfer in progress for coop close")
+        assertEquals(
+            0uL,
+            balanceState.totalLightningSats,
+            "Lightning balance reduced - coop close balance subtracted"
         )
     }
 
@@ -374,7 +411,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
                 lspOrderId = null
             ),
             newTransferEntity(
-                type = TransferType.COOP_CLOSE,
+                type = TransferType.FORCE_CLOSE,
                 amountSats = toSavings.toLong(),
                 channelId = savingsChannelId,
                 lspOrderId = null

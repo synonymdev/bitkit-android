@@ -92,6 +92,7 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_METADATA_KEY = "rnPendingMetadata"
         private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
+        private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
         private const val RN_DID_ATTEMPT_PEER_RECOVERY_KEY = "rnDidAttemptMigrationPeerRecovery"
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
@@ -348,6 +349,16 @@ class MigrationService @Inject constructor(
 
     suspend fun markMigrationChecked() {
         val key = stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)
+        rnMigrationStore.edit { it[key] = "true" }
+    }
+
+    suspend fun isChannelRecoveryChecked(): Boolean {
+        val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    suspend fun markChannelRecoveryChecked() {
+        val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
         rnMigrationStore.edit { it[key] = "true" }
     }
 
@@ -1329,13 +1340,13 @@ class MigrationService @Inject constructor(
         return null
     }
 
-    private suspend fun fetchRNRemoteLdkData() {
-        runCatching {
-            val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching
-            if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching
+    suspend fun fetchRNRemoteLdkData(): Boolean {
+        return runCatching {
+            val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching true
+            if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching true
 
             val managerData = rnBackupClient.retrieve("channel_manager", fileGroup = "ldk")
-                ?: return@runCatching
+                ?: return@runCatching true
 
             val expectedCount = files.channelMonitors.size
             val monitorResults = coroutineScope {
@@ -1372,9 +1383,11 @@ class MigrationService @Inject constructor(
                     channelMonitors = monitors,
                 )
             }
+
+            failedMonitors.isEmpty()
         }.onFailure { e ->
             Logger.error("Failed to fetch remote LDK data", e, context = TAG)
-        }
+        }.getOrDefault(false)
     }
 
     private suspend fun applyRNRemoteSettings(data: ByteArray) {

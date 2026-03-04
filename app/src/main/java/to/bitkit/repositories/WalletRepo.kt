@@ -54,6 +54,7 @@ class WalletRepo @Inject constructor(
     private val deriveBalanceStateUseCase: DeriveBalanceStateUseCase,
     private val wipeWalletUseCase: WipeWalletUseCase,
     private val transferRepo: TransferRepo,
+    private val activityRepo: ActivityRepo,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
@@ -206,6 +207,7 @@ class WalletRepo @Inject constructor(
             delay(EVENT_SYNC_DEBOUNCE_MS)
             syncBalances()
             transferRepo.syncTransferStates()
+            activityRepo.syncActivities()
         }
     }
 
