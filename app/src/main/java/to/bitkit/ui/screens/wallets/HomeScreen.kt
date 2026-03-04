@@ -66,11 +66,19 @@ import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.dto.price.Change
+import to.bitkit.data.dto.price.GraphPeriod
+import to.bitkit.data.dto.price.PriceDTO
+import to.bitkit.data.dto.price.PriceWidgetData
+import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
+import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.widget.ArticleModel
+import to.bitkit.models.widget.BlockModel
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
@@ -101,6 +109,7 @@ import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
 import to.bitkit.ui.screens.widgets.DragDropColumn
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
+import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.screens.widgets.facts.FactsCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
@@ -838,9 +847,58 @@ private fun DeleteWidgetAlert(
     )
 }
 
-@Preview(showSystemUi = true)
+private val previewBalances = BalanceState(
+    totalOnchainSats = 165_000u,
+    totalLightningSats = 45_000u,
+)
+
+private val previewWidgets = listOf(
+    WidgetWithPosition(type = WidgetType.BLOCK, position = 0),
+    WidgetWithPosition(type = WidgetType.NEWS, position = 1),
+    WidgetWithPosition(type = WidgetType.PRICE, position = 2),
+    WidgetWithPosition(type = WidgetType.WEATHER, position = 3),
+)
+
+private val previewBlock = BlockModel(
+    height = "761,405",
+    time = "01:31:42 UTC",
+    date = "01/2/2022",
+    transactionCount = "2,175",
+    size = "1,606kB",
+    source = "mempool.io",
+)
+
+private val previewArticle = ArticleModel(
+    timeAgo = "21 minutes ago",
+    title = "How Bitcoin changed El Salvador in more ways",
+    publisher = "bitcoinmagazine.com",
+    link = "bitcoinmagazine.com",
+)
+
+private val previewPrice = PriceDTO(
+    source = "Bitfinex.com",
+    widgets = listOf(
+        PriceWidgetData(
+            pair = TradingPair.BTC_USD,
+            change = Change(isPositive = true, formatted = "$ 20,326"),
+            price = "$20,326",
+            pastValues = listOf(1.0, 2.0, 3.0, 4.0),
+            period = GraphPeriod.ONE_DAY,
+        ),
+    ),
+)
+
+private val previewWeather = WeatherModel(
+    title = R.string.widgets__weather__condition__good__title,
+    description = R.string.widgets__weather__condition__good__description,
+    currentFee = "15 sat/vB",
+    nextBlockFee = "12 sat/vB",
+    icon = "\u2600\uFE0F",
+)
+
+@Preview(name = "With Activity", showSystemUi = true)
 @Composable
-private fun Preview() {
+private fun PreviewWithActivity() {
     AppThemeSurface {
         Box {
             Content(
@@ -850,17 +908,14 @@ private fun Preview() {
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),
-                balances = BalanceState(
-                    totalOnchainSats = 165_000u,
-                    totalLightningSats = 45_000u,
-                ),
+                balances = previewBalances,
             )
             TabBar()
         }
     }
 }
 
-@Preview(showSystemUi = true)
+@Preview(name = "Empty", showSystemUi = true)
 @Composable
 private fun PreviewEmpty() {
     AppThemeSurface {
@@ -872,7 +927,99 @@ private fun PreviewEmpty() {
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),
-                balances = BalanceState()
+                balances = BalanceState(),
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(name = "With Banners", showSystemUi = true)
+@Composable
+private fun PreviewWithBanners() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    showWidgets = true,
+                    banners = ActivityBannerType.entries,
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewActivityItems.take(3),
+                balances = previewBalances,
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(name = "Onboarding Hint", showSystemUi = true)
+@Composable
+private fun PreviewWithOnboardingHint() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    showWidgets = true,
+                    showWidgetsOnboardingHint = true,
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewActivityItems.take(3),
+                balances = previewBalances,
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(name = "Widgets Page", showSystemUi = true)
+@Composable
+private fun PreviewWidgetsPage() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    showWidgets = true,
+                    currentPage = 1,
+                    widgetsWithPosition = previewWidgets,
+                    currentBlock = previewBlock,
+                    currentArticle = previewArticle,
+                    currentPrice = previewPrice,
+                    currentWeather = previewWeather,
+                    suggestions = Suggestion.entries.take(4),
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewActivityItems.take(3),
+                balances = previewBalances,
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(name = "Widgets Editing", showSystemUi = true)
+@Composable
+private fun PreviewWidgetsEditing() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    showWidgets = true,
+                    currentPage = 1,
+                    isEditingWidgets = true,
+                    widgetsWithPosition = previewWidgets,
+                    currentBlock = previewBlock,
+                    currentArticle = previewArticle,
+                    currentPrice = previewPrice,
+                    currentWeather = previewWeather,
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewActivityItems.take(3),
+                balances = previewBalances,
             )
             TabBar()
         }
