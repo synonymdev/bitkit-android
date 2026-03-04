@@ -58,14 +58,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
 import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -166,8 +164,6 @@ fun HomeScreen(
     Content(
         isRefreshing = isRefreshing,
         homeUiState = homeUiState,
-        rootNavController = rootNavController,
-        walletNavController = walletNavController,
         drawerState = drawerState,
         latestActivities = latestActivities,
         onRefresh = {
@@ -270,6 +266,12 @@ fun HomeScreen(
         },
         onPageChanged = homeViewModel::onPageChanged,
         onDismissWidgetsOnboardingHint = homeViewModel::dismissWidgetsOnboardingHint,
+        onNavigateToAppStatus = { rootNavController.navigate(Routes.AppStatus) },
+        onNavigateToSettingUp = { rootNavController.navigate(Routes.SettingUp) },
+        onNavigateToAllActivity = { rootNavController.navigateToAllActivity() },
+        onNavigateToActivityItem = { rootNavController.navigateToActivityItem(it) },
+        onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
+        onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
     )
 }
 
@@ -279,10 +281,7 @@ fun HomeScreen(
 private fun Content(
     isRefreshing: Boolean,
     homeUiState: HomeUiState,
-    rootNavController: NavController,
-    walletNavController: NavController,
     drawerState: DrawerState,
-    hazeState: HazeState = rememberHazeState(),
     latestActivities: List<Activity>?,
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
@@ -294,6 +293,13 @@ private fun Content(
     onMoveWidget: (Int, Int) -> Unit = { _, _ -> },
     onPageChanged: (Int) -> Unit = {},
     onDismissWidgetsOnboardingHint: () -> Unit = {},
+    onNavigateToAppStatus: () -> Unit = {},
+    onNavigateToSettingUp: () -> Unit = {},
+    onNavigateToAllActivity: () -> Unit = {},
+    onNavigateToActivityItem: (String) -> Unit = {},
+    onNavigateToSavings: () -> Unit = {},
+    onNavigateToSpending: () -> Unit = {},
+    hazeState: HazeState = rememberHazeState(),
     balances: BalanceState = LocalBalances.current,
 ) {
     val scope = rememberCoroutineScope()
@@ -317,12 +323,11 @@ private fun Content(
     Box {
         TopBar(
             hazeState = hazeState,
-            rootNavController = rootNavController,
-            scope = scope,
-            drawerState = drawerState,
             showEditWidgets = homeUiState.currentPage == 1 && homeUiState.showWidgets,
             isEditingWidgets = homeUiState.isEditingWidgets,
             onClickEditWidgetList = onClickEditWidgetList,
+            onNavigateToAppStatus = onNavigateToAppStatus,
+            onOpenDrawer = { scope.launch { drawerState.open() } },
         )
 
         VerticalPager(
@@ -339,9 +344,12 @@ private fun Content(
                     homeUiState = homeUiState,
                     latestActivities = latestActivities?.take(activityCount),
                     balances = balances,
-                    rootNavController = rootNavController,
-                    walletNavController = walletNavController,
                     onRefresh = onRefresh,
+                    onNavigateToSettingUp = onNavigateToSettingUp,
+                    onNavigateToAllActivity = onNavigateToAllActivity,
+                    onNavigateToActivityItem = onNavigateToActivityItem,
+                    onNavigateToSavings = onNavigateToSavings,
+                    onNavigateToSpending = onNavigateToSpending,
                 )
 
                 1 -> WidgetsPage(
@@ -366,9 +374,12 @@ private fun WalletPage(
     homeUiState: HomeUiState,
     latestActivities: List<Activity>?,
     balances: BalanceState,
-    rootNavController: NavController,
-    walletNavController: NavController,
     onRefresh: () -> Unit,
+    onNavigateToSettingUp: () -> Unit,
+    onNavigateToAllActivity: () -> Unit,
+    onNavigateToActivityItem: (String) -> Unit,
+    onNavigateToSavings: () -> Unit,
+    onNavigateToSpending: () -> Unit,
 ) {
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -409,7 +420,7 @@ private fun WalletPage(
                     .testTag("TotalBalance")
             )
             VerticalSpacer(32.dp)
-            BalancesSection(balances, walletNavController)
+            BalancesSection(balances, onNavigateToSavings, onNavigateToSpending)
 
             if (!homeUiState.showEmptyState) {
                 if (hasActivity) {
@@ -427,9 +438,7 @@ private fun WalletPage(
                                     icon = banner.icon,
                                     onClick = {
                                         when (banner) {
-                                            ActivityBannerType.SPENDING ->
-                                                rootNavController.navigate(Routes.SettingUp)
-
+                                            ActivityBannerType.SPENDING -> onNavigateToSettingUp()
                                             ActivityBannerType.SAVINGS -> Unit
                                         }
                                     },
@@ -443,8 +452,8 @@ private fun WalletPage(
 
                     ActivityListSimple(
                         items = latestActivities,
-                        onAllActivityClick = { rootNavController.navigateToAllActivity() },
-                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onAllActivityClick = onNavigateToAllActivity,
+                        onActivityItemClick = onNavigateToActivityItem,
                     )
 
                     FillHeight()
@@ -468,11 +477,11 @@ private fun WalletPage(
     }
 }
 
-
 @Composable
 fun BalancesSection(
     balances: BalanceState,
-    walletNavController: NavController,
+    onNavigateToSavings: () -> Unit,
+    onNavigateToSpending: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -484,7 +493,7 @@ fun BalancesSection(
             sats = balances.totalOnchainSats.toLong(),
             icon = painterResource(id = R.drawable.ic_btc_circle),
             modifier = Modifier
-                .clickableAlpha { walletNavController.navigate(Routes.Savings) }
+                .clickableAlpha(onClick = onNavigateToSavings)
                 .padding(vertical = 4.dp)
                 .testTag("ActivitySavings")
         )
@@ -495,7 +504,7 @@ fun BalancesSection(
             sats = balances.totalLightningSats.toLong(),
             icon = painterResource(id = R.drawable.ic_ln_circle),
             modifier = Modifier
-                .clickableAlpha { walletNavController.navigate(Routes.Spending) }
+                .clickableAlpha(onClick = onNavigateToSpending)
                 .padding(vertical = 4.dp)
                 .testTag("ActivitySpending")
         )
@@ -750,12 +759,11 @@ private fun Widgets(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun TopBar(
     hazeState: HazeState,
-    rootNavController: NavController,
-    scope: CoroutineScope,
-    drawerState: DrawerState,
     showEditWidgets: Boolean = false,
     isEditingWidgets: Boolean = false,
     onClickEditWidgetList: () -> Unit = {},
+    onNavigateToAppStatus: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {},
 ) {
     val topbarGradient = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -793,10 +801,10 @@ private fun TopBar(
                     }
                 }
                 AppStatus(
-                    onClick = { rootNavController.navigate(Routes.AppStatus) },
+                    onClick = onNavigateToAppStatus,
                 )
                 IconButton(
-                    onClick = { scope.launch { drawerState.open() } },
+                    onClick = onOpenDrawer,
                     modifier = Modifier.testTag("HeaderMenu")
                 ) {
                     Icon(
@@ -840,8 +848,6 @@ private fun Preview() {
                 homeUiState = HomeUiState(
                     showWidgets = true,
                 ),
-                rootNavController = rememberNavController(),
-                walletNavController = rememberNavController(),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),
                 balances = BalanceState(
@@ -864,8 +870,6 @@ private fun PreviewEmpty() {
                 homeUiState = HomeUiState(
                     showEmptyState = true,
                 ),
-                rootNavController = rememberNavController(),
-                walletNavController = rememberNavController(),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),
                 balances = BalanceState()
