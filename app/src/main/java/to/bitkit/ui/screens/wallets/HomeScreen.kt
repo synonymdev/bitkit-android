@@ -509,7 +509,7 @@ fun BalancesSection(
                 .padding(vertical = 4.dp)
                 .testTag("ActivitySavings")
         )
-        VerticalDivider()
+        VerticalDivider(color = Colors.Gray4)
         HorizontalSpacer(16.dp)
         WalletBalanceView(
             title = stringResource(R.string.wallet__spending__title),
