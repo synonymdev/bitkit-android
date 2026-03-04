@@ -31,13 +31,16 @@ fun ActivityListSimple(
     ) {
         items.forEachIndexed { index, item ->
             ActivityRow(item, onActivityItemClick, testTag = "ActivityShort-$index")
-            VerticalSpacer(16.dp)
+            if (index < items.lastIndex) {
+                VerticalSpacer(16.dp)
+            }
         }
         TertiaryButton(
             text = stringResource(R.string.wallet__activity_show_all),
             onClick = onAllActivityClick,
             modifier = Modifier
                 .wrapContentWidth()
+                .padding(top = 2.dp)
                 .testTag("ActivityShowAll")
         )
     }
