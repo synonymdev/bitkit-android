@@ -842,10 +842,13 @@ class MigrationService @Inject constructor(
                 hasSeenTransferIntro = settings.transferIntroSeen ?: current.hasSeenTransferIntro,
                 hasSeenSpendingIntro = settings.spendingIntroSeen ?: current.hasSeenSpendingIntro,
                 hasSeenSavingsIntro = settings.savingsIntroSeen ?: current.hasSeenSavingsIntro,
-                selectedAddressType = settings.selectedAddressType ?: current.selectedAddressType,
+                selectedAddressType = settings.selectedAddressType?.normalizeRNAddressType()
+                    ?: current.selectedAddressType,
                 addressTypesToMonitor = run {
-                    val selected = settings.selectedAddressType ?: current.selectedAddressType
-                    val monitored = settings.addressTypesToMonitor ?: current.addressTypesToMonitor
+                    val selected = settings.selectedAddressType?.normalizeRNAddressType()
+                        ?: current.selectedAddressType
+                    val monitored = settings.addressTypesToMonitor?.map { it.normalizeRNAddressType() }
+                        ?: current.addressTypesToMonitor
                     if (selected in monitored) monitored else (monitored + selected).distinct()
                 },
             )
@@ -2062,6 +2065,14 @@ data class RNSettings(
     val selectedAddressType: String? = null,
     val addressTypesToMonitor: List<String>? = null,
 )
+
+private fun String.normalizeRNAddressType(): String = when (this) {
+    "p2tr" -> "taproot"
+    "p2wpkh" -> "nativeSegwit"
+    "p2sh" -> "nestedSegwit"
+    "p2pkh" -> "legacy"
+    else -> this
+}
 
 @Serializable
 data class RNMetadata(
