@@ -113,7 +113,7 @@ fun SuggestionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -127,7 +127,7 @@ fun SuggestionCard(
                     alignment = Alignment.CenterStart,
                     contentScale = ContentScale.FillHeight,
                     modifier = Modifier
-                        .defaultMinSize(minHeight = 96.dp)
+                        .defaultMinSize(minHeight = 80.dp)
                         .weight(1f)
                 )
 

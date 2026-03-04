@@ -146,7 +146,7 @@ fun BalanceHeader(
             modifier = smallRowModifier,
         )
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             verticalAlignment = Alignment.CenterVertically,

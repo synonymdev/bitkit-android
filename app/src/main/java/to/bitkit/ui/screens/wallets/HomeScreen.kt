@@ -441,7 +441,7 @@ private fun WalletPage(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 32.dp, bottom = 18.dp)
+                                .padding(top = 32.dp, bottom = 16.dp)
                         ) {
                             homeUiState.banners.forEach { banner ->
                                 ActivityBanner(
@@ -570,7 +570,7 @@ private fun WidgetsPage(
             )
         }
 
-        VerticalSpacer(32.dp)
+        VerticalSpacer(16.dp)
 
         TertiaryButton(
             text = stringResource(R.string.widgets__add),
@@ -647,7 +647,6 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
             text = stringResource(R.string.widgets__onboarding_swipe).withAccent(),
             modifier = Modifier.weight(1f)
         )
-        HorizontalSpacer(16.dp)
         Image(
             painter = painterResource(R.drawable.swipe_instruction),
             contentDescription = null,

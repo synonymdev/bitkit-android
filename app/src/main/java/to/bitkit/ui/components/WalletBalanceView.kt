@@ -106,7 +106,7 @@ private fun RowScope.Content(
             text = title,
             color = Colors.White64,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(4.dp)
 
         converted?.let { converted ->
             Row(
