@@ -856,10 +856,10 @@ private val previewBalances = BalanceState(
 )
 
 private val previewWidgets = listOf(
-    WidgetWithPosition(type = WidgetType.BLOCK, position = 0),
-    WidgetWithPosition(type = WidgetType.NEWS, position = 1),
-    WidgetWithPosition(type = WidgetType.PRICE, position = 2),
-    WidgetWithPosition(type = WidgetType.WEATHER, position = 3),
+    WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 0),
+    WidgetWithPosition(type = WidgetType.PRICE, position = 1),
+    WidgetWithPosition(type = WidgetType.BLOCK, position = 2),
+    WidgetWithPosition(type = WidgetType.NEWS, position = 3),
 )
 
 private val previewBlock = BlockModel(
