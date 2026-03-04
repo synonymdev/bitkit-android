@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.advanced
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.AddressType
@@ -150,6 +151,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class AddressTypePreferenceUiState(
     val selectedAddressType: AddressType = DEFAULT_ADDRESS_TYPE,
     val monitoredTypes: Set<String> = setOf(DEFAULT_ADDRESS_TYPE_STRING),
