@@ -408,36 +408,10 @@ private fun WalletPage(
                     .fillMaxWidth()
                     .testTag("TotalBalance")
             )
+            VerticalSpacer(32.dp)
+            BalancesSection(balances, walletNavController)
 
             if (!homeUiState.showEmptyState) {
-                VerticalSpacer(32.dp)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                ) {
-                    WalletBalanceView(
-                        title = stringResource(R.string.wallet__savings__title),
-                        sats = balances.totalOnchainSats.toLong(),
-                        icon = painterResource(id = R.drawable.ic_btc_circle),
-                        modifier = Modifier
-                            .clickableAlpha { walletNavController.navigate(Routes.Savings) }
-                            .padding(vertical = 4.dp)
-                            .testTag("ActivitySavings")
-                    )
-                    VerticalDivider()
-                    HorizontalSpacer(16.dp)
-                    WalletBalanceView(
-                        title = stringResource(R.string.wallet__spending__title),
-                        sats = balances.totalLightningSats.toLong(),
-                        icon = painterResource(id = R.drawable.ic_ln_circle),
-                        modifier = Modifier
-                            .clickableAlpha { walletNavController.navigate(Routes.Spending) }
-                            .padding(vertical = 4.dp)
-                            .testTag("ActivitySpending")
-                    )
-                }
-
                 if (hasActivity) {
                     AnimatedVisibility(homeUiState.banners.isNotEmpty()) {
                         Column(
@@ -491,6 +465,40 @@ private fun WalletPage(
                     .align(Alignment.BottomCenter)
             )
         }
+    }
+}
+
+
+@Composable
+fun BalancesSection(
+    balances: BalanceState,
+    walletNavController: NavController,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+    ) {
+        WalletBalanceView(
+            title = stringResource(R.string.wallet__savings__title),
+            sats = balances.totalOnchainSats.toLong(),
+            icon = painterResource(id = R.drawable.ic_btc_circle),
+            modifier = Modifier
+                .clickableAlpha { walletNavController.navigate(Routes.Savings) }
+                .padding(vertical = 4.dp)
+                .testTag("ActivitySavings")
+        )
+        VerticalDivider()
+        HorizontalSpacer(16.dp)
+        WalletBalanceView(
+            title = stringResource(R.string.wallet__spending__title),
+            sats = balances.totalLightningSats.toLong(),
+            icon = painterResource(id = R.drawable.ic_ln_circle),
+            modifier = Modifier
+                .clickableAlpha { walletNavController.navigate(Routes.Spending) }
+                .padding(vertical = 4.dp)
+                .testTag("ActivitySpending")
+        )
     }
 }
 
