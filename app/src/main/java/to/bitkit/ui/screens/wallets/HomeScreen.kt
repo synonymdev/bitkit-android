@@ -469,11 +469,11 @@ private fun Content(
                         ) {
                             homeUiState.banners.forEach { banner ->
                                 ActivityBanner(
-                                    gradientColor = banner.color,
-                                    title = stringResource(banner.title),
-                                    icon = banner.icon,
+                                    gradientColor = banner.type.color,
+                                    title = banner.title,
+                                    icon = banner.type.icon,
                                     onClick = {
-                                        when (banner) {
+                                        when (banner.type) {
                                             ActivityBannerType.SPENDING -> rootNavController.navigate(Routes.SettingUp)
                                             ActivityBannerType.SAVINGS -> Unit
                                         }
