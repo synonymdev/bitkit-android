@@ -54,7 +54,9 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toPeerDetailsList
+import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.TransactionSpeed
@@ -62,8 +64,6 @@ import to.bitkit.models.safe
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.models.toCoreNetwork
-import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
-import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.toSettingsString
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
