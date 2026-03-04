@@ -17,16 +17,16 @@ import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 
 @Stable
 data class HomeUiState(
-    val suggestions: List<Suggestion> = listOf(),
-    val banners: List<ActivityBannerType> = listOf(),
+    @Stable val suggestions: List<Suggestion> = listOf(),
+    @Stable val banners: List<ActivityBannerType> = listOf(),
     val showWidgets: Boolean = false,
     val showWidgetTitles: Boolean = false,
-    val widgetsWithPosition: List<WidgetWithPosition> = emptyList(),
+    @Stable val widgetsWithPosition: List<WidgetWithPosition> = emptyList(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val currentArticle: ArticleModel? = null,
     val currentFact: String? = null,
     val factsPreferences: FactsPreferences = FactsPreferences(),
-    val facts: List<String> = listOf(),
+    @Stable val facts: List<String> = listOf(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
     val currentBlock: BlockModel? = null,
     val weatherPreferences: WeatherPreferences = WeatherPreferences(),
