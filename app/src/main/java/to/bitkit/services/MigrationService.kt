@@ -15,7 +15,9 @@ import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -90,6 +92,7 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_METADATA_KEY = "rnPendingMetadata"
         private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
+        private const val RN_DID_ATTEMPT_PEER_RECOVERY_KEY = "rnDidAttemptMigrationPeerRecovery"
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
@@ -1251,10 +1254,70 @@ class MigrationService @Inject constructor(
         Logger.info("RN migration completed, marked for post-migration sync", context = TAG)
     }
 
+    private suspend fun isRnMigrationCompleted(): Boolean {
+        val key = stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    private suspend fun didAttemptPeerRecovery(): Boolean {
+        val key = stringPreferencesKey(RN_DID_ATTEMPT_PEER_RECOVERY_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    private suspend fun setDidAttemptPeerRecovery() {
+        val key = stringPreferencesKey(RN_DID_ATTEMPT_PEER_RECOVERY_KEY)
+        rnMigrationStore.edit { it[key] = "true" }
+    }
+
+    suspend fun tryFetchMigrationPeersFromBackup(): List<String> {
+        if (!isRnMigrationCompleted()) return emptyList()
+        if (didAttemptPeerRecovery()) return emptyList()
+
+        setDidAttemptPeerRecovery()
+
+        return runCatching {
+            val data = rnBackupClient.retrieve("peers", fileGroup = "ldk") ?: return emptyList()
+            val peers = json.decodeFromString<List<BackupPeerEntry>>(String(data))
+            if (peers.isEmpty()) return emptyList()
+
+            val trustedIds = Env.trustedLnPeers.map { it.nodeId }.toSet()
+            val uris = peers
+                .filter { it.pubKey !in trustedIds }
+                .map { "${it.pubKey}@${it.address}:${it.port}" }
+
+            Logger.info("Migration peer recovery: fetched ${uris.size} peer(s) from remote backup", context = TAG)
+            uris
+        }.onFailure {
+            Logger.warn("Migration peer recovery failed (will not retry)", it, context = TAG)
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()
         setNeedsPostMigrationSync(false)
         Logger.info("Post-migration cleanup completed", context = TAG)
+    }
+
+    private suspend fun retrieveChannelMonitorWithRetry(
+        channelId: String,
+        maxAttempts: Int = 3,
+        baseDelayMs: Long = 1000L,
+    ): ByteArray? {
+        repeat(maxAttempts) { attempt ->
+            val result = rnBackupClient.retrieveChannelMonitor(channelId)
+            if (result != null) return result
+
+            if (attempt < maxAttempts - 1) {
+                val delayMs = baseDelayMs * (attempt + 1)
+                Logger.debug(
+                    "Retrying channel monitor retrieval for $channelId " +
+                        "(attempt ${attempt + 2}/$maxAttempts) after ${delayMs}ms",
+                    context = TAG
+                )
+                delay(delayMs)
+            }
+        }
+        return null
     }
 
     private suspend fun fetchRNRemoteLdkData() {
@@ -1265,13 +1328,33 @@ class MigrationService @Inject constructor(
             val managerData = rnBackupClient.retrieve("channel_manager", fileGroup = "ldk")
                 ?: return@runCatching
 
-            val monitors = coroutineScope {
+            val expectedCount = files.channelMonitors.size
+            val monitorResults = coroutineScope {
                 files.channelMonitors.map { monitorFile ->
                     async {
                         val channelId = monitorFile.replace(".bin", "")
-                        rnBackupClient.retrieveChannelMonitor(channelId)
+                        channelId to retrieveChannelMonitorWithRetry(channelId)
                     }
-                }.mapNotNull { it.await() }
+                }.awaitAll()
+            }
+
+            val failedMonitors = monitorResults.filter { it.second == null }.map { it.first }
+            if (failedMonitors.isNotEmpty()) {
+                Logger.error(
+                    "Failed to retrieve ${failedMonitors.size}/$expectedCount channel monitors " +
+                        "after retries: ${failedMonitors.joinToString()}",
+                    context = TAG
+                )
+            }
+
+            val monitors = monitorResults.mapNotNull { it.second }
+
+            if (monitors.size < expectedCount) {
+                Logger.warn(
+                    "Channel monitor count mismatch: expected $expectedCount, got ${monitors.size}. " +
+                        "Some channels may not be recoverable.",
+                    context = TAG
+                )
             }
 
             if (monitors.isNotEmpty()) {
@@ -2074,6 +2157,13 @@ data class RNWidgets(
 data class RNWidgetsWithOptions(
     val widgets: RNWidgets,
     val widgetOptions: Map<String, ByteArray>,
+)
+
+@Serializable
+data class BackupPeerEntry(
+    val pubKey: String,
+    val address: String,
+    val port: UShort,
 )
 
 private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore("rn_migration")

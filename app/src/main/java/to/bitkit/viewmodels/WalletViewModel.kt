@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.of
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -291,6 +292,7 @@ class WalletViewModel @Inject constructor(
                     migrationService.consumePendingChannelMigration()
                 }
                 walletRepo.setWalletExistsState()
+                connectMigrationPeers()
                 walletRepo.syncBalances()
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
@@ -302,6 +304,18 @@ class WalletViewModel @Inject constructor(
                     ToastEventBus.send(it)
                 }
             }
+    }
+
+    private suspend fun connectMigrationPeers() {
+        val peerUris = migrationService.tryFetchMigrationPeersFromBackup()
+        for (uri in peerUris) {
+            runCatching {
+                val peer = PeerDetails.of(uri)
+                lightningRepo.connectPeer(peer)
+            }.onFailure {
+                Logger.error("Failed to connect migration peer: $uri", it, context = TAG)
+            }
+        }
     }
 
     fun stop() {
