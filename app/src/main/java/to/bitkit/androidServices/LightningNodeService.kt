@@ -1,6 +1,5 @@
 package to.bitkit.androidServices
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -14,7 +13,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
@@ -23,6 +21,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.ext.activityManager
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
@@ -136,7 +135,6 @@ class LightningNodeService : Service() {
                 Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
                 serviceScope.launch {
                     lightningRepo.stop()
-                    val activityManager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
                     activityManager.appTasks.forEach { it.finishAndRemoveTask() }
                     stopSelf()
                 }
@@ -148,10 +146,8 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
-        serviceScope.launch {
-            lightningRepo.stop()
-            serviceScope.cancel()
-        }
+        // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
+        serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()
     }
 
