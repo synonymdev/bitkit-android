@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
@@ -203,6 +204,7 @@ fun LargeRow(
         if (!hideBalance && prefix != null) {
             Display(
                 text = prefix,
+                fontWeight = FontWeight.ExtraBold,
                 color = Colors.White64,
                 modifier = Modifier
                     .padding(end = 8.dp)
@@ -212,6 +214,7 @@ fun LargeRow(
         if (showSymbol && !isSymbolSuffix) {
             Display(
                 text = symbol,
+                fontWeight = FontWeight.ExtraBold,
                 color = Colors.White64,
                 modifier = Modifier
                     .padding(end = 8.dp)
@@ -231,6 +234,7 @@ fun LargeRow(
         if (showSymbol && isSymbolSuffix) {
             Display(
                 text = symbol,
+                fontWeight = FontWeight.ExtraBold,
                 color = Colors.White64,
                 modifier = Modifier
                     .padding(start = 8.dp)
