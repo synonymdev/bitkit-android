@@ -313,7 +313,10 @@ private fun Content(
 ) {
     val scope = rememberCoroutineScope()
     val pageCount = if (homeUiState.showWidgets) 2 else 1
-    val pagerState = rememberPagerState(pageCount = { pageCount })
+    val pagerState = rememberPagerState(
+        initialPage = homeUiState.currentPage,
+        pageCount = { pageCount },
+    )
 
     LaunchedEffect(pagerState.currentPage) {
         onPageChanged(pagerState.currentPage)
