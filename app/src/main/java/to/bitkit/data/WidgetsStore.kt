@@ -163,6 +163,7 @@ data class WidgetsData(
         WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 0),
         WidgetWithPosition(type = WidgetType.PRICE, position = 1),
         WidgetWithPosition(type = WidgetType.BLOCK, position = 2),
+        WidgetWithPosition(type = WidgetType.NEWS, position = 3),
     ),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val factsPreferences: FactsPreferences = FactsPreferences(),
