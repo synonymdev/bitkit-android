@@ -1,5 +1,6 @@
 package to.bitkit.androidServices
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -133,10 +134,12 @@ class LightningNodeService : Service() {
         when (intent?.action) {
             ACTION_STOP_SERVICE_AND_APP -> {
                 Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
-                // Close activities gracefully without force-stopping the app
-                App.currentActivity?.value?.finishAffinity()
-                // Stop the service
-                stopSelf()
+                serviceScope.launch {
+                    lightningRepo.stop()
+                    val activityManager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+                    activityManager.appTasks.forEach { it.finishAndRemoveTask() }
+                    stopSelf()
+                }
                 return START_NOT_STICKY
             }
         }
