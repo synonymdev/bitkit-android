@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityTags
+import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -55,7 +56,6 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
-import to.bitkit.models.safe
 import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
@@ -97,6 +97,7 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
         private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
         private const val RN_DID_ATTEMPT_PEER_RECOVERY_KEY = "rnDidAttemptMigrationPeerRecovery"
+        private const val RN_DID_CLEANUP_INVALID_TRANSFERS_KEY = "didCleanupInvalidMigrationTransfers"
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
@@ -1384,6 +1385,43 @@ class MigrationService @Inject constructor(
         }.getOrDefault(emptyList())
     }
 
+    suspend fun cleanupInvalidMigrationTransfers() {
+        val key = stringPreferencesKey(RN_DID_CLEANUP_INVALID_TRANSFERS_KEY)
+        if (rnMigrationStore.data.first()[key] == "true") return
+        if (!isRnMigrationCompleted()) return
+
+        val transfers = transferDao.getActiveTransfers().first()
+            .filter { it.type == TransferType.TO_SPENDING && it.lspOrderId != null }
+
+        if (transfers.isEmpty()) {
+            rnMigrationStore.edit { it[key] = "true" }
+            return
+        }
+
+        val orderIds = transfers.mapNotNull { it.lspOrderId }
+        val orders = runCatching {
+            coreService.blocktank.orders(orderIds = orderIds, filter = null, refresh = true)
+        }.onFailure {
+            Logger.warn("Cannot cleanup migration transfers: Blocktank unreachable", it, context = TAG)
+        }.getOrNull() ?: return
+
+        val now = System.currentTimeMillis() / MS_PER_SEC
+        for (transfer in transfers) {
+            val order = orders.find { it.id == transfer.lspOrderId } ?: continue
+            if (order.state2 != BtOrderState2.PAID) {
+                transferDao.markSettled(transfer.id, now)
+                Logger.info(
+                    "Cleanup: settled invalid migration transfer ${transfer.id} " +
+                        "for order ${transfer.lspOrderId} (state: ${order.state2})",
+                    context = TAG,
+                )
+            }
+        }
+
+        rnMigrationStore.edit { it[key] = "true" }
+        Logger.info("Migration transfer cleanup completed", context = TAG)
+    }
+
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()
         setNeedsPostMigrationSync(false)
@@ -1598,11 +1636,17 @@ class MigrationService @Inject constructor(
                     null
                 }
 
-                order.state2 == com.synonym.bitkitcore.BtOrderState2.EXECUTED -> null
+                order.state2 != BtOrderState2.PAID -> {
+                    Logger.debug(
+                        "Skipping order $orderId with state ${order.state2} for transfer creation",
+                        context = TAG,
+                    )
+                    null
+                }
                 else -> TransferEntity(
                     id = txId,
                     type = TransferType.TO_SPENDING,
-                    amountSats = (order.clientBalanceSat.safe() + order.feeSat.safe()).toLong(),
+                    amountSats = order.clientBalanceSat.toLong(),
                     channelId = null,
                     fundingTxId = null,
                     lspOrderId = orderId,

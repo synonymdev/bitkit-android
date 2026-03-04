@@ -301,6 +301,7 @@ class WalletViewModel @Inject constructor(
                 }
                 walletRepo.setWalletExistsState()
                 connectMigrationPeers()
+                migrationService.cleanupInvalidMigrationTransfers()
                 walletRepo.syncBalances()
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
