@@ -1000,7 +1000,7 @@
     <string name="widgets__widget__nav_title">Widget</string>
     <string name="widgets__widget__source">Source</string>
     <string name="widgets__widgets">Widgets</string>
-    <string name="widgets__onboarding_swipe">Swipe down\nto find your\n&lt;accent&gt;widgets&lt;/accent&gt;</string>
+    <string name="widgets__onboarding_swipe">Swipe to find\n&lt;accent&gt;your widgets&lt;/accent&gt;</string>
     <string name="widgets__suggestions__description">Discover everything Bitkit has to offer.</string>
     <string name="widgets__suggestions__name">Bitkit Suggestions</string>
 </resources>

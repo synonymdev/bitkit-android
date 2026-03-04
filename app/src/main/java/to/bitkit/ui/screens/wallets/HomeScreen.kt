@@ -617,7 +617,7 @@ private fun SuggestionsSection(
 @Composable
 private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
     Row(
-        verticalAlignment = Alignment.Bottom,
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .padding(top = 32.dp)
@@ -630,7 +630,6 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
         Image(
             painter = painterResource(R.drawable.swipe_instruction),
             contentDescription = null,
-            modifier = Modifier.padding(bottom = 12.dp)
         )
     }
 }
