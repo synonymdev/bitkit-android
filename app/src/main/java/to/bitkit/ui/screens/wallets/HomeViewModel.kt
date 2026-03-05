@@ -41,6 +41,10 @@ class HomeViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
 ) : ViewModel() {
 
+    companion object {
+        private const val MAX_SUGGESTIONS = 4
+    }
+
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
@@ -314,9 +318,5 @@ class HomeViewModel @Inject constructor(
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions.filterNot { it in dismissedList }.take(MAX_SUGGESTIONS)
-    }
-
-    companion object {
-        private const val MAX_SUGGESTIONS = 4
     }
 }
