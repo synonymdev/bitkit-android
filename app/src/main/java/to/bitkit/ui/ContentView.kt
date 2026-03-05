@@ -60,8 +60,11 @@ import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.common.ComingSoonScreen
-import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
+import to.bitkit.ui.screens.profile.ProfileScreen
+import to.bitkit.ui.screens.profile.ProfileViewModel
+import to.bitkit.ui.screens.profile.PubkyRingAuthScreen
+import to.bitkit.ui.screens.profile.PubkyRingAuthViewModel
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
@@ -361,6 +364,8 @@ fun ContentView(
 
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
+        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
 
         Box(
@@ -487,6 +492,8 @@ fun ContentView(
                 rootNavController = navController,
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
+                hasSeenProfileIntro = hasSeenProfileIntro,
+                isProfileAuthenticated = isProfileAuthenticated,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
         }
@@ -910,30 +917,38 @@ private fun NavGraphBuilder.comingSoon(
             onBackClick = { navController.popBackStack() }
         )
     }
-    composableWithDefaultTransitions<Routes.Profile> {
-        ComingSoonScreen(
-            onWalletOverviewClick = { navController.navigateToHome() },
-            onBackClick = { navController.popBackStack() }
-        )
-    }
 }
 
 private fun NavGraphBuilder.profile(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
 ) {
+    composableWithDefaultTransitions<Routes.Profile> {
+        val viewModel: ProfileViewModel = hiltViewModel()
+        ProfileScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+        )
+    }
     composableWithDefaultTransitions<Routes.ProfileIntro> {
         ProfileIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenProfileIntro(true)
-                navController.navigate(Routes.CreateProfile)
+                navController.navigate(Routes.PubkyRingAuth)
             },
-            onBackClick = { navController.popBackStack() }
+            onBackClick = { navController.popBackStack() },
         )
     }
-    composableWithDefaultTransitions<Routes.CreateProfile> {
-        CreateProfileScreen(
-            onBack = { navController.popBackStack() },
+    composableWithDefaultTransitions<Routes.PubkyRingAuth> {
+        val viewModel: PubkyRingAuthViewModel = hiltViewModel()
+        PubkyRingAuthScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onAuthenticated = {
+                navController.navigate(Routes.Profile) {
+                    popUpTo(Routes.Home)
+                }
+            },
         )
     }
 }
@@ -1674,6 +1689,14 @@ fun NavController.navigateToAboutSettings() = navigate(
 
 @Stable
 sealed interface Routes {
+    companion object {
+        fun profileRoute(isAuthenticated: Boolean, hasSeenIntro: Boolean): Routes = when {
+            isAuthenticated -> Profile
+            hasSeenIntro -> PubkyRingAuth
+            else -> ProfileIntro
+        }
+    }
+
     @Serializable
     data object Home : Routes
 
@@ -1914,7 +1937,7 @@ sealed interface Routes {
     data object ProfileIntro : Routes
 
     @Serializable
-    data object CreateProfile : Routes
+    data object PubkyRingAuth : Routes
 
     @Serializable
     data object ShopIntro : Routes

@@ -52,8 +52,8 @@ enum class Suggestion(
     PROFILE(
         title = R.string.cards__slashtagsProfile__title,
         description = R.string.cards__slashtagsProfile__description,
-        color = Colors.Brand24,
-        icon = R.drawable.crown
+        color = Colors.PubkyGreen24,
+        icon = R.drawable.crown,
     ),
     SHOP(
         title = R.string.cards__shop__title,

@@ -66,6 +66,8 @@ fun DrawerMenu(
     hasSeenWidgetsIntro: Boolean,
     hasSeenShopIntro: Boolean,
     modifier: Modifier = Modifier,
+    hasSeenProfileIntro: Boolean = false,
+    isProfileAuthenticated: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -113,6 +115,9 @@ fun DrawerMenu(
                     rootNavController.navigateIfNotCurrent(Routes.ShopDiscover)
                 }
             },
+            onClickProfile = {
+                rootNavController.navigateIfNotCurrent(Routes.profileRoute(isProfileAuthenticated, hasSeenProfileIntro))
+            },
         )
     }
 }
@@ -123,6 +128,7 @@ private fun Menu(
     drawerState: DrawerState,
     onClickAddWidget: () -> Unit,
     onClickShop: () -> Unit,
+    onClickProfile: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -170,7 +176,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__profile),
             iconRes = R.drawable.ic_user_square,
             onClick = {
-                rootNavController.navigateIfNotCurrent(Routes.Profile)
+                onClickProfile()
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerProfile")

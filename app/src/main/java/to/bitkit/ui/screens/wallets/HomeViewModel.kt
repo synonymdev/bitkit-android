@@ -24,6 +24,7 @@ import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -38,10 +39,14 @@ class HomeViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: TransferRepo,
+    private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    val profileDisplayName = pubkyRepo.displayName
+    val profileDisplayImageUri = pubkyRepo.displayImageUri
 
     private val _currentArticle = MutableStateFlow<ArticleModel?>(null)
     private val _currentFact = MutableStateFlow<String?>(null)
@@ -248,7 +253,8 @@ class HomeViewModel @Inject constructor(
         walletRepo.balanceState,
         settingsStore.data,
         transferRepo.activeTransfers,
-    ) { balanceState, settings, transfers ->
+        pubkyRepo.isAuthenticated,
+    ) { balanceState, settings, transfers, profileAuthenticated ->
         val baseSuggestions = when {
             balanceState.totalLightningSats > 0uL -> { // With Lightning
                 listOfNotNull(
@@ -260,7 +266,7 @@ class HomeViewModel @Inject constructor(
                     Suggestion.QUICK_PAY,
                     Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
                     Suggestion.SHOP,
-                    Suggestion.PROFILE,
+                    Suggestion.PROFILE.takeIf { !profileAuthenticated },
                 )
             }
 
@@ -275,7 +281,7 @@ class HomeViewModel @Inject constructor(
                     Suggestion.SUPPORT,
                     Suggestion.INVITE,
                     Suggestion.SHOP,
-                    Suggestion.PROFILE,
+                    Suggestion.PROFILE.takeIf { !profileAuthenticated },
                 )
             }
 
@@ -289,7 +295,7 @@ class HomeViewModel @Inject constructor(
                     Suggestion.SECURE.takeIf { !settings.isPinEnabled },
                     Suggestion.SUPPORT,
                     Suggestion.INVITE,
-                    Suggestion.PROFILE,
+                    Suggestion.PROFILE.takeIf { !profileAuthenticated },
                 )
             }
         }

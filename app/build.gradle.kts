@@ -236,6 +236,7 @@ dependencies {
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
     implementation(libs.bitkit.core)
+    implementation(libs.paykit)
     implementation(libs.vss.client)
     // Firebase
     implementation(platform(libs.firebase.bom))

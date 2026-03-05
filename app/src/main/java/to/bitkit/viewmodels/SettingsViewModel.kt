@@ -11,12 +11,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.PubkyRepo
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
+    private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
     fun reset() = viewModelScope.launch { settingsStore.reset() }
 
@@ -90,6 +92,8 @@ class SettingsViewModel @Inject constructor(
             settingsStore.update { it.copy(hasSeenProfileIntro = value) }
         }
     }
+
+    val isPubkyAuthenticated = pubkyRepo.isAuthenticated
 
     val quickPayIntroSeen = settingsStore.data.map { it.quickPayIntroSeen }
         .asStateFlow(initialValue = false)

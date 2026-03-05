@@ -127,6 +127,7 @@ class Keychain @Inject constructor(
         BIP39_PASSPHRASE,
         PIN,
         PIN_ATTEMPTS_REMAINING,
+        PAYKIT_SESSION,
     }
 }
 

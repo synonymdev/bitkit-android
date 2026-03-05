@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -41,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -77,12 +80,14 @@ import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
@@ -131,6 +136,9 @@ fun HomeScreen(
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+    val isPubkyAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+    val profileDisplayName by homeViewModel.profileDisplayName.collectAsStateWithLifecycle()
+    val profileDisplayImageUri by homeViewModel.profileDisplayImageUri.collectAsStateWithLifecycle()
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
     val bgPaymentsIntroSeen: Boolean by settingsViewModel.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
@@ -152,12 +160,19 @@ fun HomeScreen(
         DeleteWidgetAlert(type, homeViewModel)
     }
 
+    val navigateToProfile = {
+        rootNavController.navigate(Routes.profileRoute(isPubkyAuthenticated, hasSeenProfileIntro))
+    }
+
     Content(
         isRefreshing = isRefreshing,
         homeUiState = homeUiState,
         rootNavController = rootNavController,
         walletNavController = walletNavController,
         drawerState = drawerState,
+        profileDisplayName = profileDisplayName,
+        profileDisplayImageUri = profileDisplayImageUri,
+        onClickProfile = navigateToProfile,
         latestActivities = latestActivities,
         onRefresh = {
             activityListViewModel.resync()
@@ -202,9 +217,7 @@ fun HomeScreen(
                     )
                 }
 
-                Suggestion.PROFILE -> {
-                    rootNavController.navigate(Routes.Profile)
-                }
+                Suggestion.PROFILE -> navigateToProfile()
 
                 Suggestion.SHOP -> {
                     if (!hasSeenShopIntro) {
@@ -270,6 +283,9 @@ private fun Content(
     rootNavController: NavController,
     walletNavController: NavController,
     drawerState: DrawerState,
+    profileDisplayName: String? = null,
+    profileDisplayImageUri: String? = null,
+    onClickProfile: () -> Unit = {},
     hazeState: HazeState = rememberHazeState(),
     latestActivities: List<Activity>?,
     onRefresh: () -> Unit = {},
@@ -293,6 +309,9 @@ private fun Content(
             rootNavController = rootNavController,
             scope = scope,
             drawerState = drawerState,
+            profileDisplayName = profileDisplayName,
+            profileDisplayImageUri = profileDisplayImageUri,
+            onClickProfile = onClickProfile,
         )
         val pullToRefreshState = rememberPullToRefreshState()
         PullToRefreshBox(
@@ -611,6 +630,9 @@ private fun TopBar(
     rootNavController: NavController,
     scope: CoroutineScope,
     drawerState: DrawerState,
+    profileDisplayName: String? = null,
+    profileDisplayImageUri: String? = null,
+    onClickProfile: () -> Unit = {},
 ) {
     val topbarGradient = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -629,7 +651,13 @@ private fun TopBar(
             .zIndex(1f)
     ) {
         TopAppBar(
-            title = {},
+            title = {
+                ProfileButton(
+                    displayName = profileDisplayName,
+                    displayImageUri = profileDisplayImageUri,
+                    onClick = onClickProfile,
+                )
+            },
             actions = {
                 AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
                 HorizontalSpacer(4.dp)
@@ -645,6 +673,48 @@ private fun TopBar(
             },
             colors = TopAppBarDefaults.topAppBarColors(Color.Transparent),
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun ProfileButton(
+    displayName: String?,
+    displayImageUri: String?,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .clickableAlpha(onClick = onClick)
+            .testTag("ProfileButton")
+    ) {
+        if (displayImageUri != null) {
+            PubkyImage(
+                uri = displayImageUri,
+                size = 32.dp,
+            )
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Colors.Gray4)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_user_square),
+                    contentDescription = null,
+                    tint = Colors.White32,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        Title(
+            text = displayName ?: stringResource(R.string.profile__your_name),
+            maxLines = 1,
         )
     }
 }
