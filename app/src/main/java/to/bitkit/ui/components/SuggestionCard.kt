@@ -12,11 +12,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -111,11 +111,12 @@ fun SuggestionCard(
             .clickableAlpha { onClick() }
     ) {
         Column(
+            verticalArrangement = Arrangement.Bottom,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -123,11 +124,9 @@ fun SuggestionCard(
                 Image(
                     painter = painterResource(icon),
                     contentDescription = null,
-                    alignment = Alignment.CenterStart,
-                    contentScale = ContentScale.FillHeight,
-                    modifier = Modifier
-                        .defaultMinSize(minHeight = 80.dp)
-                        .weight(1f)
+                    alignment = Alignment.TopStart,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.defaultMinSize(minHeight = 80.dp).align(Alignment.BottomStart)
                 )
 
                 if (onClose != null) {
@@ -135,6 +134,7 @@ fun SuggestionCard(
                         onClick = onClose,
                         modifier = Modifier
                             .size(16.dp)
+                            .align(Alignment.TopEnd)
                             .testTag("SuggestionDismiss")
                     ) {
                         Icon(
@@ -179,7 +179,8 @@ private fun Modifier.gradientRadialBackground(
 @Composable
 private fun Preview() {
     LazyVerticalGrid(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
     ) {
