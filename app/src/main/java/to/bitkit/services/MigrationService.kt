@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityTags
+import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -15,7 +16,9 @@ import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,13 +48,15 @@ import to.bitkit.di.json
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
-import to.bitkit.models.safe
+import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
@@ -90,6 +95,9 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_METADATA_KEY = "rnPendingMetadata"
         private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
+        private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
+        private const val RN_DID_ATTEMPT_PEER_RECOVERY_KEY = "rnDidAttemptMigrationPeerRecovery"
+        private const val RN_DID_CLEANUP_INVALID_TRANSFERS_KEY = "didCleanupInvalidMigrationTransfers"
         private const val OPENING_CURLY_BRACE = "{"
         private const val MMKV_ROOT = "persist:root"
         private const val RN_WALLET_NAME = "wallet0"
@@ -345,6 +353,16 @@ class MigrationService @Inject constructor(
 
     suspend fun markMigrationChecked() {
         val key = stringPreferencesKey(RN_MIGRATION_CHECKED_KEY)
+        rnMigrationStore.edit { it[key] = "true" }
+    }
+
+    suspend fun isChannelRecoveryChecked(): Boolean {
+        val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    suspend fun markChannelRecoveryChecked() {
+        val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
         rnMigrationStore.edit { it[key] = "true" }
     }
 
@@ -723,6 +741,80 @@ class MigrationService @Inject constructor(
         }.onFailure {
             Logger.error("Failed to decode RN wallet backup: $it", it, context = TAG)
         }.getOrNull()
+    }
+
+    private fun extractRNAddressTypeSettings(
+        mmkvData: Map<String, String>,
+    ): Pair<String?, List<String>?>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
+
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
+            val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
+
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val walletJsonString = root["wallet"]?.jsonPrimitive?.content ?: return@runCatching null
+            val walletData = json.parseToJsonElement(walletJsonString).jsonObject
+
+            var selectedAddressType: String? = null
+            var addressTypesToMonitor: List<String>? = null
+
+            val walletState = runCatching {
+                json.decodeFromJsonElement<RNWalletState>(walletData)
+            }.getOrNull()
+
+            // wallets.wallet0.addressType.<network>
+            val rnNetworkKey = when (Env.network) {
+                Network.BITCOIN -> "bitcoin"
+                Network.REGTEST -> "bitcoinRegtest"
+                Network.TESTNET -> "bitcoinTestnet"
+                Network.SIGNET -> "signet"
+            }
+            walletState?.wallets?.get(RN_WALLET_NAME)?.addressType?.get(rnNetworkKey)?.let { rnValue ->
+                selectedAddressType = rnValue.normalizeRNAddressType()
+            }
+
+            walletState?.addressTypesToMonitor?.let { rnMonitored ->
+                val normalized = rnMonitored.map { it.normalizeRNAddressType() }
+                if (normalized.isNotEmpty()) {
+                    addressTypesToMonitor = normalized
+                }
+            }
+
+            if (selectedAddressType == null && addressTypesToMonitor == null) return@runCatching null
+
+            Logger.debug(
+                "Extracted RN address type settings: selected=$selectedAddressType, " +
+                    "monitored=${addressTypesToMonitor?.joinToString(",")}",
+                context = TAG,
+            )
+            Pair(selectedAddressType, addressTypesToMonitor)
+        }.onFailure {
+            Logger.error("Failed to extract RN address type settings", it, context = TAG)
+        }.getOrNull()
+    }
+
+    private suspend fun applyRNAddressTypeSettings(
+        selectedAddressType: String?,
+        addressTypesToMonitor: List<String>?,
+    ) {
+        settingsStore.update { current ->
+            val selected = selectedAddressType ?: current.selectedAddressType
+
+            var monitored = addressTypesToMonitor ?: current.addressTypesToMonitor
+            if (selected !in monitored) {
+                monitored = (monitored + selected).distinct()
+            }
+            val nativeWitnessStrings = NATIVE_WITNESS_TYPES.map { it.toSettingsString() }
+            if (monitored.none { it in nativeWitnessStrings }) {
+                monitored = monitored + DEFAULT_ADDRESS_TYPE_STRING
+            }
+
+            current.copy(
+                selectedAddressType = selected,
+                addressTypesToMonitor = monitored,
+            )
+        }
     }
 
     private fun extractRNBlocktank(mmkvData: Map<String, String>): Pair<List<String>, Map<String, String>>? {
@@ -1151,6 +1243,10 @@ class MigrationService @Inject constructor(
             applyRNSettings(settings)
         }
 
+        extractRNAddressTypeSettings(mmkvData)?.let { (selected, monitored) ->
+            applyRNAddressTypeSettings(selected, monitored)
+        }
+
         extractRNMetadata(mmkvData)?.let { metadata ->
             Logger.info("Storing metadata for application after sync", context = TAG)
             persistMetadata(metadata)
@@ -1251,27 +1347,144 @@ class MigrationService @Inject constructor(
         Logger.info("RN migration completed, marked for post-migration sync", context = TAG)
     }
 
+    private suspend fun isRnMigrationCompleted(): Boolean {
+        val key = stringPreferencesKey(RN_MIGRATION_COMPLETED_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    private suspend fun didAttemptPeerRecovery(): Boolean {
+        val key = stringPreferencesKey(RN_DID_ATTEMPT_PEER_RECOVERY_KEY)
+        return rnMigrationStore.data.first()[key] == "true"
+    }
+
+    private suspend fun setDidAttemptPeerRecovery() {
+        val key = stringPreferencesKey(RN_DID_ATTEMPT_PEER_RECOVERY_KEY)
+        rnMigrationStore.edit { it[key] = "true" }
+    }
+
+    suspend fun tryFetchMigrationPeersFromBackup(): List<String> {
+        if (!isRnMigrationCompleted()) return emptyList()
+        if (didAttemptPeerRecovery()) return emptyList()
+
+        setDidAttemptPeerRecovery()
+
+        return runCatching {
+            val data = rnBackupClient.retrieve("peers", fileGroup = "ldk") ?: return emptyList()
+            val peers = json.decodeFromString<List<BackupPeerEntry>>(String(data))
+            if (peers.isEmpty()) return emptyList()
+
+            val trustedIds = Env.trustedLnPeers.map { it.nodeId }.toSet()
+            val uris = peers
+                .filter { it.pubKey !in trustedIds }
+                .map { "${it.pubKey}@${it.address}:${it.port}" }
+
+            Logger.info("Migration peer recovery: fetched ${uris.size} peer(s) from remote backup", context = TAG)
+            uris
+        }.onFailure {
+            Logger.warn("Migration peer recovery failed (will not retry)", it, context = TAG)
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun cleanupInvalidMigrationTransfers() {
+        val key = stringPreferencesKey(RN_DID_CLEANUP_INVALID_TRANSFERS_KEY)
+        if (rnMigrationStore.data.first()[key] == "true") return
+        if (!isRnMigrationCompleted()) return
+
+        val transfers = transferDao.getActiveTransfers().first()
+            .filter { it.type == TransferType.TO_SPENDING && it.lspOrderId != null }
+
+        if (transfers.isEmpty()) {
+            rnMigrationStore.edit { it[key] = "true" }
+            return
+        }
+
+        val orderIds = transfers.mapNotNull { it.lspOrderId }
+        val orders = runCatching {
+            coreService.blocktank.orders(orderIds = orderIds, filter = null, refresh = true)
+        }.onFailure {
+            Logger.warn("Cannot cleanup migration transfers: Blocktank unreachable", it, context = TAG)
+        }.getOrNull() ?: return
+
+        val now = System.currentTimeMillis() / MS_PER_SEC
+        for (transfer in transfers) {
+            val order = orders.find { it.id == transfer.lspOrderId } ?: continue
+            if (order.state2 != BtOrderState2.PAID) {
+                transferDao.markSettled(transfer.id, now)
+                Logger.info(
+                    "Cleanup: settled invalid migration transfer ${transfer.id} " +
+                        "for order ${transfer.lspOrderId} (state: ${order.state2})",
+                    context = TAG,
+                )
+            }
+        }
+
+        rnMigrationStore.edit { it[key] = "true" }
+        Logger.info("Migration transfer cleanup completed", context = TAG)
+    }
+
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()
         setNeedsPostMigrationSync(false)
         Logger.info("Post-migration cleanup completed", context = TAG)
     }
 
-    private suspend fun fetchRNRemoteLdkData() {
-        runCatching {
-            val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching
-            if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching
+    private suspend fun retrieveChannelMonitorWithRetry(
+        channelId: String,
+        maxAttempts: Int = 3,
+        baseDelayMs: Long = 1000L,
+    ): ByteArray? {
+        repeat(maxAttempts) { attempt ->
+            val result = rnBackupClient.retrieveChannelMonitor(channelId)
+            if (result != null) return result
+
+            if (attempt < maxAttempts - 1) {
+                val delayMs = baseDelayMs * (attempt + 1)
+                Logger.debug(
+                    "Retrying channel monitor retrieval for $channelId " +
+                        "(attempt ${attempt + 2}/$maxAttempts) after ${delayMs}ms",
+                    context = TAG
+                )
+                delay(delayMs)
+            }
+        }
+        return null
+    }
+
+    suspend fun fetchRNRemoteLdkData(): Boolean {
+        return runCatching {
+            val files = rnBackupClient.listFiles(fileGroup = "ldk") ?: return@runCatching true
+            if (!files.list.any { it.removeSuffix(".bin") == "channel_manager" }) return@runCatching true
 
             val managerData = rnBackupClient.retrieve("channel_manager", fileGroup = "ldk")
-                ?: return@runCatching
+                ?: return@runCatching true
 
-            val monitors = coroutineScope {
+            val expectedCount = files.channelMonitors.size
+            val monitorResults = coroutineScope {
                 files.channelMonitors.map { monitorFile ->
                     async {
                         val channelId = monitorFile.replace(".bin", "")
-                        rnBackupClient.retrieveChannelMonitor(channelId)
+                        channelId to retrieveChannelMonitorWithRetry(channelId)
                     }
-                }.mapNotNull { it.await() }
+                }.awaitAll()
+            }
+
+            val failedMonitors = monitorResults.filter { it.second == null }.map { it.first }
+            if (failedMonitors.isNotEmpty()) {
+                Logger.error(
+                    "Failed to retrieve ${failedMonitors.size}/$expectedCount channel monitors " +
+                        "after retries: ${failedMonitors.joinToString()}",
+                    context = TAG
+                )
+            }
+
+            val monitors = monitorResults.mapNotNull { it.second }
+
+            if (monitors.size < expectedCount) {
+                Logger.warn(
+                    "Channel monitor count mismatch: expected $expectedCount, got ${monitors.size}. " +
+                        "Some channels may not be recoverable.",
+                    context = TAG
+                )
             }
 
             if (monitors.isNotEmpty()) {
@@ -1280,9 +1493,11 @@ class MigrationService @Inject constructor(
                     channelMonitors = monitors,
                 )
             }
+
+            failedMonitors.isEmpty()
         }.onFailure { e ->
             Logger.error("Failed to fetch remote LDK data", e, context = TAG)
-        }
+        }.getOrDefault(false)
     }
 
     private suspend fun applyRNRemoteSettings(data: ByteArray) {
@@ -1421,11 +1636,17 @@ class MigrationService @Inject constructor(
                     null
                 }
 
-                order.state2 == com.synonym.bitkitcore.BtOrderState2.EXECUTED -> null
+                order.state2 != BtOrderState2.PAID -> {
+                    Logger.debug(
+                        "Skipping order $orderId with state ${order.state2} for transfer creation",
+                        context = TAG,
+                    )
+                    null
+                }
                 else -> TransferEntity(
                     id = txId,
                     type = TransferType.TO_SPENDING,
-                    amountSats = (order.clientBalanceSat.safe() + order.feeSat.safe()).toLong(),
+                    amountSats = order.clientBalanceSat.toLong(),
                     channelId = null,
                     fundingTxId = null,
                     lspOrderId = orderId,
@@ -1970,7 +2191,17 @@ data class RNSettings(
     val transferIntroSeen: Boolean? = null,
     val spendingIntroSeen: Boolean? = null,
     val savingsIntroSeen: Boolean? = null,
+    val selectedAddressType: String? = null,
+    val addressTypesToMonitor: List<String>? = null,
 )
+
+private fun String.normalizeRNAddressType(): String = when (this) {
+    "p2tr" -> "taproot"
+    "p2wpkh" -> "nativeSegwit"
+    "p2sh" -> "nestedSegwit"
+    "p2pkh" -> "legacy"
+    else -> this
+}
 
 @Serializable
 data class RNMetadata(
@@ -2076,6 +2307,13 @@ data class RNWidgetsWithOptions(
     val widgetOptions: Map<String, ByteArray>,
 )
 
+@Serializable
+data class BackupPeerEntry(
+    val pubKey: String,
+    val address: String,
+    val port: UShort,
+)
+
 private val Context.rnMigrationDataStore: DataStore<Preferences> by preferencesDataStore("rn_migration")
 private val Context.rnKeychainDataStore: DataStore<Preferences> by preferencesDataStore("RN_KEYCHAIN")
 
@@ -2086,12 +2324,16 @@ private enum class RNKeychainKey(val service: String) {
 }
 
 @Serializable
-private data class RNWalletState(val wallets: Map<String, RNWalletData>? = null)
+private data class RNWalletState(
+    val wallets: Map<String, RNWalletData>? = null,
+    val addressTypesToMonitor: List<String>? = null,
+)
 
 @Serializable
 private data class RNWalletData(
     val transfers: Map<String, List<RNRemoteTransfer>>? = null,
     val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+    val addressType: Map<String, String>? = null,
 )
 
 @Serializable

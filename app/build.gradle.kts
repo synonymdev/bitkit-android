@@ -55,8 +55,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 176
-        versionName = "2.0.2"
+        versionCode = 177
+        versionName = "2.0.3"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -170,7 +170,7 @@ android {
             reset()
             // Only architectures supported by native libs (ldk-node, bitkit-core)
             // x86 not supported; x86_64 only for debug/emulator
-            include("armeabi-v7a", "arm64-v8a")
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
             isUniversalApk = true
         }
     }

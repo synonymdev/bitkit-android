@@ -8,6 +8,7 @@ on:
         required: false
         default: "default-feature-branch"
   pull_request:
+    types: [ opened, synchronize, reopened, ready_for_review ]
 
 env:
   TERM: xterm-256color
@@ -37,7 +38,7 @@ jobs:
               - 'gradle.properties'
               - '.github/workflows/e2e.yml'
 
-  build:
+  build-local:
     needs: detect-changes
     if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -60,7 +61,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
 
-      - name: Build debug app
+      - name: Build debug app (local)
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,10 +75,54 @@ jobs:
           apk=$(find app/build/outputs/apk/dev/debug -name 'bitkit-dev-debug-*-universal.apk')
           mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
-      - name: Upload APK
+      - name: Upload APK (local)
         uses: actions/upload-artifact@v4
         with:
           name: bitkit-e2e-apk_${{ github.run_number }}
+          path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
+
+  build-staging:
+    needs: detect-changes
+    if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "adopt"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode google-services.json
+        run: echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+
+      - name: Build debug app (regtest)
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
+          E2E: true
+          E2E_BACKEND: network
+          GEO: false
+        run: ./gradlew assembleDevDebug
+
+      - name: Rename APK
+        run: |
+          apk=$(find app/build/outputs/apk/dev/debug -name 'bitkit-dev-debug-*-universal.apk')
+          mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
+
+      - name: Upload APK (regtest)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitkit-e2e-apk-regtest_${{ github.run_number }}
           path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
   e2e-branch:
@@ -88,10 +133,10 @@ jobs:
       app_branch: ${{ github.head_ref || github.ref_name }}
       e2e_branch_input: ${{ github.event.inputs.e2e_branch || 'default-feature-branch' }}
 
-  e2e-tests:
+  e2e-tests-local:
     if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    needs: [detect-changes, build, e2e-branch]
+    needs: [detect-changes, build-local, e2e-branch]
 
     strategy:
       fail-fast: false
@@ -103,8 +148,9 @@ jobs:
           - { name: send, grep: "@send" }
           - { name: lightning_security, grep: "@lightning|@security" }
           - { name: lnurl_transfer, grep: "@lnurl|@transfer" }
+          - { name: multi_address_local, grep: "@multi_address_1|@multi_address_3|@multi_address_4" }
 
-    name: e2e-tests - ${{ matrix.shard.name }}
+    name: e2e-tests-local - ${{ matrix.shard.name }}
 
     steps:
       - name: Show selected E2E branch
@@ -249,11 +295,154 @@ jobs:
         if: failure()
         uses: jwalton/gh-docker-logs@v2
 
+  e2e-tests-staging:
+    if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-staging, e2e-branch]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - { name: multi_address_2_regtest, grep: "@multi_address_2" }
+
+    name: e2e-tests-staging - ${{ matrix.shard.name }}
+
+    steps:
+      - name: Show selected E2E branch
+        env:
+          E2E_BRANCH: ${{ needs.e2e-branch.outputs.branch }}
+        run: echo $E2E_BRANCH
+
+      - name: Clone E2E tests
+        uses: actions/checkout@v4
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          path: bitkit-e2e-tests
+          ref: ${{ needs.e2e-branch.outputs.branch }}
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-33-x86_64-pixel_6
+
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_6
+          api-level: 33
+          arch: x86_64
+          avd-name: Pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+
+      - name: Download APK (regtest)
+        uses: actions/download-artifact@v4
+        with:
+          name: bitkit-e2e-apk-regtest_${{ github.run_number }}
+          path: bitkit-e2e-tests/aut
+
+      - name: List APK directory contents
+        run: ls -l bitkit-e2e-tests/aut
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cache npm cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        working-directory: bitkit-e2e-tests
+        run: npm ci
+
+      - name: Run E2E Tests 1 (${{ matrix.shard.name }})
+        continue-on-error: true
+        id: test1
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_6
+          api-level: 33
+          arch: x86_64
+          avd-name: Pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
+        env:
+          BACKEND: regtest
+          RECORD_VIDEO: true
+          ATTEMPT: 1
+
+      - name: Run E2E Tests 2 (${{ matrix.shard.name }})
+        continue-on-error: true
+        id: test2
+        if: steps.test1.outcome != 'success'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_6
+          api-level: 33
+          arch: x86_64
+          avd-name: Pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
+        env:
+          BACKEND: regtest
+          RECORD_VIDEO: true
+          ATTEMPT: 2
+
+      - name: Run E2E Tests 3 (${{ matrix.shard.name }})
+        id: test3
+        if: steps.test1.outcome != 'success' && steps.test2.outcome != 'success'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_6
+          api-level: 33
+          arch: x86_64
+          avd-name: Pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
+        env:
+          BACKEND: regtest
+          RECORD_VIDEO: true
+          ATTEMPT: 3
+
+      - name: Upload E2E Artifacts (${{ matrix.shard.name }})
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts-regtest_${{ matrix.shard.name }}_${{ github.run_number }}
+          path: bitkit-e2e-tests/artifacts/
+
+      - name: Dump docker logs on failure (${{ matrix.shard.name }})
+        if: failure()
+        uses: jwalton/gh-docker-logs@v2
+
   e2e-status:
     if: always() && github.event.pull_request.draft == false
     name: e2e-status
     runs-on: ubuntu-latest
-    needs: [detect-changes, e2e-tests]
+    needs: [detect-changes, e2e-tests-local, e2e-tests-staging]
     steps:
       - name: E2E skipped - no code changes
         if: needs.detect-changes.outputs.code != 'true'
@@ -262,7 +451,7 @@ jobs:
       - name: Verify all E2E shards succeeded
         if: needs.detect-changes.outputs.code == 'true'
         run: |
-          if [ "${{ needs.e2e-tests.result }}" != "success" ]; then
+          if [ "${{ needs.e2e-tests-local.result }}" != "success" ] || [ "${{ needs.e2e-tests-staging.result }}" != "success" ]; then
             echo "❌ Some E2E shards failed."
             exit 1
           fi

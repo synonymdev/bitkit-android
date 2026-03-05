@@ -22,6 +22,7 @@ import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.validateBitcoinAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -47,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDataMigration
+import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
@@ -66,6 +68,10 @@ import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.amountSats
+import to.bitkit.ext.channelId
+import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.maxSendableSat
@@ -86,6 +92,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
@@ -99,7 +106,6 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
-import to.bitkit.repositories.SweepRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.AppUpdaterService
@@ -152,7 +158,6 @@ class AppViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
-    private val sweepRepo: SweepRepo,
     private val coreService: CoreService,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
@@ -171,6 +176,9 @@ class AppViewModel @Inject constructor(
 
     val isGeoBlocked = lightningRepo.lightningState.map { it.isGeoBlocked }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val forceCloseRemainingDuration = transferRepo.forceCloseRemainingDuration
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
@@ -243,7 +251,7 @@ class AppViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             ToastEventBus.events.collect {
-                toast(it.type, it.title, it.description, it.autoHide, it.visibilityTime)
+                toast(it)
             }
         }
         viewModelScope.launch {
@@ -321,7 +329,7 @@ class AppViewModel @Inject constructor(
             runCatching {
                 when (event) {
                     is Event.BalanceChanged -> handleBalanceChanged()
-                    is Event.ChannelClosed -> handleChannelClosed()
+                    is Event.ChannelClosed -> handleChannelClosed(event)
                     is Event.ChannelPending -> handleChannelPending()
                     is Event.ChannelReady -> handleChannelReady(event)
                     is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(event)
@@ -359,19 +367,70 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleChannelPending() = transferRepo.syncTransferStates()
 
-    private suspend fun handleChannelClosed() {
+    private suspend fun handleChannelClosed(event: Event.ChannelClosed) {
+        val reason = event.reason
+        if (reason != null) {
+            val (isCounterpartyClose, isForceClose) = classifyClosureReason(reason)
+            if (isCounterpartyClose) {
+                createTransferForCounterpartyClose(event.channelId, isForceClose)
+                showSheet(Sheet.ConnectionClosed)
+            }
+        }
         transferRepo.syncTransferStates()
         walletRepo.syncBalances()
+    }
+
+    private suspend fun createTransferForCounterpartyClose(channelId: String, isForceClose: Boolean) {
+        val transferType = if (isForceClose) TransferType.FORCE_CLOSE else TransferType.COOP_CLOSE
+
+        val balances = lightningRepo.getBalancesAsync().getOrNull()
+        val lightningBalance = balances?.lightningBalances?.find { it.channelId() == channelId }
+        var channelBalance = lightningBalance?.amountSats() ?: 0uL
+
+        if (channelBalance == 0uL) {
+            val closedChannels = runCatching {
+                coreService.activity.closedChannels(SortDirection.DESC)
+            }.getOrNull()
+            channelBalance = closedChannels
+                ?.firstOrNull { it.channelId == channelId }
+                ?.channelValueSats ?: 0uL
+        }
+
+        if (channelBalance > 0uL) {
+            transferRepo.createTransfer(
+                type = transferType,
+                amountSats = channelBalance.toLong(),
+                channelId = channelId,
+                claimableAtHeight = lightningBalance?.claimableAtHeight(),
+            )
+        }
+    }
+
+    private fun classifyClosureReason(reason: ClosureReason): Pair<Boolean, Boolean> {
+        return when (reason) {
+            is ClosureReason.CounterpartyForceClosed -> true to true
+            is ClosureReason.CommitmentTxConfirmed -> true to true
+            is ClosureReason.CounterpartyInitiatedCooperativeClosure -> true to false
+            is ClosureReason.CounterpartyCoopClosedUnfundedChannel -> true to false
+            else -> false to false
+        }
     }
 
     private suspend fun handleSyncCompleted() {
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
         val needsPostMigrationSync = migrationService.needsPostMigrationSync()
+        val pendingPrune = settingsStore.data.first().pendingRestoreAddressTypePrune
 
         when {
             (isShowingLoading || needsPostMigrationSync) && !isCompletingMigration -> completeMigration()
             isRestoringRemote -> completeRNRemoteBackupRestore()
+            pendingPrune -> {
+                settingsStore.update { it.copy(pendingRestoreAddressTypePrune = false) }
+                delay(POST_RESTORE_PRUNE_DELAY_MS)
+                lightningRepo.pruneEmptyAddressTypesAfterRestore()
+                walletRepo.debounceSyncByEvent()
+            }
             !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
             else -> Unit
         }
@@ -405,7 +464,6 @@ class AppViewModel @Inject constructor(
             migrationService.cleanupAfterMigration()
             migrationService.setRestoringFromRNRemoteBackup(false)
             migrationService.setShowingMigrationLoading(false)
-            checkForSweepableFunds()
         } else {
             Logger.info("Post-migration sync incomplete (remote restore), will retry on next sync", context = TAG)
             migrationService.setShowingMigrationLoading(false)
@@ -460,7 +518,6 @@ class AppViewModel @Inject constructor(
             migrationService.setShowingMigrationLoading(false)
             delay(MIGRATION_AUTH_RESET_DELAY_MS)
             resetIsAuthenticatedStateInternal()
-            checkForSweepableFunds()
         } else {
             Logger.info("Post-migration sync incomplete, will retry on next sync", context = TAG)
             migrationService.setShowingMigrationLoading(false)
@@ -480,7 +537,6 @@ class AppViewModel @Inject constructor(
             migrationService.setShowingMigrationLoading(false)
             delay(MIGRATION_AUTH_RESET_DELAY_MS)
             resetIsAuthenticatedStateInternal()
-            checkForSweepableFunds()
         } else {
             Logger.info("Post-migration sync incomplete (fallback), will retry on next sync", context = TAG)
             migrationService.setShowingMigrationLoading(false)
@@ -496,13 +552,6 @@ class AppViewModel @Inject constructor(
             title = "Migration Warning",
             description = "Migration completed but node restart failed. Please restart the app."
         )
-    }
-
-    fun checkForSweepableFunds() {
-        viewModelScope.launch(bgDispatcher) {
-            sweepRepo.hasSweepableFunds()
-                .onSuccess { hasFunds -> if (hasFunds) showSheet(Sheet.SweepPrompt) }
-        }
     }
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
@@ -2068,7 +2117,8 @@ class AppViewModel @Inject constructor(
             title = toast.title,
             description = toast.description,
             autoHide = toast.autoHide,
-            visibilityTime = toast.visibilityTime
+            visibilityTime = toast.visibilityTime,
+            testTag = toast.testTag,
         )
     }
 
@@ -2224,7 +2274,6 @@ class AppViewModel @Inject constructor(
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
-    @Suppress("SpellCheckingInspection")
     private fun String.removeLightningSchemes(): String {
         return this
             .replace(Regex("^lightning:", RegexOption.IGNORE_CASE), "")
@@ -2272,6 +2321,7 @@ class AppViewModel @Inject constructor(
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val SCREEN_TRANSITION_DELAY_MS = 300L
         private const val MIGRATION_LOADING_TIMEOUT_MS = 120_000L
+        private const val POST_RESTORE_PRUNE_DELAY_MS = 30_000L
         private const val MIGRATION_AUTH_RESET_DELAY_MS = 500L
         private const val REMOTE_RESTORE_NODE_RESTART_DELAY_MS = 500L
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L

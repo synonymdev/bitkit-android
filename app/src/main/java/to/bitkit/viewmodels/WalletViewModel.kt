@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.of
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -61,6 +62,7 @@ class WalletViewModel @Inject constructor(
     companion object {
         private const val TAG = "WalletViewModel"
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
+        private const val CHANNEL_RECOVERY_RESTART_DELAY_MS = 500L
     }
 
     val lightningState = lightningRepo.lightningState
@@ -221,7 +223,14 @@ class WalletViewModel @Inject constructor(
         backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
     }
 
-    fun onRestoreContinue() = _restoreState.update { RestoreState.Settled }
+    fun onRestoreContinue() {
+        viewModelScope.launch(bgDispatcher) {
+            if (!settingsStore.restoredMonitoredTypesFromBackup) {
+                settingsStore.update { it.copy(pendingRestoreAddressTypePrune = true) }
+            }
+        }
+        _restoreState.update { RestoreState.Settled }
+    }
 
     fun onRestoreRetry() = viewModelScope.launch(bgDispatcher) {
         _restoreState.update { it.countRetry() }
@@ -291,10 +300,13 @@ class WalletViewModel @Inject constructor(
                     migrationService.consumePendingChannelMigration()
                 }
                 walletRepo.setWalletExistsState()
+                connectMigrationPeers()
+                migrationService.cleanupInvalidMigrationTransfers()
                 walletRepo.syncBalances()
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
                 }
+                checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
                 Logger.error("Node startup error", it, context = TAG)
@@ -302,6 +314,62 @@ class WalletViewModel @Inject constructor(
                     ToastEventBus.send(it)
                 }
             }
+    }
+
+    private suspend fun connectMigrationPeers() {
+        val peerUris = migrationService.tryFetchMigrationPeersFromBackup()
+        for (uri in peerUris) {
+            runCatching {
+                val peer = PeerDetails.of(uri)
+                lightningRepo.connectPeer(peer)
+            }.onFailure {
+                Logger.error("Failed to connect migration peer: $uri", it, context = TAG)
+            }
+        }
+    }
+
+    private suspend fun checkForOrphanedChannelMonitorRecovery() {
+        if (migrationService.isChannelRecoveryChecked()) return
+
+        Logger.info("Running one-time channel monitor recovery check", context = TAG)
+
+        val allMonitorsRetrieved = runCatching {
+            val allRetrieved = migrationService.fetchRNRemoteLdkData()
+            val channelMigration = buildChannelMigrationIfAvailable()
+
+            if (channelMigration == null) {
+                Logger.info("No channel monitors found on RN backup", context = TAG)
+                return@runCatching allRetrieved
+            }
+
+            Logger.info(
+                "Found ${channelMigration.channelMonitors.size} monitors on RN backup, attempting recovery",
+                context = TAG,
+            )
+
+            lightningRepo.stop().onFailure {
+                Logger.error("Failed to stop node for channel recovery", it, context = TAG)
+            }
+            delay(CHANNEL_RECOVERY_RESTART_DELAY_MS)
+            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
+                .onSuccess {
+                    migrationService.consumePendingChannelMigration()
+                    walletRepo.syncNodeAndWallet()
+                    walletRepo.syncBalances()
+                    Logger.info("Channel monitor recovery complete", context = TAG)
+                }
+                .onFailure {
+                    Logger.error("Failed to restart node after channel recovery", it, context = TAG)
+                }
+
+            allRetrieved
+        }.getOrDefault(false)
+
+        if (allMonitorsRetrieved) {
+            migrationService.markChannelRecoveryChecked()
+        } else {
+            Logger.warn("Some monitors failed to download, will retry on next startup", context = TAG)
+        }
     }
 
     fun stop() {

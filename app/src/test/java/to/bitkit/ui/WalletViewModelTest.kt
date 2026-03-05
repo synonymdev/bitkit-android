@@ -57,6 +57,8 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
+        whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
+        whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
         whenever(connectivityRepo.isOnline).thenReturn(isOnline)
 
         sut = WalletViewModel(

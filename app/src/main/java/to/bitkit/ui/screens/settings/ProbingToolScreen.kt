@@ -137,6 +137,9 @@ private fun ProbingToolContent(
             if (uiState.isLnurlPay) {
                 SectionHeader("AMOUNT (REQUIRED)")
                 SectionFooter("Enter the amount in sats to probe via LNURL")
+            } else if (uiState.isZeroAmountInvoice) {
+                SectionHeader("AMOUNT (OPTIONAL)")
+                SectionFooter("Enter amount in sats, or leave empty to probe with 1 sat")
             } else {
                 SectionHeader("AMOUNT OVERRIDE (OPTIONAL)")
                 SectionFooter("Override the invoice amount for variable-amount invoices")

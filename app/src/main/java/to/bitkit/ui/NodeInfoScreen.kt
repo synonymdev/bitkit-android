@@ -1,7 +1,7 @@
 package to.bitkit.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,27 +9,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RemoveCircleOutline
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.synonym.bitkitcore.ILspNode
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.BestBlock
@@ -43,14 +45,18 @@ import to.bitkit.ext.amountSats
 import to.bitkit.ext.balanceUiText
 import to.bitkit.ext.channelId
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatToString
 import to.bitkit.ext.uri
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.Toast
+import to.bitkit.models.NodePeer
+import to.bitkit.models.alias
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningState
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.LightningChannel
@@ -65,6 +71,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Shapes
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.withAccent
 import kotlin.time.Clock.System.now
@@ -73,30 +80,22 @@ import kotlin.time.ExperimentalTime
 @Composable
 fun NodeInfoScreen(
     navController: NavController,
+    viewModel: NodeInfoViewModel = hiltViewModel(),
 ) {
     val wallet = walletViewModel ?: return
-    val app = appViewModel ?: return
-    val settings = settingsViewModel ?: return
-    val context = LocalContext.current
 
     val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()
-    val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val peers by viewModel.peers.collectAsStateWithLifecycle()
 
     Content(
         lightningState = lightningState,
+        peers = peers,
         isRefreshing = isRefreshing,
-        isDevModeEnabled = isDevModeEnabled,
-        onBack = { navController.popBackStack() },
-        onRefresh = { wallet.onPullToRefresh() },
-        onDisconnectPeer = { wallet.disconnectPeer(it) },
-        onCopy = { text ->
-            app.toast(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
-                description = text
-            )
-        },
+        onBack = navController::popBackStack,
+        onRefresh = wallet::onPullToRefresh,
+        onDisconnectPeer = viewModel::disconnectPeer,
+        onCopy = viewModel::onCopy,
     )
 }
 
@@ -105,7 +104,7 @@ fun NodeInfoScreen(
 private fun Content(
     lightningState: LightningState,
     isRefreshing: Boolean = false,
-    isDevModeEnabled: Boolean,
+    peers: List<NodePeer> = emptyList(),
     onBack: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onDisconnectPeer: (PeerDetails) -> Unit = {},
@@ -130,35 +129,29 @@ private fun Content(
                     nodeId = lightningState.nodeId,
                     onCopy = onCopy,
                 )
+                NodeStateSection(
+                    nodeLifecycleState = lightningState.nodeLifecycleState,
+                    nodeStatus = lightningState.nodeStatus,
+                )
+                lightningState.balances?.let { details ->
+                    WalletBalancesSection(balanceDetails = details)
 
-                if (isDevModeEnabled) {
-                    NodeStateSection(
-                        nodeLifecycleState = lightningState.nodeLifecycleState,
-                        nodeStatus = lightningState.nodeStatus,
+                    if (details.lightningBalances.isNotEmpty()) {
+                        LightningBalancesSection(balances = details.lightningBalances)
+                    }
+                }
+                if (lightningState.channels.isNotEmpty()) {
+                    ChannelsSection(
+                        channels = lightningState.channels,
+                        onCopy = onCopy,
                     )
-
-                    lightningState.balances?.let { details ->
-                        WalletBalancesSection(balanceDetails = details)
-
-                        if (details.lightningBalances.isNotEmpty()) {
-                            LightningBalancesSection(balances = details.lightningBalances)
-                        }
-                    }
-
-                    if (lightningState.channels.isNotEmpty()) {
-                        ChannelsSection(
-                            channels = lightningState.channels,
-                            onCopy = onCopy,
-                        )
-                    }
-
-                    if (lightningState.peers.isNotEmpty()) {
-                        PeersSection(
-                            peers = lightningState.peers,
-                            onDisconnectPeer = onDisconnectPeer,
-                            onCopy = onCopy,
-                        )
-                    }
+                }
+                if (peers.isNotEmpty()) {
+                    PeersSection(
+                        peers = peers,
+                        onDisconnectPeer = onDisconnectPeer,
+                        onCopy = onCopy,
+                    )
                 }
                 VerticalSpacer(16.dp)
             }
@@ -390,46 +383,67 @@ private fun ChannelsSection(
 
 @Composable
 private fun PeersSection(
-    peers: List<PeerDetails>,
-    onDisconnectPeer: (PeerDetails) -> Unit,
+    peers: List<NodePeer>,
+    onDisconnectPeer: (PeerDetails) -> Unit = {},
     onCopy: (String) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader("Peers")
-        peers.forEach { peer ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.height(52.dp)
-            ) {
-                BodyM(
-                    text = peer.uri,
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickableAlpha(
-                            onClick = copyToClipboard(peer.uri) {
-                                onCopy(it)
-                            }
-                        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            peers.forEach { peer ->
+                PeerCard(
+                    peer = peer,
+                    onCopy = onCopy,
+                    onDisconnectPeer = onDisconnectPeer,
                 )
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .clickableAlpha(onClick = { onDisconnectPeer(peer) })
-                ) {
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeerCard(
+    peer: NodePeer,
+    onCopy: (String) -> Unit,
+    onDisconnectPeer: (PeerDetails) -> Unit,
+) {
+    val uri = peer.peerDetails.uri
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickableAlpha(onClick = copyToClipboard(uri) { onCopy(it) })
+            .background(color = Colors.Gray6, shape = Shapes.medium)
+            .padding(16.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                BodyMSB(text = peer.alias())
+                if (peer.lspNode != null) {
                     Icon(
-                        imageVector = Icons.Default.RemoveCircleOutline,
-                        contentDescription = stringResource(R.string.common__close),
-                        tint = Colors.Red,
-                        modifier = Modifier.size(16.dp)
+                        imageVector = Icons.Filled.VerifiedUser,
+                        contentDescription = null,
+                        tint = Colors.White32,
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
-            HorizontalDivider()
+            CaptionB(
+                text = peer.peerDetails.nodeId.ellipsisMiddle(@Suppress("MagicNumber") 24),
+                color = Colors.White64,
+                maxLines = 1,
+            )
+        }
+        IconButton(onClick = { onDisconnectPeer(peer.peerDetails) }) {
+            Icon(
+                imageVector = Icons.Default.RemoveCircleOutline,
+                contentDescription = stringResource(R.string.common__close),
+                tint = Colors.Red,
+            )
         }
     }
 }
@@ -452,27 +466,47 @@ private fun ChannelDetailRow(
     }
 }
 
-@Preview(showSystemUi = true)
+private fun previewPeers() = listOf(
+    NodePeer(
+        peerDetails = Peers.stag,
+        lspNode = ILspNode(
+            alias = "Blocktank-LND1",
+            pubkey = Peers.stag.nodeId,
+            connectionStrings = listOf(),
+            readonly = null,
+        ),
+    ),
+    NodePeer(
+        peerDetails = PeerDetails(
+            nodeId = "0448a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+            address = "192.168.1.1:9735",
+            isConnected = true,
+            isPersisted = false,
+        ),
+        lspNode = null,
+    ),
+)
+
+@Preview
 @Composable
-private fun Preview() {
+private fun PreviewPeersSection() {
     AppThemeSurface {
-        Content(
-            isDevModeEnabled = false,
-            lightningState = LightningState(
-                nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-            ),
-        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            PeersSection(
+                peers = previewPeers(),
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalTime::class)
 @Preview(showSystemUi = true)
 @Composable
-private fun PreviewDevMode() {
+private fun Preview() {
     AppThemeSurface {
         val syncTime = now().epochSeconds.toULong()
         Content(
-            isDevModeEnabled = true,
+            peers = previewPeers(),
             lightningState = LightningState(
                 nodeLifecycleState = NodeLifecycleState.Running,
                 nodeStatus = NodeStatus(

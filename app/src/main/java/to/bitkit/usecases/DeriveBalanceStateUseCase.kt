@@ -1,14 +1,18 @@
 package to.bitkit.usecases
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
+import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BalanceState
+import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -19,40 +23,46 @@ import javax.inject.Singleton
 
 @Singleton
 class DeriveBalanceStateUseCase @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
 ) {
-    suspend operator fun invoke(): Result<BalanceState> = runCatching {
-        val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
-        val channels = lightningRepo.getChannels().orEmpty()
-        val activeTransfers = transferRepo.activeTransfers.first()
+    suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
+        runCatching {
+            val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
+            val channels = lightningRepo.getChannels().orEmpty()
+            val activeTransfers = transferRepo.activeTransfers.first()
 
-        val paidOrdersSats = getOrderPaymentsSats(activeTransfers)
-        val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
+            val paidOrdersSats = getOrderPaymentsSats(activeTransfers)
+            val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
 
-        val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
-        val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
+            val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
+            val coopCloseSavingsSats = getCoopCloseTransferSats(activeTransfers, channels, balanceDetails)
+            val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
 
-        val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
-        val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
-        val totalLightningSats = afterPendingChannels.safe() - toSavingsAmount.safe()
+            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
+            val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
+            val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
+            val totalLightningSats = afterPendingChannels.safe() - toSavingsAmount.safe()
 
-        val balanceState = BalanceState(
-            totalOnchainSats = totalOnchainSats,
-            totalLightningSats = totalLightningSats,
-            maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
-            maxSendOnchainSats = getMaxSendAmount(balanceDetails),
-            balanceInTransferToSavings = toSavingsAmount,
-            balanceInTransferToSpending = toSpendingAmount,
-        )
+            val balanceState = BalanceState(
+                totalOnchainSats = totalOnchainSats,
+                channelFundableBalance = channelFundableBalance,
+                totalLightningSats = totalLightningSats,
+                maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
+                maxSendOnchainSats = getMaxSendAmount(balanceDetails),
+                balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
+                balanceInTransferToSpending = toSpendingAmount,
+            )
 
-        val height = lightningRepo.lightningState.value.block()?.height
-        Logger.verbose("Active transfers at block height=$height: ${jsonLogOf(activeTransfers)}", context = TAG)
-        Logger.verbose("Balances in ldk-node at block height=$height: ${jsonLogOf(balanceDetails)}", context = TAG)
-        Logger.verbose("Balances in state at block height=$height: ${jsonLogOf(balanceState)}", context = TAG)
+            val height = lightningRepo.lightningState.value.block()?.height
+            Logger.verbose("Active transfers at block height=$height: ${jsonLogOf(activeTransfers)}", context = TAG)
+            Logger.verbose("Balances in ldk-node at block height=$height: ${jsonLogOf(balanceDetails)}", context = TAG)
+            Logger.verbose("Balances in state at block height=$height: ${jsonLogOf(balanceState)}", context = TAG)
 
-        return@runCatching balanceState
+            return@runCatching balanceState
+        }
     }
 
     private fun getOrderPaymentsSats(transfers: List<TransferEntity>): ULong {
@@ -97,6 +107,33 @@ class DeriveBalanceStateUseCase @Inject constructor(
         return toSavingsAmount
     }
 
+    private suspend fun getMaxChannelFundableAmount(fundableBalance: ULong): ULong {
+        if (fundableBalance == 0uL) return 0u
+
+        val fallback = (fundableBalance.toDouble() * FALLBACK_FEE_PERCENT).toULong()
+        val fee = lightningRepo.calculateTotalFee(
+            amountSats = fundableBalance,
+        ).onFailure {
+            Logger.debug("Could not calculate channel funding fee, using fallback of: $fallback", context = TAG)
+        }.getOrDefault(fallback)
+
+        return fundableBalance.safe() - fee.safe()
+    }
+
+    private suspend fun getCoopCloseTransferSats(
+        transfers: List<TransferEntity>,
+        channels: List<ChannelDetails>,
+        balanceDetails: BalanceDetails,
+    ): ULong {
+        var amount = 0uL
+        for (transfer in transfers.filter { it.type == TransferType.COOP_CLOSE }) {
+            val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
+            val channelBalance = balanceDetails.lightningBalances.find { it.channelId() == channelId }
+            amount += channelBalance?.amountSats() ?: 0u
+        }
+        return amount
+    }
+
     private suspend fun getMaxSendAmount(balanceDetails: BalanceDetails): ULong {
         val spendableOnchainSats = balanceDetails.spendableOnchainBalanceSats
         if (spendableOnchainSats == 0uL) return 0u
@@ -104,10 +141,8 @@ class DeriveBalanceStateUseCase @Inject constructor(
         val fallback = (spendableOnchainSats.toDouble() * FALLBACK_FEE_PERCENT).toULong()
         val speed = settingsStore.data.first().defaultTransactionSpeed
 
-        val fee = lightningRepo.calculateTotalFee(
-            amountSats = spendableOnchainSats,
+        val fee = lightningRepo.estimateSendAllFee(
             speed = speed,
-            utxosToSpend = lightningRepo.listSpendableOutputs().getOrNull()
         ).onFailure {
             Logger.debug("Could not calculate max send amount, using fallback of: $fallback", context = TAG)
         }.getOrDefault(fallback)

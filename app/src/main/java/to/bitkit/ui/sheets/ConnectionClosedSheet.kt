@@ -1,10 +1,8 @@
 package to.bitkit.ui.sheets
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -21,90 +19,66 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
-import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withAccent
 
 @Composable
-fun SweepPromptSheet(
-    onSweep: () -> Unit,
-    onCancel: () -> Unit,
+fun ConnectionClosedSheet(
+    onDismiss: () -> Unit,
 ) {
-    Content(
-        onSweep = onSweep,
-        onCancel = onCancel,
-    )
+    Content(onDismiss = onDismiss)
 }
 
 @Composable
 private fun Content(
     modifier: Modifier = Modifier,
-    onSweep: () -> Unit = {},
-    onCancel: () -> Unit = {},
+    onDismiss: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
-            .sheetHeight()
+            .sheetHeight(
+                size = SheetSize.MEDIUM
+            )
             .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
-            .testTag("SweepPromptSheet")
+            .testTag("ConnectionClosedSheet")
     ) {
-        SheetTopBar(titleText = stringResource(R.string.sweep__nav_title))
+        SheetTopBar(titleText = stringResource(R.string.lightning__connection_closed__title))
+
+        BodyM(
+            text = stringResource(R.string.lightning__connection_closed__description),
+            color = Colors.White64,
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Box(
-            contentAlignment = Alignment.BottomCenter,
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
             Image(
-                painter = painterResource(R.drawable.coin_stack_x),
+                painter = painterResource(R.drawable.switch_box),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.size(311.dp)
+                modifier = Modifier.size(256.dp)
             )
         }
 
-        VerticalSpacer(16.dp)
-
-        Display(text = stringResource(R.string.sweep__prompt_title).withAccent())
-
-        VerticalSpacer(8.dp)
-
-        BodyM(
-            text = stringResource(R.string.sweep__prompt_description),
-            color = Colors.White64,
-            modifier = Modifier.fillMaxWidth()
+        PrimaryButton(
+            text = stringResource(R.string.common__ok),
+            onClick = onDismiss,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("ConnectionClosedButton")
         )
-
-        VerticalSpacer(32.dp)
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            SecondaryButton(
-                text = stringResource(R.string.common__cancel),
-                onClick = onCancel,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("CancelButton")
-            )
-            PrimaryButton(
-                text = stringResource(R.string.sweep__prompt_sweep),
-                onClick = onSweep,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("SweepButton")
-            )
-        }
 
         VerticalSpacer(16.dp)
     }

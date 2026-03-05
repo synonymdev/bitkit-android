@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import com.google.firebase.messaging.FirebaseMessaging
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
@@ -44,6 +45,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
@@ -52,12 +54,17 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toPeerDetailsList
+import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.safe
+import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.toSettingsString
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
@@ -113,6 +120,7 @@ class LightningRepo @Inject constructor(
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
     private val lifecycleMutex = Mutex()
+    private val isChangingAddressType = AtomicBoolean(false)
 
     init {
         observeConnectivityForSyncRetry()
@@ -628,6 +636,185 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    suspend fun getBalanceForAddressType(addressType: AddressType): Result<ULong> = withContext(bgDispatcher) {
+        executeWhenNodeRunning("getBalanceForAddressType") {
+            runCatching {
+                lightningService.getBalanceForAddressType(addressType).totalSats
+            }
+        }
+    }
+
+    suspend fun getChannelFundableBalance(): ULong = withContext(bgDispatcher) {
+        val settings = settingsStore.data.first()
+        val selectedType = settings.selectedAddressType.toAddressType()
+        val monitoredTypes = settings.addressTypesToMonitor.mapNotNull { it.toAddressType() }
+        val typesToSum = (listOfNotNull(selectedType) + monitoredTypes).distinct().filter { it != AddressType.P2PKH }
+
+        if (typesToSum.isEmpty()) {
+            return@withContext getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: 0uL
+        }
+
+        var total = 0uL
+        for (type in typesToSum) {
+            val balance = executeWhenNodeRunning("getBalanceForAddressType") {
+                runCatching { lightningService.getBalanceForAddressType(type).spendableSats }
+            }.getOrNull()
+            if (balance == null) {
+                return@withContext getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: 0uL
+            }
+            total = total.safe() + balance.safe()
+        }
+        total
+    }
+
+    suspend fun updateAddressType(
+        selectedType: String,
+        monitoredTypes: List<String>,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        if (!isChangingAddressType.compareAndSet(false, true)) {
+            return@withContext Result.failure(AppError("Address type change already in progress"))
+        }
+
+        val previousSettings = settingsStore.data.first()
+        val oldSelected = previousSettings.selectedAddressType
+        val oldMonitored = previousSettings.addressTypesToMonitor
+        val addressType = selectedType.toAddressType() ?: AddressType.P2WPKH
+
+        suspend fun rollback() =
+            settingsStore.update { it.copy(selectedAddressType = oldSelected, addressTypesToMonitor = oldMonitored) }
+
+        runCatching {
+            settingsStore.update {
+                it.copy(selectedAddressType = selectedType, addressTypesToMonitor = monitoredTypes)
+            }
+            lightningService.setPrimaryAddressType(addressType)
+            syncMonitoredTypesFromNode()
+            sync().onFailure { Logger.warn("Sync after address type change failed", it, context = TAG) }
+            Unit
+        }.onFailure {
+            rollback()
+            Logger.error("updateAddressType failed", it, context = TAG)
+        }.also {
+            isChangingAddressType.set(false)
+        }
+    }
+
+    suspend fun setMonitoring(addressType: AddressType, enabled: Boolean): Result<Unit> = withContext(bgDispatcher) {
+        if (!isChangingAddressType.compareAndSet(false, true)) {
+            return@withContext Result.failure(AppError("Address type change already in progress"))
+        }
+
+        val previousSettings = settingsStore.data.first()
+        val oldMonitored = previousSettings.addressTypesToMonitor.toList()
+
+        if (!enabled) {
+            val validationError = validateDisableMonitoring(addressType, previousSettings, oldMonitored)
+            if (validationError != null) {
+                isChangingAddressType.set(false)
+                return@withContext Result.failure(validationError)
+            }
+        }
+
+        val typeStr = addressType.toSettingsString()
+        val newMonitored = if (enabled) (oldMonitored + typeStr).distinct() else oldMonitored.filter { it != typeStr }
+
+        suspend fun rollback() = settingsStore.update { it.copy(addressTypesToMonitor = oldMonitored) }
+
+        runCatching {
+            settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
+            if (enabled) {
+                lightningService.addAddressTypeToMonitor(addressType)
+            } else {
+                lightningService.removeAddressTypeFromMonitor(addressType)
+            }
+            sync().onFailure { Logger.warn("Sync after monitoring change failed", it, context = TAG) }
+            Unit
+        }.onFailure {
+            rollback()
+            Logger.error("setMonitoring failed", it, context = TAG)
+        }.also {
+            isChangingAddressType.set(false)
+        }
+    }
+
+    private suspend fun validateDisableMonitoring(
+        addressType: AddressType,
+        settings: SettingsData,
+        monitoredTypes: List<String>,
+    ): AppError? {
+        if (addressType == settings.selectedAddressType.toAddressType()) {
+            return AppError("Cannot disable monitoring: address type is currently selected")
+        }
+        if (isLastRequiredNativeWitnessWallet(addressType, monitoredTypes)) {
+            return AppError(
+                "Cannot disable monitoring: at least one Native SegWit or Taproot wallet required for Lightning"
+            )
+        }
+        val balance = getBalanceForAddressType(addressType).getOrElse {
+            return AppError("Cannot disable monitoring: failed to verify balance")
+        }
+        if (balance > 0uL) {
+            return AppError("Cannot disable monitoring: address type has balance")
+        }
+        return null
+    }
+
+    private suspend fun syncMonitoredTypesFromNode() {
+        runCatching {
+            val nodeMonitored = lightningService.listMonitoredAddressTypes()
+            val settings = settingsStore.data.first()
+            val selectedType = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
+            val combined = (nodeMonitored + selectedType).distinct()
+            val allOrdered = ALL_ADDRESS_TYPE_STRINGS
+            val newMonitored = allOrdered.filter { typeStr ->
+                typeStr.toAddressType() in combined
+            }
+            settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
+        }.onFailure {
+            Logger.warn("syncMonitoredTypesFromNode failed", it, context = TAG)
+        }
+    }
+
+    fun isChangingAddressType(): Boolean = isChangingAddressType.get()
+
+    suspend fun pruneEmptyAddressTypesAfterRestore(): Result<Unit> = withContext(bgDispatcher) {
+        if (isChangingAddressType.get()) return@withContext Result.success(Unit)
+
+        val settings = settingsStore.data.first()
+        val selectedType = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
+        val monitored = settings.addressTypesToMonitor.toMutableList()
+
+        val toRemove = monitored.filter { typeStr ->
+            if (typeStr == settings.selectedAddressType) return@filter false
+            val type = typeStr.toAddressType() ?: return@filter false
+            val balance = getBalanceForAddressType(type).getOrNull() ?: return@filter false
+            if (balance != 0uL) return@filter false
+            val wouldLeaveNativeWitness = (selectedType in NATIVE_WITNESS_TYPES) ||
+                monitored.any { it != typeStr && it.toAddressType() in NATIVE_WITNESS_TYPES }
+            wouldLeaveNativeWitness
+        }
+
+        if (toRemove.isEmpty()) return@withContext Result.success(Unit)
+
+        val newMonitored = monitored.filter { it !in toRemove }
+        settingsStore.update { it.copy(addressTypesToMonitor = newMonitored) }
+        for (typeStr in toRemove) {
+            val type = typeStr.toAddressType() ?: continue
+            runCatching { lightningService.removeAddressTypeFromMonitor(type) }.onFailure {
+                Logger.error("Failed to remove address type $typeStr from monitor", it, context = TAG)
+            }
+        }
+        sync().onFailure { Logger.warn("Sync after prune failed", it, context = TAG) }
+        Result.success(Unit)
+    }
+
+    private fun isLastRequiredNativeWitnessWallet(addressType: AddressType, monitoredTypes: List<String>): Boolean {
+        if (addressType !in NATIVE_WITNESS_TYPES) return false
+        val monitored = monitoredTypes.mapNotNull { it.toAddressType() }
+        val remaining = monitored.filter { it != addressType && it in NATIVE_WITNESS_TYPES }
+        return remaining.isEmpty()
+    }
+
     private suspend fun restartWithPreviousConfig(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Stopping node for recovery attempt", context = TAG)
 
@@ -803,12 +990,20 @@ class LightningRepo @Inject constructor(
         val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
         val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
 
-        // use passed utxos if specified, otherwise run auto coin select if enabled
-        val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(sats, satsPerVByte)
+        Logger.debug(
+            "sendOnChain: sats=$sats, isTransfer=$isTransfer, isMaxAmount=$isMaxAmount, satsPerVByte=$satsPerVByte",
+            context = TAG,
+        )
 
-        Logger.debug("UTXOs selected to spend: $finalUtxosToSpend", context = TAG)
+        // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
+        val utxosForSend = when {
+            isTransfer && isMaxAmount -> null
+            else -> utxosToSpend ?: determineUtxosToSpend(sats, satsPerVByte)
+        }
 
-        val txId = lightningService.send(address, sats, satsPerVByte, finalUtxosToSpend, isMaxAmount)
+        Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
+
+        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
 
         val preActivityMetadata = PreActivityMetadata(
             paymentId = txId,
@@ -823,6 +1018,16 @@ class LightningRepo @Inject constructor(
             channelId = channelId ?: "",
         )
         preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
+
+        coreService.activity.createSentOnchainActivityFromSendResult(
+            txid = txId,
+            address = address,
+            amount = sats,
+            fee = 0u,
+            feeRate = satsPerVByte,
+            isTransfer = isTransfer,
+            channelId = channelId,
+        )
 
         syncState()
         Result.success(txId)
@@ -901,6 +1106,20 @@ class LightningRepo @Inject constructor(
             val fallbackFee = 1000uL
             Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", e = it, context = TAG)
             return@recoverCatching fallbackFee
+        }
+    }
+
+    /** Estimates the fee for a send-all (drain) transaction */
+    suspend fun estimateSendAllFee(
+        address: Address? = null,
+        speed: TransactionSpeed? = null,
+        feeRates: FeeRates? = null,
+    ): Result<ULong> = withContext(bgDispatcher) {
+        runCatching {
+            val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
+            val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
+            lightningService.estimateSendAllFee(address = addressOrDefault, satsPerVByte = satsPerVByte)
         }
     }
 
