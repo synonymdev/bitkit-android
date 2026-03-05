@@ -1,6 +1,5 @@
 package to.bitkit.repositories
 
-import androidx.compose.runtime.Stable
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
@@ -454,7 +453,7 @@ class LightningRepo @Inject constructor(
                 // If node is still running, revert to Running state to allow retry
                 if (lightningService.node != null && lightningService.status?.isRunning == true) {
                     Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                    _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
                 } else {
                     // Node appears stopped, update state
                     _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
@@ -1407,12 +1406,11 @@ class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node t
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
 
-@Stable
-sealed class PendingPaymentResolution {
-    @Stable
-    data class Success(val paymentHash: String) : PendingPaymentResolution()
-    @Stable
-    data class Failure(val paymentHash: String, val reason: String?) : PendingPaymentResolution()
+sealed interface PendingPaymentResolution {
+    val paymentHash: String
+
+    data class Success(override val paymentHash: String) : PendingPaymentResolution
+    data class Failure(override val paymentHash: String, val reason: String?) : PendingPaymentResolution
 }
 
 data class LightningState(

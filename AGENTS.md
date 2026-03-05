@@ -194,7 +194,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
 - ALWAYS create data classes for state AFTER viewModel class in same file
 - ALWAYS return early where applicable, PREFER guard-like `if` conditions like `if (condition) return`
-- ALWAYS write the documentation for new features as markdown files in `docs/`
+- ALWAYS write the documentation for new features as Markdown files in `docs/`
 - NEVER write code in the documentation files
 - NEVER add code comments to private functions, classes, etc
 - ALWAYS use `_uiState.update { }`, NEVER use `_stateFlow.value =`
@@ -206,8 +206,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
 - ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking {}`
 - ALWAYS add business logic to Repository layer via methods returning `Result<T>` and use it in ViewModels
-- ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice-versa for downstream
-- ALWAYS add new localizable string string resources in alphabetical order in `strings.xml`
+- ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
+- ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
@@ -215,9 +215,11 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
 - ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
-- ALWAYS position companion object at the top of the class
-- ALWAYS inherit custom exceptions from AppError
-- ALWAYS use Kotlin Duration for timeouts and delays
+- ALWAYS position `companion object at the top of the class
+- ALWAYS inherit custom exceptions from `AppError`
+- ALWAYS prefer Kotlin `Duration` for timeouts and delays
+- ALWAYS prefer `sealed interface` over `sealed class` when no shared state or constructor is needed
+- NEVER duplicate error logging in `.onFailure {}` if the called method already logs the same error internally
 
 ### Device Debugging (adb)
 
