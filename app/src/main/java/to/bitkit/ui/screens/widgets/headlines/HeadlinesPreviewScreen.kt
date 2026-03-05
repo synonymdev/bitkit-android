@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -109,10 +108,8 @@ fun HeadlinesPreviewContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__news__name)),
-                    modifier = Modifier
-                        .width(263.dp)
-                        .testTag("widget_title")
+                    text = AnnotatedString(stringResource(R.string.widgets__news__name).replace(" ", "\n")),
+                    modifier = Modifier.testTag("widget_title"),
                 )
                 Icon(
                     painter = painterResource(R.drawable.widget_newspaper),

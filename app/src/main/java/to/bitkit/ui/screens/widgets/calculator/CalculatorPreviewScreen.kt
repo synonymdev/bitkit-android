@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -113,10 +112,10 @@ fun CalculatorPreviewContent(
                             .testTag("header_row")
                     ) {
                         Headline(
-                            text = AnnotatedString(stringResource(R.string.widgets__calculator__name)),
-                            modifier = Modifier
-                                .width(200.dp)
-                                .testTag("widget_title")
+                            text = AnnotatedString(
+                                stringResource(R.string.widgets__calculator__name).replace(" ", "\n"),
+                            ),
+                            modifier = Modifier.testTag("widget_title"),
                         )
                         Icon(
                             painter = painterResource(R.drawable.widget_math_operation),
