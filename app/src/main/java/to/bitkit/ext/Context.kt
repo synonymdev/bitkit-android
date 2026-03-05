@@ -1,6 +1,7 @@
 package to.bitkit.ext
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -26,6 +27,9 @@ val Context.notificationManagerCompat: NotificationManagerCompat
 
 val Context.clipboardManager: ClipboardManager
     get() = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+val Context.activityManager: ActivityManager
+    get() = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
 
 // Permissions
 

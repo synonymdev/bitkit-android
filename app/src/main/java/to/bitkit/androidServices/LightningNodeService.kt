@@ -13,7 +13,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
@@ -22,6 +21,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.ext.activityManager
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
@@ -133,10 +133,11 @@ class LightningNodeService : Service() {
         when (intent?.action) {
             ACTION_STOP_SERVICE_AND_APP -> {
                 Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
-                // Close activities gracefully without force-stopping the app
-                App.currentActivity?.value?.finishAffinity()
-                // Stop the service
-                stopSelf()
+                serviceScope.launch {
+                    lightningRepo.stop()
+                    activityManager.appTasks.forEach { it.finishAndRemoveTask() }
+                    stopSelf()
+                }
                 return START_NOT_STICKY
             }
         }
@@ -145,10 +146,8 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
-        serviceScope.launch {
-            lightningRepo.stop()
-            serviceScope.cancel()
-        }
+        // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
+        serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()
     }
 

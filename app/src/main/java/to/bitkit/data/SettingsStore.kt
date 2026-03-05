@@ -10,6 +10,7 @@ import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Suggestion
@@ -31,12 +32,21 @@ class SettingsStore @Inject constructor(
 
     val data: Flow<SettingsData> = store.data
 
+    @Volatile
+    var restoredMonitoredTypesFromBackup: Boolean = false
+        private set
+
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
         runCatching {
             val data = payload.settings.resetPin()
             store.updateData { data }
+
+            val monitored = data.addressTypesToMonitor
+            val selected = data.selectedAddressType
+            restoredMonitoredTypesFromBackup = monitored.size > 1 ||
+                (monitored.size == 1 && monitored.first() != selected)
         }.onSuccess {
-            Logger.debug("Restored settings", TAG)
+            Logger.debug("Restored settings, monitoredFromBackup=$restoredMonitoredTypesFromBackup", context = TAG)
         }
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
@@ -66,6 +76,7 @@ class SettingsStore @Inject constructor(
 
     suspend fun reset() {
         store.updateData { SettingsData() }
+        restoredMonitoredTypesFromBackup = false
         Logger.info("Deleted all user settings data.")
     }
 
@@ -118,6 +129,9 @@ data class SettingsData(
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val electrumServer: String = Env.electrumServerUrl,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
+    val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
+    val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
+    val pendingRestoreAddressTypePrune: Boolean = false,
 )
 
 fun SettingsData.resetPin() = this.copy(

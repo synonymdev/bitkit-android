@@ -73,6 +73,7 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
+import to.bitkit.models.BannerItem
 import to.bitkit.models.BalanceState
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
@@ -446,11 +447,11 @@ private fun WalletPage(
                         ) {
                             homeUiState.banners.forEach { banner ->
                                 ActivityBanner(
-                                    gradientColor = banner.color,
-                                    title = stringResource(banner.title),
-                                    icon = banner.icon,
+                                    gradientColor = banner.type.color,
+                                    title = banner.title,
+                                    icon = banner.type.icon,
                                     onClick = {
-                                        when (banner) {
+                                        when (banner.type) {
                                             ActivityBannerType.SPENDING -> onNavigateToSettingUp()
                                             ActivityBannerType.SAVINGS -> Unit
                                         }
@@ -944,7 +945,7 @@ private fun PreviewWithBanners() {
                 isRefreshing = false,
                 homeUiState = HomeUiState(
                     showWidgets = true,
-                    banners = ActivityBannerType.entries,
+                    banners = ActivityBannerType.entries.map { BannerItem(type = it, title = "") },
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),

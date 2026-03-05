@@ -9,6 +9,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.Upsert
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.work.CoroutineWorker
 import androidx.work.OneTimeWorkRequestBuilder
@@ -30,7 +31,7 @@ import to.bitkit.env.Env
         ConfigEntity::class,
         TransferEntity::class,
     ],
-    version = 5,
+    version = 6,
 )
 @TypeConverters(StringListConverter::class)
 abstract class AppDb : RoomDatabase() {
@@ -38,6 +39,12 @@ abstract class AppDb : RoomDatabase() {
     abstract fun transferDao(): TransferDao
 
     companion object {
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transfers ADD COLUMN claimableAtHeight INTEGER DEFAULT NULL")
+            }
+        }
+
         private const val DB_NAME = "${BuildConfig.APPLICATION_ID}.sqlite"
 
         @Volatile
@@ -65,6 +72,7 @@ abstract class AppDb : RoomDatabase() {
                         }
                     }
                 })
+                .addMigrations(MIGRATION_5_6)
                 .apply {
                     if (Env.isDebug) fallbackToDestructiveMigration(dropAllTables = true)
                 }

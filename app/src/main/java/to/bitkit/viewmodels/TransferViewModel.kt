@@ -28,7 +28,6 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -195,17 +194,28 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
 
-            // Calculate if change would be dust and we should use sendAll
+            // Use live spendableOnchainBalanceSats (not cached) to respect anchor reserves
             val spendableBalance =
-                lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
-            val txFee = lightningRepo.calculateTotalFee(
-                amountSats = order.feeSat,
+                lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: 0uL
+            val sendAllFee = lightningRepo.estimateSendAllFee(
                 address = address,
                 speed = speed,
-            ).getOrElse { 0uL }
+            ).getOrElse {
+                Logger.error("Failed to estimate send-all fee", it, context = TAG)
+                ToastEventBus.send(it)
+                return@launch
+            }
 
-            val expectedChange = spendableBalance.toLong() - order.feeSat.toLong() - txFee.toLong()
-            val shouldUseSendAll = expectedChange >= 0 && expectedChange < Defaults.dustLimit.toInt()
+            val expectedChange =
+                spendableBalance.toLong() - order.feeSat.toLong() - sendAllFee.toLong()
+            val shouldUseSendAll =
+                expectedChange >= 0 && expectedChange < TRANSFER_SEND_ALL_THRESHOLD_SATS
+
+            Logger.debug(
+                "BT confirm: spendable=$spendableBalance, feeSat=${order.feeSat}, " +
+                    "sendAllFee=$sendAllFee, expectedChange=$expectedChange, sendAll=$shouldUseSendAll",
+                context = TAG,
+            )
 
             lightningRepo
                 .sendOnChain(
@@ -610,6 +620,7 @@ class TransferViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "TransferViewModel"
+        private const val TRANSFER_SEND_ALL_THRESHOLD_SATS = 1000
         private const val MIN_STEP_DELAY_MS = 500L
         private const val POLL_INTERVAL_MS = 2_500L
         private const val MAX_CONSECUTIVE_ERRORS = 5

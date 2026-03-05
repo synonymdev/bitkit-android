@@ -111,6 +111,8 @@
     <string name="lightning__conn_open">Open connections</string>
     <string name="lightning__conn_pending">Pending connections</string>
     <string name="lightning__connection">Connection</string>
+    <string name="lightning__connection_closed__description">The funds on your spending balance have been transferred to your savings.</string>
+    <string name="lightning__connection_closed__title">Connection Closed</string>
     <string name="lightning__connections">Lightning Connections</string>
     <string name="lightning__created_on">Created on</string>
     <string name="lightning__error_add">Bitkit could not add the Lightning peer.</string>
@@ -244,6 +246,7 @@
     <string name="lightning__transfer__nav_title">Transfer Funds</string>
     <string name="lightning__transfer__swipe">Swipe To Transfer</string>
     <string name="lightning__transfer_in_progress">TRANSFER IN PROGRESS</string>
+    <string name="lightning__transfer_ready_in">TRANSFER READY IN %s</string>
     <string name="lightning__transfer_intro__button">Get Started</string>
     <string name="lightning__transfer_intro__text">Fund your spending balance to enjoy instant and cheap transactions with friends, family, and merchants.</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
@@ -534,6 +537,18 @@
     <string name="settings__addr__no_addrs_str">No addresses found when searching for \"{searchTxt}\"</string>
     <string name="settings__addr__path">Path: {path}</string>
     <string name="settings__addr__spend_number">{count, plural, one {Spend ₿ {fundsToSpend} From # address} other {Spend ₿ {fundsToSpend} From # addresses}}</string>
+    <string name="settings__addr_type__applying">Applying changes…</string>
+    <string name="settings__addr_type__changed">Address Type Changed</string>
+    <string name="settings__addr_type__disabled_currently_selected">Cannot disable monitoring: address type is currently selected</string>
+    <string name="settings__addr_type__disabled_has_balance">Cannot disable monitoring: address type has balance</string>
+    <string name="settings__addr_type__disabled_native_required">At least one Native SegWit or Taproot wallet is required for Lightning channels.</string>
+    <string name="settings__addr_type__disabled_verify_failed">Cannot disable monitoring: failed to verify balance</string>
+    <string name="settings__addr_type__monitoring">Monitor address types</string>
+    <string name="settings__addr_type__now_using">Now using {type} addresses.</string>
+    <string name="settings__addr_type__primary">Primary address type</string>
+    <string name="settings__addr_type__settings_updated">Settings updated</string>
+    <string name="settings__addr_type__title">Address type</string>
+    <string name="settings__adv__addr_type_currently_selected">Currently selected</string>
     <string name="settings__adv__address_viewer">Address Viewer</string>
     <string name="settings__adv__coin_selection">Coin Selection</string>
     <string name="settings__adv__cs_auto">Autopilot</string>

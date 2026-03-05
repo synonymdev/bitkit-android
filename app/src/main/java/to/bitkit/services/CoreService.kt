@@ -69,9 +69,13 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
+import to.bitkit.ext.channelId
 import to.bitkit.ext.create
+import to.bitkit.ext.latestSpendingTxid
+import to.bitkit.models.addressTypeFromAddress
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -91,6 +95,7 @@ class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
+    private val settingsStore: SettingsStore,
 ) {
     private var walletIndex: Int = 0
 
@@ -98,7 +103,8 @@ class CoreService @Inject constructor(
         ActivityService(
             coreService = this,
             cacheStore = cacheStore,
-            lightningService = lightningService
+            lightningService = lightningService,
+            settingsStore = settingsStore,
         )
     }
     val blocktank: BlocktankService by lazy {
@@ -205,6 +211,7 @@ class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val cacheStore: CacheStore,
     private val lightningService: LightningService,
+    private val settingsStore: SettingsStore,
 ) {
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
@@ -282,6 +289,14 @@ class ActivityService(
     suspend fun getOnchainActivityByTxId(txId: String): OnchainActivity? = ServiceQueue.CORE.background {
         getActivityByTxId(txId = txId)
     }
+
+    suspend fun hasOnchainActivityForChannel(channelId: String): Boolean {
+        val activities = get(filter = ActivityFilter.ONCHAIN, limit = 50u, sortDirection = SortDirection.DESC)
+        return activities.any { it is Activity.Onchain && it.v1.channelId == channelId }
+    }
+
+    suspend fun hasOnchainActivityForTxid(txid: String): Boolean =
+        getOnchainActivityByTxId(txid) != null
 
     @Suppress("LongParameterList")
     suspend fun get(
@@ -511,7 +526,13 @@ class ActivityService(
     }.getOrNull()
 
     private suspend fun findAddressInPreActivityMetadata(details: BitkitCoreTransactionDetails): String? {
-        for (output in details.outputs) {
+        val selectedType = settingsStore.data.first().selectedAddressType
+        val outputsByPriority = details.outputs.sortedBy { output ->
+            val address = output.scriptpubkeyAddress ?: return@sortedBy Int.MAX_VALUE
+            val typeStr = address.addressTypeFromAddress() ?: return@sortedBy Int.MAX_VALUE
+            if (typeStr == selectedType) 0 else 1
+        }
+        for (output in outputsByPriority) {
             val address = output.scriptpubkeyAddress ?: continue
             val metadata = coreService.activity.getPreActivityMetadata(
                 searchKey = address,
@@ -570,6 +591,7 @@ class ActivityService(
         existingActivity: Activity.Onchain,
         confirmationData: ConfirmationData,
         ldkValue: ULong,
+        ldkFeeMsat: ULong,
         channelId: String? = null,
     ): OnchainActivity {
         var preservedIsTransfer = existingActivity.v1.isTransfer
@@ -588,6 +610,9 @@ class ActivityService(
             ldkValue
         }
 
+        val ldkFeeSats = ldkFeeMsat / 1000u
+        val updatedFee = if (existingActivity.v1.fee == 0uL && ldkFeeSats > 0uL) ldkFeeSats else existingActivity.v1.fee
+
         val updatedOnChain = existingActivity.v1.copy(
             confirmed = confirmationData.isConfirmed,
             confirmTimestamp = confirmationData.confirmedTimestamp,
@@ -596,6 +621,7 @@ class ActivityService(
             isTransfer = preservedIsTransfer,
             channelId = preservedChannelId,
             value = preservedValue,
+            fee = updatedFee,
         )
 
         return updatedOnChain
@@ -681,6 +707,7 @@ class ActivityService(
                 existingActivity = existingActivity as Activity.Onchain,
                 confirmationData = confirmationData,
                 ldkValue = ldkValue,
+                ldkFeeMsat = payment.feePaidMsat ?: 0u,
                 channelId = resolvedChannelId,
             )
         } else {
@@ -794,6 +821,47 @@ class ActivityService(
                     val tags = (0 until numTags).map { possibleTags.random() }
                     appendTags(id, tags)
                 }
+            }
+        }
+    }
+
+    @Suppress("LongParameterList")
+    suspend fun createSentOnchainActivityFromSendResult(
+        txid: String,
+        address: String,
+        amount: ULong,
+        fee: ULong,
+        feeRate: ULong,
+        isTransfer: Boolean,
+        channelId: String?,
+    ) {
+        ServiceQueue.CORE.background {
+            runCatching {
+                if (getOnchainActivityByTxId(txId = txid) != null) {
+                    Logger.debug("Activity already exists for txid $txid, skipping immediate creation", context = TAG)
+                    return@background
+                }
+                val now = System.currentTimeMillis().toULong() / 1000u
+                val onchain = OnchainActivity.create(
+                    id = txid,
+                    txType = PaymentType.SENT,
+                    txId = txid,
+                    value = amount,
+                    fee = fee,
+                    feeRate = feeRate,
+                    address = address,
+                    confirmed = false,
+                    isTransfer = isTransfer,
+                    channelId = channelId,
+                    timestamp = now,
+                    createdAt = now,
+                    updatedAt = 0u,
+                    seenAt = now,
+                )
+                upsertActivity(Activity.Onchain(onchain))
+                Logger.info("Created sent onchain activity for txid $txid from send result", context = TAG)
+            }.onFailure {
+                Logger.error("Failed to create sent onchain activity for txid $txid", it, context = TAG)
             }
         }
     }
@@ -1038,6 +1106,16 @@ class ActivityService(
             runCatching {
                 val onchain = getOnchainActivityByTxId(txid) ?: return@background true
 
+                if (onchain.isTransfer) {
+                    Logger.info("Skipping received sheet for transfer transaction $txid", context = TAG)
+                    return@background false
+                }
+
+                if (onchain.channelId != null) {
+                    Logger.info("Skipping received sheet for channel transaction $txid", context = TAG)
+                    return@background false
+                }
+
                 // Check if activity has already been seen
                 if (onchain.seenAt != null) {
                     Logger.info(
@@ -1239,10 +1317,13 @@ class ActivityService(
         transactionDetails: BitkitCoreTransactionDetails? = null,
     ): String? {
         return runCatching {
+            // Check if this transaction is a pending sweep from a channel closure
+            val pendingSweeps = lightningService.balances?.pendingBalancesFromChannelClosures
+            val matchingSweep = pendingSweeps?.firstOrNull { it.latestSpendingTxid() == txid }
+            if (matchingSweep != null) return matchingSweep.channelId()
+
             val closedChannelsList = closedChannels(SortDirection.DESC)
-            if (closedChannelsList.isEmpty()) {
-                return null
-            }
+            if (closedChannelsList.isEmpty()) return null
 
             // Use provided transaction details if available, otherwise fetch from bitkitcore
             val details = transactionDetails ?: fetchTransactionDetails(txid) ?: run {
@@ -1250,22 +1331,37 @@ class ActivityService(
                 return null
             }
 
-            for (input in details.inputs) {
-                val inputTxid = input.txid
-                val inputVout = input.vout.toInt()
-
-                val matchingChannel = closedChannelsList.firstOrNull { channel ->
-                    channel.fundingTxoTxid == inputTxid && channel.fundingTxoIndex == inputVout.toUInt()
-                }
-
-                if (matchingChannel != null) {
-                    return matchingChannel.channelId
-                }
-            }
-            null
+            // Check if any input spends a closed channel's funding UTXO (commitment tx)
+            findChannelByFundingUtxo(details, closedChannelsList)
+                // Check if any input's parent transaction is a channel-related activity
+                // (e.g., sweep tx spending from commitment tx)
+                ?: findChannelByParentActivity(details)
         }.onFailure { e ->
             Logger.warn("Failed to check if transaction $txid spends closed channel funding UTXO", e, context = TAG)
         }.getOrNull()
+    }
+
+    private fun findChannelByFundingUtxo(
+        details: BitkitCoreTransactionDetails,
+        closedChannels: List<ClosedChannelDetails>,
+    ): String? {
+        for (input in details.inputs) {
+            val matchingChannel = closedChannels.firstOrNull { channel ->
+                channel.fundingTxoTxid == input.txid && channel.fundingTxoIndex == input.vout
+            }
+            if (matchingChannel != null) return matchingChannel.channelId
+        }
+        return null
+    }
+
+    private suspend fun findChannelByParentActivity(
+        details: BitkitCoreTransactionDetails,
+    ): String? {
+        for (input in details.inputs) {
+            val parentActivity = getOnchainActivityByTxId(input.txid)
+            if (parentActivity?.channelId != null) return parentActivity.channelId
+        }
+        return null
     }
 
     companion object {
