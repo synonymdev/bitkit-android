@@ -114,7 +114,6 @@ fun SuggestionCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -150,6 +149,7 @@ fun SuggestionCard(
             Headline20(
                 text = AnnotatedString(title),
                 color = Colors.White,
+                modifier = Modifier.padding(top = 4.dp),
             )
 
             CaptionB(
