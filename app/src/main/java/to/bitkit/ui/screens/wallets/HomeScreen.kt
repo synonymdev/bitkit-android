@@ -249,6 +249,7 @@ fun HomeScreen(
             }
         },
         onClickAddWidget = {
+            homeViewModel.disableEditMode()
             if (!hasSeenWidgetsIntro) {
                 rootNavController.navigate(Routes.WidgetsIntro)
             } else {
