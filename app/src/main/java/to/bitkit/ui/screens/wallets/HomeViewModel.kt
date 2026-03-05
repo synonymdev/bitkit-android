@@ -227,7 +227,13 @@ class HomeViewModel @Inject constructor(
     fun deleteWidget(widgetType: WidgetType) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(widgetType)
-            dismissAlertDeleteWidget()
+            _uiState.update {
+                it.copy(
+                    widgetsWithPosition = it.widgetsWithPosition
+                        .filterNot { widget -> widget.type == widgetType },
+                    deleteWidgetAlert = null,
+                )
+            }
         }
     }
 
