@@ -84,9 +84,9 @@ private fun Content(
             VerticalSpacer(26.dp)
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Headline(
                     text = AnnotatedString(stringResource(R.string.widgets__suggestions__name)),
@@ -139,10 +139,10 @@ private fun Content(
             }
 
             Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .padding(vertical = 21.dp)
                     .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (isSuggestionsWidgetEnabled) {
                     SecondaryButton(
