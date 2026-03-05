@@ -73,8 +73,8 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
-import to.bitkit.models.BannerItem
 import to.bitkit.models.BalanceState
+import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
@@ -86,7 +86,6 @@ import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.Sheet
@@ -468,7 +467,7 @@ private fun WalletPage(
                         onActivityItemClick = onNavigateToActivityItem,
                     )
 
-                    FillHeight()
+                    VerticalSpacer(16.dp)
 
                     if (homeUiState.showWidgetsOnboardingHint) {
                         WidgetsOnboardingHint()
