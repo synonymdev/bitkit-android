@@ -253,32 +253,29 @@ class HomeViewModel @Inject constructor(
         transferRepo.activeTransfers,
     ) { balanceState, settings, transfers ->
         val baseSuggestions = when {
-            balanceState.totalLightningSats > 0uL -> { // With Lightning
+            balanceState.totalLightningSats > 0uL -> { // With Lightning (spending)
                 listOfNotNull(
-                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.BUY,
-                    Suggestion.SUPPORT,
-                    Suggestion.INVITE,
-                    Suggestion.QUICK_PAY,
+                    Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
                     Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
                     Suggestion.SHOP,
                     Suggestion.PROFILE,
+                    Suggestion.SUPPORT,
+                    Suggestion.INVITE,
+                    Suggestion.BUY,
                 )
             }
 
             balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
                 listOfNotNull(
                     Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
                     Suggestion.LIGHTNING.takeIf {
                         transfers.all { it.type != TransferType.TO_SPENDING }
                     },
-                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.BUY,
                     Suggestion.SUPPORT,
-                    Suggestion.INVITE,
-                    Suggestion.SHOP,
                     Suggestion.PROFILE,
+                    Suggestion.INVITE,
+                    Suggestion.BUY,
                 )
             }
 
@@ -288,11 +285,11 @@ class HomeViewModel @Inject constructor(
                     Suggestion.LIGHTNING.takeIf {
                         transfers.all { it.type != TransferType.TO_SPENDING }
                     },
+                    Suggestion.SUPPORT,
                     Suggestion.BACK_UP.takeIf { !settings.backupVerified },
                     Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.SUPPORT,
-                    Suggestion.INVITE,
                     Suggestion.PROFILE,
+                    Suggestion.INVITE,
                 )
             }
         }
