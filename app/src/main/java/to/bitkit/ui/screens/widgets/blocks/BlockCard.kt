@@ -86,7 +86,6 @@ fun BlockCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 28.dp)
                         .testTag("block_card_block_row"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -109,7 +108,6 @@ fun BlockCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 28.dp)
                         .testTag("block_card_time_row"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -132,7 +130,6 @@ fun BlockCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 28.dp)
                         .testTag("block_card_date_row"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -155,7 +152,6 @@ fun BlockCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 28.dp)
                         .testTag("block_card_transactions_row"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -178,7 +174,6 @@ fun BlockCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 28.dp)
                         .testTag("block_card_size_row"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
