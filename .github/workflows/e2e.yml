@@ -81,7 +81,7 @@ jobs:
           name: bitkit-e2e-apk_${{ github.run_number }}
           path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
-  build-regtest:
+  build-staging:
     needs: detect-changes
     if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -295,10 +295,10 @@ jobs:
         if: failure()
         uses: jwalton/gh-docker-logs@v2
 
-  e2e-tests-regtest:
+  e2e-tests-staging:
     if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    needs: [detect-changes, build-regtest, e2e-branch]
+    needs: [detect-changes, build-staging, e2e-branch]
 
     strategy:
       fail-fast: false
@@ -306,7 +306,7 @@ jobs:
         shard:
           - { name: multi_address_2_regtest, grep: "@multi_address_2" }
 
-    name: e2e-tests-regtest - ${{ matrix.shard.name }}
+    name: e2e-tests-staging - ${{ matrix.shard.name }}
 
     steps:
       - name: Show selected E2E branch
@@ -442,7 +442,7 @@ jobs:
     if: always() && github.event.pull_request.draft == false
     name: e2e-status
     runs-on: ubuntu-latest
-    needs: [detect-changes, e2e-tests-local, e2e-tests-regtest]
+    needs: [detect-changes, e2e-tests-local, e2e-tests-staging]
     steps:
       - name: E2E skipped - no code changes
         if: needs.detect-changes.outputs.code != 'true'
@@ -451,7 +451,7 @@ jobs:
       - name: Verify all E2E shards succeeded
         if: needs.detect-changes.outputs.code == 'true'
         run: |
-          if [ "${{ needs.e2e-tests-local.result }}" != "success" ] || [ "${{ needs.e2e-tests-regtest.result }}" != "success" ]; then
+          if [ "${{ needs.e2e-tests-local.result }}" != "success" ] || [ "${{ needs.e2e-tests-staging.result }}" != "success" ]; then
             echo "❌ Some E2E shards failed."
             exit 1
           fi
