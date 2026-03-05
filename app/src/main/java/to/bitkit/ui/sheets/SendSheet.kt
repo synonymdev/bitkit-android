@@ -31,6 +31,8 @@ import to.bitkit.ui.screens.wallets.send.SendErrorScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeCustomScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeRateScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeViewModel
+import to.bitkit.ui.screens.wallets.send.SendPendingScreen
+import to.bitkit.ui.screens.wallets.send.SendPendingViewModel
 import to.bitkit.ui.screens.wallets.send.SendPinCheckScreen
 import to.bitkit.ui.screens.wallets.send.SendQuickPayScreen
 import to.bitkit.ui.screens.wallets.send.SendRecipientScreen
@@ -90,6 +92,9 @@ fun SendSheet(
                     is SendEffect.NavigateToFee -> navController.navigate(SendRoute.FeeRate)
                     is SendEffect.NavigateToFeeCustom -> navController.navigate(SendRoute.FeeCustom)
                     is SendEffect.NavigateToComingSoon -> navController.navigate(SendRoute.ComingSoon)
+                    is SendEffect.NavigateToPending -> navController.navigate(
+                        SendRoute.Pending(it.paymentHash, it.amount)
+                    ) { popUpTo(startDestination) { inclusive = true } }
                 }
             }
         }
@@ -263,9 +268,31 @@ fun SendSheet(
                             ),
                         )
                     },
+                    onPaymentPending = { paymentHash, amount ->
+                        appViewModel.trackPendingPayment(paymentHash)
+                        navController.navigate(SendRoute.Pending(paymentHash, amount)) {
+                            popUpTo(startDestination) { inclusive = true }
+                        }
+                    },
                     onShowError = { errorMessage ->
                         navController.navigate(SendRoute.Error(errorMessage))
                     }
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.Pending> {
+                val route = it.toRoute<SendRoute.Pending>()
+                SendPendingScreen(
+                    paymentHash = route.paymentHash,
+                    amount = route.amount,
+                    onPaymentSuccess = { details ->
+                        appViewModel.handlePaymentSuccess(details)
+                    },
+                    onPaymentError = { errorMessage ->
+                        navController.navigate(SendRoute.Error(errorMessage))
+                    },
+                    onClose = { appViewModel.hideSheet() },
+                    onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId) },
+                    viewModel = hiltViewModel<SendPendingViewModel>(),
                 )
             }
             composableWithDefaultTransitions<SendRoute.ComingSoon> {
@@ -347,6 +374,9 @@ sealed interface SendRoute {
 
     @Serializable
     data object ComingSoon : SendRoute
+
+    @Serializable
+    data class Pending(val paymentHash: String, val amount: Long) : SendRoute
 
     @Serializable
     data class Error(val errorMessage: String) : SendRoute

@@ -187,7 +187,7 @@ class ExternalNodeViewModel @Inject constructor(
 
                 else -> WatchResult.Continue()
             }
-        }
+        }!!
     }
 }
 

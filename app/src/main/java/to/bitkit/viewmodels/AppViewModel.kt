@@ -103,6 +103,8 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PaymentPendingException
+import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
@@ -586,6 +588,10 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            val resolved = lightningRepo.resolvePendingPayment(
+                PendingPaymentResolution.Failure(paymentHash, event.reason.toUserMessage(context))
+            )
+            if (resolved) return notifyPaymentFailed(event.reason)
         }
         notifyPaymentFailed(event.reason)
     }
@@ -600,6 +606,8 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            val resolved = lightningRepo.resolvePendingPayment(PendingPaymentResolution.Success(paymentHash))
+            if (resolved) return notifyPendingPaymentSucceeded()
         }
         notifyPaymentSentOnLightning(event)
     }
@@ -674,6 +682,13 @@ class AppViewModel @Inject constructor(
             },
         )
     }
+
+    private fun notifyPendingPaymentSucceeded() = toast(
+        type = Toast.ToastType.LIGHTNING,
+        title = context.getString(R.string.wallet__toast_payment_sent_title),
+        description = context.getString(R.string.wallet__toast_payment_sent_description),
+        testTag = "PendingPaymentSucceededToast",
+    )
 
     private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(
         type = Toast.ToastType.ERROR,
@@ -1698,6 +1713,12 @@ class AppViewModel @Inject constructor(
                         ),
                     )
                 }.onFailure { e ->
+                    if (e is PaymentPendingException) {
+                        Logger.info("Lightning payment pending: ${e.paymentHash}", context = TAG)
+                        lightningRepo.trackPendingPayment(e.paymentHash)
+                        setSendEffect(SendEffect.NavigateToPending(e.paymentHash, paymentAmount.toLong()))
+                        return@onFailure
+                    }
                     // Delete pre-activity metadata on failure
                     if (createdMetadataPaymentId != null) {
                         preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
@@ -1828,8 +1849,10 @@ class AppViewModel @Inject constructor(
         amount: ULong? = null,
     ): Result<PaymentId> {
         return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
-            // Wait until matching payment event is received
-            val result = lightningRepo.nodeEvents.watchUntil { event ->
+            // Wait until matching payment event is received (with timeout for hold invoices)
+            val result = lightningRepo.nodeEvents.watchUntil(
+                timeout = LightningRepo.SEND_LIGHTNING_TIMEOUT,
+            ) { event ->
                 when (event) {
                     is Event.PaymentSuccessful -> {
                         if (event.paymentHash == hash) {
@@ -1851,7 +1874,7 @@ class AppViewModel @Inject constructor(
                     else -> WatchResult.Continue()
                 }
             }
-            return result
+            return result ?: Result.failure(PaymentPendingException(hash))
         }
     }
 
@@ -1865,6 +1888,15 @@ class AppViewModel @Inject constructor(
     }
 
     fun resetQuickPay() = _quickPayData.update { null }
+
+    fun trackPendingPayment(paymentHash: String) = lightningRepo.trackPendingPayment(paymentHash)
+
+    fun navigateToActivity(activityRawId: String) {
+        viewModelScope.launch {
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activityRawId)))
+        }
+    }
 
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded() {
@@ -2390,6 +2422,7 @@ sealed class SendEffect {
     data object NavigateToFeeCustom : SendEffect()
     data object NavigateToComingSoon : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
+    data class NavigateToPending(val paymentHash: String, val amount: Long) : SendEffect()
 }
 
 sealed class MainScreenEffect {

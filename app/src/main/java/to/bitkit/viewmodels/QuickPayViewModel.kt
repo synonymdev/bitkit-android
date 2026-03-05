@@ -15,6 +15,7 @@ import to.bitkit.ext.WatchResult
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -62,6 +63,18 @@ class QuickPayViewModel @Inject constructor(
                         )
                     }
                 }.onFailure { error ->
+                    if (error is PaymentPendingException) {
+                        Logger.info("QuickPay lightning payment pending: ${error.paymentHash}")
+                        _uiState.update {
+                            it.copy(
+                                result = QuickPayResult.Pending(
+                                    paymentHash = error.paymentHash,
+                                    amount = amount.toLong(),
+                                )
+                            )
+                        }
+                        return@onFailure
+                    }
                     Logger.error("QuickPay lightning payment failed", error)
 
                     _uiState.update {
@@ -81,8 +94,10 @@ class QuickPayViewModel @Inject constructor(
             }
             .getOrDefault("")
 
-        // Wait until matching payment event is received
-        val result = lightningRepo.nodeEvents.watchUntil { event ->
+        // Wait until matching payment event is received (with timeout for hold invoices)
+        val result = lightningRepo.nodeEvents.watchUntil(
+            timeout = LightningRepo.SEND_LIGHTNING_TIMEOUT,
+        ) { event ->
             when (event) {
                 is Event.PaymentSuccessful -> {
                     if (event.paymentHash == hash) {
@@ -104,7 +119,7 @@ class QuickPayViewModel @Inject constructor(
                 else -> WatchResult.Continue()
             }
         }
-        return result
+        return result ?: Result.failure(PaymentPendingException(hash))
     }
 }
 
@@ -112,6 +127,11 @@ sealed class QuickPayResult {
     data class Success(
         val paymentHash: String,
         val amountWithFee: Long,
+    ) : QuickPayResult()
+
+    data class Pending(
+        val paymentHash: String,
+        val amount: Long,
     ) : QuickPayResult()
 
     data class Error(val message: String) : QuickPayResult()
