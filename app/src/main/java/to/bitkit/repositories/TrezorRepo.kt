@@ -7,8 +7,14 @@ import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
+import com.synonym.bitkitcore.TrezorPrecomposeParams
+import com.synonym.bitkitcore.TrezorPrecomposedInput
+import com.synonym.bitkitcore.TrezorPrecomposedOutput
+import com.synonym.bitkitcore.TrezorPrecomposedResult
+import com.synonym.bitkitcore.TrezorPrevTx
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorScriptType
+import com.synonym.bitkitcore.TrezorSignTxParams
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTxInput
@@ -222,6 +228,73 @@ class TrezorRepo @Inject constructor(
     }.onFailure { e ->
         Logger.error("Trezor getAddressInfo failed", e, context = TAG)
         _state.update { it.copy(error = e.message) }
+    }
+
+    suspend fun precomposeTransaction(
+        params: TrezorPrecomposeParams,
+    ): Result<List<TrezorPrecomposedResult>> = runCatching {
+        trezorService.precomposeTransaction(params = params)
+    }.onFailure {
+        Logger.error("Trezor precomposeTransaction failed", it, context = TAG)
+        _state.update { s -> s.copy(error = it.message) }
+    }
+
+    suspend fun convertToSignParams(
+        inputs: List<TrezorPrecomposedInput>,
+        outputs: List<TrezorPrecomposedOutput>,
+        coin: TrezorCoinType?,
+    ): Result<TrezorSignTxParams> = runCatching {
+        trezorService.precomposedToSignParams(
+            inputs = inputs,
+            outputs = outputs,
+            coin = coin,
+        )
+    }.onFailure {
+        Logger.error("Trezor convertToSignParams failed", it, context = TAG)
+        _state.update { s -> s.copy(error = it.message) }
+    }
+
+    suspend fun fetchPrevTxs(
+        txids: List<String>,
+        network: TrezorCoinType,
+    ): Result<List<TrezorPrevTx>> = runCatching {
+        trezorService.fetchPrevTxs(
+            txids = txids,
+            electrumUrl = electrumUrlForNetwork(network),
+        )
+    }.onFailure {
+        Logger.error("Trezor fetchPrevTxs failed", it, context = TAG)
+        _state.update { s -> s.copy(error = it.message) }
+    }
+
+    suspend fun broadcastRawTx(
+        serializedTx: String,
+        network: TrezorCoinType,
+    ): Result<String> = runCatching {
+        trezorService.broadcastRawTx(
+            serializedTx = serializedTx,
+            electrumUrl = electrumUrlForNetwork(network),
+        )
+    }.onFailure {
+        Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
+        _state.update { s -> s.copy(error = it.message) }
+    }
+
+    suspend fun signTxWithParams(params: TrezorSignTxParams): Result<TrezorSignedTx> = runCatching {
+        ensureConnected()
+        val response = trezorService.signTxWithParams(params)
+        _state.update { it.copy(error = null) }
+        response
+    }.onFailure {
+        Logger.error("Trezor signTxWithParams failed", it, context = TAG)
+        _state.update { s -> s.copy(error = it.message) }
+    }
+
+    fun coinStringForNetwork(network: TrezorCoinType): String = when (network) {
+        TrezorCoinType.BITCOIN -> "Bitcoin"
+        TrezorCoinType.TESTNET -> "Testnet"
+        TrezorCoinType.REGTEST -> "Regtest"
+        TrezorCoinType.SIGNET -> "Testnet"
     }
 
     suspend fun disconnect(): Result<Unit> = runCatching {

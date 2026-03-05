@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.SingleAddressInfoResult
+import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
@@ -35,11 +36,23 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.viewmodels.TrezorUiState
 
+@Suppress("LongParameterList")
 @Composable
 internal fun BalanceLookupSection(
     uiState: TrezorUiState,
+    isDeviceConnected: Boolean,
     onInputChange: (String) -> Unit,
     onLookup: () -> Unit,
+    onSendAddressChange: (String) -> Unit,
+    onSendAmountChange: (String) -> Unit,
+    onSendFeeRateChange: (String) -> Unit,
+    onToggleSendMax: () -> Unit,
+    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit,
+    onCompose: () -> Unit,
+    onSign: () -> Unit,
+    onBroadcast: () -> Unit,
+    onBackToForm: () -> Unit,
+    onResetSend: () -> Unit,
 ) {
     Column {
         Text(
@@ -76,7 +89,23 @@ internal fun BalanceLookupSection(
         )
 
         AnimatedVisibility(visible = uiState.accountInfoResult != null) {
-            uiState.accountInfoResult?.let { AccountInfoResultView(it) }
+            uiState.accountInfoResult?.let {
+                AccountInfoResultView(
+                    result = it,
+                    uiState = uiState,
+                    isDeviceConnected = isDeviceConnected,
+                    onSendAddressChange = onSendAddressChange,
+                    onSendAmountChange = onSendAmountChange,
+                    onSendFeeRateChange = onSendFeeRateChange,
+                    onToggleSendMax = onToggleSendMax,
+                    onSortingStrategyChange = onSortingStrategyChange,
+                    onCompose = onCompose,
+                    onSign = onSign,
+                    onBroadcast = onBroadcast,
+                    onBackToForm = onBackToForm,
+                    onResetSend = onResetSend,
+                )
+            }
         }
 
         AnimatedVisibility(visible = uiState.addressInfoResult != null) {
@@ -85,8 +114,23 @@ internal fun BalanceLookupSection(
     }
 }
 
+@Suppress("LongParameterList")
 @Composable
-private fun AccountInfoResultView(result: AccountInfoResult) {
+private fun AccountInfoResultView(
+    result: AccountInfoResult,
+    uiState: TrezorUiState,
+    isDeviceConnected: Boolean,
+    onSendAddressChange: (String) -> Unit,
+    onSendAmountChange: (String) -> Unit,
+    onSendFeeRateChange: (String) -> Unit,
+    onToggleSendMax: () -> Unit,
+    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit,
+    onCompose: () -> Unit,
+    onSign: () -> Unit,
+    onBroadcast: () -> Unit,
+    onBackToForm: () -> Unit,
+    onResetSend: () -> Unit,
+) {
     Column {
         Spacer(modifier = Modifier.height(12.dp))
         ResultCard {
@@ -109,6 +153,24 @@ private fun AccountInfoResultView(result: AccountInfoResult) {
                 UtxoRow(utxo)
                 Spacer(modifier = Modifier.height(4.dp))
             }
+        }
+
+        if (result.balance > 0uL) {
+            Spacer(modifier = Modifier.height(16.dp))
+            SendTransactionSection(
+                uiState = uiState,
+                isDeviceConnected = isDeviceConnected,
+                onAddressChange = onSendAddressChange,
+                onAmountChange = onSendAmountChange,
+                onFeeRateChange = onSendFeeRateChange,
+                onToggleSendMax = onToggleSendMax,
+                onSortingStrategyChange = onSortingStrategyChange,
+                onCompose = onCompose,
+                onSign = onSign,
+                onBroadcast = onBroadcast,
+                onBack = onBackToForm,
+                onReset = onResetSend,
+            )
         }
     }
 }
@@ -195,7 +257,7 @@ private fun UtxoRow(utxo: AccountUtxo) {
 }
 
 @Composable
-private fun ResultCard(content: @Composable () -> Unit) {
+internal fun ResultCard(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()

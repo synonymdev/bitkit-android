@@ -65,7 +65,6 @@ import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
-import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
@@ -95,6 +94,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.SavingsWalletScreen
 import to.bitkit.ui.screens.wallets.SpendingWalletScreen
@@ -1757,7 +1757,6 @@ sealed interface Routes {
 
     @Serializable
     data object Trezor : Routes
-
 
     @Serializable
     data object SweepNav : Routes

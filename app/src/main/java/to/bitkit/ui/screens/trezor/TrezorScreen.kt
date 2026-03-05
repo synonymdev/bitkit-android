@@ -9,13 +9,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +52,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorSortingStrategy
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
@@ -145,11 +146,22 @@ private fun TrezorScreenContent(
             onLookupInputChange = viewModel::setLookupInput,
             onLookup = viewModel::lookupBalanceInfo,
             onNetworkChange = viewModel::setSelectedNetwork,
+            onSendAddressChange = viewModel::setSendAddress,
+            onSendAmountChange = viewModel::setSendAmount,
+            onSendFeeRateChange = viewModel::setSendFeeRate,
+            onToggleSendMax = viewModel::toggleSendMax,
+            onSortingStrategyChange = viewModel::setSortingStrategy,
+            onCompose = viewModel::composeTx,
+            onSign = viewModel::signComposedTx,
+            onBroadcast = viewModel::broadcastSignedTx,
+            onBackToForm = viewModel::backToComposeForm,
+            onResetSend = viewModel::resetSendFlow,
             permissionsGranted = permissionsState.allPermissionsGranted,
         )
     }
 }
 
+@Suppress("LongParameterList")
 @Composable
 private fun TrezorContent(
     trezorState: TrezorState,
@@ -170,6 +182,16 @@ private fun TrezorContent(
     onLookupInputChange: (String) -> Unit = {},
     onLookup: () -> Unit = {},
     onNetworkChange: (TrezorCoinType) -> Unit = {},
+    onSendAddressChange: (String) -> Unit = {},
+    onSendAmountChange: (String) -> Unit = {},
+    onSendFeeRateChange: (String) -> Unit = {},
+    onToggleSendMax: () -> Unit = {},
+    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit = {},
+    onCompose: () -> Unit = {},
+    onSign: () -> Unit = {},
+    onBroadcast: () -> Unit = {},
+    onBackToForm: () -> Unit = {},
+    onResetSend: () -> Unit = {},
     permissionsGranted: Boolean = true,
 ) {
     Column(
@@ -365,8 +387,19 @@ private fun TrezorContent(
                 Spacer(modifier = Modifier.height(16.dp))
                 BalanceLookupSection(
                     uiState = uiState,
+                    isDeviceConnected = trezorState.connectedDevice != null,
                     onInputChange = onLookupInputChange,
                     onLookup = onLookup,
+                    onSendAddressChange = onSendAddressChange,
+                    onSendAmountChange = onSendAmountChange,
+                    onSendFeeRateChange = onSendFeeRateChange,
+                    onToggleSendMax = onToggleSendMax,
+                    onSortingStrategyChange = onSortingStrategyChange,
+                    onCompose = onCompose,
+                    onSign = onSign,
+                    onBroadcast = onBroadcast,
+                    onBackToForm = onBackToForm,
+                    onResetSend = onResetSend,
                 )
 
                 // Debug Log Window
