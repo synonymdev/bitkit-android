@@ -134,7 +134,11 @@ class WidgetsStore @Inject constructor(
         if (store.data.first().widgets.map { it.type }.contains(type)) return
 
         store.updateData { data ->
-            data.copy(widgets = (data.widgets + WidgetWithPosition(type = type)).sortedBy { it.position })
+            val nextPosition = (data.widgets.maxOfOrNull { it.position } ?: -1) + 1
+            data.copy(
+                widgets = (data.widgets + WidgetWithPosition(type = type, position = nextPosition))
+                    .sortedBy { it.position }
+            )
         }
     }
 
