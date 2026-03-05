@@ -24,6 +24,7 @@ import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -39,6 +40,7 @@ class HomeViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: TransferRepo,
+    private val activityRepo: ActivityRepo,
 ) : ViewModel() {
 
     companion object {
@@ -98,9 +100,13 @@ class HomeViewModel @Inject constructor(
                 settingsStore.data,
                 walletRepo.balanceState,
                 transferRepo.activeTransfers,
-            ) { settings, balanceState, activeTransfers ->
+                activityRepo.activitiesChanged,
+            ) { settings, balanceState, activeTransfers, _ ->
+                val hasActivity = activityRepo.getActivities(limit = 1u)
+                    .getOrNull()?.isNotEmpty() == true
                 _uiState.value.copy(
                     showEmptyState = settings.showEmptyBalanceView &&
+                        !hasActivity &&
                         balanceState.totalSats == 0uL &&
                         balanceState.balanceInTransferToSpending == 0uL &&
                         balanceState.balanceInTransferToSavings == 0uL &&
