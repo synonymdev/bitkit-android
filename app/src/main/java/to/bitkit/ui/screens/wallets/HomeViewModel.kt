@@ -66,7 +66,11 @@ class HomeViewModel @Inject constructor(
                     suggestions = suggestions,
                     showWidgets = settings.showWidgets,
                     showWidgetTitles = settings.showWidgetTitles,
-                    widgetsWithPosition = widgetsData.widgets,
+                    widgetsWithPosition = if (_uiState.value.isEditingWidgets) {
+                        _uiState.value.widgetsWithPosition
+                    } else {
+                        widgetsData.widgets
+                    },
                     headlinePreferences = widgetsData.headlinePreferences,
                     factsPreferences = widgetsData.factsPreferences,
                     blocksPreferences = widgetsData.blocksPreferences,
