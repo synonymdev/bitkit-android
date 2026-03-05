@@ -43,9 +43,6 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
             wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
             wheneverBlocking {
-                lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
-            }.thenReturn(Result.success(1000uL))
-            wheneverBlocking {
                 lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
             }.thenReturn(Result.success(1000uL))
         }
@@ -107,7 +104,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         wheneverBlocking {
-            lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+            lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(fee))
 
         val result = sut()
@@ -133,7 +130,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         wheneverBlocking {
-            lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+            lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.failure(Exception("Fee estimation failed")))
 
         val result = sut()

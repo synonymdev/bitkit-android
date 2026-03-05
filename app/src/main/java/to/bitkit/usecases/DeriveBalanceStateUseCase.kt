@@ -111,8 +111,9 @@ class DeriveBalanceStateUseCase @Inject constructor(
         if (fundableBalance == 0uL) return 0u
 
         val fallback = (fundableBalance.toDouble() * FALLBACK_FEE_PERCENT).toULong()
-        val fee = lightningRepo.calculateTotalFee(
-            amountSats = fundableBalance,
+        val speed = settingsStore.data.first().defaultTransactionSpeed
+        val fee = lightningRepo.estimateSendAllFee(
+            speed = speed,
         ).onFailure {
             Logger.debug("Could not calculate channel funding fee, using fallback of: $fallback", context = TAG)
         }.getOrDefault(fallback)
