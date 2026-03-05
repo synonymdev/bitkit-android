@@ -591,7 +591,10 @@ class AppViewModel @Inject constructor(
             val resolved = lightningRepo.resolvePendingPayment(
                 PendingPaymentResolution.Failure(paymentHash, event.reason.toUserMessage(context))
             )
-            if (resolved) return notifyPaymentFailed(event.reason)
+            if (resolved) {
+                if (_currentSheet.value !is Sheet.Send) notifyPaymentFailed(event.reason)
+                return
+            }
         }
         notifyPaymentFailed(event.reason)
     }
@@ -607,7 +610,10 @@ class AppViewModel @Inject constructor(
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
             val resolved = lightningRepo.resolvePendingPayment(PendingPaymentResolution.Success(paymentHash))
-            if (resolved) return notifyPendingPaymentSucceeded()
+            if (resolved) {
+                if (_currentSheet.value !is Sheet.Send) notifyPendingPaymentSucceeded()
+                return
+            }
         }
         notifyPaymentSentOnLightning(event)
     }
