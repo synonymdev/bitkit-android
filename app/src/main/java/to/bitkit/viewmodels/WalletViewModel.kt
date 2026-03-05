@@ -223,7 +223,14 @@ class WalletViewModel @Inject constructor(
         backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
     }
 
-    fun onRestoreContinue() = _restoreState.update { RestoreState.Settled }
+    fun onRestoreContinue() {
+        viewModelScope.launch(bgDispatcher) {
+            if (!settingsStore.restoredMonitoredTypesFromBackup) {
+                settingsStore.update { it.copy(pendingRestoreAddressTypePrune = true) }
+            }
+        }
+        _restoreState.update { RestoreState.Settled }
+    }
 
     fun onRestoreRetry() = viewModelScope.launch(bgDispatcher) {
         _restoreState.update { it.countRetry() }

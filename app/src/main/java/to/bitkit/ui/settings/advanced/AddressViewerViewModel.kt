@@ -2,6 +2,7 @@ package to.bitkit.ui.settings.advanced
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -11,11 +12,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.AddressModel
+import to.bitkit.models.toAddressType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import javax.inject.Inject
@@ -23,6 +27,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AddressViewerViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
 ) : ViewModel() {
@@ -31,7 +36,11 @@ class AddressViewerViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
-        loadAddresses()
+        viewModelScope.launch(bgDispatcher) {
+            val selected = settingsStore.data.first().selectedAddressType.toAddressType() ?: AddressType.P2WPKH
+            _uiState.update { it.copy(selectedAddressType = selected) }
+            loadAddresses()
+        }
     }
 
     fun loadAddresses() {
@@ -43,6 +52,7 @@ class AddressViewerViewModel @Inject constructor(
 
                 val addresses = walletRepo.getAddresses(
                     isChange = !_uiState.value.showReceiveAddresses,
+                    addressType = _uiState.value.selectedAddressType,
                 ).getOrThrow()
 
                 _uiState.update { currentState ->
@@ -71,6 +81,7 @@ class AddressViewerViewModel @Inject constructor(
                 val newAddresses = walletRepo.getAddresses(
                     startIndex = nextStartIndex,
                     isChange = !currentState.showReceiveAddresses,
+                    addressType = currentState.selectedAddressType,
                 ).getOrThrow()
 
                 _uiState.update { currentState ->
@@ -107,8 +118,10 @@ class AddressViewerViewModel @Inject constructor(
             _uiState.update { it.copy(showReceiveAddresses = isReceiving, isLoading = true) }
 
             runCatching {
-                val addresses = walletRepo.getAddresses(isChange = !isReceiving)
-                    .getOrThrow()
+                val addresses = walletRepo.getAddresses(
+                    isChange = !isReceiving,
+                    addressType = _uiState.value.selectedAddressType,
+                ).getOrThrow()
 
                 _uiState.update { currentState ->
                     currentState.copy(
@@ -128,6 +141,32 @@ class AddressViewerViewModel @Inject constructor(
     fun updateSearchText(text: String) = _uiState.update { it.copy(searchText = text) }
 
     fun selectAddress(address: AddressModel) = _uiState.update { it.copy(selectedAddress = address) }
+
+    fun selectAddressType(addressType: AddressType) {
+        if (_uiState.value.selectedAddressType == addressType) return
+
+        viewModelScope.launch(bgDispatcher) {
+            _uiState.update { it.copy(selectedAddressType = addressType, isLoading = true) }
+
+            runCatching {
+                val addresses = walletRepo.getAddresses(
+                    isChange = !_uiState.value.showReceiveAddresses,
+                    addressType = addressType,
+                ).getOrThrow()
+
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        addresses = addresses,
+                        selectedAddress = addresses.firstOrNull(),
+                        balances = emptyMap(),
+                    )
+                }
+                loadBalancesForAddresses(addresses)
+            }
+
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
 
     private fun loadBalancesForAddresses(newAddresses: List<AddressModel>) {
         if (_uiState.value.isLoadingBalances) return
@@ -177,4 +216,5 @@ data class UiState(
     val isLoading: Boolean = false,
     val isLoadingBalances: Boolean = false,
     val showReceiveAddresses: Boolean = true,
+    val selectedAddressType: AddressType = AddressType.P2WPKH,
 )

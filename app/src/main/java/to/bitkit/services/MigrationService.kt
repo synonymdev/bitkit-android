@@ -48,12 +48,15 @@ import to.bitkit.di.json
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
@@ -740,6 +743,80 @@ class MigrationService @Inject constructor(
         }.getOrNull()
     }
 
+    private fun extractRNAddressTypeSettings(
+        mmkvData: Map<String, String>,
+    ): Pair<String?, List<String>?>? {
+        val rootJson = mmkvData[MMKV_ROOT] ?: return null
+
+        return runCatching {
+            val jsonStart = rootJson.indexOf(OPENING_CURLY_BRACE)
+            val jsonString = if (jsonStart >= 0) rootJson.substring(jsonStart) else rootJson
+
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val walletJsonString = root["wallet"]?.jsonPrimitive?.content ?: return@runCatching null
+            val walletData = json.parseToJsonElement(walletJsonString).jsonObject
+
+            var selectedAddressType: String? = null
+            var addressTypesToMonitor: List<String>? = null
+
+            val walletState = runCatching {
+                json.decodeFromJsonElement<RNWalletState>(walletData)
+            }.getOrNull()
+
+            // wallets.wallet0.addressType.<network>
+            val rnNetworkKey = when (Env.network) {
+                Network.BITCOIN -> "bitcoin"
+                Network.REGTEST -> "bitcoinRegtest"
+                Network.TESTNET -> "bitcoinTestnet"
+                Network.SIGNET -> "signet"
+            }
+            walletState?.wallets?.get(RN_WALLET_NAME)?.addressType?.get(rnNetworkKey)?.let { rnValue ->
+                selectedAddressType = rnValue.normalizeRNAddressType()
+            }
+
+            walletState?.addressTypesToMonitor?.let { rnMonitored ->
+                val normalized = rnMonitored.map { it.normalizeRNAddressType() }
+                if (normalized.isNotEmpty()) {
+                    addressTypesToMonitor = normalized
+                }
+            }
+
+            if (selectedAddressType == null && addressTypesToMonitor == null) return@runCatching null
+
+            Logger.debug(
+                "Extracted RN address type settings: selected=$selectedAddressType, " +
+                    "monitored=${addressTypesToMonitor?.joinToString(",")}",
+                context = TAG,
+            )
+            Pair(selectedAddressType, addressTypesToMonitor)
+        }.onFailure {
+            Logger.error("Failed to extract RN address type settings", it, context = TAG)
+        }.getOrNull()
+    }
+
+    private suspend fun applyRNAddressTypeSettings(
+        selectedAddressType: String?,
+        addressTypesToMonitor: List<String>?,
+    ) {
+        settingsStore.update { current ->
+            val selected = selectedAddressType ?: current.selectedAddressType
+
+            var monitored = addressTypesToMonitor ?: current.addressTypesToMonitor
+            if (selected !in monitored) {
+                monitored = (monitored + selected).distinct()
+            }
+            val nativeWitnessStrings = NATIVE_WITNESS_TYPES.map { it.toSettingsString() }
+            if (monitored.none { it in nativeWitnessStrings }) {
+                monitored = monitored + DEFAULT_ADDRESS_TYPE_STRING
+            }
+
+            current.copy(
+                selectedAddressType = selected,
+                addressTypesToMonitor = monitored,
+            )
+        }
+    }
+
     private fun extractRNBlocktank(mmkvData: Map<String, String>): Pair<List<String>, Map<String, String>>? {
         val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
@@ -1164,6 +1241,10 @@ class MigrationService @Inject constructor(
 
         extractRNSettings(mmkvData)?.let { settings ->
             applyRNSettings(settings)
+        }
+
+        extractRNAddressTypeSettings(mmkvData)?.let { (selected, monitored) ->
+            applyRNAddressTypeSettings(selected, monitored)
         }
 
         extractRNMetadata(mmkvData)?.let { metadata ->
@@ -2110,7 +2191,17 @@ data class RNSettings(
     val transferIntroSeen: Boolean? = null,
     val spendingIntroSeen: Boolean? = null,
     val savingsIntroSeen: Boolean? = null,
+    val selectedAddressType: String? = null,
+    val addressTypesToMonitor: List<String>? = null,
 )
+
+private fun String.normalizeRNAddressType(): String = when (this) {
+    "p2tr" -> "taproot"
+    "p2wpkh" -> "nativeSegwit"
+    "p2sh" -> "nestedSegwit"
+    "p2pkh" -> "legacy"
+    else -> this
+}
 
 @Serializable
 data class RNMetadata(
@@ -2233,12 +2324,16 @@ private enum class RNKeychainKey(val service: String) {
 }
 
 @Serializable
-private data class RNWalletState(val wallets: Map<String, RNWalletData>? = null)
+private data class RNWalletState(
+    val wallets: Map<String, RNWalletData>? = null,
+    val addressTypesToMonitor: List<String>? = null,
+)
 
 @Serializable
 private data class RNWalletData(
     val transfers: Map<String, List<RNRemoteTransfer>>? = null,
     val boostedTransactions: Map<String, Map<String, RNRemoteBoostedTx>>? = null,
+    val addressType: Map<String, String>? = null,
 )
 
 @Serializable
