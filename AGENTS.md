@@ -165,7 +165,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
 - NEVER capitalize words in commit messages
-- ALWAYS run `git status` to check ALL uncommitted changes after completing any code edits, then reply with 3 commit message suggestions covering the ENTIRE uncommitted diff
+- ALWAYS suggest 3 commit messages with confidence score ratings, e.g. `fix: show toast on resolution (90%)`. In plan mode, include them at the end of the plan. If the user picks one via plan update, commit after implementation. Outside plan mode, suggest after implementation completes. In both cases, run `git status` to check ALL uncommitted changes after completing code edits
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
 - ALWAYS consider applying YAGNI (You Ain't Gonna Need It) principle for new code
@@ -216,6 +216,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
 - ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
 - ALWAYS position companion object at the top of the class
+- ALWAYS inherit custom exceptions from AppError
+- ALWAYS use Kotlin Duration for timeouts and delays
 
 ### Device Debugging (adb)
 
