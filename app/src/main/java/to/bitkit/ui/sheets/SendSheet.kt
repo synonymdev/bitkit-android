@@ -82,7 +82,7 @@ fun SendSheet(
                     is SendEffect.PaymentSuccess -> {
                         appViewModel.clearClipboardForAutoRead()
                         navController.navigate(SendRoute.Success) {
-                            popUpTo(startDestination) { inclusive = true }
+                            popUpTo<SendRoute.Pending> { inclusive = true }
                         }
                     }
 
@@ -288,7 +288,9 @@ fun SendSheet(
                         appViewModel.handlePaymentSuccess(details)
                     },
                     onPaymentError = { errorMessage ->
-                        navController.navigate(SendRoute.Error(errorMessage))
+                        navController.navigate(SendRoute.Error(errorMessage)) {
+                            popUpTo<SendRoute.Pending> { inclusive = true }
+                        }
                     },
                     onClose = { appViewModel.hideSheet() },
                     onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId) },
