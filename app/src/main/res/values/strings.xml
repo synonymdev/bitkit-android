@@ -979,6 +979,7 @@
     <string name="wallet__transfer_to_spending">Transfer To Spending</string>
     <string name="wallet__withdraw_error">Your withdrawal was unsuccessful. Please scan the QR code again or contact support.</string>
     <string name="widgets__add">Add Widget</string>
+    <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks.</string>
     <string name="widgets__blocks__field__block">Block</string>
     <string name="widgets__blocks__field__date">Date</string>

@@ -1351,6 +1351,7 @@ private fun NavGraphBuilder.widgets(
         )
     }
     composableWithDefaultTransitions<Routes.AddWidget> {
+        val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         AddWidgetsScreen(
             onWidgetSelected = { widgetType ->
                 when (widgetType) {
@@ -1365,6 +1366,8 @@ private fun NavGraphBuilder.widgets(
             },
             fiatSymbol = LocalCurrencies.current.currencySymbol,
             onBackCLick = { navController.popBackStack() },
+            showWidgets = showWidgets,
+            onEnableInSettingsClick = { navController.navigate(Routes.WidgetsSettings) },
         )
     }
     composableWithDefaultTransitions<Routes.SuggestionsPreview> {
