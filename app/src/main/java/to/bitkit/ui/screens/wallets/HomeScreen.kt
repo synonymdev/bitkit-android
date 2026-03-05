@@ -433,6 +433,7 @@ private fun WalletPage(
             )
             VerticalSpacer(32.dp)
             BalancesSection(balances, onNavigateToSavings, onNavigateToSpending)
+            VerticalSpacer(32.dp)
 
             if (!homeUiState.showEmptyState) {
                 if (hasActivity) {
@@ -441,7 +442,7 @@ private fun WalletPage(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 32.dp, bottom = 16.dp)
+                                .padding(bottom = 16.dp)
                         ) {
                             homeUiState.banners.forEach { banner ->
                                 ActivityBanner(
@@ -459,8 +460,6 @@ private fun WalletPage(
                             }
                         }
                     }
-
-                    VerticalSpacer(32.dp)
 
                     ActivityListSimple(
                         items = latestActivities,
