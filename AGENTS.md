@@ -179,6 +179,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
 - NEVER add `e = ` named parameter to Logger calls
 - NEVER manually append the `Throwable`'s message or any other props to the string passed as the 1st param of `Logger.*` calls, its internals are already enriching the final log message with the details of the `Throwable` passed via the `e` arg
+- ALWAYS wrap parameter values in log messages with single quotes, e.g. `Logger.info("Received event '$eventName'", context = TAG)`
+- ALWAYS start log messages with a verb, e.g. `Logger.info("Received payment for '$hash'", context = TAG)`
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
@@ -204,6 +206,9 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
 - NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
+- ALWAYS prefer `kotlin.test` asserts over `org.junit.Assert` in unit tests
+- ALWAYS use a deterministic locale in unit tests to ensure consistent results across CI and local environments
+- ALWAYS add a locale parameter with default value `Locale.getDefault()` to methods that depend on locale
 - ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking {}`
 - ALWAYS add business logic to Repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
