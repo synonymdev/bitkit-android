@@ -72,11 +72,11 @@ class ProfileViewModel @Inject constructor(
                 .onSuccess {
                     _effects.emit(ProfileEffect.SignedOut)
                 }
-                .onFailure { e ->
+                .onFailure {
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__sign_out_title),
-                        description = e.message,
+                        description = it.message,
                     )
                 }
             _isSigningOut.update { false }

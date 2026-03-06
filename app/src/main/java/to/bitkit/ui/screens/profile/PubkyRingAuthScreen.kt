@@ -64,8 +64,8 @@ fun PubkyRingAuthScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
-        viewModel.effects.collect { effect ->
-            when (effect) {
+        viewModel.effects.collect {
+            when (it) {
                 PubkyRingAuthEffect.Authenticated -> onAuthenticated()
             }
         }

@@ -30,7 +30,6 @@ The auth handshake uses a relay-based protocol:
 - **Idle** — no authentication in progress
 - **Authenticating** — `startAuth()` has been called, waiting for relay setup
 - **Authenticated** — session active, profile available
-- **Error** — authentication failed
 
 ## Service Layer (`PubkyService`)
 
@@ -57,8 +56,8 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 ### Profile Loading
 
 - `loadProfile()` fetches the profile for the authenticated public key
-- Uses a `_isLoadingProfile` guard to prevent concurrent loads
-- The guard is reset in a `finally` block to handle coroutine cancellation
+- Uses a `Mutex` with `tryLock()` to prevent concurrent loads
+- The mutex is released in a `finally` block to handle coroutine cancellation
 - Profile name and image URI are cached in `SharedPreferences` for instant display on launch before the full profile loads
 
 ### Exposed State

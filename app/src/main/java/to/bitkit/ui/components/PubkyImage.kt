@@ -65,8 +65,6 @@ fun PubkyImage(
 
         if (bitmap != null) return@LaunchedEffect
 
-        bitmap = null
-
         runCatching {
             withContext(Dispatchers.IO) {
                 cache.image(uri)?.let { return@withContext it }

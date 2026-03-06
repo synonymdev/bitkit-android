@@ -66,8 +66,8 @@ fun ProfileScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.effects.collect { effect ->
-            when (effect) {
+        viewModel.effects.collect {
+            when (it) {
                 ProfileEffect.SignedOut -> onBackClick()
             }
         }
@@ -198,7 +198,7 @@ private fun ProfileBody(
             )
             VerticalSpacer(8.dp)
         }
-        HorizontalDivider(color = Colors.White10)
+        HorizontalDivider()
 
         VerticalSpacer(24.dp)
 
@@ -309,7 +309,7 @@ private fun ProfileLinkRow(label: String, value: String) {
             fontSize = 15.sp,
         )
         VerticalSpacer(16.dp)
-        HorizontalDivider(color = Colors.White10)
+        HorizontalDivider()
     }
 }
 

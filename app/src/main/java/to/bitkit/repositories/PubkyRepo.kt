@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import to.bitkit.data.PubkyImageCache
 import to.bitkit.data.keychain.Keychain
@@ -24,7 +25,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class PubkyAuthState { Idle, Authenticating, Authenticated, Error }
+enum class PubkyAuthState { Idle, Authenticating, Authenticated }
 
 @Singleton
 class PubkyRepo @Inject constructor(
@@ -43,6 +44,7 @@ class PubkyRepo @Inject constructor(
 
     private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val loadProfileMutex = Mutex()
 
     private val _authState = MutableStateFlow(PubkyAuthState.Idle)
     val authState: StateFlow<PubkyAuthState> = _authState.asStateFlow()
@@ -96,8 +98,8 @@ class PubkyRepo @Inject constructor(
                 runCatching {
                     val pk = pubkyService.importSession(savedSecret)
                     InitResult.Restored(pk)
-                }.getOrElse { error ->
-                    Logger.warn("Failed to restore paykit session", error, context = TAG)
+                }.getOrElse {
+                    Logger.warn("Failed to restore paykit session", it, context = TAG)
                     InitResult.RestorationFailed
                 }
             }
@@ -164,7 +166,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadProfile() {
         val pk = _publicKey.value ?: return
-        if (_isLoadingProfile.value) return
+        if (!loadProfileMutex.tryLock()) return
 
         _isLoadingProfile.update { true }
         try {
@@ -182,6 +184,7 @@ class PubkyRepo @Inject constructor(
             }
         } finally {
             _isLoadingProfile.update { false }
+            loadProfileMutex.unlock()
         }
     }
 
