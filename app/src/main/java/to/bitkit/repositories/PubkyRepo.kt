@@ -63,7 +63,8 @@ class PubkyRepo @Inject constructor(
     val displayName: StateFlow<String?> = _profile.map { it?.name ?: prefs.getString(KEY_CACHED_NAME, null) }
         .stateIn(scope, SharingStarted.Eagerly, prefs.getString(KEY_CACHED_NAME, null))
 
-    val displayImageUri: StateFlow<String?> = _profile.map { it?.imageUrl ?: prefs.getString(KEY_CACHED_IMAGE_URI, null) }
+    val displayImageUri: StateFlow<String?> = _profile
+        .map { it?.imageUrl ?: prefs.getString(KEY_CACHED_IMAGE_URI, null) }
         .stateIn(scope, SharingStarted.Eagerly, prefs.getString(KEY_CACHED_IMAGE_URI, null))
 
     private sealed interface InitResult {
