@@ -43,9 +43,14 @@ class SendPendingViewModel @Inject constructor(
     fun init(paymentHash: String, amount: Long) {
         if (isInitialized) return
         isInitialized = true
+        lightningRepo.setActivePendingPaymentHash(paymentHash)
         _uiState.update { it.copy(amount = amount) }
         findActivity(paymentHash)
         observeResolution(paymentHash, amount)
+    }
+
+    override fun onCleared() {
+        lightningRepo.setActivePendingPaymentHash(null)
     }
 
     fun onResolutionHandled() = _uiState.update { it.copy(resolution = null) }

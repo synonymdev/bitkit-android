@@ -126,6 +126,7 @@ class LightningRepo @Inject constructor(
     private val syncRetryJob = AtomicReference<Job?>(null)
     private val lifecycleMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
+    private val _activePendingPaymentHash = AtomicReference<String?>(null)
 
     init {
         observeConnectivityForSyncRetry()
@@ -1386,6 +1387,10 @@ class LightningRepo @Inject constructor(
     }
 
     fun trackPendingPayment(paymentHash: String) = pendingPayments.add(paymentHash)
+
+    fun setActivePendingPaymentHash(hash: String?) = run { _activePendingPaymentHash.set(hash) }
+
+    fun isActivePendingPayment(hash: String): Boolean = _activePendingPaymentHash.get() == hash
 
     fun resolvePendingPayment(resolution: PendingPaymentResolution): Boolean {
         val hash = when (resolution) {
