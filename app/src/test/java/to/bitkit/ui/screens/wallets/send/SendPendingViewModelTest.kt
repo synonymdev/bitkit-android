@@ -10,8 +10,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
@@ -104,11 +102,8 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val resolution = sut.uiState.value.resolution
-        assertIs<SendPendingUiState.Resolution.Success>(resolution)
-        assertEquals(hash, resolution.details.paymentHashOrTxId)
-        assertEquals(amount, resolution.details.sats)
-        assertEquals(NewTransactionSheetType.LIGHTNING, resolution.details.type)
-        assertEquals(NewTransactionSheetDirection.SENT, resolution.details.direction)
+        assertIs<PendingPaymentResolution.Success>(resolution)
+        assertEquals(hash, resolution.paymentHash)
     }
 
     @Test
@@ -122,7 +117,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val resolution = sut.uiState.value.resolution
-        assertIs<SendPendingUiState.Resolution.Error>(resolution)
+        assertIs<PendingPaymentResolution.Failure>(resolution)
     }
 
     @Test

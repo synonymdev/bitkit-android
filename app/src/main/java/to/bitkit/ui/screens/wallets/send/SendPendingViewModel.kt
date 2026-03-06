@@ -11,13 +11,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.ext.rawId
-import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
-import to.bitkit.ui.screens.wallets.send.SendPendingUiState.Resolution
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -42,7 +38,7 @@ class SendPendingViewModel @Inject constructor(
         pendingPaymentRepo.setActiveHash(paymentHash)
         _uiState.update { it.copy(amount = amount) }
         findActivity(paymentHash)
-        observeResolution(paymentHash, amount)
+        observeResolution(paymentHash)
     }
 
     override fun onCleared() {
@@ -64,7 +60,7 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    private fun observeResolution(paymentHash: String, amount: Long) {
+    private fun observeResolution(paymentHash: String) {
         viewModelScope.launch {
             pendingPaymentRepo.resolution
                 .filter { it.paymentHash == paymentHash }
@@ -73,22 +69,7 @@ class SendPendingViewModel @Inject constructor(
                         "Received payment resolution '${resolution::class.simpleName}' for '$paymentHash'",
                         context = TAG,
                     )
-                    _uiState.update {
-                        it.copy(
-                            resolution = when (resolution) {
-                                is PendingPaymentResolution.Success -> Resolution.Success(
-                                    NewTransactionSheetDetails(
-                                        type = NewTransactionSheetType.LIGHTNING,
-                                        direction = NewTransactionSheetDirection.SENT,
-                                        paymentHashOrTxId = resolution.paymentHash,
-                                        sats = amount,
-                                    )
-                                )
-
-                                is PendingPaymentResolution.Failure -> Resolution.Error
-                            }
-                        )
-                    }
+                    _uiState.update { it.copy(resolution = resolution) }
                 }
         }
     }
@@ -97,10 +78,5 @@ class SendPendingViewModel @Inject constructor(
 data class SendPendingUiState(
     val amount: Long = 0L,
     val activityId: String? = null,
-    val resolution: Resolution? = null,
-) {
-    sealed interface Resolution {
-        data class Success(val details: NewTransactionSheetDetails) : Resolution
-        data object Error : Resolution
-    }
-}
+    val resolution: PendingPaymentResolution? = null,
+)

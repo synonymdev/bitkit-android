@@ -734,7 +734,7 @@ class AppViewModel @Inject constructor(
             txType = PaymentType.SENT,
             retry = true
         ).onSuccess { activity ->
-            handlePaymentSuccess(
+            onSendSuccess(
                 NewTransactionSheetDetails(
                     type = NewTransactionSheetType.LIGHTNING,
                     direction = NewTransactionSheetDirection.SENT,
@@ -1681,7 +1681,7 @@ class AppViewModel @Inject constructor(
                 sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         Logger.info("Onchain send result txid: $txId", context = TAG)
-                        handlePaymentSuccess(
+                        onSendSuccess(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.ONCHAIN,
                                 direction = NewTransactionSheetDirection.SENT,
@@ -1732,7 +1732,7 @@ class AppViewModel @Inject constructor(
 
                 sendLightning(bolt11, paymentAmount).onSuccess { actualPaymentHash ->
                     Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
-                    handlePaymentSuccess(
+                    onSendSuccess(
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.SENT,
@@ -2283,7 +2283,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun handlePaymentSuccess(details: NewTransactionSheetDetails) {
+    fun onSendSuccess(details: NewTransactionSheetDetails) {
         details.paymentHashOrTxId?.let {
             if (!processedPayments.add(it)) {
                 Logger.debug("Payment $it already processed, skipping duplicate", context = TAG)
@@ -2292,7 +2292,7 @@ class AppViewModel @Inject constructor(
         }
 
         _successSendUiState.update { details }
-        setSendEffect(SendEffect.PaymentSuccess(details))
+        setSendEffect(SendEffect.PaymentSuccess)
     }
 
     fun handleDeeplinkIntent(intent: Intent) {
@@ -2435,7 +2435,7 @@ sealed class SendEffect {
     data object NavigateToFee : SendEffect()
     data object NavigateToFeeCustom : SendEffect()
     data object NavigateToComingSoon : SendEffect()
-    data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
+    data object PaymentSuccess : SendEffect()
     data class NavigateToPending(val paymentHash: String, val amount: Long) : SendEffect()
 }
 

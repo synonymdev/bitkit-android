@@ -27,7 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
@@ -36,7 +36,6 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.wallets.send.SendPendingUiState.Resolution
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -47,7 +46,7 @@ import to.bitkit.utils.Logger
 fun SendPendingScreen(
     paymentHash: String,
     amount: Long,
-    onPaymentSuccess: (NewTransactionSheetDetails) -> Unit,
+    onPaymentSuccess: (String) -> Unit,
     onPaymentError: () -> Unit,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
@@ -61,8 +60,8 @@ fun SendPendingScreen(
         LaunchedEffect(resolution) {
             runCatching {
                 when (resolution) {
-                    is Resolution.Success -> onPaymentSuccess(resolution.details)
-                    is Resolution.Error -> onPaymentError()
+                    is PendingPaymentResolution.Success -> onPaymentSuccess(resolution.paymentHash)
+                    is PendingPaymentResolution.Failure -> onPaymentError()
                 }
             }.onFailure { Logger.error("Failed handling payment resolution", it) }
             viewModel.onResolutionHandled()

@@ -259,7 +259,7 @@ fun SendSheet(
                 SendQuickPayScreen(
                     quickPayData = requireNotNull(quickPayData),
                     onPaymentComplete = { paymentHash, amountWithFee ->
-                        appViewModel.handlePaymentSuccess(
+                        appViewModel.onSendSuccess(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.LIGHTNING,
                                 direction = NewTransactionSheetDirection.SENT,
@@ -284,8 +284,15 @@ fun SendSheet(
                 SendPendingScreen(
                     paymentHash = route.paymentHash,
                     amount = route.amount,
-                    onPaymentSuccess = { details ->
-                        appViewModel.handlePaymentSuccess(details)
+                    onPaymentSuccess = { paymentHash ->
+                        appViewModel.onSendSuccess(
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.LIGHTNING,
+                                direction = NewTransactionSheetDirection.SENT,
+                                paymentHashOrTxId = paymentHash,
+                                sats = route.amount,
+                            ),
+                        )
                     },
                     onPaymentError = {
                         navController.navigate(SendRoute.Error()) {
