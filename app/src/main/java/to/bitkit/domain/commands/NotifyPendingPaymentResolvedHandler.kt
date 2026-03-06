@@ -6,7 +6,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.di.IoDispatcher
-import to.bitkit.ext.toUserMessage
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.utils.Logger
@@ -46,7 +45,7 @@ class NotifyPendingPaymentResolvedHandler @Inject constructor(
         )
         is NotifyPendingPaymentResolved.Command.Failure -> NotificationDetails(
             title = context.getString(R.string.wallet__toast_payment_failed_title),
-            body = command.reason.toUserMessage(context),
+            body = context.getString(R.string.wallet__toast_payment_failed_description),
         )
     }
 }

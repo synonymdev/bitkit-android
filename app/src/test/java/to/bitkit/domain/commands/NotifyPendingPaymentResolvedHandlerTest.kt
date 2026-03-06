@@ -28,8 +28,8 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
             .thenReturn("Your pending payment was completed successfully.")
         whenever(context.getString(R.string.wallet__toast_payment_failed_title))
             .thenReturn("Payment Failed")
-        whenever(context.getString(R.string.wallet__toast_payment_failed_route_not_found))
-            .thenReturn("Could not find a payment path to the recipient.")
+        whenever(context.getString(R.string.wallet__toast_payment_failed_description))
+            .thenReturn("Your instant payment failed. Please try again.")
 
         sut = NotifyPendingPaymentResolvedHandler(
             context = context,
@@ -66,7 +66,7 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
         val paymentResult = result.getOrThrow()
         assertTrue(paymentResult is NotifyPendingPaymentResolved.Result.ShowNotification)
         assertEquals("Payment Failed", paymentResult.notification.title)
-        assertEquals("Could not find a payment path to the recipient.", paymentResult.notification.body)
+        assertEquals("Your instant payment failed. Please try again.", paymentResult.notification.body)
     }
 
     @Test
