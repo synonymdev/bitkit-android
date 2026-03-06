@@ -1489,6 +1489,7 @@ class MigrationService @Inject constructor(
             }
 
             if (monitors.isNotEmpty()) {
+                Logger.info("Found ${monitors.size} channel monitors", TAG)
                 pendingChannelMigration = PendingChannelMigration(
                     channelManager = managerData,
                     channelMonitors = monitors,
