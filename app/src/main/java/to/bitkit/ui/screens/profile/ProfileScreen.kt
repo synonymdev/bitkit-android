@@ -62,10 +62,6 @@ fun ProfileScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
-        if (uiState.profile == null) viewModel.loadProfile()
-    }
-
-    LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
                 ProfileEffect.SignedOut -> onBackClick()
@@ -216,11 +212,11 @@ private fun ProfileBody(
 
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth()
             )
             if (profile.imageUrl != null) {
                 Box(
@@ -242,14 +238,12 @@ private fun ProfileBody(
             color = Colors.White,
             fontSize = 15.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
 
         VerticalSpacer(32.dp)
 
-        profile.links.forEach { link ->
-            ProfileLinkRow(label = link.label, value = link.url)
-        }
+        profile.links.forEach { ProfileLinkRow(label = it.label, value = it.url) }
     }
 }
 

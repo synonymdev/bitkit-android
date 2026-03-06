@@ -47,7 +47,6 @@ class PubkyRepo @Inject constructor(
     private val loadProfileMutex = Mutex()
 
     private val _authState = MutableStateFlow(PubkyAuthState.Idle)
-    val authState: StateFlow<PubkyAuthState> = _authState.asStateFlow()
 
     private val _profile = MutableStateFlow<PubkyProfile?>(null)
     val profile: StateFlow<PubkyProfile?> = _profile.asStateFlow()
@@ -58,22 +57,13 @@ class PubkyRepo @Inject constructor(
     private val _isLoadingProfile = MutableStateFlow(false)
     val isLoadingProfile: StateFlow<Boolean> = _isLoadingProfile.asStateFlow()
 
-    private val _isInitialized = MutableStateFlow(false)
-    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
-
-    private val _cachedName = MutableStateFlow(prefs.getString(KEY_CACHED_NAME, null))
-    val cachedName: StateFlow<String?> = _cachedName.asStateFlow()
-
-    private val _cachedImageUri = MutableStateFlow(prefs.getString(KEY_CACHED_IMAGE_URI, null))
-    val cachedImageUri: StateFlow<String?> = _cachedImageUri.asStateFlow()
-
     val isAuthenticated: StateFlow<Boolean> = _authState.map { it == PubkyAuthState.Authenticated }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
-    val displayName: StateFlow<String?> = _profile.map { it?.name }
+    val displayName: StateFlow<String?> = _profile.map { it?.name ?: prefs.getString(KEY_CACHED_NAME, null) }
         .stateIn(scope, SharingStarted.Eagerly, prefs.getString(KEY_CACHED_NAME, null))
 
-    val displayImageUri: StateFlow<String?> = _profile.map { it?.imageUrl }
+    val displayImageUri: StateFlow<String?> = _profile.map { it?.imageUrl ?: prefs.getString(KEY_CACHED_IMAGE_URI, null) }
         .stateIn(scope, SharingStarted.Eagerly, prefs.getString(KEY_CACHED_IMAGE_URI, null))
 
     private sealed interface InitResult {
@@ -107,8 +97,6 @@ class PubkyRepo @Inject constructor(
             Logger.error("Failed to initialize paykit", it, context = TAG)
         }.getOrNull() ?: return
 
-        _isInitialized.update { true }
-
         when (result) {
             is InitResult.NoSession -> Logger.debug("No saved paykit session found", context = TAG)
             is InitResult.Restored -> {
@@ -128,6 +116,7 @@ class PubkyRepo @Inject constructor(
         return runCatching {
             withContext(bgDispatcher) { pubkyService.startAuth() }
         }.onFailure {
+            Logger.error("Failed to start authentication", it, context = TAG)
             _authState.update { PubkyAuthState.Idle }
         }
     }
@@ -144,6 +133,7 @@ class PubkyRepo @Inject constructor(
                 pk
             }
         }.onFailure {
+            Logger.error("Failed to complete authentication", it, context = TAG)
             _authState.update { PubkyAuthState.Idle }
         }.onSuccess { pk ->
             _publicKey.update { pk }
@@ -196,7 +186,7 @@ class PubkyRepo @Inject constructor(
                     runCatching { pubkyService.forceSignOut() }
                 }
             runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-            imageCache.clear()
+            runCatching { imageCache.clear() }
         }
         clearCachedMetadata()
         _publicKey.update { null }
@@ -205,8 +195,6 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun cacheMetadata(profile: PubkyProfile) {
-        _cachedName.update { profile.name }
-        _cachedImageUri.update { profile.imageUrl }
         prefs.edit()
             .putString(KEY_CACHED_NAME, profile.name)
             .putString(KEY_CACHED_IMAGE_URI, profile.imageUrl)
@@ -214,8 +202,6 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun clearCachedMetadata() {
-        _cachedName.update { null }
-        _cachedImageUri.update { null }
         prefs.edit().clear().apply()
     }
 }

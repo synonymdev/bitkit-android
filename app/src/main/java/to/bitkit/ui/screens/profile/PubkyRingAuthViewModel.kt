@@ -72,7 +72,7 @@ class PubkyRingAuthViewModel @Inject constructor(
                     context.startActivity(intent)
                 }
                 .onFailure {
-                    _uiState.update { state -> state.copy(isAuthenticating = false) }
+                    _uiState.update { it.copy(isAuthenticating = false) }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__auth_error_title),
@@ -92,7 +92,7 @@ class PubkyRingAuthViewModel @Inject constructor(
                     _effects.emit(PubkyRingAuthEffect.Authenticated)
                 }
                 .onFailure {
-                    _uiState.update { state -> state.copy(isWaitingForRing = false) }
+                    _uiState.update { it.copy(isWaitingForRing = false) }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__auth_error_title),

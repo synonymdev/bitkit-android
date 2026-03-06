@@ -52,6 +52,10 @@ class ProfileViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<ProfileEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    init {
+        loadProfile()
+    }
+
     fun loadProfile() {
         viewModelScope.launch { pubkyRepo.loadProfile() }
     }

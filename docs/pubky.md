@@ -64,14 +64,12 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 
 | StateFlow | Description |
 |---|---|
-| `authState` | Current `PubkyAuthState` |
 | `profile` | Full `PubkyProfile` or null |
 | `publicKey` | Authenticated user's public key |
-| `isAuthenticated` | Derived from `authState` |
+| `isAuthenticated` | Derived from internal auth state |
 | `displayName` | Profile name with cached fallback |
 | `displayImageUri` | Profile image URI with cached fallback |
 | `isLoadingProfile` | Loading indicator |
-| `isInitialized` | Whether paykit has been initialized |
 
 ## PubkyImage Component
 

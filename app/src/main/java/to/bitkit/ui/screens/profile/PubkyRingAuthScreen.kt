@@ -164,14 +164,14 @@ private fun Content(
                     SecondaryButton(
                         text = stringResource(R.string.profile__ring_download),
                         onClick = onDownload,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f)
                     )
                     HorizontalSpacer(16.dp)
                     PrimaryButton(
                         text = stringResource(R.string.profile__ring_authorize),
                         isLoading = uiState.isAuthenticating,
                         onClick = onAuthorize,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 VerticalSpacer(16.dp)

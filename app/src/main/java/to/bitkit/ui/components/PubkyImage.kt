@@ -119,18 +119,20 @@ fun PubkyImage(
                 CircularProgressIndicator(
                     strokeWidth = 2.dp,
                     color = Colors.White32,
-                    modifier = Modifier.size(size / 3),
+                    modifier = Modifier.size(size / 3)
                 )
             }
         }
     }
 }
 
+private const val ALLOWED_SCHEME = "pubky://"
+
 private suspend fun resolveImageData(data: ByteArray, service: PubkyService): ByteArray {
     return runCatching {
         val json = JSONObject(String(data))
         val src = json.optString("src", "")
-        if (src.isNotEmpty()) {
+        if (src.isNotEmpty() && src.startsWith(ALLOWED_SCHEME)) {
             Logger.debug("File descriptor found, fetching blob from: $src", context = TAG)
             service.fetchFile(src)
         } else {
