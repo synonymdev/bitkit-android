@@ -55,17 +55,20 @@ class PubkyRingAuthViewModel @Inject constructor(
 
             pubkyRepo.startAuthentication()
                 .onSuccess { authUrl ->
-                    _uiState.update { it.copy(isAuthenticating = false, isWaitingForRing = true) }
+                    _uiState.update { it.copy(isAuthenticating = false) }
 
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     val canOpen = intent.resolveActivity(context.packageManager) != null
                     if (!canOpen) {
+                        approvalJob?.cancel()
                         pubkyRepo.cancelAuthentication()
-                        _uiState.update { it.copy(isWaitingForRing = false, showRingNotInstalledDialog = true) }
+                        _uiState.update { it.copy(showRingNotInstalledDialog = true) }
                         return@launch
                     }
+
+                    _uiState.update { it.copy(isWaitingForRing = true) }
                     context.startActivity(intent)
                 }
                 .onFailure { e ->

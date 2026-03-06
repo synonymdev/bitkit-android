@@ -435,6 +435,7 @@
     <string name="profile__intro_description">Set up your portable pubky profile, so your contacts can reach you or pay you anytime, anywhere in the ecosystem.</string>
     <string name="profile__intro_title">Portable\n&lt;accent&gt;pubky profile&lt;/accent&gt;</string>
     <string name="profile__nav_title">Profile</string>
+    <string name="profile__public_key">Public Key</string>
     <string name="profile__qr_scan_label">Scan to add {name}</string>
     <string name="profile__retry_load">Try Again</string>
     <string name="profile__ring_auth_description">Please authorize Bitkit with Pubky Ring, your mobile keychain for the next web.</string>

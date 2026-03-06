@@ -86,7 +86,7 @@ class ProfileViewModel @Inject constructor(
     fun copyPublicKey() {
         val pk = pubkyRepo.publicKey.value ?: return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Public Key", pk))
+        clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.profile__public_key), pk))
         viewModelScope.launch {
             ToastEventBus.send(
                 type = Toast.ToastType.SUCCESS,
