@@ -364,6 +364,7 @@ class MigrationService @Inject constructor(
     suspend fun markChannelRecoveryChecked() {
         val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
         rnMigrationStore.edit { it[key] = "true" }
+        Logger.info("markChannelRecoveryChecked", TAG)
     }
 
     suspend fun hasRNWalletData(): Boolean {
