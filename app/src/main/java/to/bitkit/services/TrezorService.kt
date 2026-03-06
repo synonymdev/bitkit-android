@@ -22,10 +22,10 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTxInput
 import com.synonym.bitkitcore.TrezorTxOutput
 import com.synonym.bitkitcore.TrezorVerifyMessageParams
+import com.synonym.bitkitcore.trezorBroadcastRawTx
 import com.synonym.bitkitcore.trezorClearCredentials
 import com.synonym.bitkitcore.trezorConnect
 import com.synonym.bitkitcore.trezorDisconnect
-import com.synonym.bitkitcore.trezorBroadcastRawTx
 import com.synonym.bitkitcore.trezorFetchPrevTxs
 import com.synonym.bitkitcore.trezorGetAccountInfo
 import com.synonym.bitkitcore.trezorGetAddress

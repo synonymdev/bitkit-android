@@ -17,6 +17,7 @@ import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignTxParams
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
+import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.TrezorTxInput
 import com.synonym.bitkitcore.TrezorTxOutput
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -365,9 +366,11 @@ class TrezorRepo @Inject constructor(
                 _state.value.connectedDevice ?: error("Connected but no features")
             } else {
                 val scannedDevices = scan().getOrThrow()
-                val match = knownDevices.firstNotNullOfOrNull { known ->
+                val usbDevice = scannedDevices.find { it.transportType == TrezorTransportType.USB }
+                val idMatch = knownDevices.firstNotNullOfOrNull { known ->
                     scannedDevices.find { it.id == known.id }
-                } ?: error("No known device found nearby")
+                }
+                val match = usbDevice ?: idMatch ?: error("No known device found nearby")
                 connect(match.id).getOrThrow()
             }
         }.onSuccess {
@@ -378,35 +381,49 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> = runCatching {
-        _state.update { it.copy(isConnecting = true, error = null) }
-        TrezorDebugLog.log("RECONNECT", "=== connectKnownDevice START ===")
-        TrezorDebugLog.log("RECONNECT", "deviceId=$deviceId")
-        TrezorDebugLog.log("RECONNECT", "isInitialized=${_state.value.isInitialized}")
-        if (!_state.value.isInitialized) {
-            TrezorDebugLog.log("RECONNECT", "Initializing...")
-            initialize().getOrThrow()
-            TrezorDebugLog.log("RECONNECT", "Initialized OK")
+    suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> {
+        if (_state.value.isConnecting) {
+            return Result.failure(IllegalStateException("Connection already in progress"))
         }
-        TrezorDebugLog.log("RECONNECT", "Scanning for devices...")
-        val scannedDevices = trezorService.scan()
-        TrezorDebugLog.log("RECONNECT", "Scan found ${scannedDevices.size} devices: ${scannedDevices.map { it.id }}")
-        val device = scannedDevices.find { it.id == deviceId }
-            ?: error("Device not found nearby — is it powered on?")
-        TrezorDebugLog.log("RECONNECT", "Found matching device: id=${device.id}, name=${device.name}")
-        TrezorDebugLog.log("RECONNECT", "Calling connectWithThpRetry...")
-        val features = connectWithThpRetry(device.id)
-        TrezorDebugLog.log("RECONNECT", "Connected! label=${features.label}, model=${features.model}")
-        addOrUpdateKnownDevice(device, features)
-        _state.update {
-            it.copy(isConnecting = false, connectedDevice = features, connectedDeviceId = deviceId)
+        return runCatching {
+            _state.update { it.copy(isConnecting = true, error = null) }
+            TrezorDebugLog.log("RECONNECT", "=== connectKnownDevice START ===")
+            TrezorDebugLog.log("RECONNECT", "deviceId=$deviceId")
+            TrezorDebugLog.log("RECONNECT", "isInitialized=${_state.value.isInitialized}")
+            if (!_state.value.isInitialized) {
+                TrezorDebugLog.log("RECONNECT", "Initializing...")
+                initialize().getOrThrow()
+                TrezorDebugLog.log("RECONNECT", "Initialized OK")
+            }
+            TrezorDebugLog.log("RECONNECT", "Scanning for devices...")
+            val scannedDevices = trezorService.scan()
+            TrezorDebugLog.log(
+                "RECONNECT",
+                "Scan found ${scannedDevices.size} devices: ${scannedDevices.map { it.id }}",
+            )
+            val exactMatch = scannedDevices.find { it.id == deviceId }
+            val usbDevice = scannedDevices.find { it.transportType == TrezorTransportType.USB }
+            val device = if (exactMatch?.transportType == TrezorTransportType.BLUETOOTH && usbDevice != null) {
+                TrezorDebugLog.log("RECONNECT", "Preferring USB over BLE")
+                usbDevice
+            } else {
+                exactMatch ?: error("Device not found nearby — is it powered on?")
+            }
+            TrezorDebugLog.log("RECONNECT", "Found matching device: id=${device.id}, name=${device.name}")
+            TrezorDebugLog.log("RECONNECT", "Calling connectWithThpRetry...")
+            val features = connectWithThpRetry(device.id)
+            TrezorDebugLog.log("RECONNECT", "Connected! label=${features.label}, model=${features.model}")
+            addOrUpdateKnownDevice(device, features)
+            _state.update {
+                it.copy(isConnecting = false, connectedDevice = features, connectedDeviceId = device.id)
+            }
+            TrezorDebugLog.log("RECONNECT", "=== connectKnownDevice SUCCESS ===")
+            features
+        }.onFailure { e ->
+            TrezorDebugLog.log("RECONNECT", "FAILED: ${e.message}")
+            Logger.error("Connect known device failed", e, context = TAG)
+            _state.update { it.copy(isConnecting = false, error = e.message) }
         }
-        TrezorDebugLog.log("RECONNECT", "=== connectKnownDevice SUCCESS ===")
-        features
-    }.onFailure { e ->
-        TrezorDebugLog.log("RECONNECT", "FAILED: ${e.message}")
-        Logger.error("Connect known device failed", e, context = TAG)
-        _state.update { it.copy(isConnecting = false, error = e.message) }
     }
 
     suspend fun forgetDevice(deviceId: String): Result<Unit> = runCatching {
