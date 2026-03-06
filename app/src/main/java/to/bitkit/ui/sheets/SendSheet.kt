@@ -308,12 +308,8 @@ fun SendSheet(
                 SendErrorScreen(
                     errorMessage = route.errorMessage,
                     onRetry = {
-                        if (startDestination == SendRoute.Recipient) {
-                            navController.navigate(SendRoute.Recipient) {
-                                popUpTo<SendRoute.Recipient> { inclusive = true }
-                            }
-                        } else {
-                            navController.navigate(SendRoute.Success)
+                        navController.navigate(SendRoute.Recipient) {
+                            popUpTo(navController.graph.id) { inclusive = true }
                         }
                     },
                     onClose = {
