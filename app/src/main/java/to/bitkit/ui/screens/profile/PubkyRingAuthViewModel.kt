@@ -18,6 +18,7 @@ import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -25,6 +26,9 @@ class PubkyRingAuthViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "PubkyRingAuthViewModel"
+    }
 
     private val _uiState = MutableStateFlow(PubkyRingAuthUiState())
     val uiState = _uiState.asStateFlow()
@@ -72,6 +76,7 @@ class PubkyRingAuthViewModel @Inject constructor(
                     context.startActivity(intent)
                 }
                 .onFailure {
+                    Logger.error("Authentication failed", it, context = TAG)
                     _uiState.update { it.copy(isAuthenticating = false) }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
@@ -92,6 +97,7 @@ class PubkyRingAuthViewModel @Inject constructor(
                     _effects.emit(PubkyRingAuthEffect.Authenticated)
                 }
                 .onFailure {
+                    Logger.error("Auth approval failed", it, context = TAG)
                     _uiState.update { it.copy(isWaitingForRing = false) }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,

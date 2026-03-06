@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import to.bitkit.data.PubkyImageCache
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -40,6 +43,7 @@ class PubkyRepo @Inject constructor(
         private const val PREFS_NAME = "pubky_profile_cache"
         private const val KEY_CACHED_NAME = "cached_name"
         private const val KEY_CACHED_IMAGE_URI = "cached_image_uri"
+        private const val PUBKY_SCHEME = "pubky://"
     }
 
     private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
@@ -117,7 +121,6 @@ class PubkyRepo @Inject constructor(
         return runCatching {
             withContext(bgDispatcher) { pubkyService.startAuth() }
         }.onFailure {
-            Logger.error("Failed to start authentication", it, context = TAG)
             _authState.update { PubkyAuthState.Idle }
         }
     }
@@ -134,7 +137,6 @@ class PubkyRepo @Inject constructor(
                 pk
             }
         }.onFailure {
-            Logger.error("Failed to complete authentication", it, context = TAG)
             _authState.update { PubkyAuthState.Idle }
         }.onSuccess { pk ->
             _publicKey.update { pk }
@@ -193,6 +195,34 @@ class PubkyRepo @Inject constructor(
         _publicKey.update { null }
         _profile.update { null }
         _authState.update { PubkyAuthState.Idle }
+    }
+
+    fun cachedImage(uri: String): Bitmap? = imageCache.memoryImage(uri)
+
+    suspend fun fetchImage(uri: String): Result<Bitmap> = runCatching {
+        withContext(bgDispatcher) {
+            imageCache.image(uri)?.let { return@withContext it }
+
+            val data = pubkyService.fetchFile(uri)
+            val blobData = resolveImageData(data)
+            val image = BitmapFactory.decodeByteArray(blobData, 0, blobData.size)
+                ?: error("Could not decode image blob (${blobData.size} bytes)")
+            imageCache.store(image, blobData, uri)
+            image
+        }
+    }
+
+    private suspend fun resolveImageData(data: ByteArray): ByteArray {
+        return runCatching {
+            val json = JSONObject(String(data))
+            val src = json.optString("src", "")
+            if (src.isNotEmpty() && src.startsWith(PUBKY_SCHEME)) {
+                Logger.debug("File descriptor found, fetching blob from: $src", context = TAG)
+                pubkyService.fetchFile(src)
+            } else {
+                data
+            }
+        }.getOrDefault(data)
     }
 
     private fun cacheMetadata(profile: PubkyProfile) {

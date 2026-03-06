@@ -1,6 +1,5 @@
 package to.bitkit.ui.components
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -27,12 +26,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import to.bitkit.R
-import to.bitkit.data.PubkyImageCache
-import to.bitkit.services.PubkyService
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 
@@ -41,8 +36,7 @@ private const val TAG = "PubkyImage"
 @EntryPoint
 @InstallIn(SingletonComponent::class)
 interface PubkyImageEntryPoint {
-    fun pubkyService(): PubkyService
-    fun pubkyImageCache(): PubkyImageCache
+    fun pubkyRepo(): PubkyRepo
 }
 
 @Composable
@@ -52,12 +46,10 @@ fun PubkyImage(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val entryPoint = remember {
-        EntryPointAccessors.fromApplication(context, PubkyImageEntryPoint::class.java)
+    val repo = remember {
+        EntryPointAccessors.fromApplication(context, PubkyImageEntryPoint::class.java).pubkyRepo()
     }
-    val cache = remember { entryPoint.pubkyImageCache() }
-    val service = remember { entryPoint.pubkyService() }
-    var bitmap by remember(uri) { mutableStateOf(cache.memoryImage(uri)) }
+    var bitmap by remember(uri) { mutableStateOf(repo.cachedImage(uri)) }
     var hasFailed by remember(uri) { mutableStateOf(false) }
 
     LaunchedEffect(uri) {
@@ -65,23 +57,12 @@ fun PubkyImage(
 
         if (bitmap != null) return@LaunchedEffect
 
-        runCatching {
-            withContext(Dispatchers.IO) {
-                cache.image(uri)?.let { return@withContext it }
-
-                val data = service.fetchFile(uri)
-                val blobData = resolveImageData(data, service)
-                val image = BitmapFactory.decodeByteArray(blobData, 0, blobData.size)
-                    ?: error("Could not decode image blob (${blobData.size} bytes)")
-                cache.store(image, blobData, uri)
-                image
+        repo.fetchImage(uri)
+            .onSuccess { bitmap = it }
+            .onFailure {
+                Logger.error("Failed to load pubky image", it, context = TAG)
+                hasFailed = true
             }
-        }.onSuccess {
-            bitmap = it
-        }.onFailure {
-            Logger.error("Failed to load pubky image", it, context = TAG)
-            hasFailed = true
-        }
     }
 
     Box(
@@ -124,19 +105,4 @@ fun PubkyImage(
             }
         }
     }
-}
-
-private const val ALLOWED_SCHEME = "pubky://"
-
-private suspend fun resolveImageData(data: ByteArray, service: PubkyService): ByteArray {
-    return runCatching {
-        val json = JSONObject(String(data))
-        val src = json.optString("src", "")
-        if (src.isNotEmpty() && src.startsWith(ALLOWED_SCHEME)) {
-            Logger.debug("File descriptor found, fetching blob from: $src", context = TAG)
-            service.fetchFile(src)
-        } else {
-            data
-        }
-    }.getOrDefault(data)
 }

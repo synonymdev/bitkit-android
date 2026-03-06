@@ -22,6 +22,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -29,6 +30,9 @@ class ProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "ProfileViewModel"
+    }
 
     private val _showSignOutDialog = MutableStateFlow(false)
     private val _isSigningOut = MutableStateFlow(false)
@@ -77,6 +81,7 @@ class ProfileViewModel @Inject constructor(
                     _effects.emit(ProfileEffect.SignedOut)
                 }
                 .onFailure {
+                    Logger.error("Sign out failed", it, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__sign_out_title),
