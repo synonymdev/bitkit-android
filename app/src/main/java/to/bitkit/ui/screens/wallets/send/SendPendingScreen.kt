@@ -40,6 +40,7 @@ import to.bitkit.ui.screens.wallets.send.SendPendingUiState.Resolution
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.utils.Logger
 
 @Composable
 fun SendPendingScreen(
@@ -62,7 +63,7 @@ fun SendPendingScreen(
                     is Resolution.Success -> onPaymentSuccess(resolution.details)
                     is Resolution.Error -> onPaymentError(resolution.message)
                 }
-            }
+            }.onFailure { Logger.error("Failed handling payment resolution", it) }
             viewModel.onResolutionHandled()
         }
     }

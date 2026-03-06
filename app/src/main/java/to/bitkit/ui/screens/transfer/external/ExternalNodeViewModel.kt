@@ -187,7 +187,9 @@ class ExternalNodeViewModel @Inject constructor(
 
                 else -> WatchResult.Continue()
             }
-        }!!
+        }.let {
+            checkNotNull(it) { "Timeout in awaitChannelPendingEvent for userChannelId='$userChannelId'" }
+        }
     }
 }
 

@@ -82,7 +82,7 @@ fun SendSheet(
                     is SendEffect.PaymentSuccess -> {
                         appViewModel.clearClipboardForAutoRead()
                         navController.navigate(SendRoute.Success) {
-                            popUpTo<SendRoute.Pending> { inclusive = true }
+                            popUpTo(navController.graph.id) { inclusive = true }
                         }
                     }
 

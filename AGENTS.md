@@ -220,8 +220,10 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
 - ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
-- ALWAYS position `companion object at the top of the class
+- ALWAYS position `companion object` at the top of the class
+- NEVER use `Exception` directly, use `AppError` instead
 - ALWAYS inherit custom exceptions from `AppError`
+- ALWAYS prefer `requireNotNull(someNullable) { "error message" }` or `checkNotNull { "someErrorMessage" }` over `!!` or `?: SomeAppError()`
 - ALWAYS prefer Kotlin `Duration` for timeouts and delays
 - ALWAYS prefer `sealed interface` over `sealed class` when no shared state or constructor is needed
 - NEVER duplicate error logging in `.onFailure {}` if the called method already logs the same error internally

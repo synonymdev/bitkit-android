@@ -25,6 +25,10 @@ class QuickPayViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "QuickPayViewModel"
+    }
+
     private val _uiState = MutableStateFlow(QuickPayUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -64,7 +68,7 @@ class QuickPayViewModel @Inject constructor(
                     }
                 }.onFailure { error ->
                     if (error is PaymentPendingException) {
-                        Logger.info("QuickPay lightning payment pending: ${error.paymentHash}")
+                        Logger.info("QuickPay lightning payment pending", context = TAG)
                         _uiState.update {
                             it.copy(
                                 result = QuickPayResult.Pending(
@@ -75,7 +79,7 @@ class QuickPayViewModel @Inject constructor(
                         }
                         return@onFailure
                     }
-                    Logger.error("QuickPay lightning payment failed", error)
+                    Logger.error("QuickPay lightning payment failed", error, context = TAG)
 
                     _uiState.update {
                         it.copy(result = QuickPayResult.Error(error.message.orEmpty()))

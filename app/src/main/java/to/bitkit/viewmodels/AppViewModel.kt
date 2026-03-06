@@ -1720,7 +1720,7 @@ class AppViewModel @Inject constructor(
                     )
                 }.onFailure { e ->
                     if (e is PaymentPendingException) {
-                        Logger.info("Lightning payment pending: ${e.paymentHash}", context = TAG)
+                        Logger.info("Lightning payment pending", context = TAG)
                         lightningRepo.trackPendingPayment(e.paymentHash)
                         setSendEffect(SendEffect.NavigateToPending(e.paymentHash, paymentAmount.toLong()))
                         return@onFailure
