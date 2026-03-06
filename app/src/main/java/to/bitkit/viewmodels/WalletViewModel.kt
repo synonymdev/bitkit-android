@@ -62,7 +62,6 @@ class WalletViewModel @Inject constructor(
     companion object {
         private const val TAG = "WalletViewModel"
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
-        private const val CHANNEL_RECOVERY_RESTART_DELAY_MS = 500L
     }
 
     val lightningState = lightningRepo.lightningState
@@ -267,8 +266,13 @@ class WalletViewModel @Inject constructor(
 
                 waitForRestoreIfNeeded()
 
-                val channelMigration = buildChannelMigrationIfAvailable()
+                val orphanedRecoveryResult = fetchOrphanedChannelMonitorsIfNeeded()
+                val isOrphanedRecovery = orphanedRecoveryResult != null
+                val channelMigration = buildChannelMigrationIfAvailable(isOrphanedRecovery)
                 startNode(walletIndex, channelMigration)
+                if (orphanedRecoveryResult == true) {
+                    migrationService.markChannelRecoveryChecked()
+                }
             } finally {
                 isStarting = false
             }
@@ -282,10 +286,11 @@ class WalletViewModel @Inject constructor(
         } ?: Logger.warn("waitForRestoreIfNeeded timeout, proceeding anyway", context = TAG)
     }
 
-    private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? =
+    private fun buildChannelMigrationIfAvailable(isOrphanedRecovery: Boolean = false): ChannelDataMigration? =
         migrationService.peekPendingChannelMigration()?.let { migration ->
             ChannelDataMigration(
-                channelManager = migration.channelManager.map { it.toUByte() },
+                // don't overwrite channel manager for orphaned recovery, we only need the monitors for the sweep
+                channelManager = if (isOrphanedRecovery) null else migration.channelManager.map { it.toUByte() },
                 channelMonitors = migration.channelMonitors.map { monitor -> monitor.map { it.toUByte() } },
             )
         }
@@ -306,7 +311,6 @@ class WalletViewModel @Inject constructor(
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
                 }
-                checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
                 Logger.error("Node startup error", it, context = TAG)
@@ -328,48 +332,17 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    private suspend fun checkForOrphanedChannelMonitorRecovery() {
-        if (migrationService.isChannelRecoveryChecked()) return
+    private suspend fun fetchOrphanedChannelMonitorsIfNeeded(): Boolean? {
+        if (migrationService.isChannelRecoveryChecked()) return null
+        if (migrationService.peekPendingChannelMigration() != null) return null
 
-        Logger.info("Running one-time channel monitor recovery check", context = TAG)
+        Logger.info("Running pre-startup channel monitor recovery check", context = TAG)
 
-        val allMonitorsRetrieved = runCatching {
-            val allRetrieved = migrationService.fetchRNRemoteLdkData()
-            val channelMigration = buildChannelMigrationIfAvailable()
-
-            if (channelMigration == null) {
-                Logger.info("No channel monitors found on RN backup", context = TAG)
-                return@runCatching allRetrieved
-            }
-
-            Logger.info(
-                "Found ${channelMigration.channelMonitors.size} monitors on RN backup, attempting recovery",
-                context = TAG,
-            )
-
-            lightningRepo.stop().onFailure {
-                Logger.error("Failed to stop node for channel recovery", it, context = TAG)
-            }
-            delay(CHANNEL_RECOVERY_RESTART_DELAY_MS)
-            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
-                .onSuccess {
-                    migrationService.consumePendingChannelMigration()
-                    walletRepo.syncNodeAndWallet()
-                    walletRepo.syncBalances()
-                    Logger.info("Channel monitor recovery complete", context = TAG)
-                }
-                .onFailure {
-                    Logger.error("Failed to restart node after channel recovery", it, context = TAG)
-                }
-
-            allRetrieved
+        return runCatching {
+            migrationService.fetchRNRemoteLdkData()
+        }.onFailure {
+            Logger.error("Pre-startup channel monitor fetch failed", it, context = TAG)
         }.getOrDefault(false)
-
-        if (allMonitorsRetrieved) {
-            migrationService.markChannelRecoveryChecked()
-        } else {
-            Logger.warn("Some monitors failed to download, will retry on next startup", context = TAG)
-        }
     }
 
     fun stop() {
