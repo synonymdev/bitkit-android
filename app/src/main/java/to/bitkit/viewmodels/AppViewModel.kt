@@ -433,6 +433,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.pruneEmptyAddressTypesAfterRestore()
                 walletRepo.debounceSyncByEvent()
             }
+
             !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
             else -> Unit
         }
@@ -1870,26 +1871,12 @@ class AppViewModel @Inject constructor(
     ): Result<PaymentId> {
         return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
             // Wait until matching payment event is received (with timeout for hold invoices)
-            val result = lightningRepo.nodeEvents.watchUntil(
-                timeout = LightningRepo.SEND_LIGHTNING_TIMEOUT,
-            ) { event ->
-                when (event) {
-                    is Event.PaymentSuccessful -> {
-                        if (event.paymentHash == hash) {
-                            WatchResult.Complete(Result.success(hash))
-                        } else {
-                            WatchResult.Continue()
-                        }
-                    }
-
-                    is Event.PaymentFailed -> {
-                        if (event.paymentHash == hash) {
-                            val error = Exception(event.reason.toUserMessage(context))
-                            WatchResult.Complete(Result.failure(error))
-                        } else {
-                            WatchResult.Continue()
-                        }
-                    }
+            val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+                when (it) {
+                    is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
+                    is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
+                        Result.failure(AppError(it.reason.toUserMessage(context)))
+                    )
 
                     else -> WatchResult.Continue()
                 }

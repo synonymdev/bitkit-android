@@ -16,6 +16,7 @@ import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -99,26 +100,12 @@ class QuickPayViewModel @Inject constructor(
             .getOrDefault("")
 
         // Wait until matching payment event is received (with timeout for hold invoices)
-        val result = lightningRepo.nodeEvents.watchUntil(
-            timeout = LightningRepo.SEND_LIGHTNING_TIMEOUT,
-        ) { event ->
-            when (event) {
-                is Event.PaymentSuccessful -> {
-                    if (event.paymentHash == hash) {
-                        WatchResult.Complete(Result.success(hash))
-                    } else {
-                        WatchResult.Continue()
-                    }
-                }
-
-                is Event.PaymentFailed -> {
-                    if (event.paymentHash == hash) {
-                        val error = Exception(event.reason.toUserMessage(context))
-                        WatchResult.Complete(Result.failure(error))
-                    } else {
-                        WatchResult.Continue()
-                    }
-                }
+        val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+            when (it) {
+                is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
+                is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
+                    Result.failure(AppError(it.reason.toUserMessage(context)))
+                )
 
                 else -> WatchResult.Continue()
             }

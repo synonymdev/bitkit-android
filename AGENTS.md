@@ -225,6 +225,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS inherit custom exceptions from `AppError`
 - ALWAYS prefer `requireNotNull(someNullable) { "error message" }` or `checkNotNull { "someErrorMessage" }` over `!!` or `?: SomeAppError()`
 - ALWAYS prefer Kotlin `Duration` for timeouts and delays
+- ALWAYS prefer `when (subject)` with Kotlin guard conditions (`if`) over condition-based `when {}` with `is` type checks, e.g. `when (event) { is Foo if event.x == y -> ... }` instead of `when { event is Foo && event.x == y -> ... }`
 - ALWAYS prefer `sealed interface` over `sealed class` when no shared state or constructor is needed
 - NEVER duplicate error logging in `.onFailure {}` if the called method already logs the same error internally
 
