@@ -58,7 +58,7 @@ E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
 - **State Management**: StateFlow, SharedFlow
 - **Navigation**: Compose Navigation with strongly typed routes
 - **Push Notifications**: Firebase
-- **Storage**: DataStore with json files
+- **Storage**: DataStore with JSON files
 
 ### Project Structure
 
@@ -165,6 +165,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
 - NEVER capitalize words in commit messages
+- ALWAYS create a `*-backup` branch before performing a rebase
 - ALWAYS suggest 3 commit messages with confidence score ratings, e.g. `fix: show toast on resolution (90%)`. In plan mode, include them at the end of the plan. If the user picks one via plan update, commit after implementation. Outside plan mode, suggest after implementation completes. In both cases, run `git status` to check ALL uncommitted changes after completing code edits
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
@@ -205,12 +206,12 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
-- NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
+- ALWAYS use `whenever { mock.suspendCall() }` for suspend stubs and `whenever(mock.call())` for non-suspend stubs
+- NEVER use the old, deprecated `wheneverBlocking`
 - ALWAYS prefer `kotlin.test` asserts over `org.junit.Assert` in unit tests
-- ALWAYS use a deterministic locale in unit tests to ensure consistent results across CI and local environments
+- ALWAYS use a deterministic locale in unit tests to ensure consistent results across CI and local runs
 - ALWAYS add a locale parameter with default value `Locale.getDefault()` to methods that depend on locale
-- ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking {}`
-- ALWAYS add business logic to Repository layer via methods returning `Result<T>` and use it in ViewModels
+- ALWAYS add business logic to repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
 - ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms

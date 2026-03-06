@@ -57,6 +57,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@Suppress("LargeClass")
 class LightningRepoTest : BaseUnitTest() {
     private lateinit var sut: LightningRepo
 
