@@ -1388,6 +1388,8 @@ class LightningRepo @Inject constructor(
 
     fun trackPendingPayment(paymentHash: String) = pendingPayments.add(paymentHash)
 
+    fun isPendingPayment(hash: String): Boolean = pendingPayments.contains(hash)
+
     fun setActivePendingPaymentHash(hash: String?) = run { _activePendingPaymentHash.set(hash) }
 
     fun isActivePendingPayment(hash: String): Boolean = _activePendingPaymentHash.get() == hash
