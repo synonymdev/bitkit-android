@@ -593,7 +593,7 @@ class AppViewModel @Inject constructor(
             )
             if (resolved) {
                 if (_currentSheet.value !is Sheet.Send || !lightningRepo.isActivePendingPayment(paymentHash)) {
-                    notifyPaymentFailed(event.reason)
+                    notifyPendingPaymentFailed()
                 }
                 return
             }
@@ -698,6 +698,13 @@ class AppViewModel @Inject constructor(
         title = context.getString(R.string.wallet__toast_payment_sent_title),
         description = context.getString(R.string.wallet__toast_payment_sent_description),
         testTag = "PendingPaymentSucceededToast",
+    )
+
+    private fun notifyPendingPaymentFailed() = toast(
+        type = Toast.ToastType.ERROR,
+        title = context.getString(R.string.wallet__toast_payment_failed_title),
+        description = context.getString(R.string.wallet__toast_payment_failed_description),
+        testTag = "PendingPaymentFailedToast",
     )
 
     private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(

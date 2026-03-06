@@ -971,7 +971,7 @@
     <string name="wallet__toast_payment_failed_route_not_found">Could not find a payment path to the recipient.</string>
     <string name="wallet__toast_payment_failed_timeout">Payment timed out. Please try again.</string>
     <string name="wallet__toast_payment_failed_title">Payment Failed</string>
-    <string name="wallet__toast_payment_sent_description">Your pending payment was completed successfully.</string>
+    <string name="wallet__toast_payment_sent_description">Your instant payment was sent successfully.</string>
     <string name="wallet__toast_payment_sent_title">Payment Sent</string>
     <string name="wallet__toast_received_transaction_replaced_description">Your received transaction was replaced by a fee bump</string>
     <string name="wallet__toast_received_transaction_replaced_title">Received Transaction Replaced</string>

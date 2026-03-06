@@ -40,6 +40,7 @@ import to.bitkit.ui.screens.wallets.send.SendPendingUiState.Resolution
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 
 @Composable
@@ -101,7 +102,7 @@ private fun Content(
             BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
 
             VerticalSpacer(32.dp)
-            BodyM(stringResource(R.string.wallet__send_pending__description))
+            BodyM(stringResource(R.string.wallet__send_pending__description), color = Colors.White64)
 
             FillHeight()
             HourglassAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
