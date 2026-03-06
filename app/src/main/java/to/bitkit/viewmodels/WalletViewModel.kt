@@ -61,6 +61,7 @@ class WalletViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
+        private const val NODE_RESTART_DELAY_MS = 500L
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
     }
 
@@ -269,7 +270,17 @@ class WalletViewModel @Inject constructor(
                 val orphanedRecoveryResult = fetchOrphanedChannelMonitorsIfNeeded()
                 val isOrphanedRecovery = orphanedRecoveryResult != null
                 val channelMigration = buildChannelMigrationIfAvailable(isOrphanedRecovery)
+
+                // If node is already running, stop it first so the migration data is applied on restart
+                val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunningOrStarting()
+                if (channelMigration != null && isNodeRunning) {
+                    Logger.info("Stopping running node to apply channel migration data", context = TAG)
+                    lightningRepo.stop()
+                    delay(NODE_RESTART_DELAY_MS)
+                }
+
                 startNode(walletIndex, channelMigration)
+
                 if (orphanedRecoveryResult == true) {
                     migrationService.markChannelRecoveryChecked()
                 }
