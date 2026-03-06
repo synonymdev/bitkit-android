@@ -119,9 +119,9 @@ fun PubkyImage(
             }
             else -> {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(size / 3),
                     strokeWidth = 2.dp,
                     color = Colors.White32,
+                    modifier = Modifier.size(size / 3),
                 )
             }
         }

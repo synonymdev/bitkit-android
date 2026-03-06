@@ -115,7 +115,9 @@ class PubkyRepo @Inject constructor(
                 Logger.info("Paykit session restored for ${result.publicKey}", context = TAG)
                 loadProfile()
             }
-            is InitResult.RestorationFailed -> Unit
+            is InitResult.RestorationFailed -> {
+                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+            }
         }
     }
 
@@ -132,11 +134,12 @@ class PubkyRepo @Inject constructor(
         return runCatching {
             withContext(bgDispatcher) {
                 val sessionSecret = pubkyService.completeAuth()
+                val pk = pubkyService.importSession(sessionSecret)
 
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
                 keychain.saveString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
 
-                pubkyService.importSession(sessionSecret)
+                pk
             }
         }.onFailure {
             _authState.update { PubkyAuthState.Idle }
@@ -164,19 +167,22 @@ class PubkyRepo @Inject constructor(
         if (_isLoadingProfile.value) return
 
         _isLoadingProfile.update { true }
-        runCatching {
-            withContext(bgDispatcher) {
-                val ffiProfile = pubkyService.getProfile(pk)
-                Logger.debug("Profile loaded — name: ${ffiProfile.name}, image: ${ffiProfile.image}", context = TAG)
-                PubkyProfile.fromFfi(pk, ffiProfile)
+        try {
+            runCatching {
+                withContext(bgDispatcher) {
+                    val ffiProfile = pubkyService.getProfile(pk)
+                    Logger.debug("Profile loaded — name: ${ffiProfile.name}, image: ${ffiProfile.image}", context = TAG)
+                    PubkyProfile.fromFfi(pk, ffiProfile)
+                }
+            }.onSuccess { loadedProfile ->
+                _profile.update { loadedProfile }
+                cacheMetadata(loadedProfile)
+            }.onFailure {
+                Logger.error("Failed to load profile", it, context = TAG)
             }
-        }.onSuccess { loadedProfile ->
-            _profile.update { loadedProfile }
-            cacheMetadata(loadedProfile)
-        }.onFailure {
-            Logger.error("Failed to load profile", it, context = TAG)
+        } finally {
+            _isLoadingProfile.update { false }
         }
-        _isLoadingProfile.update { false }
     }
 
     suspend fun signOut(): Result<Unit> = runCatching {
