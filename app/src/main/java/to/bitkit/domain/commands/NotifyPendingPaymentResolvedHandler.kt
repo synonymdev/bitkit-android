@@ -8,7 +8,7 @@ import to.bitkit.R
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.NotificationDetails
-import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,7 +17,7 @@ import javax.inject.Singleton
 class NotifyPendingPaymentResolvedHandler @Inject constructor(
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-    private val lightningRepo: LightningRepo,
+    private val pendingPaymentRepo: PendingPaymentRepo,
 ) {
     companion object {
         const val TAG = "NotifyPendingPaymentResolvedHandler"
@@ -27,7 +27,7 @@ class NotifyPendingPaymentResolvedHandler @Inject constructor(
         command: NotifyPendingPaymentResolved.Command,
     ): Result<NotifyPendingPaymentResolved.Result> = withContext(ioDispatcher) {
         runCatching {
-            if (!lightningRepo.isPendingPayment(command.paymentHash)) {
+            if (!pendingPaymentRepo.isPending(command.paymentHash)) {
                 return@runCatching NotifyPendingPaymentResolved.Result.Skip
             }
             val notification = buildNotificationContent(command)

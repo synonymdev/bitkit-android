@@ -18,7 +18,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.ActivityRepo
-import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.ui.screens.wallets.send.SendPendingUiState.Resolution
 import to.bitkit.utils.Logger
@@ -26,7 +26,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SendPendingViewModel @Inject constructor(
-    private val lightningRepo: LightningRepo,
+    private val pendingPaymentRepo: PendingPaymentRepo,
     private val activityRepo: ActivityRepo,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
@@ -43,14 +43,14 @@ class SendPendingViewModel @Inject constructor(
     fun init(paymentHash: String, amount: Long) {
         if (isInitialized) return
         isInitialized = true
-        lightningRepo.setActivePendingPaymentHash(paymentHash)
+        pendingPaymentRepo.setActiveHash(paymentHash)
         _uiState.update { it.copy(amount = amount) }
         findActivity(paymentHash)
         observeResolution(paymentHash, amount)
     }
 
     override fun onCleared() {
-        lightningRepo.setActivePendingPaymentHash(null)
+        pendingPaymentRepo.setActiveHash(null)
     }
 
     fun onResolutionHandled() = _uiState.update { it.copy(resolution = null) }
@@ -70,7 +70,7 @@ class SendPendingViewModel @Inject constructor(
 
     private fun observeResolution(paymentHash: String, amount: Long) {
         viewModelScope.launch {
-            lightningRepo.pendingPaymentResolution
+            pendingPaymentRepo.resolution
                 .filter { it.paymentHash == paymentHash }
                 .collect { resolution ->
                     Logger.info(

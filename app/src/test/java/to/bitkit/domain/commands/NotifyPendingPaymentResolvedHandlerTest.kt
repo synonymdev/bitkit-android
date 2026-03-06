@@ -8,7 +8,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.R
-import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
 
     private val context: Context = mock()
-    private val lightningRepo: LightningRepo = mock()
+    private val pendingPaymentRepo: PendingPaymentRepo = mock()
 
     private lateinit var sut: NotifyPendingPaymentResolvedHandler
 
@@ -34,13 +34,13 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
         sut = NotifyPendingPaymentResolvedHandler(
             context = context,
             ioDispatcher = testDispatcher,
-            lightningRepo = lightningRepo,
+            pendingPaymentRepo = pendingPaymentRepo,
         )
     }
 
     @Test
     fun `success command returns ShowNotification when pending`() = test {
-        whenever(lightningRepo.isPendingPayment(any())).thenReturn(true)
+        whenever(pendingPaymentRepo.isPending(any())).thenReturn(true)
         val command = NotifyPendingPaymentResolved.Command.Success(paymentHash = "hash123")
 
         val result = sut(command)
@@ -54,7 +54,7 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
 
     @Test
     fun `failure command returns ShowNotification when pending`() = test {
-        whenever(lightningRepo.isPendingPayment(any())).thenReturn(true)
+        whenever(pendingPaymentRepo.isPending(any())).thenReturn(true)
         val command = NotifyPendingPaymentResolved.Command.Failure(
             paymentHash = "hash456",
             reason = PaymentFailureReason.ROUTE_NOT_FOUND,
@@ -71,7 +71,7 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
 
     @Test
     fun `success command returns Skip when not pending`() = test {
-        whenever(lightningRepo.isPendingPayment(any())).thenReturn(false)
+        whenever(pendingPaymentRepo.isPending(any())).thenReturn(false)
         val command = NotifyPendingPaymentResolved.Command.Success(paymentHash = "hash789")
 
         val result = sut(command)
@@ -83,7 +83,7 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
 
     @Test
     fun `failure command returns Skip when not pending`() = test {
-        whenever(lightningRepo.isPendingPayment(any())).thenReturn(false)
+        whenever(pendingPaymentRepo.isPending(any())).thenReturn(false)
         val command = NotifyPendingPaymentResolved.Command.Failure(
             paymentHash = "hash000",
             reason = PaymentFailureReason.RETRIES_EXHAUSTED,

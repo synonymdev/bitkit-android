@@ -104,6 +104,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
+import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.TransferRepo
@@ -118,6 +119,7 @@ import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
@@ -145,6 +147,7 @@ class AppViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val lightningRepo: LightningRepo,
+    private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
     private val backupRepo: BackupRepo,
     private val settingsStore: SettingsStore,
@@ -588,11 +591,11 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
-            val resolved = lightningRepo.resolvePendingPayment(
+            val resolved = pendingPaymentRepo.resolve(
                 PendingPaymentResolution.Failure(paymentHash, event.reason.toUserMessage(context))
             )
             if (resolved) {
-                if (_currentSheet.value !is Sheet.Send || !lightningRepo.isActivePendingPayment(paymentHash)) {
+                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentFailed()
                 }
                 return
@@ -611,9 +614,9 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
-            val resolved = lightningRepo.resolvePendingPayment(PendingPaymentResolution.Success(paymentHash))
+            val resolved = pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash))
             if (resolved) {
-                if (_currentSheet.value !is Sheet.Send || !lightningRepo.isActivePendingPayment(paymentHash)) {
+                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentSucceeded()
                 }
                 return
@@ -1729,19 +1732,19 @@ class AppViewModel @Inject constructor(
                             sats = paymentAmount.toLong(), // TODO Add fee when available
                         ),
                     )
-                }.onFailure { e ->
-                    if (e is PaymentPendingException) {
+                }.onFailure {
+                    if (it is PaymentPendingException) {
                         Logger.info("Lightning payment pending", context = TAG)
-                        lightningRepo.trackPendingPayment(e.paymentHash)
-                        setSendEffect(SendEffect.NavigateToPending(e.paymentHash, paymentAmount.toLong()))
+                        pendingPaymentRepo.track(it.paymentHash)
+                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, paymentAmount.toLong()))
                         return@onFailure
                     }
                     // Delete pre-activity metadata on failure
                     if (createdMetadataPaymentId != null) {
                         preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
                     }
-                    Logger.error("Error sending lightning payment", e, context = TAG)
-                    toast(e)
+                    Logger.error("Error sending lightning payment", it, context = TAG)
+                    toast(it)
                     hideSheet()
                 }
             }
@@ -1906,7 +1909,7 @@ class AppViewModel @Inject constructor(
 
     fun resetQuickPay() = _quickPayData.update { null }
 
-    fun trackPendingPayment(paymentHash: String) = lightningRepo.trackPendingPayment(paymentHash)
+    fun trackPendingPayment(paymentHash: String) = pendingPaymentRepo.track(paymentHash)
 
     fun navigateToActivity(activityRawId: String) {
         viewModelScope.launch {
