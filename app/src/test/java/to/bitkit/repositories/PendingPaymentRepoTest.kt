@@ -7,6 +7,7 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PendingPaymentRepoTest : BaseUnitTest() {
@@ -19,14 +20,16 @@ class PendingPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `track adds hash and returns true`() {
-        assertTrue(sut.track("hash1"))
+    fun `track adds hash to pending set`() {
+        sut.track("hash1")
+        assertTrue(sut.isPending("hash1"))
     }
 
     @Test
-    fun `track returns false for duplicate hash`() {
+    fun `track is idempotent for duplicate hash`() {
         sut.track("hash1")
-        assertFalse(sut.track("hash1"))
+        sut.track("hash1")
+        assertEquals(1, sut.state.value.pendingPayments.size)
     }
 
     @Test
@@ -66,11 +69,10 @@ class PendingPaymentRepoTest : BaseUnitTest() {
     fun `resolve emits Failure on resolution flow`() = test {
         sut.track("hash1")
         sut.resolution.test {
-            sut.resolve(PendingPaymentResolution.Failure("hash1", "route not found"))
+            sut.resolve(PendingPaymentResolution.Failure("hash1"))
             val item = awaitItem()
             assertIs<PendingPaymentResolution.Failure>(item)
             assertEquals("hash1", item.paymentHash)
-            assertEquals("route not found", item.reason)
         }
     }
 
@@ -91,5 +93,22 @@ class PendingPaymentRepoTest : BaseUnitTest() {
         sut.setActiveHash("hash1")
         sut.setActiveHash(null)
         assertFalse(sut.isActive("hash1"))
+    }
+
+    @Test
+    fun `resolve clears activeHash when pendingPayments becomes empty`() {
+        sut.track("hash1")
+        sut.setActiveHash("hash1")
+        sut.resolve(PendingPaymentResolution.Success("hash1"))
+        assertNull(sut.state.value.activeHash)
+    }
+
+    @Test
+    fun `resolve keeps activeHash when pendingPayments is not empty`() {
+        sut.track("hash1")
+        sut.track("hash2")
+        sut.setActiveHash("hash1")
+        sut.resolve(PendingPaymentResolution.Success("hash2"))
+        assertEquals("hash1", sut.state.value.activeHash)
     }
 }

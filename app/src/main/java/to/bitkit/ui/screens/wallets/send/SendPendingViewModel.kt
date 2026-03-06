@@ -1,18 +1,15 @@
 package to.bitkit.ui.screens.wallets.send
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.R
 import to.bitkit.ext.rawId
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -28,7 +25,6 @@ import javax.inject.Inject
 class SendPendingViewModel @Inject constructor(
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val activityRepo: ActivityRepo,
-    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     companion object {
@@ -89,9 +85,7 @@ class SendPendingViewModel @Inject constructor(
                                     )
                                 )
 
-                                is PendingPaymentResolution.Failure -> Resolution.Error(
-                                    resolution.reason ?: context.getString(R.string.wallet__toast_payment_failed_title)
-                                )
+                                is PendingPaymentResolution.Failure -> Resolution.Error
                             }
                         )
                     }
@@ -107,6 +101,6 @@ data class SendPendingUiState(
 ) {
     sealed interface Resolution {
         data class Success(val details: NewTransactionSheetDetails) : Resolution
-        data class Error(val message: String) : Resolution
+        data object Error : Resolution
     }
 }

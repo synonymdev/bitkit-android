@@ -48,7 +48,7 @@ fun SendPendingScreen(
     paymentHash: String,
     amount: Long,
     onPaymentSuccess: (NewTransactionSheetDetails) -> Unit,
-    onPaymentError: (String) -> Unit,
+    onPaymentError: () -> Unit,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
     viewModel: SendPendingViewModel,
@@ -62,7 +62,7 @@ fun SendPendingScreen(
             runCatching {
                 when (resolution) {
                     is Resolution.Success -> onPaymentSuccess(resolution.details)
-                    is Resolution.Error -> onPaymentError(resolution.message)
+                    is Resolution.Error -> onPaymentError()
                 }
             }.onFailure { Logger.error("Failed handling payment resolution", it) }
             viewModel.onResolutionHandled()

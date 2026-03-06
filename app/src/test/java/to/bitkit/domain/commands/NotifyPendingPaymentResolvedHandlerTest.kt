@@ -3,7 +3,6 @@ package to.bitkit.domain.commands
 import android.content.Context
 import org.junit.Before
 import org.junit.Test
-import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
@@ -55,10 +54,7 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
     @Test
     fun `failure command returns ShowNotification when pending`() = test {
         whenever(pendingPaymentRepo.isPending(any())).thenReturn(true)
-        val command = NotifyPendingPaymentResolved.Command.Failure(
-            paymentHash = "hash456",
-            reason = PaymentFailureReason.ROUTE_NOT_FOUND,
-        )
+        val command = NotifyPendingPaymentResolved.Command.Failure(paymentHash = "hash456")
 
         val result = sut(command)
 
@@ -84,10 +80,7 @@ class NotifyPendingPaymentResolvedHandlerTest : BaseUnitTest() {
     @Test
     fun `failure command returns Skip when not pending`() = test {
         whenever(pendingPaymentRepo.isPending(any())).thenReturn(false)
-        val command = NotifyPendingPaymentResolved.Command.Failure(
-            paymentHash = "hash000",
-            reason = PaymentFailureReason.RETRIES_EXHAUSTED,
-        )
+        val command = NotifyPendingPaymentResolved.Command.Failure(paymentHash = "hash000")
 
         val result = sut(command)
 

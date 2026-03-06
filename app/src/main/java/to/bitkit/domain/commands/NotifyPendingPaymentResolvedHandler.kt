@@ -4,9 +4,7 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import to.bitkit.R
 import to.bitkit.di.IoDispatcher
-import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -39,13 +37,7 @@ class NotifyPendingPaymentResolvedHandler @Inject constructor(
     private fun buildNotificationContent(
         command: NotifyPendingPaymentResolved.Command,
     ) = when (command) {
-        is NotifyPendingPaymentResolved.Command.Success -> NotificationDetails(
-            title = context.getString(R.string.wallet__toast_payment_sent_title),
-            body = context.getString(R.string.wallet__toast_payment_sent_description),
-        )
-        is NotifyPendingPaymentResolved.Command.Failure -> NotificationDetails(
-            title = context.getString(R.string.wallet__toast_payment_failed_title),
-            body = context.getString(R.string.wallet__toast_payment_failed_description),
-        )
+        is NotifyPendingPaymentResolved.Command.Success -> NotifyPendingPaymentResolved.successNotification(context)
+        is NotifyPendingPaymentResolved.Command.Failure -> NotifyPendingPaymentResolved.failureNotification(context)
     }
 }

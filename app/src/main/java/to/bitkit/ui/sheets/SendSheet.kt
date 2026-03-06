@@ -287,8 +287,8 @@ fun SendSheet(
                     onPaymentSuccess = { details ->
                         appViewModel.handlePaymentSuccess(details)
                     },
-                    onPaymentError = { errorMessage ->
-                        navController.navigate(SendRoute.Error(errorMessage)) {
+                    onPaymentError = {
+                        navController.navigate(SendRoute.Error()) {
                             popUpTo<SendRoute.Pending> { inclusive = true }
                         }
                     },
@@ -306,7 +306,7 @@ fun SendSheet(
             composableWithDefaultTransitions<SendRoute.Error> {
                 val route = it.toRoute<SendRoute.Error>()
                 SendErrorScreen(
-                    errorMessage = route.errorMessage,
+                    message = route.message,
                     onRetry = {
                         navController.navigate(SendRoute.Recipient) {
                             popUpTo(navController.graph.id) { inclusive = true }
@@ -377,5 +377,5 @@ sealed interface SendRoute {
     data class Pending(val paymentHash: String, val amount: Long) : SendRoute
 
     @Serializable
-    data class Error(val errorMessage: String) : SendRoute
+    data class Error(val message: String? = null) : SendRoute
 }

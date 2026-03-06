@@ -63,6 +63,7 @@ import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.domain.commands.NotifyPendingPaymentResolved
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
@@ -593,7 +594,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
             val resolved = pendingPaymentRepo.resolve(
-                PendingPaymentResolution.Failure(paymentHash, event.reason.toUserMessage(context))
+                PendingPaymentResolution.Failure(paymentHash)
             )
             if (resolved) {
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
@@ -697,19 +698,25 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun notifyPendingPaymentSucceeded() = toast(
-        type = Toast.ToastType.LIGHTNING,
-        title = context.getString(R.string.wallet__toast_payment_sent_title),
-        description = context.getString(R.string.wallet__toast_payment_sent_description),
-        testTag = "PendingPaymentSucceededToast",
-    )
+    private fun notifyPendingPaymentSucceeded() {
+        val details = NotifyPendingPaymentResolved.successNotification(context)
+        toast(
+            type = Toast.ToastType.LIGHTNING,
+            title = details.title,
+            description = details.body,
+            testTag = "PendingPaymentSucceededToast",
+        )
+    }
 
-    private fun notifyPendingPaymentFailed() = toast(
-        type = Toast.ToastType.ERROR,
-        title = context.getString(R.string.wallet__toast_payment_failed_title),
-        description = context.getString(R.string.wallet__toast_payment_failed_description),
-        testTag = "PendingPaymentFailedToast",
-    )
+    private fun notifyPendingPaymentFailed() {
+        val details = NotifyPendingPaymentResolved.failureNotification(context)
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = details.title,
+            description = details.body,
+            testTag = "PendingPaymentFailedToast",
+        )
+    }
 
     private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(
         type = Toast.ToastType.ERROR,
