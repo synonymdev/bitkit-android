@@ -52,7 +52,7 @@ internal fun Context.notificationBuilder(
     val pendingIntent = PendingIntent.getActivity(this, 0, intent, flags)
 
     return NotificationCompat.Builder(this, channelId)
-        .setSmallIcon(R.drawable.ic_launcher_fg_regtest)
+        .setSmallIcon(R.drawable.ic_bitkit_outlined)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
         .setContentIntent(pendingIntent) // fired on tap
