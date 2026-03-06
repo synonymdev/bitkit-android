@@ -68,6 +68,10 @@ class SendPendingViewModel @Inject constructor(
             lightningRepo.pendingPaymentResolution
                 .filter { it.paymentHash == paymentHash }
                 .collect { resolution ->
+                    Logger.info(
+                        "Received payment resolution '${resolution::class.simpleName}' for '$paymentHash'",
+                        context = TAG,
+                    )
                     _uiState.update {
                         it.copy(
                             resolution = when (resolution) {
