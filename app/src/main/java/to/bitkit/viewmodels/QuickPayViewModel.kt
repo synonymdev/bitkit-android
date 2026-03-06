@@ -16,6 +16,7 @@ import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
+import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -24,6 +25,7 @@ import javax.inject.Inject
 class QuickPayViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
+    private val pendingPaymentRepo: PendingPaymentRepo,
 ) : ViewModel() {
 
     companion object {
@@ -35,9 +37,9 @@ class QuickPayViewModel @Inject constructor(
 
     val lightningState = lightningRepo.lightningState
 
-    fun pay(quickPayData: QuickPayData) {
+    fun pay(data: QuickPayData) {
         viewModelScope.launch {
-            val (bolt11, amount) = when (val data = quickPayData) {
+            val (bolt11, amount) = when (data) {
                 is QuickPayData.Bolt11 -> {
                     Logger.info("QuickPay: processing bolt11 invoice")
                     data.bolt11 to data.sats
@@ -52,7 +54,7 @@ class QuickPayViewModel @Inject constructor(
                             }
                             return@launch
                         }
-                    invoice.bolt11 to quickPayData.sats
+                    invoice.bolt11 to data.sats
                 }
             }
 
@@ -70,6 +72,7 @@ class QuickPayViewModel @Inject constructor(
                 }.onFailure { error ->
                     if (error is PaymentPendingException) {
                         Logger.info("QuickPay lightning payment pending", context = TAG)
+                        pendingPaymentRepo.track(error.paymentHash)
                         _uiState.update {
                             it.copy(
                                 result = QuickPayResult.Pending(

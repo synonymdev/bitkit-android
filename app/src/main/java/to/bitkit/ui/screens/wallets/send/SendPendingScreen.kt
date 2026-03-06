@@ -40,7 +40,6 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.utils.Logger
 
 @Composable
 fun SendPendingScreen(
@@ -58,12 +57,10 @@ fun SendPendingScreen(
 
     uiState.resolution?.let { resolution ->
         LaunchedEffect(resolution) {
-            runCatching {
-                when (resolution) {
-                    is PendingPaymentResolution.Success -> onPaymentSuccess(resolution.paymentHash)
-                    is PendingPaymentResolution.Failure -> onPaymentError()
-                }
-            }.onFailure { Logger.error("Failed handling payment resolution", it) }
+            when (resolution) {
+                is PendingPaymentResolution.Success -> onPaymentSuccess(resolution.paymentHash)
+                is PendingPaymentResolution.Failure -> onPaymentError()
+            }
             viewModel.onResolutionHandled()
         }
     }

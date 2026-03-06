@@ -593,10 +593,8 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
-            val resolved = pendingPaymentRepo.resolve(
-                PendingPaymentResolution.Failure(paymentHash)
-            )
-            if (resolved) {
+            if (pendingPaymentRepo.isPending(paymentHash)) {
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentFailed()
                 }
@@ -616,8 +614,8 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
-            val resolved = pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash))
-            if (resolved) {
+            if (pendingPaymentRepo.isPending(paymentHash)) {
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentSucceeded()
                 }
@@ -1902,8 +1900,6 @@ class AppViewModel @Inject constructor(
     }
 
     fun resetQuickPay() = _quickPayData.update { null }
-
-    fun trackPendingPayment(paymentHash: String) = pendingPaymentRepo.track(paymentHash)
 
     fun navigateToActivity(activityRawId: String) {
         viewModelScope.launch {
