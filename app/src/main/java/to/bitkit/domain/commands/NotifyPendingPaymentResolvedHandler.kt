@@ -5,6 +5,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
+import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -37,7 +38,7 @@ class NotifyPendingPaymentResolvedHandler @Inject constructor(
     private fun buildNotificationContent(
         command: NotifyPendingPaymentResolved.Command,
     ) = when (command) {
-        is NotifyPendingPaymentResolved.Command.Success -> NotifyPendingPaymentResolved.successNotification(context)
-        is NotifyPendingPaymentResolved.Command.Failure -> NotifyPendingPaymentResolved.failureNotification(context)
+        is NotifyPendingPaymentResolved.Command.Success -> PendingPaymentNotification.success(context)
+        is NotifyPendingPaymentResolved.Command.Failure -> PendingPaymentNotification.error(context)
     }
 }

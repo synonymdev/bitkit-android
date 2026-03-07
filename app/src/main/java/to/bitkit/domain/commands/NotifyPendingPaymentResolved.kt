@@ -1,8 +1,6 @@
 package to.bitkit.domain.commands
 
-import android.content.Context
 import org.lightningdevkit.ldknode.Event
-import to.bitkit.R
 import to.bitkit.models.NotificationDetails
 
 sealed interface NotifyPendingPaymentResolved {
@@ -25,17 +23,5 @@ sealed interface NotifyPendingPaymentResolved {
     sealed interface Result : NotifyPendingPaymentResolved {
         data class ShowNotification(val notification: NotificationDetails) : Result
         data object Skip : Result
-    }
-
-    companion object {
-        fun successNotification(context: Context) = NotificationDetails(
-            title = context.getString(R.string.wallet__toast_payment_sent_title),
-            body = context.getString(R.string.wallet__toast_payment_sent_description),
-        )
-
-        fun failureNotification(context: Context) = NotificationDetails(
-            title = context.getString(R.string.wallet__toast_payment_failed_title),
-            body = context.getString(R.string.wallet__toast_payment_failed_description),
-        )
     }
 }

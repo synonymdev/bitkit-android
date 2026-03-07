@@ -63,7 +63,6 @@ import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
-import to.bitkit.domain.commands.NotifyPendingPaymentResolved
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
@@ -105,6 +104,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
+import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
@@ -696,22 +696,20 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun notifyPendingPaymentSucceeded() {
-        val details = NotifyPendingPaymentResolved.successNotification(context)
+    private fun notifyPendingPaymentSucceeded() = PendingPaymentNotification.success(context).let {
         toast(
             type = Toast.ToastType.LIGHTNING,
-            title = details.title,
-            description = details.body,
+            title = it.title,
+            description = it.body,
             testTag = "PendingPaymentSucceededToast",
         )
     }
 
-    private fun notifyPendingPaymentFailed() {
-        val details = NotifyPendingPaymentResolved.failureNotification(context)
+    private fun notifyPendingPaymentFailed() = PendingPaymentNotification.error(context).let {
         toast(
             type = Toast.ToastType.ERROR,
-            title = details.title,
-            description = details.body,
+            title = it.title,
+            description = it.body,
             testTag = "PendingPaymentFailedToast",
         )
     }
@@ -740,8 +738,8 @@ class AppViewModel @Inject constructor(
                     sats = activity.totalValue().toLong(),
                 ),
             )
-        }.onFailure { e ->
-            Logger.warn("Failed displaying sheet for event: $event", e)
+        }.onFailure {
+            Logger.warn("Failed displaying sheet for event: $event", it)
         }
     }
 
