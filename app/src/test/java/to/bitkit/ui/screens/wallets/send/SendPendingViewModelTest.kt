@@ -34,11 +34,11 @@ class SendPendingViewModelTest : BaseUnitTest() {
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }.thenReturn(
             Result.failure(Exception("not found"))
         )
+        sut = createViewModel()
     }
 
     @Test
     fun `init sets amount in uiState`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
@@ -47,7 +47,6 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `init sets activeHash on repo`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
@@ -56,7 +55,6 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `init is idempotent`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         sut.init(hash, 9999L)
         advanceUntilIdle()
@@ -66,25 +64,19 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `findActivity sets activityId`() = test {
-        val activityV1 = mock<LightningActivity> {
-            on { id } doReturn "activity_id_123"
-        }
-        val activity = mock<Activity.Lightning> {
-            on { v1 } doReturn activityV1
-        }
-        whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
-            .thenReturn(Result.success(activity))
+        val activityId = "activity_id_123"
+        val activityV1 = mock<LightningActivity> { on { id } doReturn activityId }
+        val activity = mock<Activity.Lightning> { on { v1 } doReturn activityV1 }
+        whenever(activityRepo.findActivityByPaymentId(any(), any(), any(), any())).thenReturn(Result.success(activity))
 
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
-        assertEquals("activity_id_123", sut.uiState.value.activityId)
+        assertEquals(activityId, sut.uiState.value.activityId)
     }
 
     @Test
     fun `findActivity failure leaves activityId null`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
@@ -93,7 +85,6 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `observeResolution Success updates uiState`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
@@ -108,7 +99,6 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `observeResolution Failure updates uiState`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
@@ -122,7 +112,6 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `observeResolution ignores other hashes`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
@@ -135,7 +124,6 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onResolutionHandled clears resolution`() = test {
-        sut = createViewModel()
         sut.init(hash, amount)
         advanceUntilIdle()
 
