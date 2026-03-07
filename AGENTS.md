@@ -198,7 +198,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
 - ALWAYS create data classes for state AFTER viewModel class in same file
 - ALWAYS return early where applicable, PREFER guard-like `if` conditions like `if (condition) return`
-- ALWAYS write the documentation for new features as Markdown files in `docs/`
+- ALWAYS save documentation as Markdown files in `docs/` when explicitly asked to write docs
 - NEVER write code in the documentation files
 - NEVER add code comments to private functions, classes, etc
 - ALWAYS use `_uiState.update { }`, NEVER use `_stateFlow.value =`
@@ -222,7 +222,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
-- ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
+- ALWAYS wrap suspend functions in `withContext(ioDispatcher)` if in domain layer, using ctor injected prop `@IoDispatcher private val ioDispatcher: CoroutineDispatcher`
 - ALWAYS position `companion object` at the top of the class
 - NEVER use `Exception` directly, use `AppError` instead
 - ALWAYS inherit custom exceptions from `AppError`

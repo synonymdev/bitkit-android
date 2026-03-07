@@ -739,7 +739,7 @@ class AppViewModel @Inject constructor(
                 ),
             )
         }.onFailure {
-            Logger.warn("Failed displaying sheet for event: $event", it)
+            Logger.warn("Failed displaying sheet for event: $event", it, context = TAG)
         }
     }
 

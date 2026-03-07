@@ -16,9 +16,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -151,7 +151,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         controller.create().startCommand(0, 0)
         testScheduler.advanceUntilIdle()
 
-        assertNotNull("Event handler should be captured", capturedHandler)
+        assertNotNull(capturedHandler, "Event handler should be captured")
 
         val event = Event.PaymentReceived(
             paymentId = "payment_id",
@@ -169,7 +169,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val paymentNotification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
-        assertNotNull("Payment notification should be present", paymentNotification)
+        assertNotNull(paymentNotification, "Payment notification should be present")
 
         val expected = NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
@@ -207,7 +207,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
 
-        assertNull("Payment notification should NOT be present in foreground", paymentNotification)
+        assertNull(paymentNotification, "Payment notification should NOT be present in foreground")
 
         verify(cacheStore, never()).setBackgroundReceive(any())
     }
@@ -234,7 +234,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val paymentNotification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
-        assertNotNull("Payment notification should be present", paymentNotification)
+        assertNotNull(paymentNotification, "Payment notification should be present")
 
         val body = paymentNotification?.extras?.getString(Notification.EXTRA_TEXT)
         assertEquals($$"Received ₿ 100 ($0.10)", body)
@@ -273,7 +273,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val notification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
         }
-        assertNotNull("Pending payment success notification should be present", notification)
+        assertNotNull(notification, "Pending payment success notification should be present")
         assertEquals(sentBody, notification?.extras?.getString(Notification.EXTRA_TEXT))
     }
 
@@ -309,7 +309,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val notification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == failedTitle
         }
-        assertNotNull("Pending payment failure notification should be present", notification)
+        assertNotNull(notification, "Pending payment failure notification should be present")
         assertEquals(failedBody, notification?.extras?.getString(Notification.EXTRA_TEXT))
     }
 
@@ -348,7 +348,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val notification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
         }
-        assertNull("Pending payment notification should NOT be present in foreground", notification)
+        assertNull(notification, "Pending payment notification should NOT be present in foreground")
     }
 
     @Test
@@ -379,6 +379,6 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val notification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
         }
-        assertNull("Non-pending payment should NOT trigger notification", notification)
+        assertNull(notification, "Non-pending payment should NOT trigger notification")
     }
 }
