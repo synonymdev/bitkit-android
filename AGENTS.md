@@ -169,7 +169,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS suggest 3 commit messages with confidence score ratings, e.g. `fix: show toast on resolution (90%)`. In plan mode, include them at the end of the plan. If the user picks one via plan update, commit after implementation. Outside plan mode, suggest after implementation completes. In both cases, run `git status` to check ALL uncommitted changes after completing code edits
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
-- ALWAYS consider applying YAGNI (You Ain't Gonna Need It) principle for new code
+- ALWAYS use or create `Context` extension properties in `ext/Context.kt` instead of raw `context.getSystemService()` casts
+- ALWAYS apply the YAGNI (You Ain't Gonna Need It) principle for new code
 - ALWAYS reuse existing constants
 - ALWAYS ensure a method exist before calling it
 - ALWAYS remove unused code after refactors

@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.app.Application
 import android.app.Notification
-import android.app.NotificationManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.firebase.messaging.FirebaseMessaging
@@ -49,6 +48,7 @@ import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.domain.commands.NotifyPendingPaymentResolved
 import to.bitkit.domain.commands.NotifyPendingPaymentResolvedHandler
+import to.bitkit.ext.notificationManager
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -163,7 +163,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
@@ -200,7 +200,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
@@ -228,7 +228,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
@@ -267,7 +267,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
 
         val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val notification = shadows.allNotifications.find {
@@ -303,7 +303,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
 
         val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val notification = shadows.allNotifications.find {
@@ -342,7 +342,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
 
         val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val notification = shadows.allNotifications.find {
@@ -372,7 +372,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
 
         val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val sentTitle = context.getString(R.string.wallet__toast_payment_sent_title)
