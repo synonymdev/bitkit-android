@@ -198,7 +198,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
 - ALWAYS create data classes for state AFTER viewModel class in same file
 - ALWAYS return early where applicable, PREFER guard-like `if` conditions like `if (condition) return`
-- ALWAYS save documentation as Markdown files in `docs/` when explicitly asked to write docs
+- USE `docs/` as target dir of saved files when asked to create documentation for new features
 - NEVER write code in the documentation files
 - NEVER add code comments to private functions, classes, etc
 - ALWAYS use `_uiState.update { }`, NEVER use `_stateFlow.value =`
