@@ -30,7 +30,7 @@ class NotifyPendingPaymentResolvedHandler @Inject constructor(
             val notification = buildNotificationContent(command)
             NotifyPendingPaymentResolved.Result.ShowNotification(notification)
         }.onFailure {
-            Logger.error("Failed to process pending payment notification", e = it, context = TAG)
+            Logger.error("Failed to process pending payment notification", it, context = TAG)
         }
     }
 

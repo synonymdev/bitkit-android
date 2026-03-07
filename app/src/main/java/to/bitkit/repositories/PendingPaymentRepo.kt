@@ -25,13 +25,7 @@ class PendingPaymentRepo @Inject constructor() {
     fun isPending(hash: String): Boolean = _state.value.pendingPayments.contains(hash)
 
     fun resolve(resolution: PendingPaymentResolution) {
-        _state.update {
-            val newSet = it.pendingPayments - resolution.paymentHash
-            it.copy(
-                pendingPayments = newSet,
-                activeHash = if (newSet.isEmpty()) null else it.activeHash,
-            )
-        }
+        _state.update { it.copy(pendingPayments = it.pendingPayments - resolution.paymentHash) }
         _resolution.tryEmit(resolution)
     }
 

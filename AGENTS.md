@@ -207,7 +207,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
-- ALWAYS use `whenever { mock.suspendCall() }` for suspend stubs and `whenever(mock.call())` for non-suspend stubs
+- ALWAYS use `whenever { mock.suspendCall() }` for suspend stubs if not inside `test{}` fn blocks
+- ALWAYS use `whenever(mock.call())` for non-suspend stubs and for suspend stubs if inside `test{}` fn blocks
 - NEVER use the old, deprecated `wheneverBlocking`
 - ALWAYS prefer `kotlin.test` asserts over `org.junit.Assert` in unit tests
 - ALWAYS use a deterministic locale in unit tests to ensure consistent results across CI and local runs

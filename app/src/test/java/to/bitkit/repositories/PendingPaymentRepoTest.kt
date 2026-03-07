@@ -7,7 +7,6 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PendingPaymentRepoTest : BaseUnitTest() {
@@ -98,19 +97,10 @@ class PendingPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resolve clears activeHash when pendingPayments becomes empty`() {
+    fun `resolve does not affect activeHash`() {
         sut.track("hash1")
         sut.setActiveHash("hash1")
         sut.resolve(PendingPaymentResolution.Success("hash1"))
-        assertNull(sut.state.value.activeHash)
-    }
-
-    @Test
-    fun `resolve keeps activeHash when pendingPayments is not empty`() {
-        sut.track("hash1")
-        sut.track("hash2")
-        sut.setActiveHash("hash1")
-        sut.resolve(PendingPaymentResolution.Success("hash2"))
         assertEquals("hash1", sut.state.value.activeHash)
     }
 }
