@@ -31,7 +31,8 @@ fun DragAndDropWidget(
     title: String,
     onClickDelete: () -> Unit,
     onClickSettings: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    dragModifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
@@ -84,8 +85,8 @@ fun DragAndDropWidget(
             }
 
             IconButton(
-                onClick = onClickDelete,
-                modifier = Modifier.testTag("${title}_WidgetActionDrag")
+                onClick = {},
+                modifier = dragModifier.testTag("${title}_WidgetActionDrag")
             ) {
                 Icon(
                     modifier = Modifier.size(24.dp),

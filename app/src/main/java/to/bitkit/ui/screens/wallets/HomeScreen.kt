@@ -555,7 +555,7 @@ private fun WidgetsPage(
                 items = homeUiState.widgetsWithPosition,
                 onMove = onMoveWidget,
                 modifier = Modifier.fillMaxWidth()
-            ) { widgetWithPosition, isDragging ->
+            ) { widgetWithPosition, isDragging, dragModifier ->
                 DragAndDropWidget(
                     iconRes = widgetWithPosition.type.iconRes,
                     title = stringResource(widgetWithPosition.type.title),
@@ -565,7 +565,8 @@ private fun WidgetsPage(
                         .fillMaxWidth()
                         .graphicsLayer {
                             alpha = if (isDragging) 0.8f else 1.0f
-                        }
+                        },
+                    dragModifier = dragModifier,
                 )
             }
         } else {
