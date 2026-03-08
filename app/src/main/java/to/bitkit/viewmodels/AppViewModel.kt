@@ -106,6 +106,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -162,6 +163,7 @@ class AppViewModel @Inject constructor(
     private val quickPaySheet: QuickPayTimedSheet,
     private val highBalanceSheet: HighBalanceTimedSheet,
     private val formatMoneyValue: FormatMoneyValue,
+    private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -260,6 +262,9 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             lightningRepo.updateGeoBlockState()
+        }
+        viewModelScope.launch {
+            widgetsRepo.refreshEnabledWidgets()
         }
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
