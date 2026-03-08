@@ -15,7 +15,6 @@ import to.bitkit.R
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
