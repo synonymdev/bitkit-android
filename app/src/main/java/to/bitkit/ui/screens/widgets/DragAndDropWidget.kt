@@ -36,7 +36,7 @@ fun DragAndDropWidget(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(Colors.Gray6)
     ) {
         Row(
             modifier = Modifier
