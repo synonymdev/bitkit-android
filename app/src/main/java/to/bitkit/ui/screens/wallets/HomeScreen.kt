@@ -564,7 +564,7 @@ private fun WidgetsPage(
                     modifier = Modifier
                         .fillMaxWidth()
                         .graphicsLayer {
-                            alpha = if (isDragging) 0.8f else 1.0f
+                            alpha = if (isDragging) 0.9f else 1.0f
                         },
                     dragModifier = dragModifier,
                 )

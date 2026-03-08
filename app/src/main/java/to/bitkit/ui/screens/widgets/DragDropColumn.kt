@@ -13,12 +13,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import to.bitkit.models.WidgetWithPosition
+
+private const val DRAG_SCALE = 1.05f
 
 @Composable
 fun DragDropColumn(
@@ -74,15 +75,10 @@ fun DragDropColumn(
                     .fillMaxWidth()
                     .graphicsLayer {
                         translationY = if (isDragging) draggedItemOffset else 0f
+                        scaleX = if (isDragging) DRAG_SCALE else 1f
+                        scaleY = if (isDragging) DRAG_SCALE else 1f
                     }
                     .zIndex(if (isDragging) 1f else 0f)
-                    .then(
-                        if (isDragging) {
-                            Modifier.shadow(8.dp)
-                        } else {
-                            Modifier
-                        }
-                    )
             ) {
                 itemContent(item, isDragging, dragModifier)
             }
