@@ -371,7 +371,10 @@ class TrezorTransport @Inject constructor(
                 val existed = file.exists()
                 file.delete()
                 TrezorDebugLog.log("SAVE", "CLEARED credential (file existed=$existed)")
-                Logger.info("Cleared THP credential for device: '$deviceId' (path='${file.absolutePath}')", context = TAG)
+                Logger.info(
+                    "Cleared THP credential for device: '$deviceId' (path='${file.absolutePath}')",
+                    context = TAG,
+                )
                 return true
             }
 
@@ -923,7 +926,10 @@ class TrezorTransport @Inject constructor(
 
                 if (!writeLatch.await(WRITE_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)) {
                     lastError = "Write timeout"
-                    Logger.warn("BLE write timeout (attempt '$attempt'/'$BLE_WRITE_RETRY_COUNT'): '$path'", context = TAG)
+                    Logger.warn(
+                        "BLE write timeout (attempt '$attempt'/'$BLE_WRITE_RETRY_COUNT'): '$path'",
+                        context = TAG,
+                    )
                     if (attempt < BLE_WRITE_RETRY_COUNT) {
                         Thread.sleep(BLE_WRITE_RETRY_DELAY_MS)
                         continue
