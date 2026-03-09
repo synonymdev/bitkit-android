@@ -31,6 +31,8 @@ import to.bitkit.ui.screens.wallets.send.SendErrorScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeCustomScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeRateScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeViewModel
+import to.bitkit.ui.screens.wallets.send.SendPendingScreen
+import to.bitkit.ui.screens.wallets.send.SendPendingViewModel
 import to.bitkit.ui.screens.wallets.send.SendPinCheckScreen
 import to.bitkit.ui.screens.wallets.send.SendQuickPayScreen
 import to.bitkit.ui.screens.wallets.send.SendRecipientScreen
@@ -80,7 +82,7 @@ fun SendSheet(
                     is SendEffect.PaymentSuccess -> {
                         appViewModel.clearClipboardForAutoRead()
                         navController.navigate(SendRoute.Success) {
-                            popUpTo(startDestination) { inclusive = true }
+                            popUpTo(navController.graph.id) { inclusive = true }
                         }
                     }
 
@@ -90,6 +92,9 @@ fun SendSheet(
                     is SendEffect.NavigateToFee -> navController.navigate(SendRoute.FeeRate)
                     is SendEffect.NavigateToFeeCustom -> navController.navigate(SendRoute.FeeCustom)
                     is SendEffect.NavigateToComingSoon -> navController.navigate(SendRoute.ComingSoon)
+                    is SendEffect.NavigateToPending -> navController.navigate(
+                        SendRoute.Pending(it.paymentHash, it.amount)
+                    ) { popUpTo(startDestination) { inclusive = true } }
                 }
             }
         }
@@ -254,7 +259,7 @@ fun SendSheet(
                 SendQuickPayScreen(
                     quickPayData = requireNotNull(quickPayData),
                     onPaymentComplete = { paymentHash, amountWithFee ->
-                        appViewModel.handlePaymentSuccess(
+                        appViewModel.onSendSuccess(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.LIGHTNING,
                                 direction = NewTransactionSheetDirection.SENT,
@@ -263,9 +268,39 @@ fun SendSheet(
                             ),
                         )
                     },
+                    onPaymentPending = { paymentHash, amount ->
+                        navController.navigate(SendRoute.Pending(paymentHash, amount)) {
+                            popUpTo(startDestination) { inclusive = true }
+                        }
+                    },
                     onShowError = { errorMessage ->
                         navController.navigate(SendRoute.Error(errorMessage))
                     }
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.Pending> {
+                val route = it.toRoute<SendRoute.Pending>()
+                SendPendingScreen(
+                    paymentHash = route.paymentHash,
+                    amount = route.amount,
+                    onPaymentSuccess = { paymentHash ->
+                        appViewModel.onSendSuccess(
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.LIGHTNING,
+                                direction = NewTransactionSheetDirection.SENT,
+                                paymentHashOrTxId = paymentHash,
+                                sats = route.amount,
+                            ),
+                        )
+                    },
+                    onPaymentError = {
+                        navController.navigate(SendRoute.Error()) {
+                            popUpTo<SendRoute.Pending> { inclusive = true }
+                        }
+                    },
+                    onClose = { appViewModel.hideSheet() },
+                    onViewDetails = { rawId -> appViewModel.navigateToActivity(rawId) },
+                    viewModel = hiltViewModel<SendPendingViewModel>(),
                 )
             }
             composableWithDefaultTransitions<SendRoute.ComingSoon> {
@@ -277,14 +312,10 @@ fun SendSheet(
             composableWithDefaultTransitions<SendRoute.Error> {
                 val route = it.toRoute<SendRoute.Error>()
                 SendErrorScreen(
-                    errorMessage = route.errorMessage,
+                    message = route.message,
                     onRetry = {
-                        if (startDestination == SendRoute.Recipient) {
-                            navController.navigate(SendRoute.Recipient) {
-                                popUpTo<SendRoute.Recipient> { inclusive = true }
-                            }
-                        } else {
-                            navController.navigate(SendRoute.Success)
+                        navController.navigate(SendRoute.Recipient) {
+                            popUpTo(navController.graph.id) { inclusive = true }
                         }
                     },
                     onClose = {
@@ -349,5 +380,8 @@ sealed interface SendRoute {
     data object ComingSoon : SendRoute
 
     @Serializable
-    data class Error(val errorMessage: String) : SendRoute
+    data class Pending(val paymentHash: String, val amount: Long) : SendRoute
+
+    @Serializable
+    data class Error(val message: String? = null) : SendRoute
 }

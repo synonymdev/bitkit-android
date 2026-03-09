@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.app.Application
 import android.app.Notification
-import android.app.NotificationManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.firebase.messaging.FirebaseMessaging
@@ -17,9 +16,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -47,6 +43,9 @@ import to.bitkit.di.DispatchersModule
 import to.bitkit.di.ViewModelModule
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.domain.commands.NotifyPendingPaymentResolved
+import to.bitkit.domain.commands.NotifyPendingPaymentResolvedHandler
+import to.bitkit.ext.notificationManager
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -56,6 +55,9 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 @HiltAndroidTest
 @UninstallModules(DispatchersModule::class, DbModule::class, ViewModelModule::class)
@@ -80,6 +82,9 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
     @BindValue
     val notifyPaymentReceivedHandler = mock<NotifyPaymentReceivedHandler>()
+
+    @BindValue
+    val notifyPendingPaymentResolvedHandler = mock<NotifyPendingPaymentResolvedHandler>()
 
     @BindValue
     val cacheStore = mock<CacheStore>()
@@ -146,7 +151,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         controller.create().startCommand(0, 0)
         testScheduler.advanceUntilIdle()
 
-        assertNotNull("Event handler should be captured", capturedHandler)
+        assertNotNull(capturedHandler, "Event handler should be captured")
 
         val event = Event.PaymentReceived(
             paymentId = "payment_id",
@@ -158,13 +163,13 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
-        assertNotNull("Payment notification should be present", paymentNotification)
+        assertNotNull(paymentNotification, "Payment notification should be present")
 
         val expected = NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
@@ -195,14 +200,14 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
 
-        assertNull("Payment notification should NOT be present in foreground", paymentNotification)
+        assertNull(paymentNotification, "Payment notification should NOT be present in foreground")
 
         verify(cacheStore, never()).setBackgroundReceive(any())
     }
@@ -223,15 +228,153 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val paymentNotification = shadows.allNotifications.find {
             it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
         }
-        assertNotNull("Payment notification should be present", paymentNotification)
+        assertNotNull(paymentNotification, "Payment notification should be present")
 
-        val body = paymentNotification?.extras?.getString(Notification.EXTRA_TEXT)
+        val body = paymentNotification.extras?.getString(Notification.EXTRA_TEXT)
         assertEquals($$"Received ₿ 100 ($0.10)", body)
+    }
+
+    @Test
+    fun `pending payment success in background shows notification`() = test {
+        val sentTitle = context.getString(R.string.wallet__toast_payment_sent_title)
+        val sentBody = context.getString(R.string.wallet__toast_payment_sent_description)
+        whenever(notifyPendingPaymentResolvedHandler.invoke(any())).thenReturn(
+            Result.success(
+                NotifyPendingPaymentResolved.Result.ShowNotification(
+                    NotificationDetails(title = sentTitle, body = sentBody)
+                )
+            )
+        )
+
+        val controller = Robolectric.buildService(LightningNodeService::class.java)
+        controller.create().startCommand(0, 0)
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.PaymentSuccessful(
+            paymentId = "payment_id",
+            paymentHash = "test_hash",
+            paymentPreimage = "preimage",
+            feePaidMsat = 10uL,
+        )
+
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
+        }
+        assertNotNull(notification, "Pending payment success notification should be present")
+        assertEquals(sentBody, notification?.extras?.getString(Notification.EXTRA_TEXT))
+    }
+
+    @Test
+    fun `pending payment failure in background shows notification`() = test {
+        val failedTitle = context.getString(R.string.wallet__toast_payment_failed_title)
+        val failedBody = context.getString(R.string.wallet__toast_payment_failed_description)
+        whenever(notifyPendingPaymentResolvedHandler.invoke(any())).thenReturn(
+            Result.success(
+                NotifyPendingPaymentResolved.Result.ShowNotification(
+                    NotificationDetails(title = failedTitle, body = failedBody)
+                )
+            )
+        )
+
+        val controller = Robolectric.buildService(LightningNodeService::class.java)
+        controller.create().startCommand(0, 0)
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.PaymentFailed(
+            paymentId = "payment_id",
+            paymentHash = "test_hash",
+            reason = null,
+        )
+
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == failedTitle
+        }
+        assertNotNull(notification, "Pending payment failure notification should be present")
+        assertEquals(failedBody, notification?.extras?.getString(Notification.EXTRA_TEXT))
+    }
+
+    @Test
+    fun `pending payment success in foreground skips notification`() = test {
+        val mockActivity: Activity = mock()
+        App.currentActivity?.onActivityStarted(mockActivity)
+
+        val sentTitle = context.getString(R.string.wallet__toast_payment_sent_title)
+        whenever(notifyPendingPaymentResolvedHandler.invoke(any())).thenReturn(
+            Result.success(
+                NotifyPendingPaymentResolved.Result.ShowNotification(
+                    NotificationDetails(title = sentTitle, body = "body")
+                )
+            )
+        )
+
+        val controller = Robolectric.buildService(LightningNodeService::class.java)
+        controller.create().startCommand(0, 0)
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.PaymentSuccessful(
+            paymentId = "payment_id",
+            paymentHash = "test_hash",
+            paymentPreimage = "preimage",
+            feePaidMsat = 10uL,
+        )
+
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
+        }
+        assertNull(notification, "Pending payment notification should NOT be present in foreground")
+    }
+
+    @Test
+    fun `non-pending payment skips notification`() = test {
+        whenever(notifyPendingPaymentResolvedHandler.invoke(any())).thenReturn(
+            Result.success(NotifyPendingPaymentResolved.Result.Skip)
+        )
+
+        val controller = Robolectric.buildService(LightningNodeService::class.java)
+        controller.create().startCommand(0, 0)
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.PaymentSuccessful(
+            paymentId = "payment_id",
+            paymentHash = "non_pending_hash",
+            paymentPreimage = "preimage",
+            feePaidMsat = 10uL,
+        )
+
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+
+        val sentTitle = context.getString(R.string.wallet__toast_payment_sent_title)
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
+        }
+        assertNull(notification, "Non-pending payment should NOT trigger notification")
     }
 }
