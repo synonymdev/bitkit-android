@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
+import to.bitkit.models.addressTypeInfo
+import to.bitkit.models.toAddressType
 import javax.inject.Inject
 
 @HiltViewModel
@@ -17,6 +19,10 @@ class AdvancedSettingsViewModel @Inject constructor(
 
     val isDevModeEnabled = settingsStore.data.map { it.isDevModeEnabled }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val selectedAddressTypeName = settingsStore.data
+        .map { it.selectedAddressType.toAddressType()?.addressTypeInfo()?.shortName ?: "" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     fun resetSuggestions() {
         viewModelScope.launch {

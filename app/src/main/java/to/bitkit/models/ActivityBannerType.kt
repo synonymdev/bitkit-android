@@ -22,3 +22,8 @@ enum class ActivityBannerType(
         title = R.string.lightning__transfer_in_progress
     )
 }
+
+data class BannerItem(
+    val type: ActivityBannerType,
+    val title: String,
+)

@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
@@ -12,9 +12,11 @@ import androidx.compose.material3.SwitchColors
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -26,10 +28,11 @@ fun SettingsSwitchRow(
     isChecked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
     colors: SwitchColors = AppSwitchDefaults.colors,
 ) {
     Column(
-        modifier = modifier.height(52.dp)
+        modifier = modifier.heightIn(min = 52.dp),
     ) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -39,7 +42,17 @@ fun SettingsSwitchRow(
                 .clickableAlpha { onClick() }
                 .padding(vertical = 16.dp)
         ) {
-            BodyM(text = title, color = Colors.White)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                BodyM(text = title, color = Colors.White, overflow = TextOverflow.Ellipsis)
+                if (subtitle != null) {
+                    BodyS(text = subtitle, color = Colors.White64)
+                }
+            }
 
             Switch(
                 checked = isChecked,

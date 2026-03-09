@@ -2,14 +2,20 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.google.firebase.messaging.FirebaseMessaging
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.ILspNode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.AddressTypeBalance
+import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -419,6 +425,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(flowOf(mockSettingsData))
 
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(coreService.activity).thenReturn(mock())
 
         whenever(
             lightningService.send(
@@ -678,6 +685,384 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
+    }
+
+    @Test
+    fun `getBalanceForAddressType should succeed when node is running`() = test {
+        startNodeForTesting()
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2WPKH))
+            .thenReturn(AddressTypeBalance(totalSats = 50_000uL, spendableSats = 50_000uL))
+
+        val result = sut.getBalanceForAddressType(AddressType.P2WPKH)
+
+        assertTrue(result.isSuccess)
+        assertEquals(50_000uL, result.getOrNull())
+    }
+
+    @Test
+    fun `getBalanceForAddressType should fail when node is not running`() = test {
+        val result = sut.getBalanceForAddressType(AddressType.P2WPKH)
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `getChannelFundableBalance should return aggregate spendable when per-type fails`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(SettingsData(selectedAddressType = "nativeSegwit", addressTypesToMonitor = listOf("nativeSegwit")))
+        )
+        whenever(lightningService.getBalanceForAddressType(any()))
+            .thenThrow(UnsupportedOperationException("per-type not supported"))
+        whenever(lightningService.balances).thenReturn(
+            BalanceDetails(
+                totalOnchainBalanceSats = 100_000uL,
+                spendableOnchainBalanceSats = 80_000uL,
+                totalAnchorChannelsReserveSats = 0uL,
+                totalLightningBalanceSats = 0uL,
+                lightningBalances = emptyList(),
+                pendingBalancesFromChannelClosures = emptyList(),
+            ),
+        )
+
+        val result = sut.getChannelFundableBalance()
+
+        assertEquals(80_000uL, result)
+    }
+
+    @Test
+    fun `updateAddressType should fail when already in progress`() = test {
+        startNodeForTesting()
+        val settingsFlow = MutableSharedFlow<SettingsData>(replay = 1)
+        whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+
+        val scope = CoroutineScope(testDispatcher)
+        val job1 = scope.async {
+            sut.updateAddressType("taproot", listOf("taproot", "nativeSegwit"))
+        }
+        testScheduler.advanceUntilIdle()
+        val job2 = scope.async { sut.updateAddressType("legacy", listOf("legacy")) }
+        val result2 = job2.await()
+        settingsFlow.emit(
+            SettingsData(
+                selectedAddressType = "nativeSegwit",
+                addressTypesToMonitor = listOf("nativeSegwit"),
+            ),
+        )
+        val result1 = job1.await()
+
+        assertTrue(result2.isFailure)
+        assertTrue(result2.exceptionOrNull()?.message?.contains("already in progress") == true)
+        assertTrue(result1.isSuccess)
+    }
+
+    @Test
+    fun `setMonitoring should fail when disabling currently selected type`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "taproot",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot")
+                )
+            )
+        )
+
+        val result = sut.setMonitoring(AddressType.P2TR, enabled = false)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("currently selected") == true)
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `setMonitoring should fail when disabling last required native witness`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "legacy",
+                    addressTypesToMonitor = listOf("taproot")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2TR))
+            .thenReturn(AddressTypeBalance(totalSats = 0uL, spendableSats = 0uL))
+
+        val result = sut.setMonitoring(AddressType.P2TR, enabled = false)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("Native SegWit or Taproot") == true)
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `setMonitoring should fail when balance verification fails`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2TR))
+            .thenThrow(RuntimeException("balance check failed"))
+
+        val result = sut.setMonitoring(AddressType.P2TR, enabled = false)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("verify") == true)
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `setMonitoring should fail when disabling with balance greater than zero`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2TR))
+            .thenReturn(AddressTypeBalance(totalSats = 1_000uL, spendableSats = 1_000uL))
+
+        val result = sut.setMonitoring(AddressType.P2TR, enabled = false)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("has balance") == true)
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `setMonitoring should succeed when enabling a type`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit")
+                )
+            )
+        )
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+
+        val result = sut.setMonitoring(AddressType.P2TR, enabled = true)
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).addAddressTypeToMonitor(AddressType.P2TR)
+    }
+
+    @Test
+    fun `setMonitoring should succeed when disabling when allowed`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2TR))
+            .thenReturn(AddressTypeBalance(totalSats = 0uL, spendableSats = 0uL))
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+
+        val result = sut.setMonitoring(AddressType.P2TR, enabled = false)
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).removeAddressTypeFromMonitor(AddressType.P2TR)
+    }
+
+    @Test
+    fun `updateAddressType should succeed`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(SettingsData(selectedAddressType = "nativeSegwit", addressTypesToMonitor = listOf("nativeSegwit")))
+        )
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+
+        val result = sut.updateAddressType("taproot", listOf("taproot", "nativeSegwit"))
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).setPrimaryAddressType(AddressType.P2TR)
+    }
+
+    @Test
+    fun `updateAddressType should fail when setPrimaryAddressType fails`() = test {
+        startNodeForTesting()
+        whenever(
+            settingsStore.data
+        ).thenReturn(
+            flowOf(SettingsData(selectedAddressType = "nativeSegwit", addressTypesToMonitor = listOf("nativeSegwit")))
+        )
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+        whenever(lightningService.setPrimaryAddressType(any()))
+            .thenThrow(RuntimeException("setPrimaryAddressType failed"))
+
+        val result = sut.updateAddressType("taproot", listOf("taproot", "nativeSegwit"))
+
+        assertTrue(result.isFailure)
+        // Verify rollback happened (update called twice: once for new settings, once for rollback)
+        verifyBlocking(settingsStore, times(2)) { update(any()) }
+    }
+
+    @Test
+    fun `getChannelFundableBalance should sum spendable across monitored types excluding legacy`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot", "legacy")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2WPKH))
+            .thenReturn(AddressTypeBalance(totalSats = 50_000uL, spendableSats = 40_000uL))
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2TR))
+            .thenReturn(AddressTypeBalance(totalSats = 30_000uL, spendableSats = 20_000uL))
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2PKH))
+            .thenReturn(AddressTypeBalance(totalSats = 10_000uL, spendableSats = 10_000uL))
+
+        val result = sut.getChannelFundableBalance()
+
+        // 40_000 (P2WPKH) + 20_000 (P2TR) = 60_000; legacy 10_000 excluded
+        assertEquals(60_000uL, result)
+    }
+
+    @Test
+    fun `pruneEmptyAddressTypesAfterRestore should remove empty non-selected types`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot", "legacy")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2TR))
+            .thenReturn(AddressTypeBalance(totalSats = 0uL, spendableSats = 0uL))
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2PKH))
+            .thenReturn(AddressTypeBalance(totalSats = 0uL, spendableSats = 0uL))
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+
+        val result = sut.pruneEmptyAddressTypesAfterRestore()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).removeAddressTypeFromMonitor(AddressType.P2TR)
+        verify(lightningService).removeAddressTypeFromMonitor(AddressType.P2PKH)
+        // Selected type (nativeSegwit/P2WPKH) must not be removed
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(AddressType.P2WPKH)
+    }
+
+    @Test
+    fun `pruneEmptyAddressTypesAfterRestore should keep types with balance`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2TR))
+            .thenReturn(AddressTypeBalance(totalSats = 5_000uL, spendableSats = 5_000uL))
+
+        val result = sut.pruneEmptyAddressTypesAfterRestore()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `pruneEmptyAddressTypesAfterRestore should not remove last native witness type`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "legacy",
+                    addressTypesToMonitor = listOf("legacy", "nativeSegwit")
+                )
+            )
+        )
+        whenever(lightningService.getBalanceForAddressType(AddressType.P2WPKH))
+            .thenReturn(AddressTypeBalance(totalSats = 0uL, spendableSats = 0uL))
+
+        val result = sut.pruneEmptyAddressTypesAfterRestore()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `pruneEmptyAddressTypesAfterRestore should skip when address type change in progress`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot")
+                )
+            )
+        )
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+        // Start an address type change to set isChangingAddressType
+        val settingsFlow = MutableSharedFlow<SettingsData>()
+        whenever(settingsStore.data).thenReturn(settingsFlow)
+        val scope = CoroutineScope(testDispatcher)
+        scope.async { sut.updateAddressType("taproot", listOf("taproot")) }
+        testScheduler.advanceUntilIdle()
+
+        val result = sut.pruneEmptyAddressTypesAfterRestore()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `setMonitoring should rollback on service failure`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "nativeSegwit",
+                    addressTypesToMonitor = listOf("nativeSegwit")
+                )
+            )
+        )
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+        whenever(lightningService.addAddressTypeToMonitor(any()))
+            .thenThrow(RuntimeException("service error"))
+
+        val result = sut.setMonitoring(AddressType.P2TR, enabled = true)
+
+        assertTrue(result.isFailure)
+        // Verify rollback happened (update called twice: once for new, once for rollback)
+        verifyBlocking(settingsStore, times(2)) { update(any()) }
     }
 
     @Test
