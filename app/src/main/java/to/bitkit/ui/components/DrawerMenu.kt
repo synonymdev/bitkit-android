@@ -263,7 +263,7 @@ private fun DrawerItem(
         modifier = modifier
             .then(
                 if (onClick != null) {
-                    Modifier.clickable { onClick() }
+                    Modifier.clickableAlpha { onClick() }
                 } else {
                     Modifier
                 }
