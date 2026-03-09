@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -103,6 +104,10 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PaymentPendingException
+import to.bitkit.repositories.PendingPaymentNotification
+import to.bitkit.repositories.PendingPaymentRepo
+import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
@@ -117,6 +122,7 @@ import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
@@ -144,6 +150,7 @@ class AppViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val lightningRepo: LightningRepo,
+    private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
     private val backupRepo: BackupRepo,
     private val settingsStore: SettingsStore,
@@ -433,6 +440,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.pruneEmptyAddressTypesAfterRestore()
                 walletRepo.debounceSyncByEvent()
             }
+
             !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> walletRepo.debounceSyncByEvent()
             else -> Unit
         }
@@ -591,6 +599,13 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            if (pendingPaymentRepo.isPending(paymentHash)) {
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash))
+                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
+                    notifyPendingPaymentFailed()
+                }
+                return
+            }
         }
         notifyPaymentFailed(event.reason)
     }
@@ -605,6 +620,13 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            if (pendingPaymentRepo.isPending(paymentHash)) {
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash))
+                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
+                    notifyPendingPaymentSucceeded()
+                }
+                return
+            }
         }
         notifyPaymentSentOnLightning(event)
     }
@@ -680,6 +702,24 @@ class AppViewModel @Inject constructor(
         )
     }
 
+    private fun notifyPendingPaymentSucceeded() = PendingPaymentNotification.success(context).let {
+        toast(
+            type = Toast.ToastType.LIGHTNING,
+            title = it.title,
+            description = it.body,
+            testTag = "PendingPaymentSucceededToast",
+        )
+    }
+
+    private fun notifyPendingPaymentFailed() = PendingPaymentNotification.error(context).let {
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = it.title,
+            description = it.body,
+            testTag = "PendingPaymentFailedToast",
+        )
+    }
+
     private fun notifyPaymentFailed(reason: PaymentFailureReason? = null) = toast(
         type = Toast.ToastType.ERROR,
         title = context.getString(R.string.wallet__toast_payment_failed_title),
@@ -696,7 +736,7 @@ class AppViewModel @Inject constructor(
             txType = PaymentType.SENT,
             retry = true
         ).onSuccess { activity ->
-            handlePaymentSuccess(
+            onSendSuccess(
                 NewTransactionSheetDetails(
                     type = NewTransactionSheetType.LIGHTNING,
                     direction = NewTransactionSheetDirection.SENT,
@@ -704,8 +744,8 @@ class AppViewModel @Inject constructor(
                     sats = activity.totalValue().toLong(),
                 ),
             )
-        }.onFailure { e ->
-            Logger.warn("Failed displaying sheet for event: $event", e)
+        }.onFailure {
+            Logger.warn("Failed displaying sheet for event: $event", it, context = TAG)
         }
     }
 
@@ -1643,7 +1683,7 @@ class AppViewModel @Inject constructor(
                 sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         Logger.info("Onchain send result txid: $txId", context = TAG)
-                        handlePaymentSuccess(
+                        onSendSuccess(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.ONCHAIN,
                                 direction = NewTransactionSheetDirection.SENT,
@@ -1694,7 +1734,7 @@ class AppViewModel @Inject constructor(
 
                 sendLightning(bolt11, paymentAmount).onSuccess { actualPaymentHash ->
                     Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
-                    handlePaymentSuccess(
+                    onSendSuccess(
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.SENT,
@@ -1702,13 +1742,19 @@ class AppViewModel @Inject constructor(
                             sats = paymentAmount.toLong(), // TODO Add fee when available
                         ),
                     )
-                }.onFailure { e ->
+                }.onFailure {
+                    if (it is PaymentPendingException) {
+                        Logger.info("Lightning payment pending", context = TAG)
+                        pendingPaymentRepo.track(it.paymentHash)
+                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, paymentAmount.toLong()))
+                        return@onFailure
+                    }
                     // Delete pre-activity metadata on failure
                     if (createdMetadataPaymentId != null) {
                         preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
                     }
-                    Logger.error("Error sending lightning payment", e, context = TAG)
-                    toast(e)
+                    Logger.error("Error sending lightning payment", it, context = TAG)
+                    toast(it)
                     hideSheet()
                 }
             }
@@ -1833,30 +1879,18 @@ class AppViewModel @Inject constructor(
         amount: ULong? = null,
     ): Result<PaymentId> {
         return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
-            // Wait until matching payment event is received
-            val result = lightningRepo.nodeEvents.watchUntil { event ->
-                when (event) {
-                    is Event.PaymentSuccessful -> {
-                        if (event.paymentHash == hash) {
-                            WatchResult.Complete(Result.success(hash))
-                        } else {
-                            WatchResult.Continue()
-                        }
-                    }
-
-                    is Event.PaymentFailed -> {
-                        if (event.paymentHash == hash) {
-                            val error = Exception(event.reason.toUserMessage(context))
-                            WatchResult.Complete(Result.failure(error))
-                        } else {
-                            WatchResult.Continue()
-                        }
-                    }
+            // Wait until matching payment event is received (with timeout for hold invoices)
+            val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+                when (it) {
+                    is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
+                    is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
+                        Result.failure(AppError(it.reason.toUserMessage(context)))
+                    )
 
                     else -> WatchResult.Continue()
                 }
             }
-            return result
+            return result ?: Result.failure(PaymentPendingException(hash))
         }
     }
 
@@ -1870,6 +1904,13 @@ class AppViewModel @Inject constructor(
     }
 
     fun resetQuickPay() = _quickPayData.update { null }
+
+    fun navigateToActivity(activityRawId: String) {
+        viewModelScope.launch {
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activityRawId)))
+        }
+    }
 
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded() {
@@ -2242,7 +2283,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun handlePaymentSuccess(details: NewTransactionSheetDetails) {
+    fun onSendSuccess(details: NewTransactionSheetDetails) {
         details.paymentHashOrTxId?.let {
             if (!processedPayments.add(it)) {
                 Logger.debug("Payment $it already processed, skipping duplicate", context = TAG)
@@ -2251,7 +2292,7 @@ class AppViewModel @Inject constructor(
         }
 
         _successSendUiState.update { details }
-        setSendEffect(SendEffect.PaymentSuccess(details))
+        setSendEffect(SendEffect.PaymentSuccess)
     }
 
     fun handleDeeplinkIntent(intent: Intent) {
@@ -2394,7 +2435,8 @@ sealed class SendEffect {
     data object NavigateToFee : SendEffect()
     data object NavigateToFeeCustom : SendEffect()
     data object NavigateToComingSoon : SendEffect()
-    data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
+    data object PaymentSuccess : SendEffect()
+    data class NavigateToPending(val paymentHash: String, val amount: Long) : SendEffect()
 }
 
 sealed class MainScreenEffect {
@@ -2442,10 +2484,14 @@ sealed interface LnurlParams {
     data class LnurlWithdraw(val data: LnurlWithdrawData) : LnurlParams
 }
 
+@Stable
 sealed interface QuickPayData {
     val sats: ULong
 
+    @Stable
     data class Bolt11(override val sats: ULong, val bolt11: String) : QuickPayData
+
+    @Stable
     data class LnurlPay(override val sats: ULong, val callback: String) : QuickPayData
 }
 // endregion

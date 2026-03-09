@@ -8,6 +8,7 @@ object ToastEventBus {
     private val _events = MutableSharedFlow<Toast>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
 
+    @Suppress("LongParameterList")
     suspend fun send(
         type: Toast.ToastType,
         title: String,

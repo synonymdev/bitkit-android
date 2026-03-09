@@ -1,31 +1,33 @@
 package to.bitkit.models
 
-import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.math.BigDecimal
 import java.util.Locale
+import kotlin.test.assertEquals
 
 class CurrencyTest {
+
+    private val locale = Locale.US
 
     @Test
     fun `formatToModernDisplay uses space grouping`() {
         val sats = 123_456_789L
 
-        val formatted = sats.formatToModernDisplay(Locale.US)
+        val formatted = sats.formatToModernDisplay(locale)
 
         assertEquals("123 456 789", formatted)
     }
 
     @Test
     fun `formatToModernDisplay handles zero`() {
-        val formatted = 0L.formatToModernDisplay(Locale.US)
+        val formatted = 0L.formatToModernDisplay(locale)
 
         assertEquals("0", formatted)
     }
 
     @Test
     fun `formatToClassicDisplay always shows eight decimals`() {
-        val formatted = 0L.formatToClassicDisplay(Locale.US)
+        val formatted = 0L.formatToClassicDisplay(locale)
 
         assertEquals("0.00000000", formatted)
     }
@@ -34,7 +36,7 @@ class CurrencyTest {
     fun `formatToClassicDisplay converts sats to btc`() {
         val sats = 12_345L // 0.00012345 BTC
 
-        val formatted = sats.formatToClassicDisplay(Locale.US)
+        val formatted = sats.formatToClassicDisplay(locale)
 
         assertEquals("0.00012345", formatted)
     }
@@ -43,7 +45,7 @@ class CurrencyTest {
     fun `formatCurrencyWithSymbol places USD symbol before amount`() {
         val value = BigDecimal("10.50")
 
-        val formatted = value.formatCurrencyWithSymbol("USD")
+        val formatted = value.formatCurrencyWithSymbol("USD", locale = locale)
 
         assertEquals("$10.50", formatted)
     }
@@ -52,7 +54,7 @@ class CurrencyTest {
     fun `formatCurrencyWithSymbol places GBP symbol before amount`() {
         val value = BigDecimal("10.50")
 
-        val formatted = value.formatCurrencyWithSymbol("GBP")
+        val formatted = value.formatCurrencyWithSymbol("GBP", locale = locale)
 
         assertEquals("£10.50", formatted)
     }
@@ -109,6 +111,7 @@ class CurrencyTest {
         val formatted = value.formatCurrencyWithSymbol(
             currencyCode = "USD",
             withSpace = true,
+            locale = locale,
         )
 
         assertEquals("$ 10.50", formatted)
@@ -150,7 +153,7 @@ class CurrencyTest {
     fun `formatCurrencyWithSymbol formats large amounts with grouping`() {
         val value = BigDecimal("1234567.89")
 
-        val formatted = value.formatCurrencyWithSymbol("USD")
+        val formatted = value.formatCurrencyWithSymbol("USD", locale = locale)
 
         assertEquals("$1,234,567.89", formatted)
     }
