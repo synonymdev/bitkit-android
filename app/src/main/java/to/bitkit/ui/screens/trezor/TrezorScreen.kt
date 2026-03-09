@@ -26,7 +26,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +39,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -487,12 +485,9 @@ private fun DebugLogSection() {
                     .padding(8.dp),
             ) {
                 items(debugLines) { line ->
-                    Text(
+                    Footnote(
                         text = line,
                         color = Colors.White80,
-                        fontSize = 9.sp,
-                        lineHeight = 12.sp,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                     )
                 }
             }

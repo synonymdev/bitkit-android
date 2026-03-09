@@ -10,15 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
@@ -46,11 +43,9 @@ internal fun AddressSection(
         )
         VerticalSpacer(8.dp)
 
-        Text(
+        Footnote(
             text = "Path: ${uiState.derivationPath}",
             color = Colors.White50,
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
         )
 
         VerticalSpacer(12.dp)
@@ -93,12 +88,10 @@ internal fun AddressSection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        Footnote(
                             text = response.address,
                             color = Colors.Brand,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         HorizontalSpacer(8.dp)
                         Icon(

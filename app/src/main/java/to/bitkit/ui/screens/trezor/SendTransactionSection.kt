@@ -12,15 +12,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.TrezorPrecomposedOutput
 import com.synonym.bitkitcore.TrezorPrecomposedResult
 import com.synonym.bitkitcore.TrezorSignedTx
@@ -114,7 +111,7 @@ private fun ComposeForm(
         OutlinedTextField(
             value = uiState.sendAddress,
             onValueChange = onAddressChange,
-            label = { Text("Destination address", color = Colors.White50) },
+            label = { Footnote("Destination address", color = Colors.White50) },
             colors = textFieldColors,
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
@@ -130,7 +127,7 @@ private fun ComposeForm(
             OutlinedTextField(
                 value = if (uiState.isSendMax) "MAX" else uiState.sendAmountSats,
                 onValueChange = onAmountChange,
-                label = { Text("Amount (sats)", color = Colors.White50) },
+                label = { Footnote("Amount (sats)", color = Colors.White50) },
                 colors = textFieldColors,
                 enabled = !uiState.isSendMax,
                 singleLine = true,
@@ -154,7 +151,7 @@ private fun ComposeForm(
         OutlinedTextField(
             value = uiState.sendFeeRate,
             onValueChange = onFeeRateChange,
-            label = { Text("Fee rate (sat/vB)", color = Colors.White50) },
+            label = { Footnote("Fee rate (sat/vB)", color = Colors.White50) },
             colors = textFieldColors,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -241,11 +238,9 @@ private fun ReviewSection(
             VerticalSpacer(4.dp)
             result.inputs.forEach { input ->
                 ResultCard {
-                    Text(
+                    Footnote(
                         text = "${input.txid.take(8)}...${input.txid.takeLast(8)}:${input.vout}",
                         color = Colors.Brand,
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
                     )
                     InfoRow("Amount", "${input.amount} sats")
                     InfoRow("Path", input.path)
@@ -301,21 +296,17 @@ private fun OutputCard(output: TrezorPrecomposedOutput) {
         when (output) {
             is TrezorPrecomposedOutput.Payment -> {
                 InfoRow("Type", "Payment")
-                Text(
+                Footnote(
                     text = output.address,
                     color = Colors.Brand,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
                 )
                 InfoRow("Amount", "${output.amount} sats")
             }
             is TrezorPrecomposedOutput.Change -> {
                 InfoRow("Type", "Change")
-                Text(
+                Footnote(
                     text = output.address,
                     color = Colors.White64,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
                 )
                 InfoRow("Amount", "${output.amount} sats")
                 InfoRow("Path", output.path)
@@ -357,12 +348,9 @@ private fun SignedResultSection(
                 verticalAlignment = Alignment.Top,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
+                Footnote(
                     text = signedTx.serializedTx,
                     color = Colors.White,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 14.sp,
                     modifier = Modifier.weight(1f),
                 )
                 HorizontalSpacer(8.dp)
@@ -424,12 +412,9 @@ private fun BroadcastResultCard(txid: String) {
                     .clickableAlpha(onClick = onCopyTxid),
             )
         }
-        Text(
+        Footnote(
             text = txid,
             color = Colors.Brand,
-            fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            lineHeight = 14.sp,
         )
     }
 }
