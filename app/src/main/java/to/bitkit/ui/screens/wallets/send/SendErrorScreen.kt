@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,8 +19,10 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -30,12 +31,12 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun SendErrorScreen(
-    errorMessage: String,
+    message: String?,
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
     Content(
-        errorMessage = errorMessage,
+        message,
         onRetry = onRetry,
         onClose = onClose,
     )
@@ -43,12 +44,11 @@ fun SendErrorScreen(
 
 @Composable
 private fun Content(
-    errorMessage: String,
+    message: String?,
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
-    val errorText = errorMessage.ifEmpty { "Unknown error." }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -62,11 +62,13 @@ private fun Content(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
-            BodyM(text = errorText, color = Colors.White64)
+            message?.let {
+                BodyM(it, color = Colors.White64)
+            }
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
             Image(
                 painter = painterResource(R.drawable.cross),
                 contentDescription = null,
@@ -74,7 +76,7 @@ private fun Content(
                     .fillMaxWidth()
                     .height(256.dp)
             )
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -90,11 +92,13 @@ private fun Content(
                 PrimaryButton(
                     text = stringResource(R.string.common__try_again),
                     onClick = onRetry,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("Retry")
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -105,7 +109,7 @@ private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
-                errorMessage = stringResource(R.string.wallet__send_error_create_tx),
+                message = stringResource(R.string.wallet__send_error_create_tx),
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -118,7 +122,7 @@ private fun PreviewUnknown() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
-                errorMessage = "",
+                message = null,
                 modifier = Modifier.sheetHeight(),
             )
         }

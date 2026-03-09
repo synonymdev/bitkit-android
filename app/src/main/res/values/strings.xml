@@ -807,6 +807,7 @@
     <string name="wallet__activity_payment">Payment</string>
     <string name="wallet__activity_payment_hash">Payment hash</string>
     <string name="wallet__activity_pending">Pending</string>
+    <string name="wallet__activity_pending_nav_title">Payment Pending</string>
     <string name="wallet__activity_preimage">Preimage</string>
     <string name="wallet__activity_previous_month">Previous month</string>
     <string name="wallet__activity_received">Received</string>
@@ -944,6 +945,8 @@
     <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_max_spending__description">The maximum spendable amount is a bit lower due to a required reserve balance.</string>
     <string name="wallet__send_max_spending__title">Reserve Balance</string>
+    <string name="wallet__send_pending__description">This payment is taking a bit longer than expected. You can continue using Bitkit.</string>
+    <string name="wallet__send_pending__nav_title">Payment Pending</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Review &amp; Send</string>
@@ -967,6 +970,8 @@
     <string name="wallet__toast_payment_failed_route_not_found">Could not find a payment path to the recipient.</string>
     <string name="wallet__toast_payment_failed_timeout">Payment timed out. Please try again.</string>
     <string name="wallet__toast_payment_failed_title">Payment Failed</string>
+    <string name="wallet__toast_payment_sent_description">Your instant payment was sent successfully.</string>
+    <string name="wallet__toast_payment_sent_title">Payment Sent</string>
     <string name="wallet__toast_received_transaction_replaced_description">Your received transaction was replaced by a fee bump</string>
     <string name="wallet__toast_received_transaction_replaced_title">Received Transaction Replaced</string>
     <string name="wallet__toast_transaction_removed_description">Transaction was removed from mempool</string>

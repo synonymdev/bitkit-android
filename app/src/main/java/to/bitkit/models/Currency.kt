@@ -158,10 +158,11 @@ fun BigDecimal.formatCurrencyWithSymbol(
     currencySymbol: String? = null,
     withSpace: Boolean = false,
     decimalPlaces: Int = FIAT_DECIMALS,
+    locale: Locale = Locale.getDefault(),
 ): String {
     val formatted = formatCurrency(decimalPlaces) ?: "0.00"
     val symbol = currencySymbol
-        ?: runCatching { java.util.Currency.getInstance(currencyCode) }.getOrNull()?.symbol
+        ?: runCatching { java.util.Currency.getInstance(currencyCode) }.getOrNull()?.getSymbol(locale)
         ?: currencyCode
     val separator = if (withSpace) " " else ""
 

@@ -21,6 +21,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.domain.commands.NotifyPendingPaymentResolved
+import to.bitkit.domain.commands.NotifyPendingPaymentResolvedHandler
 import to.bitkit.ext.activityManager
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
@@ -52,6 +54,9 @@ class LightningNodeService : Service() {
     lateinit var notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler
 
     @Inject
+    lateinit var notifyPendingPaymentResolvedHandler: NotifyPendingPaymentResolvedHandler
+
+    @Inject
     lateinit var cacheStore: CacheStore
 
     override fun onCreate() {
@@ -66,6 +71,7 @@ class LightningNodeService : Service() {
                 eventHandler = { event ->
                     Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
                     handlePaymentReceived(event)
+                    handlePendingPaymentResolved(event)
                 }
             ).onSuccess {
                 walletRepo.setWalletExistsState()
@@ -97,6 +103,20 @@ class LightningNodeService : Service() {
         Logger.debug("Showing payment notification: ${notification.title}", context = TAG)
         serviceScope.launch { cacheStore.setBackgroundReceive(sheet) }
         pushNotification(notification.title, notification.body)
+    }
+
+    private suspend fun handlePendingPaymentResolved(event: Event) {
+        val command = NotifyPendingPaymentResolved.Command.from(event) ?: return
+
+        notifyPendingPaymentResolvedHandler(command).onSuccess {
+            if (it !is NotifyPendingPaymentResolved.Result.ShowNotification) return
+            if (App.currentActivity?.value != null) {
+                Logger.debug("Skipping pending payment notification: activity is active", context = TAG)
+                return
+            }
+            Logger.debug("Showing pending payment notification for '${command.paymentHash}'", context = TAG)
+            pushNotification(it.notification.title, it.notification.body)
+        }
     }
 
     private fun createNotification(
