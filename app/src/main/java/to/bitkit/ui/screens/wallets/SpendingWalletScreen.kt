@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -90,8 +92,11 @@ fun SpendingWalletScreen(
                     DrawerNavIcon()
                 }
             )
+            val scrollState = rememberScrollState()
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .then(if (showEmptyState) Modifier.verticalScroll(scrollState) else Modifier)
             ) {
                 BalanceHeaderView(
                     sats = balances.totalLightningSats.toLong(),
