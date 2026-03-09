@@ -38,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -122,7 +121,7 @@ private fun TrezorScreenContent(
 
     ScreenColumn {
         AppTopBar(
-            titleText = stringResource(R.string.settings__adv__trezor),
+            titleText = "Trezor",
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )

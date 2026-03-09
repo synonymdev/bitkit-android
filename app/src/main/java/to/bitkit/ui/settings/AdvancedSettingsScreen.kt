@@ -159,10 +159,10 @@ private fun Content(
 
             // Hardware Wallet Section
             if (isDevModeEnabled) {
-                SectionHeader(title = stringResource(R.string.settings__adv__section_hardware_wallet))
+                SectionHeader(title = "Hardware Wallet")
 
                 SettingsButtonRow(
-                    title = stringResource(R.string.settings__adv__trezor),
+                    title = "Trezor",
                     onClick = onTrezorClick,
                     modifier = Modifier.testTag("Trezor"),
                 )

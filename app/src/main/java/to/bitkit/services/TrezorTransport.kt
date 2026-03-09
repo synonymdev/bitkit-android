@@ -24,6 +24,8 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import com.synonym.bitkitcore.NativeDeviceInfo
 import com.synonym.bitkitcore.TrezorCallMessageResult
@@ -34,6 +36,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
 import to.bitkit.utils.Logger
@@ -138,7 +141,7 @@ class TrezorTransport @Inject constructor(
                 }
                 if (migrated > 0) {
                     espPrefs.edit().clear().commit()
-                    Logger.info("Migrated $migrated THP credentials from SharedPreferences to files", context = TAG)
+                    Logger.info("Migrated '$migrated' THP credentials from SharedPreferences to files", context = TAG)
                 }
             } catch (e: Exception) {
                 Logger.warn("ESP migration failed (may be inaccessible)", e, context = TAG)
@@ -196,7 +199,7 @@ class TrezorTransport @Inject constructor(
                     )
                 }
             devices.addAll(usbDevices)
-            Logger.debug("USB enumerate found ${usbDevices.size} Trezor device(s)", context = TAG)
+            Logger.debug("USB enumerate found '${usbDevices.size}' Trezor device(s)", context = TAG)
         } catch (e: Exception) {
             Logger.error("USB enumerate failed", e, context = TAG)
         }
@@ -205,12 +208,12 @@ class TrezorTransport @Inject constructor(
         try {
             val bleDevices = enumerateBleDevices()
             devices.addAll(bleDevices)
-            Logger.debug("BLE enumerate found ${bleDevices.size} Trezor device(s)", context = TAG)
+            Logger.debug("BLE enumerate found '${bleDevices.size}' Trezor device(s)", context = TAG)
         } catch (e: Exception) {
             Logger.error("BLE enumerate failed", e, context = TAG)
         }
 
-        Logger.info("Total enumerate found ${devices.size} Trezor device(s)", context = TAG)
+        Logger.info("Total enumerate found '${devices.size}' Trezor device(s)", context = TAG)
         val summary = devices.map { "${it.path} (${it.transportType})" }
         TrezorDebugLog.log("ENUM", "Found ${devices.size} devices: $summary")
         return devices
@@ -266,7 +269,7 @@ class TrezorTransport @Inject constructor(
         // For BLE/THP devices, the Rust side now handles THP protocol directly.
         // This callback returns null to let Rust use its built-in THP implementation.
         Logger.debug(
-            "callMessage called for $path, type=$messageType - returning null (Rust handles THP)",
+            "callMessage called for '$path', type='$messageType' - returning null (Rust handles THP)",
             context = TAG,
         )
         return null
@@ -302,7 +305,7 @@ class TrezorTransport @Inject constructor(
             }
 
             val code = submittedPairingCode
-            Logger.info("Pairing code received (len=${code.length})", context = TAG)
+            Logger.info("Pairing code received (len='${code.length}')", context = TAG)
             return code
         } catch (e: InterruptedException) {
             Logger.error("Pairing code wait interrupted", e, context = TAG)
@@ -333,7 +336,7 @@ class TrezorTransport @Inject constructor(
      * UI should show a dialog when this is true.
      */
     private val _needsPairingCode = MutableStateFlow(false)
-    val needsPairingCode: kotlinx.coroutines.flow.StateFlow<Boolean> = _needsPairingCode
+    val needsPairingCode: StateFlow<Boolean> = _needsPairingCode
 
     /**
      * Submit a pairing code from the UI.
@@ -341,7 +344,7 @@ class TrezorTransport @Inject constructor(
      */
     fun submitPairingCode(code: String) {
         synchronized(pairingCodeLock) {
-            Logger.info("Pairing code submitted (len=${code.length})", context = TAG)
+            Logger.info("Pairing code submitted (len='${code.length}')", context = TAG)
             submittedPairingCode = code
             _needsPairingCode.value = false
             pairingCodeRequest.latch?.countDown()
@@ -368,7 +371,7 @@ class TrezorTransport @Inject constructor(
                 val existed = file.exists()
                 file.delete()
                 TrezorDebugLog.log("SAVE", "CLEARED credential (file existed=$existed)")
-                Logger.info("Cleared THP credential for device: $deviceId (path=${file.absolutePath})", context = TAG)
+                Logger.info("Cleared THP credential for device: '$deviceId' (path='${file.absolutePath}')", context = TAG)
                 return true
             }
 
@@ -386,7 +389,7 @@ class TrezorTransport @Inject constructor(
             }
 
             Logger.info(
-                "Saving THP credential to: ${file.absolutePath} (${credentialJson.length} chars)",
+                "Saving THP credential to: '${file.absolutePath}' (${credentialJson.length} chars)",
                 context = TAG,
             )
             true
@@ -416,7 +419,7 @@ class TrezorTransport @Inject constructor(
             TrezorDebugLog.log("LOAD", "All credential files: $allFiles")
 
             Logger.info(
-                "Loading THP credential from: ${file.absolutePath}, exists=$exists, size=$size",
+                "Loading THP credential from: '${file.absolutePath}', exists='$exists', size='$size'",
                 context = TAG,
             )
             if (exists) {
@@ -426,12 +429,12 @@ class TrezorTransport @Inject constructor(
                     TrezorDebugLog.log("LOAD", "WARNING: File exists but is blank! Returning null.")
                     null
                 } else {
-                    Logger.info("Loaded THP credential for device: $deviceId (${json.length} chars)", context = TAG)
+                    Logger.info("Loaded THP credential for device: '$deviceId' (${json.length} chars)", context = TAG)
                     json
                 }
             } else {
                 TrezorDebugLog.log("LOAD", "No credential file found -> returning null")
-                Logger.debug("No stored THP credential for device: $deviceId", context = TAG)
+                Logger.debug("No stored THP credential for device: '$deviceId'", context = TAG)
                 null
             }
         } catch (e: Exception) {
@@ -447,7 +450,7 @@ class TrezorTransport @Inject constructor(
             val file = credentialFile(deviceId)
             TrezorDebugLog.log("CLEAR", "clearDeviceCredential for: $deviceId, exists=${file.exists()}")
             file.delete()
-            Logger.info("Cleared device credential for: $deviceId", context = TAG)
+            Logger.info("Cleared device credential for: '$deviceId'", context = TAG)
         } catch (e: Exception) {
             TrezorDebugLog.log("CLEAR", "EXCEPTION: ${e.message}")
             Logger.error("Failed to clear device credential", e, context = TAG)
@@ -496,7 +499,7 @@ class TrezorTransport @Inject constructor(
         )
 
         try {
-            Logger.info("Requesting USB permission for ${device.deviceName}", context = TAG)
+            Logger.info("Requesting USB permission for '${device.deviceName}'", context = TAG)
             usbManager.requestPermission(device, permissionIntent)
 
             // Block until user responds (up to 60 seconds)
@@ -507,7 +510,7 @@ class TrezorTransport @Inject constructor(
             }
 
             val status = if (granted) "granted" else "denied"
-            Logger.info("USB permission $status for ${device.deviceName}", context = TAG)
+            Logger.info("USB permission '$status' for '${device.deviceName}'", context = TAG)
             return granted
         } finally {
             try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
@@ -552,7 +555,7 @@ class TrezorTransport @Inject constructor(
                 if (!requestUsbPermission(device)) {
                     return TrezorTransportWriteResult(
                         success = false,
-                        error = "USB permission denied for $path",
+                        error = "USB permission denied for '$path'",
                     )
                 }
             }
@@ -582,7 +585,7 @@ class TrezorTransport @Inject constructor(
                 endpoints.read,
                 endpoints.write,
             )
-            Logger.info("USB device opened: $path", context = TAG)
+            Logger.info("USB device opened: '$path'", context = TAG)
             TrezorTransportWriteResult(success = true, error = "")
         } catch (e: Exception) {
             Logger.error("USB open failed", e, context = TAG)
@@ -598,7 +601,7 @@ class TrezorTransport @Inject constructor(
 
             openDevice.connection.releaseInterface(openDevice.usbInterface)
             openDevice.connection.close()
-            Logger.info("USB device closed: $path", context = TAG)
+            Logger.info("USB device closed: '$path'", context = TAG)
             TrezorTransportWriteResult(success = true, error = "")
         } catch (e: Exception) {
             Logger.error("USB close failed", e, context = TAG)
@@ -633,7 +636,7 @@ class TrezorTransport @Inject constructor(
             }
 
             val data = buffer.copyOf(bytesRead)
-            Logger.debug("USB read $bytesRead bytes from $path", context = TAG)
+            Logger.debug("USB read '$bytesRead' bytes from '$path'", context = TAG)
             TrezorTransportReadResult(success = true, data = data, error = "")
         } catch (e: Exception) {
             Logger.error("USB read failed", e, context = TAG)
@@ -658,7 +661,7 @@ class TrezorTransport @Inject constructor(
                 return TrezorTransportWriteResult(success = false, error = "Write failed: $bytesWritten")
             }
 
-            Logger.debug("USB wrote $bytesWritten bytes to $path", context = TAG)
+            Logger.debug("USB wrote '$bytesWritten' bytes to '$path'", context = TAG)
             TrezorTransportWriteResult(success = true, error = "")
         } catch (e: Exception) {
             Logger.error("USB write failed", e, context = TAG)
@@ -714,12 +717,12 @@ class TrezorTransport @Inject constructor(
             val address = device.address
             if (!discoveredBleDevices.containsKey(address)) {
                 discoveredBleDevices[address] = device
-                Logger.debug("BLE device found: $address (${device.name})", context = TAG)
+                Logger.debug("BLE device found: '$address' ('${device.name}')", context = TAG)
             }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Logger.error("BLE scan failed: $errorCode", context = TAG)
+            Logger.error("BLE scan failed: '$errorCode'", context = TAG)
         }
     }
 
@@ -729,7 +732,7 @@ class TrezorTransport @Inject constructor(
         address: String,
     ): TrezorTransportWriteResult? {
         if (device.bondState == BluetoothDevice.BOND_NONE) {
-            Logger.info("Device not bonded, initiating bonding: $address", context = TAG)
+            Logger.info("Device not bonded, initiating bonding: '$address'", context = TAG)
             if (!device.createBond()) {
                 return TrezorTransportWriteResult(success = false, error = "Failed to initiate bonding")
             }
@@ -744,9 +747,9 @@ class TrezorTransport @Inject constructor(
             if (device.bondState != BluetoothDevice.BOND_BONDED) {
                 return TrezorTransportWriteResult(success = false, error = "Bonding timeout")
             }
-            Logger.info("Device bonded successfully: $address", context = TAG)
+            Logger.info("Device bonded successfully: '$address'", context = TAG)
         } else if (device.bondState == BluetoothDevice.BOND_BONDING) {
-            Logger.info("Device is currently bonding, waiting: $address", context = TAG)
+            Logger.info("Device is currently bonding, waiting: '$address'", context = TAG)
             var bondAttempts = 0
             while (device.bondState == BluetoothDevice.BOND_BONDING && bondAttempts < MAX_BOND_POLL_ATTEMPTS) {
                 Thread.sleep(BOND_POLL_INTERVAL_MS)
@@ -756,7 +759,7 @@ class TrezorTransport @Inject constructor(
                 return TrezorTransportWriteResult(success = false, error = "Bonding failed")
             }
         } else {
-            Logger.info("Device already bonded: $address", context = TAG)
+            Logger.info("Device already bonded: '$address'", context = TAG)
         }
         return null
     }
@@ -810,14 +813,14 @@ class TrezorTransport @Inject constructor(
         // Stabilization delay: device THP layer needs time after BLE reconnect
         Thread.sleep(BLE_CONNECTION_STABILIZATION_MS)
 
-        Logger.info("BLE device opened: $path", context = TAG)
+        Logger.info("BLE device opened: '$path'", context = TAG)
         return TrezorTransportWriteResult(success = true, error = "")
     }
 
     @Suppress("TooGenericExceptionCaught")
     @SuppressLint("MissingPermission")
     private fun closeBleDevice(path: String): TrezorTransportWriteResult {
-        val connection = bleConnections.remove(path)
+        val connection = bleConnections[path]
             ?: return TrezorTransportWriteResult(success = true, error = "")
 
         userInitiatedCloseSet.add(path)
@@ -829,7 +832,7 @@ class TrezorTransport @Inject constructor(
 
             val disconnected = disconnectLatch.await(DISCONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             if (!disconnected) {
-                Logger.warn("BLE disconnect timeout, forcing close: $path", context = TAG)
+                Logger.warn("BLE disconnect timeout, forcing close: '$path'", context = TAG)
             }
 
             bleConnections.remove(path)
@@ -839,7 +842,7 @@ class TrezorTransport @Inject constructor(
             Logger.error("BLE close failed", e, context = TAG)
         }
 
-        Logger.info("BLE device closed: $path", context = TAG)
+        Logger.info("BLE device closed: '$path'", context = TAG)
         return TrezorTransportWriteResult(success = true, error = "")
     }
 
@@ -860,7 +863,7 @@ class TrezorTransport @Inject constructor(
                     error = "Read timeout"
                 )
 
-            Logger.debug("BLE read ${data.size} bytes from $path", context = TAG)
+            Logger.debug("BLE read ${data.size} bytes from '$path'", context = TAG)
             TrezorTransportReadResult(success = true, data = data, error = "")
         } catch (e: Exception) {
             Logger.error("BLE read failed", e, context = TAG)
@@ -885,7 +888,7 @@ class TrezorTransport @Inject constructor(
             ?: return TrezorTransportWriteResult(success = false, error = "Write characteristic not available")
 
         if (!connection.isConnected) {
-            Logger.warn("BLE write attempted on disconnected device: $path", context = TAG)
+            Logger.warn("BLE write attempted on disconnected device: '$path'", context = TAG)
             return TrezorTransportWriteResult(success = false, error = "Device disconnected")
         }
 
@@ -907,8 +910,8 @@ class TrezorTransport @Inject constructor(
                     val connState = connection.isConnected
                     val charPropsHex = Integer.toHexString(writeChar.properties)
                     Logger.warn(
-                        "BLE write initiation failed (attempt $attempt/$BLE_WRITE_RETRY_COUNT): $path, " +
-                            "isConnected=$connState, charProps=0x$charPropsHex, dataLen=${data.size}",
+                        "BLE write initiation failed (attempt '$attempt'/'$BLE_WRITE_RETRY_COUNT'): '$path', " +
+                            "isConnected='$connState', charProps='0x$charPropsHex', dataLen='${data.size}'",
                         context = TAG,
                     )
                     if (attempt < BLE_WRITE_RETRY_COUNT) {
@@ -920,7 +923,7 @@ class TrezorTransport @Inject constructor(
 
                 if (!writeLatch.await(WRITE_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)) {
                     lastError = "Write timeout"
-                    Logger.warn("BLE write timeout (attempt $attempt/$BLE_WRITE_RETRY_COUNT): $path", context = TAG)
+                    Logger.warn("BLE write timeout (attempt '$attempt'/'$BLE_WRITE_RETRY_COUNT'): '$path'", context = TAG)
                     if (attempt < BLE_WRITE_RETRY_COUNT) {
                         Thread.sleep(BLE_WRITE_RETRY_DELAY_MS)
                         continue
@@ -931,8 +934,8 @@ class TrezorTransport @Inject constructor(
                 if (connection.writeStatus != BluetoothGatt.GATT_SUCCESS) {
                     lastError = "Write callback failed: ${connection.writeStatus}"
                     Logger.warn(
-                        "BLE write callback failed with status ${connection.writeStatus} " +
-                            "(attempt $attempt/$BLE_WRITE_RETRY_COUNT): $path",
+                        "BLE write callback failed with status '${connection.writeStatus}' " +
+                            "(attempt '$attempt'/'$BLE_WRITE_RETRY_COUNT'): '$path'",
                         context = TAG,
                     )
                     if (attempt < BLE_WRITE_RETRY_COUNT) {
@@ -943,7 +946,7 @@ class TrezorTransport @Inject constructor(
                 }
 
                 // Success!
-                Logger.debug("BLE wrote ${data.size} bytes to $path (attempt $attempt)", context = TAG)
+                Logger.debug("BLE wrote '${data.size}' bytes to '$path' (attempt '$attempt')", context = TAG)
 
                 // Small delay between writes to avoid overwhelming the GATT
                 Thread.sleep(BLE_WRITE_INTER_DELAY_MS)
@@ -966,15 +969,15 @@ class TrezorTransport @Inject constructor(
 
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Logger.debug("BLE connected, requesting MTU: $path", context = TAG)
+                    Logger.debug("BLE connected, requesting MTU: '$path'", context = TAG)
                     val mtuResult = gatt.requestMtu(256)
                     if (!mtuResult) {
-                        Logger.warn("MTU request failed, proceeding with service discovery: $path", context = TAG)
+                        Logger.warn("MTU request failed, proceeding with service discovery: '$path'", context = TAG)
                         gatt.discoverServices()
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Logger.debug("BLE disconnected: $path", context = TAG)
+                    Logger.debug("BLE disconnected: '$path'", context = TAG)
                     connection?.isConnected = false
                     connection?.connectionLatch?.countDown()
                     connection?.disconnectLatch?.countDown()
@@ -988,9 +991,9 @@ class TrezorTransport @Inject constructor(
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             val path = "ble:${gatt.device.address}"
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                Logger.info("MTU changed to $mtu for $path", context = TAG)
+                Logger.info("MTU changed to '$mtu' for '$path'", context = TAG)
             } else {
-                Logger.warn("MTU change failed with status $status for $path", context = TAG)
+                Logger.warn("MTU change failed with status '$status' for '$path'", context = TAG)
             }
             gatt.discoverServices()
         }
@@ -1000,7 +1003,7 @@ class TrezorTransport @Inject constructor(
             val connection = bleConnections[path] ?: return
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Logger.error("Service discovery failed: $status", context = TAG)
+                Logger.error("Service discovery failed: '$status'", context = TAG)
                 connection.connectionLatch?.countDown()
                 return
             }
@@ -1046,20 +1049,20 @@ class TrezorTransport @Inject constructor(
                 @Suppress("DEPRECATION")
                 val writeResult = gatt.writeDescriptor(descriptor)
                 if (!writeResult) {
-                    Logger.warn("CCCD descriptor write failed to initiate: $path", context = TAG)
+                    Logger.warn("CCCD descriptor write failed to initiate: '$path'", context = TAG)
                     // Also enable CCCD for PUSH characteristic before signaling ready
                     enablePushCccd(gatt, pushChar, path)
                     connection.isConnected = true
                     connection.connectionLatch?.countDown()
                 }
             } else {
-                Logger.warn("CCCD descriptor not found, proceeding: $path", context = TAG)
+                Logger.warn("CCCD descriptor not found, proceeding: '$path'", context = TAG)
                 enablePushCccd(gatt, pushChar, path)
                 connection.isConnected = true
                 connection.connectionLatch?.countDown()
             }
 
-            Logger.info("BLE services discovered: $path", context = TAG)
+            Logger.info("BLE services discovered: '$path'", context = TAG)
         }
 
         override fun onCharacteristicChanged(
@@ -1071,7 +1074,7 @@ class TrezorTransport @Inject constructor(
 
             // Only process notifications from the NOTIFY characteristic
             if (characteristic.uuid != NOTIFY_CHAR_UUID) {
-                Logger.debug("Ignoring notification from non-TX char: ${characteristic.uuid}", context = TAG)
+                Logger.debug("Ignoring notification from non-TX char: '${characteristic.uuid}'", context = TAG)
                 return
             }
 
@@ -1080,7 +1083,7 @@ class TrezorTransport @Inject constructor(
 
             if (data != null && data.isNotEmpty()) {
                 connection.readQueue.offer(data)
-                Logger.debug("BLE TX notification: ${data.size} bytes", context = TAG)
+                Logger.debug("BLE TX notification: '${data.size}' bytes", context = TAG)
             }
         }
 
@@ -1093,7 +1096,7 @@ class TrezorTransport @Inject constructor(
             val connection = bleConnections[path] ?: return
             connection.writeStatus = status
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Logger.warn("BLE write callback status: $status for $path", context = TAG)
+                Logger.warn("BLE write callback status: '$status' for '$path'", context = TAG)
             }
             connection.writeLatch?.countDown()
         }
@@ -1109,18 +1112,18 @@ class TrezorTransport @Inject constructor(
             val charUuid = descriptor.characteristic.uuid
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Logger.info(
-                    "CCCD descriptor write complete for $charUuid: $path",
+                    "CCCD descriptor write complete for '$charUuid': '$path'",
                     context = TAG,
                 )
             } else {
                 Logger.warn(
-                    "CCCD descriptor write failed with status $status for $charUuid: $path",
+                    "CCCD descriptor write failed with status '$status' for '$charUuid': '$path'",
                     context = TAG,
                 )
             }
 
             // Delay subsequent GATT operations without blocking the callback thread
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            Handler(Looper.getMainLooper()).postDelayed({
                 // If this was the TX characteristic CCCD, also enable PUSH CCCD
                 if (descriptor.characteristic.uuid == NOTIFY_CHAR_UUID) {
                     val pushChar = gatt.getService(SERVICE_UUID)?.getCharacteristic(PUSH_CHAR_UUID)
@@ -1152,7 +1155,7 @@ class TrezorTransport @Inject constructor(
         @Suppress("DEPRECATION")
         val result = gatt.writeDescriptor(pushDescriptor)
         if (!result) {
-            Logger.warn("PUSH CCCD descriptor write failed to initiate: $path", context = TAG)
+            Logger.warn("PUSH CCCD descriptor write failed to initiate: '$path'", context = TAG)
         }
         return result
     }
