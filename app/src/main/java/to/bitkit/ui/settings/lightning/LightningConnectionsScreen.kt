@@ -86,8 +86,6 @@ fun LightningConnectionsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.refreshObservedState()
-        viewModel.clearSelectedChannel()
-        viewModel.clearTransactionDetails()
 
         val selectedChannelId = navController.previousBackStackEntry?.savedStateHandle?.get<String>("selectedChannelId")
         if (selectedChannelId != null) {

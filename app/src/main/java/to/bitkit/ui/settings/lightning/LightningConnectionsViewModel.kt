@@ -4,14 +4,10 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.synonym.bitkitcore.Activity
-import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.IBtOrder
-import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
-import com.synonym.bitkitcore.TransactionDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -49,7 +45,7 @@ class LightningConnectionsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
-    internal val blocktankRepo: BlocktankRepo,
+    private val blocktankRepo: BlocktankRepo,
     private val logsRepo: LogsRepo,
     private val walletRepo: WalletRepo,
     private val activityRepo: ActivityRepo,
@@ -58,15 +54,6 @@ class LightningConnectionsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
     val uiState = _uiState.asStateFlow()
-
-    private val _selectedChannel = MutableStateFlow<ChannelUi?>(null)
-    val selectedChannel = _selectedChannel.asStateFlow()
-
-    private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
-    val txDetails = _txDetails.asStateFlow()
-
-    private val _txTime = MutableStateFlow<ULong?>(null)
-    val txTime = _txTime.asStateFlow()
 
     private val _closeConnectionUiState = MutableStateFlow(CloseConnectionUiState())
     val closeConnectionUiState = _closeConnectionUiState.asStateFlow()
@@ -90,7 +77,8 @@ class LightningConnectionsViewModel @Inject constructor(
                         state.copy(
                             closedChannels = closedChannels.mapIndexed { index, closedChannel ->
                                 closedChannel.toChannelUi(
-                                    baseIndex = openChannels.size + pendingConnections.size + index
+                                    baseIndex = openChannels.size + pendingConnections.size + index,
+                                    connectionText = context.getString(R.string.lightning__connection),
                                 )
                             }.reversed()
                         )
@@ -110,20 +98,22 @@ class LightningConnectionsViewModel @Inject constructor(
             ) { lightningState, blocktankState ->
                 val channels = lightningState.channels
                 val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
-                val openChannels = channels.filterOpen()
+                val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.value.copy(
                     isNodeRunning = isNodeRunning,
-                    openChannels = openChannels.map { channel -> channel.mapToUiModel() },
+                    openChannels = channels.filterOpen().map { channel ->
+                        channel.mapToUiModel(channels, blocktankState.paidOrders, connectionText)
+                    },
                     pendingConnections = getPendingConnections(channels, blocktankState.paidOrders)
-                        .map { it.mapToUiModel() },
-                    failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders).map { it.mapToUiModel() },
+                        .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
+                    failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders)
+                        .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
                     localBalance = calculateLocalBalance(channels),
                     remoteBalance = channels.calculateRemoteBalance(),
                 )
             }.collect { newState ->
                 _uiState.update { newState }
-                refreshSelectedChannelIfNeeded(lightningRepo.lightningState.value.channels)
             }
         }
     }
@@ -142,70 +132,6 @@ class LightningConnectionsViewModel @Inject constructor(
         }
     }
 
-    private fun refreshSelectedChannelIfNeeded(channels: List<ChannelDetails>) {
-        val currentSelectedChannel = _selectedChannel.value ?: return
-
-        // Filter out closed channels from the list
-        val closedChannelIds = _uiState.value.closedChannels.map { it.details.channelId }.toSet()
-        val activeChannels = channels.filterNot { it.channelId in closedChannelIds }
-
-        // Don't refresh if the selected channel is closed
-        if (currentSelectedChannel.details.channelId in closedChannelIds) {
-            return
-        }
-
-        // Try to find updated version in active channels
-        val updatedChannel = findUpdatedChannel(currentSelectedChannel.details, activeChannels)
-        _selectedChannel.update { updatedChannel?.mapToUiModel() }
-    }
-
-    @Suppress("ReturnCount")
-    private fun findUpdatedChannel(
-        currentChannel: ChannelDetails,
-        allChannels: List<ChannelDetails>,
-    ): ChannelDetails? {
-        allChannels.find { it.channelId == currentChannel.channelId }?.let { return it }
-
-        // If current channel has funding txo, try to match by it
-        currentChannel.fundingTxo?.let { fundingTxo ->
-            allChannels
-                .find { it.fundingTxo?.txid == fundingTxo.txid && it.fundingTxo?.vout == fundingTxo.vout }
-                ?.let { return it }
-        }
-
-        // Try to find in pending/failed order channels
-        val blocktankState = blocktankRepo.blocktankState.value
-        val pendingOrderChannels = getPendingOrdersAsChannels(
-            allChannels,
-            blocktankState.paidOrders,
-        )
-        val failedOrderChannels = getFailedOrdersAsChannels(
-            blocktankState.paidOrders,
-        )
-        val orderChannels = pendingOrderChannels + failedOrderChannels
-
-        // Direct channel ID match in order channels
-        orderChannels.find { it.channelId == currentChannel.channelId }?.let { return it }
-
-        // If the current channel was a fake channel (order), check if it became a real channel
-        val orders = blocktankRepo.blocktankState.value.orders
-        val orderForCurrentChannel = orders.find { it.id == currentChannel.channelId }
-
-        if (orderForCurrentChannel != null) {
-            // Check if order now has a funding tx
-            val fundingTxId = orderForCurrentChannel.channel?.fundingTx?.id
-            if (fundingTxId != null) {
-                // Try to find real channel with matching funding tx
-                allChannels.find { channel -> channel.fundingTxo?.txid == fundingTxId }?.let { return it }
-            }
-
-            // Order might have transitioned states, check if it's still in our fake channels
-            orderChannels.find { it.channelId == orderForCurrentChannel.id }?.let { return it }
-        }
-
-        return null
-    }
-
     fun onPullToRefresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
@@ -221,64 +147,6 @@ class LightningConnectionsViewModel @Inject constructor(
         loadClosedChannels()
     }
 
-    private fun ClosedChannelDetails.toChannelUi(baseIndex: Int): ChannelUi {
-        val channelDetails = createChannelDetails().copy(
-            channelId = this.channelId,
-            counterpartyNodeId = this.counterpartyNodeId,
-            fundingTxo = OutPoint(txid = this.fundingTxoTxid, vout = this.fundingTxoIndex),
-            channelValueSats = this.channelValueSats,
-            outboundCapacityMsat = this.outboundCapacityMsat,
-            inboundCapacityMsat = this.inboundCapacityMsat,
-            unspendablePunishmentReserve = this.unspendablePunishmentReserve,
-            counterpartyUnspendablePunishmentReserve = this.counterpartyUnspendablePunishmentReserve,
-            isChannelReady = false,
-            isUsable = false,
-        )
-        val connectionText = context.getString(R.string.lightning__connection)
-        return ChannelUi(
-            name = "$connectionText ${baseIndex + 1}",
-            details = channelDetails,
-            closureReason = this.channelClosureReason.takeIf { it.isNotEmpty() }
-        )
-    }
-
-    private fun ChannelDetails.mapToUiModel(): ChannelUi = ChannelUi(
-        name = getChannelName(this),
-        details = this
-    )
-
-    @Suppress("ForbiddenComment")
-    private fun getChannelName(channel: ChannelDetails): String {
-        val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
-
-        val channels = lightningRepo.lightningState.value.channels
-        val paidBlocktankOrders = blocktankRepo.blocktankState.value.paidOrders
-
-        // orders without a corresponding known channel are considered pending
-        val pendingChannels = paidBlocktankOrders.filter { order ->
-            channels.none { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }
-        }
-        val pendingIndex = pendingChannels.indexOfFirst { order -> channel.channelId == order.id }
-
-        // TODO: sort channels to get consistent index; node.listChannels returns a list in random order
-        val channelIndex = channels.indexOfFirst { channel.channelId == it.channelId }
-
-        val connectionText = context.getString(R.string.lightning__connection)
-
-        return when {
-            channelIndex == -1 -> {
-                if (pendingIndex == -1) {
-                    default
-                } else {
-                    val index = channels.size + pendingIndex
-                    "$connectionText ${index + 1}"
-                }
-            }
-
-            else -> "$connectionText ${channelIndex + 1}"
-        }
-    }
-
     private fun getPendingConnections(
         knownChannels: List<ChannelDetails>,
         paidOrders: List<IBtOrder>,
@@ -287,48 +155,6 @@ class LightningConnectionsViewModel @Inject constructor(
         val pendingOrderChannels = getPendingOrdersAsChannels(knownChannels, paidOrders)
 
         return pendingOrderChannels + pendingLdkChannels
-    }
-
-    private fun getPendingOrdersAsChannels(
-        knownChannels: List<ChannelDetails>,
-        paidOrders: List<IBtOrder>,
-    ): List<ChannelDetails> {
-        return paidOrders.mapNotNull { order ->
-            // Only process orders that don't have a corresponding known channel
-            if (knownChannels.any { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }) {
-                return@mapNotNull null
-            }
-
-            if (order.state2 !in listOf(BtOrderState2.CREATED, BtOrderState2.PAID)) return@mapNotNull null
-
-            createChannelDetails().copy(
-                channelId = order.id,
-                counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
-                fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-                channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
-                outboundCapacityMsat = order.clientBalanceSat * 1000u,
-                inboundCapacityMsat = order.lspBalanceSat * 1000u,
-            )
-        }
-    }
-
-    private fun getFailedOrdersAsChannels(
-        paidOrders: List<IBtOrder>,
-    ): List<ChannelDetails> {
-        return paidOrders.mapNotNull { order ->
-            if (order.state2 != BtOrderState2.EXPIRED) return@mapNotNull null
-
-            createChannelDetails().copy(
-                channelId = order.id,
-                counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
-                fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-                channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
-                outboundCapacityMsat = order.clientBalanceSat * 1000u,
-                inboundCapacityMsat = order.lspBalanceSat * 1000u,
-                isChannelReady = false,
-                isUsable = false,
-            )
-        }
     }
 
     private fun calculateLocalBalance(channels: List<ChannelDetails>): ULong {
@@ -341,7 +167,7 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch {
             logsRepo.zipLogsForSharing()
                 .onSuccess { uri -> onReady(uri) }
-                .onFailure { err ->
+                .onFailure {
                     ToastEventBus.send(
                         type = Toast.ToastType.WARNING,
                         title = context.getString(R.string.lightning__error_logs),
@@ -351,104 +177,17 @@ class LightningConnectionsViewModel @Inject constructor(
         }
     }
 
-    fun setSelectedChannel(channelUi: ChannelUi) {
-        _selectedChannel.update { channelUi }
-    }
-
-    fun clearSelectedChannel() = _selectedChannel.update { null }
-
-    fun findAndSelectChannel(channelId: String): Boolean {
-        val channels = lightningRepo.lightningState.value.channels
-        val blocktankState = blocktankRepo.blocktankState.value
-
-        val channelUi = findChannelUi(channelId, channels, blocktankState)
-        if (channelUi != null) {
-            setSelectedChannel(channelUi)
-            return true
-        }
-
-        return false
-    }
-
-    private fun findChannelUi(
-        channelId: String,
-        channels: List<ChannelDetails>,
-        blocktankState: to.bitkit.repositories.BlocktankState,
-    ): ChannelUi? {
-        return channels.find { it.channelId == channelId }?.mapToUiModel()
-            ?: getPendingOrdersAsChannels(channels, blocktankState.paidOrders)
-                .find { it.channelId == channelId }?.mapToUiModel()
-            ?: getFailedOrdersAsChannels(blocktankState.paidOrders)
-                .find { it.channelId == channelId }?.mapToUiModel()
-            ?: _uiState.value.closedChannels.find { it.details.channelId == channelId }
-            ?: blocktankState.orders.find { it.id == channelId }?.let { order ->
-                createChannelDetails().copy(
-                    channelId = order.id,
-                    counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
-                    fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-                    channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
-                    outboundCapacityMsat = order.clientBalanceSat * 1000u,
-                    inboundCapacityMsat = order.lspBalanceSat * 1000u,
-                ).mapToUiModel()
-            }
-    }
-
-    fun fetchTransactionDetails(txid: String) {
-        viewModelScope.launch(bgDispatcher) {
-            activityRepo.getTransactionDetails(txid)
-                .onSuccess { transactionDetails ->
-                    _txDetails.update { transactionDetails }
-                    if (transactionDetails != null) {
-                        Logger.debug("fetchTransactionDetails success for: '$txid'", context = TAG)
-                    } else {
-                        Logger.warn("Transaction details not found for: '$txid'", context = TAG)
-                    }
-                }
-                .onFailure { e ->
-                    Logger.warn("fetchTransactionDetails error for: '$txid'", e, context = TAG)
-                    _txDetails.update { null }
-                }
-        }
-    }
-
-    fun clearTransactionDetails() {
-        _txDetails.update { null }
-        _txTime.update { null }
-    }
-
-    fun fetchActivityTimestamp(channelId: String) {
-        viewModelScope.launch {
-            val activities = activityRepo.getActivities(
-                filter = ActivityFilter.ONCHAIN,
-                txType = PaymentType.SENT,
-                tags = null,
-                search = null,
-                minDate = null,
-                maxDate = null,
-                limit = null,
-                sortDirection = null
-            ).getOrNull() ?: emptyList()
-
-            val transferActivity = activities.firstOrNull { activity ->
-                activity is Activity.Onchain &&
-                    activity.v1.isTransfer &&
-                    activity.v1.channelId == channelId
-            } as? Activity.Onchain
-
-            _txTime.update { transferActivity?.v1?.confirmTimestamp ?: transferActivity?.v1?.timestamp }
-        }
-    }
-
     fun clearCloseConnectionState() {
         _closeConnectionUiState.update { CloseConnectionUiState() }
     }
 
-    fun closeChannel() {
-        val channel = _selectedChannel.value?.details ?: run {
-            val error = IllegalStateException("No channel selected for closing")
-            Logger.error(error.message, e = error, context = TAG)
-            throw error
-        }
+    fun closeChannel(channelId: String) {
+        val channel = lightningRepo.lightningState.value.channels
+            .find { it.channelId == channelId }
+            ?: run {
+                Logger.error("No channel found for closing: $channelId", context = TAG)
+                return
+            }
 
         viewModelScope.launch {
             _closeConnectionUiState.update { it.copy(isLoading = true) }
@@ -477,7 +216,7 @@ class LightningConnectionsViewModel @Inject constructor(
                     }
                 },
                 onFailure = { error ->
-                    Logger.error("Failed to close channel", e = error, context = TAG)
+                    Logger.error("Failed to close channel", error, context = TAG)
 
                     ToastEventBus.send(
                         type = Toast.ToastType.WARNING,
@@ -494,6 +233,111 @@ class LightningConnectionsViewModel @Inject constructor(
     companion object {
         private const val TAG = "LightningConnectionsViewModel"
     }
+}
+
+internal fun getPendingOrdersAsChannels(
+    knownChannels: List<ChannelDetails>,
+    paidOrders: List<IBtOrder>,
+): List<ChannelDetails> {
+    return paidOrders.mapNotNull { order ->
+        if (knownChannels.any { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }) {
+            return@mapNotNull null
+        }
+
+        if (order.state2 !in listOf(BtOrderState2.CREATED, BtOrderState2.PAID)) return@mapNotNull null
+
+        createChannelDetails().copy(
+            channelId = order.id,
+            counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
+            fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
+            channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
+            outboundCapacityMsat = order.clientBalanceSat * 1000u,
+            inboundCapacityMsat = order.lspBalanceSat * 1000u,
+        )
+    }
+}
+
+internal fun getFailedOrdersAsChannels(
+    paidOrders: List<IBtOrder>,
+): List<ChannelDetails> {
+    return paidOrders.mapNotNull { order ->
+        if (order.state2 != BtOrderState2.EXPIRED) return@mapNotNull null
+
+        createChannelDetails().copy(
+            channelId = order.id,
+            counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
+            fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
+            channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
+            outboundCapacityMsat = order.clientBalanceSat * 1000u,
+            inboundCapacityMsat = order.lspBalanceSat * 1000u,
+            isChannelReady = false,
+            isUsable = false,
+        )
+    }
+}
+
+@Suppress("ForbiddenComment")
+internal fun getChannelName(
+    channel: ChannelDetails,
+    allChannels: List<ChannelDetails>,
+    paidOrders: List<IBtOrder>,
+    connectionText: String,
+): String {
+    val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
+
+    // orders without a corresponding known channel are considered pending
+    val pendingChannels = paidOrders.filter { order ->
+        allChannels.none { ch -> ch.fundingTxo?.txid == order.channel?.fundingTx?.id }
+    }
+    val pendingIndex = pendingChannels.indexOfFirst { order -> channel.channelId == order.id }
+
+    // TODO: sort channels to get consistent index; node.listChannels returns a list in random order
+    val channelIndex = allChannels.indexOfFirst { channel.channelId == it.channelId }
+
+    return when {
+        channelIndex == -1 -> {
+            if (pendingIndex == -1) {
+                default
+            } else {
+                val index = allChannels.size + pendingIndex
+                "$connectionText ${index + 1}"
+            }
+        }
+
+        else -> "$connectionText ${channelIndex + 1}"
+    }
+}
+
+internal fun ChannelDetails.mapToUiModel(
+    allChannels: List<ChannelDetails>,
+    paidOrders: List<IBtOrder>,
+    connectionText: String,
+): ChannelUi = ChannelUi(
+    name = getChannelName(this, allChannels, paidOrders, connectionText),
+    details = this,
+)
+
+internal fun ClosedChannelDetails.toChannelUi(
+    baseIndex: Int,
+    connectionText: String,
+): ChannelUi {
+    val channelDetails = createChannelDetails().copy(
+        channelId = this.channelId,
+        counterpartyNodeId = this.counterpartyNodeId,
+        fundingTxo = OutPoint(txid = this.fundingTxoTxid, vout = this.fundingTxoIndex),
+        channelValueSats = this.channelValueSats,
+        outboundCapacityMsat = this.outboundCapacityMsat,
+        inboundCapacityMsat = this.inboundCapacityMsat,
+        unspendablePunishmentReserve = this.unspendablePunishmentReserve,
+        counterpartyUnspendablePunishmentReserve = this.counterpartyUnspendablePunishmentReserve,
+        isChannelReady = false,
+        isUsable = false,
+    )
+    return ChannelUi(
+        name = "$connectionText ${baseIndex + 1}",
+        details = channelDetails,
+        closureReason = this.channelClosureReason.takeIf { it.isNotEmpty() }
+    )
 }
 
 data class LightningConnectionsUiState(

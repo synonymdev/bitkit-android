@@ -76,7 +76,6 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.getBlockExplorerUrl
-import to.bitkit.ui.walletViewModel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -85,84 +84,83 @@ import java.util.Locale
 @Composable
 fun ChannelDetailScreen(
     navController: NavController,
-    viewModel: LightningConnectionsViewModel,
+    viewModel: ChannelDetailViewModel,
     channelId: String,
 ) {
     val context = LocalContext.current
     val app = appViewModel ?: return
-    val wallet = walletViewModel ?: return
 
     LaunchedEffect(channelId) {
-        viewModel.findAndSelectChannel(channelId)
+        viewModel.loadChannel(channelId)
     }
-
-    val selectedChannel by viewModel.selectedChannel.collectAsStateWithLifecycle()
-    val channel = selectedChannel
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val paidOrders by viewModel.blocktankRepo.blocktankState.collectAsStateWithLifecycle()
-    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
 
-    if (channel == null) {
-        Content(
-            channel = null,
-            onBack = { navController.popBackStack() },
-        )
-        return
-    }
-
-    val isClosedChannel = uiState.closedChannels.any { it.details.channelId == channel.details.channelId }
-
-    // Fetch transaction details for funding transaction if available
-    LaunchedEffect(channel.details.fundingTxo?.txid) {
-        channel.details.fundingTxo?.txid?.let { txid ->
-            viewModel.fetchTransactionDetails(txid)
+    when (val loadState = uiState.channelLoadState) {
+        is ChannelLoadState.Loading -> {
+            ScreenColumn {
+                AppTopBar(
+                    titleText = "",
+                    onBackClick = { navController.popBackStack() },
+                    actions = { DrawerNavIcon() },
+                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
         }
-    }
 
-    // Fetch activity timestamp for transfer activity with matching channel ID
-    LaunchedEffect(channel.details.channelId) {
-        channel.details.channelId.let { id ->
-            viewModel.fetchActivityTimestamp(id)
+        is ChannelLoadState.NotFound -> {
+            LaunchedEffect(Unit) {
+                app.toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.lightning__channel_not_found),
+                )
+                navController.popBackStack()
+            }
         }
-    }
 
-    val txTime by viewModel.txTime.collectAsStateWithLifecycle()
-
-    Content(
-        channel = channel,
-        blocktankOrders = paidOrders.paidOrders,
-        cjitEntries = paidOrders.cjitEntries,
-        txTime = txTime,
-        isRefreshing = uiState.isRefreshing,
-        isClosedChannel = isClosedChannel,
-        onBack = { navController.popBackStack() },
-        onRefresh = {
-            viewModel.onPullToRefresh()
-        },
-        onCopyText = { text ->
-            context.setClipboardText(text)
-            app.toast(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
-                description = text,
+        is ChannelLoadState.Success -> {
+            val channel = loadState.channel
+            Content(
+                channel = channel,
+                blocktankOrders = uiState.paidOrders,
+                cjitEntries = uiState.cjitEntries,
+                txTime = uiState.txTime,
+                isRefreshing = uiState.isRefreshing,
+                isClosedChannel = uiState.isClosedChannel,
+                onBack = { navController.popBackStack() },
+                onRefresh = { viewModel.onPullToRefresh() },
+                onCopyText = { text ->
+                    context.setClipboardText(text)
+                    app.toast(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.common__copied),
+                        description = text,
+                    )
+                },
+                onOpenUrl = { txId ->
+                    val url = getBlockExplorerUrl(txId)
+                    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                    context.startActivity(intent)
+                },
+                onSupport = { order -> contactSupport(order, channel, context) },
+                onCloseConnection = {
+                    navController.navigate(Routes.CloseConnection(channelId = channel.details.channelId))
+                },
             )
-        },
-        onOpenUrl = { txId ->
-            val url = getBlockExplorerUrl(txId)
-            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-            context.startActivity(intent)
-        },
-        onSupport = { order -> contactSupport(order, channel, lightningState.nodeId, context) },
-        onCloseConnection = { navController.navigate(Routes.CloseConnection) },
-    )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("CyclomaticComplexMethod")
 @Composable
 private fun Content(
-    channel: ChannelUi?,
+    channel: ChannelUi,
     blocktankOrders: List<IBtOrder> = emptyList(),
     cjitEntries: List<IcJitEntry> = emptyList(),
     txTime: ULong? = null,
@@ -177,20 +175,10 @@ private fun Content(
 ) {
     ScreenColumn {
         AppTopBar(
-            titleText = channel?.name ?: "",
+            titleText = channel.name,
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
-
-        if (channel == null) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                CircularProgressIndicator()
-            }
-            return@ScreenColumn
-        }
 
         // Check if the channel was opened via CJIT
         val cjitEntry = cjitEntries.find { entry ->
@@ -405,8 +393,6 @@ private fun Content(
                     }
                 )
 
-                val fundingTxId = channel.details.fundingTxo?.txid
-
                 txTime?.let {
                     SectionRow(
                         name = stringResource(R.string.lightning__opened_on),
@@ -601,13 +587,11 @@ private fun formatUnixTimestamp(timestamp: Long): String {
 private fun contactSupport(
     order: Any,
     channel: ChannelUi,
-    nodeId: String,
     context: Context,
 ) {
     val intent = createSupportEmailIntent(
         order = order,
         channel = channel,
-        nodeId = nodeId,
     )
     runCatching {
         context.startActivity(Intent.createChooser(intent, context.getString(R.string.lightning__support)))
@@ -620,7 +604,6 @@ private fun contactSupport(
 private fun createSupportEmailIntent(
     order: Any, // IBtOrder or IcJitEntry
     channel: ChannelUi,
-    nodeId: String,
 ): Intent {
     val subject = "Bitkit Support [Channel]"
 
@@ -644,20 +627,11 @@ private fun createSupportEmailIntent(
         appendLine()
         appendLine("Platform: ${Env.platform}")
         appendLine("Version: ${Env.version}")
-        appendLine("LDK node ID: $nodeId")
     }.trim()
 
     val uri = "mailto:${Env.SUPPORT_EMAIL}?subject=${Uri.encode(subject)}&body=${Uri.encode(body)}".toUri()
 
     return Intent(Intent.ACTION_SENDTO, uri)
-}
-
-@Preview
-@Composable
-private fun PreviewLoadingState() {
-    AppThemeSurface {
-        Content(channel = null)
-    }
 }
 
 @Preview

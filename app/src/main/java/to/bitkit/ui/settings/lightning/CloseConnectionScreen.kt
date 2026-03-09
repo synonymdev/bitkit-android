@@ -40,6 +40,7 @@ import to.bitkit.ui.utils.withAccentBoldBright
 fun CloseConnectionScreen(
     navController: NavController,
     viewModel: LightningConnectionsViewModel,
+    channelId: String,
 ) {
     val uiState by viewModel.closeConnectionUiState.collectAsState()
 
@@ -58,7 +59,7 @@ fun CloseConnectionScreen(
     Content(
         isLoading = uiState.isLoading,
         onBack = { navController.popBackStack() },
-        onClickClose = { viewModel.closeChannel() },
+        onClickClose = { viewModel.closeChannel(channelId) },
     )
 }
 
