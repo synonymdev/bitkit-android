@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +41,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.utils.previewLightningActivityItems
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -73,6 +72,7 @@ fun SpendingWalletScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Colors.Black)
+            .blockPointerInputPassthrough()
     ) {
         Image(
             painter = painterResource(id = R.drawable.coin_stack_x_2),
@@ -92,11 +92,8 @@ fun SpendingWalletScreen(
                     DrawerNavIcon()
                 }
             )
-            val scrollState = rememberScrollState()
             Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .then(if (showEmptyState) Modifier.verticalScroll(scrollState) else Modifier)
+                modifier = Modifier.padding(horizontal = 16.dp)
             ) {
                 BalanceHeaderView(
                     sats = balances.totalLightningSats.toLong(),
