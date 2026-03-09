@@ -11,22 +11,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -53,7 +51,7 @@ internal fun BalanceLookupSection(
     onResetSend: () -> Unit,
 ) {
     Column {
-        Footnote(
+        Caption13Up(
             text = "Balance Lookup",
             color = Colors.White64,
         )
@@ -62,7 +60,7 @@ internal fun BalanceLookupSection(
         OutlinedTextField(
             value = uiState.lookupInput,
             onValueChange = onInputChange,
-            label = { Text("Address or xpub", color = Colors.White50) },
+            label = { Caption("Address or xpub", color = Colors.White50) },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Colors.White,
                 unfocusedTextColor = Colors.White,
@@ -138,7 +136,7 @@ private fun AccountInfoResultView(
 
         if (result.account.utxo.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Footnote(
+            Caption13Up(
                 text = "UTXOs (${result.account.utxo.size})",
                 color = Colors.White64,
             )
@@ -179,11 +177,9 @@ private fun AddressInfoResultView(result: SingleAddressInfoResult) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
+                Caption(
                     text = result.address,
                     color = Colors.Brand,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
                     modifier = Modifier.weight(1f),
                 )
                 HorizontalSpacer(8.dp)
@@ -204,7 +200,7 @@ private fun AddressInfoResultView(result: SingleAddressInfoResult) {
 
         if (result.utxos.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Footnote(
+            Caption13Up(
                 text = "UTXOs (${result.utxos.size})",
                 color = Colors.White64,
             )
@@ -225,11 +221,9 @@ private fun UtxoRow(utxo: AccountUtxo) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
+            Caption(
                 text = "${utxo.txid.take(8)}...${utxo.txid.takeLast(8)}:${utxo.vout}",
                 color = Colors.Brand,
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
                 modifier = Modifier.weight(1f),
             )
             HorizontalSpacer(8.dp)

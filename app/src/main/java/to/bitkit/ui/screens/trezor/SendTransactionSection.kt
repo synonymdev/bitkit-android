@@ -12,23 +12,22 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.TrezorPrecomposedOutput
 import com.synonym.bitkitcore.TrezorPrecomposedResult
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -65,7 +64,7 @@ internal fun SendTransactionSection(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        Footnote(
+        Caption13Up(
             text = "Send Transaction",
             color = Colors.White64,
         )
@@ -117,7 +116,7 @@ private fun ComposeForm(
         OutlinedTextField(
             value = uiState.sendAddress,
             onValueChange = onAddressChange,
-            label = { Text("Destination address", color = Colors.White50) },
+            label = { Caption("Destination address", color = Colors.White50) },
             colors = textFieldColors,
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
@@ -133,7 +132,7 @@ private fun ComposeForm(
             OutlinedTextField(
                 value = if (uiState.isSendMax) "MAX" else uiState.sendAmountSats,
                 onValueChange = onAmountChange,
-                label = { Text("Amount (sats)", color = Colors.White50) },
+                label = { Caption("Amount (sats)", color = Colors.White50) },
                 colors = textFieldColors,
                 enabled = !uiState.isSendMax,
                 singleLine = true,
@@ -141,7 +140,7 @@ private fun ComposeForm(
                 modifier = Modifier.weight(1f),
             )
             val maxColor = if (uiState.isSendMax) Colors.Brand else Colors.White32
-            Footnote(
+            CaptionB(
                 text = "MAX",
                 color = maxColor,
                 modifier = Modifier
@@ -157,7 +156,7 @@ private fun ComposeForm(
         OutlinedTextField(
             value = uiState.sendFeeRate,
             onValueChange = onFeeRateChange,
-            label = { Text("Fee rate (sat/vB)", color = Colors.White50) },
+            label = { Caption("Fee rate (sat/vB)", color = Colors.White50) },
             colors = textFieldColors,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -166,7 +165,7 @@ private fun ComposeForm(
 
         VerticalSpacer(12.dp)
 
-        Footnote(
+        Caption13Up(
             text = "Coin Selection",
             color = Colors.White64,
         )
@@ -204,7 +203,7 @@ private fun SortingStrategyRow(
         TrezorSortingStrategy.entries.forEach { strategy ->
             val isSelected = strategy == selected
             val color = if (isSelected) Colors.Brand else Colors.White32
-            Footnote(
+            CaptionB(
                 text = labels[strategy] ?: strategy.name,
                 color = color,
                 modifier = Modifier
@@ -237,18 +236,16 @@ private fun ReviewSection(
 
         if (result.inputs.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Footnote(
+            Caption13Up(
                 text = "Inputs (${result.inputs.size})",
                 color = Colors.White64,
             )
             VerticalSpacer(4.dp)
             result.inputs.forEach { input ->
                 ResultCard {
-                    Text(
+                    Caption(
                         text = "${input.txid.take(8)}...${input.txid.takeLast(8)}:${input.vout}",
                         color = Colors.Brand,
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
                     )
                     InfoRow("Amount", "${input.amount} sats")
                     InfoRow("Path", input.path)
@@ -259,7 +256,7 @@ private fun ReviewSection(
 
         if (result.outputs.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Footnote(
+            Caption13Up(
                 text = "Outputs (${result.outputs.size})",
                 color = Colors.White64,
             )
@@ -293,7 +290,7 @@ private fun ReviewSection(
 
         if (!isDeviceConnected) {
             VerticalSpacer(4.dp)
-            Footnote(text = "Connect a Trezor device to sign")
+            Caption(text = "Connect a Trezor device to sign")
         }
     }
 }
@@ -304,21 +301,17 @@ private fun OutputCard(output: TrezorPrecomposedOutput) {
         when (output) {
             is TrezorPrecomposedOutput.Payment -> {
                 InfoRow("Type", "Payment")
-                Text(
+                Caption(
                     text = output.address,
                     color = Colors.Brand,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
                 )
                 InfoRow("Amount", "${output.amount} sats")
             }
             is TrezorPrecomposedOutput.Change -> {
                 InfoRow("Type", "Change")
-                Text(
+                Caption(
                     text = output.address,
                     color = Colors.White64,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
                 )
                 InfoRow("Amount", "${output.amount} sats")
                 InfoRow("Path", output.path)
@@ -349,7 +342,7 @@ private fun SignedResultSection(
 
         VerticalSpacer(8.dp)
 
-        Footnote(
+        Caption13Up(
             text = "Raw Transaction Hex",
             color = Colors.White64,
         )
@@ -360,12 +353,9 @@ private fun SignedResultSection(
                 verticalAlignment = Alignment.Top,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
+                Caption(
                     text = signedTx.serializedTx,
                     color = Colors.White,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 14.sp,
                     modifier = Modifier.weight(1f),
                 )
                 HorizontalSpacer(8.dp)
@@ -413,7 +403,7 @@ private fun BroadcastResultCard(txid: String) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Footnote(
+            Caption13Up(
                 text = "Broadcast TXID",
                 color = Colors.White64,
             )
@@ -427,12 +417,9 @@ private fun BroadcastResultCard(txid: String) {
                     .clickableAlpha(onClick = onCopyTxid),
             )
         }
-        Text(
+        Caption(
             text = txid,
             color = Colors.Brand,
-            fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            lineHeight = 14.sp,
         )
     }
 }

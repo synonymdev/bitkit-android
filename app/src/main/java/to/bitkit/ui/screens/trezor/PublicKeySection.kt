@@ -10,20 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -43,17 +41,15 @@ internal fun PublicKeySection(
     }
 
     Column {
-        Footnote(
+        Caption13Up(
             text = "Public Key (xpub)",
             color = Colors.White64,
         )
         VerticalSpacer(8.dp)
 
-        Text(
+        Caption(
             text = "Account path: $accountPath",
             color = Colors.White50,
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
         )
 
         VerticalSpacer(12.dp)
@@ -84,7 +80,7 @@ internal fun PublicKeySection(
                 val onCopyPublicKey = copyToClipboard(text = response.publicKey, label = "Public Key")
                 Column {
                     VerticalSpacer(12.dp)
-                    Footnote(
+                    Caption(
                         text = "xpub:",
                         color = Colors.White50,
                     )
@@ -97,12 +93,10 @@ internal fun PublicKeySection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        Caption(
                             text = response.xpub,
                             color = Colors.Brand,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         HorizontalSpacer(8.dp)
                         Icon(
@@ -116,7 +110,7 @@ internal fun PublicKeySection(
                     }
 
                     VerticalSpacer(12.dp)
-                    Footnote(
+                    Caption(
                         text = "Public Key:",
                         color = Colors.White50,
                     )
@@ -129,12 +123,10 @@ internal fun PublicKeySection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        Caption(
                             text = response.publicKey,
                             color = Colors.Brand,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         HorizontalSpacer(8.dp)
                         Icon(

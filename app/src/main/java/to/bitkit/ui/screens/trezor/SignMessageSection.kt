@@ -12,19 +12,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -41,7 +39,7 @@ internal fun SignMessageSection(
     onVerifyMessage: () -> Unit,
 ) {
     Column {
-        Footnote(
+        Caption13Up(
             text = "Sign Message",
             color = Colors.White64,
         )
@@ -50,7 +48,7 @@ internal fun SignMessageSection(
         OutlinedTextField(
             value = uiState.messageToSign,
             onValueChange = onMessageChange,
-            label = { Text("Message", color = Colors.White50) },
+            label = { Caption("Message", color = Colors.White50) },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Colors.White,
@@ -91,7 +89,7 @@ internal fun SignMessageSection(
                 val onCopySignature = copyToClipboard(text = sig, label = "Signature")
                 Column {
                     VerticalSpacer(12.dp)
-                    Footnote(
+                    Caption(
                         text = "Signature:",
                         color = Colors.White50,
                     )
@@ -104,14 +102,12 @@ internal fun SignMessageSection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        Caption(
                             text = sig,
                             color = Colors.Brand,
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         HorizontalSpacer(8.dp)
                         Icon(
