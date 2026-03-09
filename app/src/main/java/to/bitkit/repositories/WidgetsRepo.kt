@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -202,8 +203,10 @@ class WidgetsRepo @Inject constructor(
     }
 
     suspend fun refreshEnabledWidgets() = withContext(bgDispatcher) {
-        widgetsDataFlow.first().widgets.forEach {
-            refreshWidget(it.type)
+        coroutineScope {
+            widgetsDataFlow.first().widgets.forEach {
+                launch { refreshWidget(it.type) }
+            }
         }
     }
 
