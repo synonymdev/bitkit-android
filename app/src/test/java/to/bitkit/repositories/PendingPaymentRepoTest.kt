@@ -43,14 +43,14 @@ class PendingPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resolve removes tracked hash from pending set`() {
+    fun `resolve removes tracked hash from pending set`() = test {
         sut.track("hash1")
         sut.resolve(PendingPaymentResolution.Success("hash1"))
         assertFalse(sut.isPending("hash1"))
     }
 
     @Test
-    fun `resolve on untracked hash does not change state`() {
+    fun `resolve on untracked hash does not change state`() = test {
         sut.resolve(PendingPaymentResolution.Success("unknown"))
         assertTrue(sut.state.value.pendingPayments.isEmpty())
     }
@@ -97,7 +97,7 @@ class PendingPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resolve does not affect activeHash`() {
+    fun `resolve does not affect activeHash`() = test {
         sut.track("hash1")
         sut.setActiveHash("hash1")
         sut.resolve(PendingPaymentResolution.Success("hash1"))
