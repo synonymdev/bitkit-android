@@ -103,7 +103,9 @@ fun QrCodeImage(
                                             tooltipState.show()
                                         }
                                     }
-                                } else null
+                                } else {
+                                    null
+                                }
                             )
                             .then(testTag?.let { Modifier.testTag(it) } ?: Modifier)
                     )
