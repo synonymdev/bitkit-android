@@ -86,7 +86,7 @@ import java.util.Locale
 fun ChannelDetailScreen(
     channelId: String,
     navController: NavController,
-    viewModel: ChannelDetailViewModel= hiltViewModel(),
+    viewModel: ChannelDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val app = appViewModel ?: return
@@ -116,10 +116,6 @@ fun ChannelDetailScreen(
 
         is ChannelLoadState.NotFound -> {
             LaunchedEffect(Unit) {
-                app.toast(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.lightning__channel_not_found),
-                )
                 navController.popBackStack()
             }
         }

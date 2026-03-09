@@ -13,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,9 +41,9 @@ import to.bitkit.ui.utils.withAccentBoldBright
 fun CloseConnectionScreen(
     channelId: String,
     navController: NavController,
-    viewModel: CloseConnectionViewModel= hiltViewModel(),
+    viewModel: CloseConnectionViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     // Handle success navigation
     LaunchedEffect(uiState.closeSuccess) {
