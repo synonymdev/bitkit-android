@@ -1168,19 +1168,15 @@ private fun NavGraphBuilder.lightningConnections(
         composableWithDefaultTransitions<Routes.ChannelDetail> {
             val route = it.toRoute<Routes.ChannelDetail>()
             ChannelDetailScreen(
-                navController = navController,
-                viewModel = hiltViewModel(),
                 channelId = route.channelId,
+                navController = navController,
             )
         }
         composableWithDefaultTransitions<Routes.CloseConnection> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
-            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
             val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
-                navController = navController,
-                viewModel = viewModel,
                 channelId = route.channelId,
+                navController = navController,
             )
         }
     }

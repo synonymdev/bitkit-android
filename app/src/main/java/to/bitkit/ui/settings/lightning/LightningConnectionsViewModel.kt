@@ -28,18 +28,14 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
 import to.bitkit.models.Toast
-import to.bitkit.models.TransferType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
-import to.bitkit.repositories.TransferRepo
-import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("LongParameterList", "TooManyFunctions")
 @HiltViewModel
 class LightningConnectionsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -47,16 +43,11 @@ class LightningConnectionsViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
     private val logsRepo: LogsRepo,
-    private val walletRepo: WalletRepo,
     private val activityRepo: ActivityRepo,
-    private val transferRepo: TransferRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
     val uiState = _uiState.asStateFlow()
-
-    private val _closeConnectionUiState = MutableStateFlow(CloseConnectionUiState())
-    val closeConnectionUiState = _closeConnectionUiState.asStateFlow()
 
     init {
         observeState()
@@ -174,59 +165,6 @@ class LightningConnectionsViewModel @Inject constructor(
                         description = context.getString(R.string.lightning__error_logs_description),
                     )
                 }
-        }
-    }
-
-    fun clearCloseConnectionState() {
-        _closeConnectionUiState.update { CloseConnectionUiState() }
-    }
-
-    fun closeChannel(channelId: String) {
-        val channel = lightningRepo.lightningState.value.channels
-            .find { it.channelId == channelId }
-            ?: run {
-                Logger.error("No channel found for closing: $channelId", context = TAG)
-                return
-            }
-
-        viewModelScope.launch {
-            _closeConnectionUiState.update { it.copy(isLoading = true) }
-
-            lightningRepo.closeChannel(channel).fold(
-                onSuccess = {
-                    transferRepo.createTransfer(
-                        type = TransferType.COOP_CLOSE,
-                        amountSats = channel.amountOnClose.toLong(),
-                        channelId = channel.channelId,
-                        fundingTxId = channel.fundingTxo?.txid,
-                    )
-                    walletRepo.syncNodeAndWallet()
-
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.lightning__close_success_title),
-                        description = context.getString(R.string.lightning__close_success_msg),
-                    )
-
-                    _closeConnectionUiState.update {
-                        it.copy(
-                            isLoading = false,
-                            closeSuccess = true,
-                        )
-                    }
-                },
-                onFailure = { error ->
-                    Logger.error("Failed to close channel", error, context = TAG)
-
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.lightning__close_error),
-                        description = context.getString(R.string.lightning__close_error_msg),
-                    )
-
-                    _closeConnectionUiState.update { it.copy(isLoading = false) }
-                }
-            )
         }
     }
 
@@ -355,9 +293,4 @@ data class ChannelUi(
     val name: String,
     val details: ChannelDetails,
     val closureReason: String? = null,
-)
-
-data class CloseConnectionUiState(
-    val isLoading: Boolean = false,
-    val closeSuccess: Boolean = false,
 )

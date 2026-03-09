@@ -22,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.Routes
@@ -38,16 +39,11 @@ import to.bitkit.ui.utils.withAccentBoldBright
 
 @Composable
 fun CloseConnectionScreen(
-    navController: NavController,
-    viewModel: LightningConnectionsViewModel,
     channelId: String,
+    navController: NavController,
+    viewModel: CloseConnectionViewModel= hiltViewModel(),
 ) {
-    val uiState by viewModel.closeConnectionUiState.collectAsState()
-
-    // Reset state when entering the screen
-    LaunchedEffect(Unit) {
-        viewModel.clearCloseConnectionState()
-    }
+    val uiState by viewModel.uiState.collectAsState()
 
     // Handle success navigation
     LaunchedEffect(uiState.closeSuccess) {

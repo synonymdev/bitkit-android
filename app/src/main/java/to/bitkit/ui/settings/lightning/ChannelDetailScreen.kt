@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.bitkitcore.BtBolt11InvoiceState
@@ -83,9 +84,9 @@ import java.util.Locale
 
 @Composable
 fun ChannelDetailScreen(
-    navController: NavController,
-    viewModel: ChannelDetailViewModel,
     channelId: String,
+    navController: NavController,
+    viewModel: ChannelDetailViewModel= hiltViewModel(),
 ) {
     val context = LocalContext.current
     val app = appViewModel ?: return
