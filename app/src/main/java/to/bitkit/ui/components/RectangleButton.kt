@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
@@ -44,8 +45,9 @@ fun RectangleButton(
     iconSize: Dp = 20.dp,
     onClick: () -> Unit = {},
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     Button(
-        onClick = onClick,
+        onClick = debouncedClick,
         colors = ButtonDefaults.buttonColors(
             containerColor = Colors.Gray6,
         ),

@@ -33,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.shared.modifiers.alphaFeedback
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppButtonDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -66,11 +67,12 @@ fun PrimaryButton(
     color: Color? = null,
     enableGradient: Boolean = true,
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     val buttonShape = MaterialTheme.shapes.large
 
     Button(
-        onClick = onClick,
+        onClick = debouncedClick,
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.primaryColors.copy(
             containerColor = Color.Transparent,
@@ -136,10 +138,11 @@ fun SecondaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     val border = BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
     OutlinedButton(
-        onClick = onClick,
+        onClick = debouncedClick,
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.secondaryColors,
         contentPadding = contentPadding,
@@ -195,9 +198,10 @@ fun TertiaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     TextButton(
-        onClick = onClick,
+        onClick = debouncedClick,
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.tertiaryColors,
         contentPadding = contentPadding,

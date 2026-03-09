@@ -1,5 +1,6 @@
 package to.bitkit.ui.shared.modifiers
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
@@ -23,6 +24,26 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.launch
+
+private const val CLICK_DEBOUNCE_MS = 300L
+
+private class ClickDebouncer(private val debounceMs: Long = CLICK_DEBOUNCE_MS) {
+    private var lastClickTime = 0L
+
+    fun tryClick(onClick: () -> Unit) {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastClickTime >= debounceMs) {
+            lastClickTime = now
+            onClick()
+        }
+    }
+}
+
+@Composable
+fun rememberDebouncedClick(debounceMs: Long = CLICK_DEBOUNCE_MS, onClick: () -> Unit): () -> Unit {
+    val debouncer = remember { ClickDebouncer(debounceMs) }
+    return { debouncer.tryClick(onClick) }
+}
 
 /**
  * Adjusts the alpha of a composable when it is pressed and makes it clickable.
@@ -64,6 +85,7 @@ private class ClickableAlphaNode(
 ) : DelegatingNode(), LayoutModifierNode, SemanticsModifierNode {
 
     private val animatable = Animatable(1f)
+    private val debouncer = ClickDebouncer()
 
     init {
         delegate(
@@ -77,7 +99,7 @@ private class ClickableAlphaNode(
                         }
                     },
                     onTap = {
-                        onClick()
+                        debouncer.tryClick(onClick)
                         coroutineScope.launch {
                             animatable.animateTo(pressedAlpha)
                             animatable.animateTo(1f)
@@ -101,7 +123,7 @@ private class ClickableAlphaNode(
     override fun SemanticsPropertyReceiver.applySemantics() {
         role = Role.Button
         onClick {
-            onClick()
+            debouncer.tryClick(onClick)
             true
         }
     }
