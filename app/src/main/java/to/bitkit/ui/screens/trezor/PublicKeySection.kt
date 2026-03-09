@@ -18,12 +18,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -44,11 +44,9 @@ internal fun PublicKeySection(
     }
 
     Column {
-        Text(
+        Footnote(
             text = "Public Key (xpub)",
             color = Colors.White64,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
         )
         VerticalSpacer(8.dp)
 

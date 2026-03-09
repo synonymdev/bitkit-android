@@ -24,6 +24,7 @@ import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
+import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
@@ -64,13 +65,12 @@ internal fun DeviceCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
+            Footnote(
                 text = when (device.transportType) {
                     TrezorTransportType.USB -> "USB"
                     TrezorTransportType.BLUETOOTH -> "Bluetooth"
                 },
                 color = Colors.White50,
-                fontSize = 12.sp,
             )
         }
     }
@@ -122,15 +122,13 @@ internal fun KnownDeviceCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
+                Footnote(
                     text = if (device.transportType == "bluetooth") "Bluetooth" else "USB",
                     color = Colors.White50,
-                    fontSize = 12.sp,
                 )
-                Text(
+                Footnote(
                     text = if (isConnected) "Connected" else "Disconnected",
                     color = if (isConnected) Colors.Green else Colors.White32,
-                    fontSize = 12.sp,
                 )
             }
         }

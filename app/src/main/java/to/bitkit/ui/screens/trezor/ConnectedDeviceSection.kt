@@ -7,14 +7,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.TrezorFeatures
+import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -45,16 +43,13 @@ internal fun InfoRow(label: String, value: String) {
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
+        Footnote(
             text = label,
             color = Colors.White50,
-            fontSize = 12.sp,
         )
-        Text(
+        Footnote(
             text = value,
             color = Colors.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
         )
     }
 }

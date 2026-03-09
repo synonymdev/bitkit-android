@@ -28,6 +28,7 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -66,11 +67,9 @@ internal fun SendTransactionSection(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        Text(
+        Footnote(
             text = "Send Transaction",
             color = Colors.White64,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
         )
         VerticalSpacer(8.dp)
 
@@ -140,11 +139,9 @@ private fun ComposeForm(
                 modifier = Modifier.weight(1f),
             )
             val maxColor = if (uiState.isSendMax) Colors.Brand else Colors.White32
-            Text(
+            Footnote(
                 text = "MAX",
                 color = maxColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .background(maxColor.copy(alpha = 0.15f))
@@ -207,11 +204,9 @@ private fun SortingStrategyRow(
         TrezorSortingStrategy.entries.forEach { strategy ->
             val isSelected = strategy == selected
             val color = if (isSelected) Colors.Brand else Colors.White32
-            Text(
+            Footnote(
                 text = labels[strategy] ?: strategy.name,
                 color = color,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .background(color.copy(alpha = 0.15f))

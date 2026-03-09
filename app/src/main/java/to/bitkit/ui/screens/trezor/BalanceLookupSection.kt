@@ -27,6 +27,7 @@ import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -54,11 +55,9 @@ internal fun BalanceLookupSection(
     onResetSend: () -> Unit,
 ) {
     Column {
-        Text(
+        Footnote(
             text = "Balance Lookup",
             color = Colors.White64,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
         )
         VerticalSpacer(8.dp)
 

@@ -56,6 +56,7 @@ import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -236,11 +237,9 @@ private fun TrezorContent(
                 ) {
                     Column {
                         VerticalSpacer(16.dp)
-                        Text(
+                        Footnote(
                             text = "My Devices (${trezorState.knownDevices.size})",
                             color = Colors.White64,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
                         )
                         VerticalSpacer(8.dp)
                         trezorState.knownDevices.forEach { device ->
@@ -268,11 +267,9 @@ private fun TrezorContent(
                 ) {
                     Column {
                         VerticalSpacer(16.dp)
-                        Text(
+                        Footnote(
                             text = "New Devices (${trezorState.nearbyDevices.size})",
                             color = Colors.White64,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
                         )
                         VerticalSpacer(8.dp)
                         trezorState.nearbyDevices.forEach { device ->
@@ -298,11 +295,9 @@ private fun TrezorContent(
                     trezorState.connectedDevice?.let { features ->
                         Column {
                             VerticalSpacer(16.dp)
-                            Text(
+                            Footnote(
                                 text = "Connected Device",
                                 color = Colors.White64,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
                             )
                             VerticalSpacer(8.dp)
 
@@ -352,11 +347,10 @@ private fun TrezorContent(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.Top
                             ) {
-                                Text(
+                                Footnote(
                                     text = error,
                                     color = Colors.Red,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
                                 )
                                 HorizontalSpacer(8.dp)
                                 Icon(
@@ -419,11 +413,9 @@ private fun NetworkSelectorRow(
         TrezorCoinType.entries.filter { it != TrezorCoinType.SIGNET }.forEach { network ->
             val isSelected = network == selectedNetwork
             val color = if (isSelected) Colors.Brand else Colors.White32
-            Text(
+            Footnote(
                 text = network.name,
                 color = color,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .background(color.copy(alpha = 0.15f))
@@ -540,7 +532,7 @@ private fun StatusRow(trezorState: TrezorState) {
                         color = Colors.Brand
                     )
                     HorizontalSpacer(8.dp)
-                    Text("Reconnecting...", color = Colors.White64, fontSize = 12.sp)
+                    Footnote("Reconnecting...", color = Colors.White64)
                 }
 
                 trezorState.isScanning -> {
@@ -550,7 +542,7 @@ private fun StatusRow(trezorState: TrezorState) {
                         color = Colors.Brand
                     )
                     HorizontalSpacer(8.dp)
-                    Text("Scanning...", color = Colors.White64, fontSize = 12.sp)
+                    Footnote("Scanning...", color = Colors.White64)
                 }
 
                 trezorState.isConnecting -> {
@@ -560,7 +552,7 @@ private fun StatusRow(trezorState: TrezorState) {
                         color = Colors.Brand
                     )
                     HorizontalSpacer(8.dp)
-                    Text("Connecting...", color = Colors.White64, fontSize = 12.sp)
+                    Footnote("Connecting...", color = Colors.White64)
                 }
 
                 trezorState.connectedDevice != null -> {
@@ -581,15 +573,13 @@ private fun StatusRow(trezorState: TrezorState) {
 
 @Composable
 private fun StatusBadge(text: String, color: androidx.compose.ui.graphics.Color) {
-    Text(
+    Footnote(
         text = text,
         color = color,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Medium,
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(color.copy(alpha = 0.15f))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
     )
 }
 
