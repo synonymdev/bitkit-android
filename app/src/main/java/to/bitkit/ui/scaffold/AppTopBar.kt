@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.LocalDrawerState
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,8 +77,9 @@ fun BackNavIcon(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     IconButton(
-        onClick = onClick,
+        onClick = debouncedClick,
         modifier = modifier.testTag("NavigationBack")
     ) {
         Icon(
@@ -97,8 +99,9 @@ fun DrawerNavIcon(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     if (drawerState != null || isPreview) {
+        val debouncedClick = rememberDebouncedClick { scope.launch { drawerState?.open() } }
         IconButton(
-            onClick = { scope.launch { drawerState?.open() } },
+            onClick = debouncedClick,
             modifier = modifier.testTag("HeaderMenu")
         ) {
             Icon(
@@ -115,8 +118,9 @@ fun ScanNavIcon(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     IconButton(
-        onClick = onClick,
+        onClick = debouncedClick,
         modifier = modifier.testTag("NavigationAction")
     ) {
         Icon(
