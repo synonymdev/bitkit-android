@@ -544,6 +544,7 @@ private fun StatusRow(trezorState: TrezorState) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Reconnecting...", color = Colors.White64, fontSize = 12.sp)
                 }
+
                 trezorState.isScanning -> {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
@@ -553,6 +554,7 @@ private fun StatusRow(trezorState: TrezorState) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Scanning...", color = Colors.White64, fontSize = 12.sp)
                 }
+
                 trezorState.isConnecting -> {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
@@ -562,12 +564,15 @@ private fun StatusRow(trezorState: TrezorState) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Connecting...", color = Colors.White64, fontSize = 12.sp)
                 }
+
                 trezorState.connectedDevice != null -> {
                     StatusBadge(text = "Connected", color = Colors.Green)
                 }
+
                 trezorState.isInitialized -> {
                     StatusBadge(text = "Ready", color = Colors.Brand)
                 }
+
                 else -> {
                     StatusBadge(text = "Not initialized", color = Colors.White32)
                 }
