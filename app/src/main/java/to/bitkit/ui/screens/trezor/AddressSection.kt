@@ -5,12 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -26,8 +23,10 @@ import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
@@ -47,7 +46,7 @@ internal fun AddressSection(
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
 
         Text(
             text = "Path: ${uiState.derivationPath}",
@@ -56,7 +55,7 @@ internal fun AddressSection(
             fontFamily = FontFamily.Monospace,
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -82,13 +81,13 @@ internal fun AddressSection(
             trezorState.lastAddress?.let { response ->
                 val onCopyAddress = copyToClipboard(text = response.address, label = "Address")
                 Column {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    VerticalSpacer(12.dp)
                     Text(
                         text = "Address:",
                         color = Colors.White50,
                         fontSize = 11.sp,
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    VerticalSpacer(4.dp)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -104,7 +103,7 @@ internal fun AddressSection(
                             fontFamily = FontFamily.Monospace,
                             modifier = Modifier.weight(1f)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        HorizontalSpacer(8.dp)
                         Icon(
                             painter = painterResource(R.drawable.ic_copy),
                             contentDescription = "Copy address",
@@ -114,7 +113,7 @@ internal fun AddressSection(
                                 .clickableAlpha(onClick = onCopyAddress)
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    VerticalSpacer(8.dp)
                     SecondaryButton(
                         text = "Next Index",
                         onClick = onIncrementIndex,

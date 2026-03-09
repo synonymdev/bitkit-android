@@ -4,12 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
@@ -31,8 +28,10 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
@@ -73,7 +72,7 @@ internal fun SendTransactionSection(
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
 
         when (uiState.sendStep) {
             SendStep.FORM -> ComposeForm(
@@ -123,7 +122,7 @@ private fun ComposeForm(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -154,7 +153,7 @@ private fun ComposeForm(
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
 
         OutlinedTextField(
             value = uiState.sendFeeRate,
@@ -166,7 +165,7 @@ private fun ComposeForm(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
 
         Text(
             text = "Coin Selection",
@@ -174,13 +173,13 @@ private fun ComposeForm(
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        VerticalSpacer(4.dp)
         SortingStrategyRow(
             selected = uiState.sortingStrategy,
             onChange = onSortingStrategyChange,
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
 
         PrimaryButton(
             text = if (uiState.isComposing) "Composing..." else "Compose Transaction",
@@ -242,14 +241,14 @@ private fun ReviewSection(
         }
 
         if (result.inputs.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             Text(
                 text = "Inputs (${result.inputs.size})",
                 color = Colors.White64,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            VerticalSpacer(4.dp)
             result.inputs.forEach { input ->
                 ResultCard {
                     Text(
@@ -261,26 +260,26 @@ private fun ReviewSection(
                     InfoRow("Amount", "${input.amount} sats")
                     InfoRow("Path", input.path)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                VerticalSpacer(4.dp)
             }
         }
 
         if (result.outputs.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             Text(
                 text = "Outputs (${result.outputs.size})",
                 color = Colors.White64,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            VerticalSpacer(4.dp)
             result.outputs.forEach { output ->
                 OutputCard(output)
-                Spacer(modifier = Modifier.height(4.dp))
+                VerticalSpacer(4.dp)
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -302,7 +301,7 @@ private fun ReviewSection(
         }
 
         if (!isDeviceConnected) {
-            Spacer(modifier = Modifier.height(4.dp))
+            VerticalSpacer(4.dp)
             Text(
                 text = "Connect a Trezor device to sign",
                 color = Colors.White32,
@@ -361,7 +360,7 @@ private fun SignedResultSection(
             signedTx.txid?.let { InfoRow("TXID", it) }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
 
         Text(
             text = "Raw Transaction Hex",
@@ -369,7 +368,7 @@ private fun SignedResultSection(
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        VerticalSpacer(4.dp)
 
         ResultCard {
             Row(
@@ -384,7 +383,7 @@ private fun SignedResultSection(
                     lineHeight = 14.sp,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                HorizontalSpacer(8.dp)
                 Icon(
                     painter = androidx.compose.ui.res.painterResource(R.drawable.ic_copy),
                     contentDescription = "Copy raw tx",
@@ -396,11 +395,11 @@ private fun SignedResultSection(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
 
         if (broadcastTxid != null) {
             BroadcastResultCard(txid = broadcastTxid)
-            Spacer(modifier = Modifier.height(12.dp))
+            VerticalSpacer(12.dp)
         } else {
             PrimaryButton(
                 text = if (isBroadcasting) "Broadcasting..." else "Broadcast",
@@ -409,7 +408,7 @@ private fun SignedResultSection(
                 size = ButtonSize.Small,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
         }
 
         SecondaryButton(
@@ -435,7 +434,7 @@ private fun BroadcastResultCard(txid: String) {
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            HorizontalSpacer(8.dp)
             Icon(
                 painter = androidx.compose.ui.res.painterResource(R.drawable.ic_copy),
                 contentDescription = "Copy txid",

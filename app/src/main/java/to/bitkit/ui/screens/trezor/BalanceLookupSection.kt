@@ -4,12 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -30,7 +27,9 @@ import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
@@ -61,7 +60,7 @@ internal fun BalanceLookupSection(
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        VerticalSpacer(8.dp)
 
         OutlinedTextField(
             value = uiState.lookupInput,
@@ -78,7 +77,7 @@ internal fun BalanceLookupSection(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
 
         PrimaryButton(
             text = if (uiState.isLookingUp) "Looking up..." else "Lookup",
@@ -132,7 +131,7 @@ private fun AccountInfoResultView(
     onResetSend: () -> Unit,
 ) {
     Column {
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
         ResultCard {
             InfoRow("Account Type", result.accountType.name)
             InfoRow("Balance", "${result.balance} sats")
@@ -141,22 +140,22 @@ private fun AccountInfoResultView(
         }
 
         if (result.account.utxo.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             Text(
                 text = "UTXOs (${result.account.utxo.size})",
                 color = Colors.White64,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            VerticalSpacer(4.dp)
             result.account.utxo.forEach { utxo ->
                 UtxoRow(utxo)
-                Spacer(modifier = Modifier.height(4.dp))
+                VerticalSpacer(4.dp)
             }
         }
 
         if (result.balance > 0uL) {
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             SendTransactionSection(
                 uiState = uiState,
                 isDeviceConnected = isDeviceConnected,
@@ -179,7 +178,7 @@ private fun AccountInfoResultView(
 private fun AddressInfoResultView(result: SingleAddressInfoResult) {
     val onCopyAddress = copyToClipboard(text = result.address, label = "Address")
     Column {
-        Spacer(modifier = Modifier.height(12.dp))
+        VerticalSpacer(12.dp)
         ResultCard {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -192,7 +191,7 @@ private fun AddressInfoResultView(result: SingleAddressInfoResult) {
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                HorizontalSpacer(8.dp)
                 Icon(
                     painter = painterResource(R.drawable.ic_copy),
                     contentDescription = "Copy address",
@@ -209,17 +208,17 @@ private fun AddressInfoResultView(result: SingleAddressInfoResult) {
         }
 
         if (result.utxos.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             Text(
                 text = "UTXOs (${result.utxos.size})",
                 color = Colors.White64,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            VerticalSpacer(4.dp)
             result.utxos.forEach { utxo ->
                 UtxoRow(utxo)
-                Spacer(modifier = Modifier.height(4.dp))
+                VerticalSpacer(4.dp)
             }
         }
     }
@@ -240,7 +239,7 @@ private fun UtxoRow(utxo: AccountUtxo) {
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier.weight(1f),
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            HorizontalSpacer(8.dp)
             Icon(
                 painter = painterResource(R.drawable.ic_copy),
                 contentDescription = "Copy txid",

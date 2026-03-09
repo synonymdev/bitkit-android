@@ -11,14 +11,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -59,6 +56,7 @@ import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
@@ -220,7 +218,7 @@ private fun TrezorContent(
             ) {
                 StatusRow(trezorState)
 
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
 
                 ActionButtonsRow(
                     trezorState = trezorState,
@@ -237,14 +235,14 @@ private fun TrezorContent(
                     exit = fadeOut() + shrinkVertically(),
                 ) {
                     Column {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
                         Text(
                             text = "My Devices (${trezorState.knownDevices.size})",
                             color = Colors.White64,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        VerticalSpacer(8.dp)
                         trezorState.knownDevices.forEach { device ->
                             val isConnected = trezorState.connectedDeviceId == device.id
                             KnownDeviceCard(
@@ -257,7 +255,7 @@ private fun TrezorContent(
                                 },
                                 onForget = { onForgetDevice(device) },
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            VerticalSpacer(8.dp)
                         }
                     }
                 }
@@ -269,14 +267,14 @@ private fun TrezorContent(
                     exit = fadeOut() + shrinkVertically(),
                 ) {
                     Column {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
                         Text(
                             text = "New Devices (${trezorState.nearbyDevices.size})",
                             color = Colors.White64,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        VerticalSpacer(8.dp)
                         trezorState.nearbyDevices.forEach { device ->
                             DeviceCard(
                                 device = device,
@@ -286,7 +284,7 @@ private fun TrezorContent(
                                     }
                                 },
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            VerticalSpacer(8.dp)
                         }
                     }
                 }
@@ -299,18 +297,18 @@ private fun TrezorContent(
                 ) {
                     trezorState.connectedDevice?.let { features ->
                         Column {
-                            Spacer(modifier = Modifier.height(16.dp))
+                            VerticalSpacer(16.dp)
                             Text(
                                 text = "Connected Device",
                                 color = Colors.White64,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            VerticalSpacer(8.dp)
 
                             ConnectedDeviceInfo(features)
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            VerticalSpacer(16.dp)
 
                             AddressSection(
                                 trezorState = trezorState,
@@ -319,7 +317,7 @@ private fun TrezorContent(
                                 onIncrementIndex = onIncrementIndex,
                             )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            VerticalSpacer(16.dp)
 
                             PublicKeySection(
                                 trezorState = trezorState,
@@ -327,7 +325,7 @@ private fun TrezorContent(
                                 onGetPublicKey = onGetPublicKey,
                             )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            VerticalSpacer(16.dp)
 
                             SignMessageSection(
                                 uiState = uiState,
@@ -344,7 +342,7 @@ private fun TrezorContent(
                     trezorState.error?.let { error ->
                         val onCopyError = copyToClipboard(text = error, label = "Trezor Error")
                         Column {
-                            Spacer(modifier = Modifier.height(16.dp))
+                            VerticalSpacer(16.dp)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -360,7 +358,7 @@ private fun TrezorContent(
                                     fontSize = 12.sp,
                                     modifier = Modifier.weight(1f)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                HorizontalSpacer(8.dp)
                                 Icon(
                                     painter = painterResource(R.drawable.ic_copy),
                                     contentDescription = "Copy error",
@@ -369,7 +367,7 @@ private fun TrezorContent(
                                         .size(20.dp)
                                         .clickableAlpha(onClick = onCopyError)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                HorizontalSpacer(8.dp)
                                 Icon(
                                     painter = painterResource(R.drawable.ic_x),
                                     contentDescription = "Dismiss error",
@@ -384,7 +382,7 @@ private fun TrezorContent(
                 }
 
                 // Balance Lookup (always visible, no device needed)
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 BalanceLookupSection(
                     uiState = uiState,
                     isDeviceConnected = trezorState.connectedDevice != null,
@@ -442,7 +440,7 @@ private fun DebugLogSection() {
     val debugLines by TrezorDebugLog.lines.collectAsStateWithLifecycle()
 
     Column {
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -524,7 +522,7 @@ private fun StatusRow(trezorState: TrezorState) {
                 tint = Colors.White80,
                 modifier = Modifier.size(20.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            HorizontalSpacer(8.dp)
             Text(
                 text = "Trezor",
                 color = Colors.White,
@@ -541,7 +539,7 @@ private fun StatusRow(trezorState: TrezorState) {
                         strokeWidth = 2.dp,
                         color = Colors.Brand
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    HorizontalSpacer(8.dp)
                     Text("Reconnecting...", color = Colors.White64, fontSize = 12.sp)
                 }
 
@@ -551,7 +549,7 @@ private fun StatusRow(trezorState: TrezorState) {
                         strokeWidth = 2.dp,
                         color = Colors.Brand
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    HorizontalSpacer(8.dp)
                     Text("Scanning...", color = Colors.White64, fontSize = 12.sp)
                 }
 
@@ -561,7 +559,7 @@ private fun StatusRow(trezorState: TrezorState) {
                         strokeWidth = 2.dp,
                         color = Colors.Brand
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    HorizontalSpacer(8.dp)
                     Text("Connecting...", color = Colors.White64, fontSize = 12.sp)
                 }
 
