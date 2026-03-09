@@ -46,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -562,10 +561,7 @@ private fun WidgetsPage(
                     onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
                     onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            alpha = if (isDragging) 0.9f else 1.0f
-                        },
+                        .fillMaxWidth(),
                     dragModifier = dragModifier,
                 )
             }
