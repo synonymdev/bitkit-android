@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -164,11 +163,9 @@ private fun ComposeForm(
 
         VerticalSpacer(12.dp)
 
-        Text(
+        Footnote(
             text = "Coin Selection",
             color = Colors.White64,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
         )
         VerticalSpacer(4.dp)
         SortingStrategyRow(
@@ -237,11 +234,9 @@ private fun ReviewSection(
 
         if (result.inputs.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Text(
+            Footnote(
                 text = "Inputs (${result.inputs.size})",
                 color = Colors.White64,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
             )
             VerticalSpacer(4.dp)
             result.inputs.forEach { input ->
@@ -261,11 +256,9 @@ private fun ReviewSection(
 
         if (result.outputs.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Text(
+            Footnote(
                 text = "Outputs (${result.outputs.size})",
                 color = Colors.White64,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
             )
             VerticalSpacer(4.dp)
             result.outputs.forEach { output ->
@@ -297,11 +290,7 @@ private fun ReviewSection(
 
         if (!isDeviceConnected) {
             VerticalSpacer(4.dp)
-            Text(
-                text = "Connect a Trezor device to sign",
-                color = Colors.White32,
-                fontSize = 10.sp,
-            )
+            Footnote(text = "Connect a Trezor device to sign")
         }
     }
 }
@@ -357,11 +346,9 @@ private fun SignedResultSection(
 
         VerticalSpacer(8.dp)
 
-        Text(
+        Footnote(
             text = "Raw Transaction Hex",
             color = Colors.White64,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
         )
         VerticalSpacer(4.dp)
 
@@ -423,11 +410,9 @@ private fun BroadcastResultCard(txid: String) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
+            Footnote(
                 text = "Broadcast TXID",
                 color = Colors.White64,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
             )
             HorizontalSpacer(8.dp)
             Icon(

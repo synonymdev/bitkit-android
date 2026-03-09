@@ -85,10 +85,9 @@ internal fun PublicKeySection(
                 val onCopyPublicKey = copyToClipboard(text = response.publicKey, label = "Public Key")
                 Column {
                     VerticalSpacer(12.dp)
-                    Text(
+                    Footnote(
                         text = "xpub:",
                         color = Colors.White50,
-                        fontSize = 11.sp,
                     )
                     VerticalSpacer(4.dp)
                     Row(
@@ -118,10 +117,9 @@ internal fun PublicKeySection(
                     }
 
                     VerticalSpacer(12.dp)
-                    Text(
+                    Footnote(
                         text = "Public Key:",
                         color = Colors.White50,
-                        fontSize = 11.sp,
                     )
                     VerticalSpacer(4.dp)
                     Row(

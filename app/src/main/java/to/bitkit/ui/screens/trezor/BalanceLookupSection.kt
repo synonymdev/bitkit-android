@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.AccountInfoResult
@@ -140,11 +139,9 @@ private fun AccountInfoResultView(
 
         if (result.account.utxo.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Text(
+            Footnote(
                 text = "UTXOs (${result.account.utxo.size})",
                 color = Colors.White64,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
             )
             VerticalSpacer(4.dp)
             result.account.utxo.forEach { utxo ->
@@ -208,11 +205,9 @@ private fun AddressInfoResultView(result: SingleAddressInfoResult) {
 
         if (result.utxos.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Text(
+            Footnote(
                 text = "UTXOs (${result.utxos.size})",
                 color = Colors.White64,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
             )
             VerticalSpacer(4.dp)
             result.utxos.forEach { utxo ->

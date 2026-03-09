@@ -92,10 +92,9 @@ internal fun SignMessageSection(
                 val onCopySignature = copyToClipboard(text = sig, label = "Signature")
                 Column {
                     VerticalSpacer(12.dp)
-                    Text(
+                    Footnote(
                         text = "Signature:",
                         color = Colors.White50,
-                        fontSize = 11.sp,
                     )
                     VerticalSpacer(4.dp)
                     Row(

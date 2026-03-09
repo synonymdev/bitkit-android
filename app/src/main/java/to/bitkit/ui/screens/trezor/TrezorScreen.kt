@@ -38,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +54,7 @@ import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorDebugLog
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
@@ -515,11 +515,9 @@ private fun StatusRow(trezorState: TrezorState) {
                 modifier = Modifier.size(20.dp)
             )
             HorizontalSpacer(8.dp)
-            Text(
+            BodySSB(
                 text = "Trezor",
                 color = Colors.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
             )
         }
 

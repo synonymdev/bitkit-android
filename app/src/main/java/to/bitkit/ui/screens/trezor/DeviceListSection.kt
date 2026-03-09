@@ -10,20 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -57,11 +55,9 @@ internal fun DeviceCard(
         )
         HorizontalSpacer(12.dp)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            CaptionB(
                 text = device.label ?: device.name ?: device.model ?: "Trezor",
                 color = Colors.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -110,11 +106,9 @@ internal fun KnownDeviceCard(
         )
         HorizontalSpacer(12.dp)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            CaptionB(
                 text = device.label ?: device.name ?: device.model ?: "Trezor",
                 color = Colors.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

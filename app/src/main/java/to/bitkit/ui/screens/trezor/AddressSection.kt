@@ -80,10 +80,9 @@ internal fun AddressSection(
                 val onCopyAddress = copyToClipboard(text = response.address, label = "Address")
                 Column {
                     VerticalSpacer(12.dp)
-                    Text(
+                    Footnote(
                         text = "Address:",
                         color = Colors.White50,
-                        fontSize = 11.sp,
                     )
                     VerticalSpacer(4.dp)
                     Row(
