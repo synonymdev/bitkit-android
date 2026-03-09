@@ -53,6 +53,7 @@ internal fun Context.notificationBuilder(
 
     return NotificationCompat.Builder(this, channelId)
         .setSmallIcon(R.drawable.ic_bitkit_outlined)
+        .setColor(ContextCompat.getColor(this, R.color.brand))
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
         .setContentIntent(pendingIntent) // fired on tap
