@@ -448,7 +448,7 @@ class LightningRepo @Inject constructor(
                 // If node is still running, revert to Running state to allow retry
                 if (lightningService.node != null && lightningService.status?.isRunning == true) {
                     Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                    _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
                 } else {
                     // Node appears stopped, update state
                     _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
@@ -1377,6 +1377,7 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
         private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
+        val SEND_LN_TIMEOUT = 10.seconds
     }
 }
 
