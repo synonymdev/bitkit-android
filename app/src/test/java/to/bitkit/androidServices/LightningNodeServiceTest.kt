@@ -16,9 +16,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -58,6 +55,9 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 @HiltAndroidTest
 @UninstallModules(DispatchersModule::class, DbModule::class, ViewModelModule::class)
@@ -236,7 +236,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         }
         assertNotNull(paymentNotification, "Payment notification should be present")
 
-        val body = paymentNotification?.extras?.getString(Notification.EXTRA_TEXT)
+        val body = paymentNotification.extras?.getString(Notification.EXTRA_TEXT)
         assertEquals($$"Received ₿ 100 ($0.10)", body)
     }
 
@@ -266,8 +266,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager =
-            context.notificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val notification = shadows.allNotifications.find {
@@ -302,8 +301,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager =
-            context.notificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val notification = shadows.allNotifications.find {
@@ -341,8 +339,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager =
-            context.notificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val notification = shadows.allNotifications.find {
@@ -371,8 +368,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         capturedHandler?.invoke(event)
         testScheduler.advanceUntilIdle()
 
-        val notificationManager =
-            context.notificationManager
+        val notificationManager = context.notificationManager
         val shadows = Shadows.shadowOf(notificationManager)
 
         val sentTitle = context.getString(R.string.wallet__toast_payment_sent_title)
