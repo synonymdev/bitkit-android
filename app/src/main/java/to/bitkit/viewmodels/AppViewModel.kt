@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -2478,10 +2479,14 @@ sealed interface LnurlParams {
     data class LnurlWithdraw(val data: LnurlWithdrawData) : LnurlParams
 }
 
+@Stable
 sealed interface QuickPayData {
     val sats: ULong
 
+    @Stable
     data class Bolt11(override val sats: ULong, val bolt11: String) : QuickPayData
+
+    @Stable
     data class LnurlPay(override val sats: ULong, val callback: String) : QuickPayData
 }
 // endregion
