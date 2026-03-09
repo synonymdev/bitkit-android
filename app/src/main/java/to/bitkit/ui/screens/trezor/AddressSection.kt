@@ -28,7 +28,6 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
-import to.bitkit.viewmodels.TrezorUiState
 
 @Composable
 internal fun AddressSection(

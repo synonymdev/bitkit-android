@@ -6,7 +6,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,9 +16,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.Colors
@@ -77,20 +77,21 @@ internal fun PairingCodeDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            TertiaryButton(
+                text = "Submit",
                 onClick = { onSubmit(code) },
                 enabled = code.length == 6,
-            ) {
-                CaptionB(
-                    "Submit",
-                    color = if (code.length == 6) Colors.Brand else Colors.White32,
-                )
-            }
+                size = ButtonSize.Small,
+                fullWidth = false,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onCancel) {
-                CaptionB("Cancel", color = Colors.White64)
-            }
+            TertiaryButton(
+                text = "Cancel",
+                onClick = onCancel,
+                size = ButtonSize.Small,
+                fullWidth = false,
+            )
         },
     )
 }

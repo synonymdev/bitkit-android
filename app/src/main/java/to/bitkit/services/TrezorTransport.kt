@@ -34,6 +34,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import to.bitkit.ext.bluetoothManager
+import to.bitkit.ext.usbManager
 import to.bitkit.utils.Logger
 import java.io.File
 import java.util.UUID
@@ -90,26 +92,22 @@ class TrezorTransport @Inject constructor(
         private const val BLE_WRITE_RETRY_DELAY_MS = 100L
         private const val BLE_WRITE_INTER_DELAY_MS = 20L
         private const val BLE_CONNECTION_STABILIZATION_MS = 1000L
+        private const val BLE_CCCD_STABILIZATION_MS = 200L
 
         // BLE bonding constants
         private const val MAX_BOND_POLL_ATTEMPTS = 60
         private const val BOND_POLL_INTERVAL_MS = 500L
     }
 
-    private val usbManager: UsbManager by lazy {
-        context.getSystemService(Context.USB_SERVICE) as UsbManager
-    }
+    private val usbManager: UsbManager by lazy { context.usbManager }
 
-    private val bluetoothManager: BluetoothManager by lazy {
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    }
+    private val bluetoothManager: BluetoothManager by lazy { context.bluetoothManager }
 
     private val credentialDir: File by lazy {
         File(context.filesDir, "trezor-thp-credentials").also { it.mkdirs() }
     }
 
-    @Volatile
-    private var userInitiatedClose = false
+    private val userInitiatedCloseSet: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     private val _externalDisconnect = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val externalDisconnect: SharedFlow<String> = _externalDisconnect
@@ -822,7 +820,7 @@ class TrezorTransport @Inject constructor(
         val connection = bleConnections.remove(path)
             ?: return TrezorTransportWriteResult(success = true, error = "")
 
-        userInitiatedClose = true
+        userInitiatedCloseSet.add(path)
         try {
             val disconnectLatch = CountDownLatch(1)
             bleConnections[path] = connection.copy(disconnectLatch = disconnectLatch)
@@ -980,10 +978,9 @@ class TrezorTransport @Inject constructor(
                     connection?.isConnected = false
                     connection?.connectionLatch?.countDown()
                     connection?.disconnectLatch?.countDown()
-                    if (!userInitiatedClose) {
+                    if (!userInitiatedCloseSet.remove(path)) {
                         _externalDisconnect.tryEmit(path)
                     }
-                    userInitiatedClose = false
                 }
             }
         }
@@ -1109,8 +1106,6 @@ class TrezorTransport @Inject constructor(
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path] ?: return
 
-            Thread.sleep(200)
-
             val charUuid = descriptor.characteristic.uuid
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Logger.info(
@@ -1124,20 +1119,23 @@ class TrezorTransport @Inject constructor(
                 )
             }
 
-            // If this was the TX characteristic CCCD, also enable PUSH CCCD
-            if (descriptor.characteristic.uuid == NOTIFY_CHAR_UUID) {
-                val pushChar = gatt.getService(SERVICE_UUID)?.getCharacteristic(PUSH_CHAR_UUID)
-                if (!enablePushCccd(gatt, pushChar, path)) {
-                    // PUSH CCCD not available or failed, signal ready now
+            // Delay subsequent GATT operations without blocking the callback thread
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                // If this was the TX characteristic CCCD, also enable PUSH CCCD
+                if (descriptor.characteristic.uuid == NOTIFY_CHAR_UUID) {
+                    val pushChar = gatt.getService(SERVICE_UUID)?.getCharacteristic(PUSH_CHAR_UUID)
+                    if (!enablePushCccd(gatt, pushChar, path)) {
+                        // PUSH CCCD not available or failed, signal ready now
+                        connection.isConnected = true
+                        connection.connectionLatch?.countDown()
+                    }
+                    // If enablePushCccd returned true, onDescriptorWrite will fire again for PUSH
+                } else {
+                    // This was the PUSH CCCD write (or other), signal connection ready
                     connection.isConnected = true
                     connection.connectionLatch?.countDown()
                 }
-                // If enablePushCccd returned true, onDescriptorWrite will fire again for PUSH
-            } else {
-                // This was the PUSH CCCD write (or other), signal connection ready
-                connection.isConnected = true
-                connection.connectionLatch?.countDown()
-            }
+            }, BLE_CCCD_STABILIZATION_MS)
         }
     }
 

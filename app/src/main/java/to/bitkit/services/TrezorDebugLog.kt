@@ -3,6 +3,7 @@ package to.bitkit.services
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -17,18 +18,13 @@ object TrezorDebugLog {
     fun log(tag: String, msg: String) {
         val ts = fmt.format(Date())
         val line = "$ts [$tag] $msg"
-        synchronized(this) {
-            val current = _lines.value.toMutableList()
-            current.add(line)
-            if (current.size > MAX_LINES) {
-                _lines.value = current.takeLast(MAX_LINES)
-            } else {
-                _lines.value = current
-            }
+        _lines.update { current ->
+            val updated = current + line
+            if (updated.size > MAX_LINES) updated.takeLast(MAX_LINES) else updated
         }
     }
 
     fun clear() {
-        _lines.value = emptyList()
+        _lines.update { emptyList() }
     }
 }

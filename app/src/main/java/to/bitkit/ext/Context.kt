@@ -3,6 +3,7 @@ package to.bitkit.ext
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.NotificationManager
+import android.bluetooth.BluetoothManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -10,6 +11,7 @@ import android.content.Context.NOTIFICATION_SERVICE
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.hardware.usb.UsbManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -30,6 +32,12 @@ val Context.clipboardManager: ClipboardManager
 
 val Context.activityManager: ActivityManager
     get() = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+
+val Context.usbManager: UsbManager
+    get() = getSystemService(Context.USB_SERVICE) as UsbManager
+
+val Context.bluetoothManager: BluetoothManager
+    get() = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
 // Permissions
 
