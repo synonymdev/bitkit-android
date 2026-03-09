@@ -947,7 +947,6 @@
     <string name="wallet__send_max_spending__title">Reserve Balance</string>
     <string name="wallet__send_pending__description">This payment is taking a bit longer than expected. You can continue using Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
-    <string name="wallet__send_pending__title">Payment\n&lt;accent&gt;pending...&lt;/accent&gt;</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Review &amp; Send</string>
