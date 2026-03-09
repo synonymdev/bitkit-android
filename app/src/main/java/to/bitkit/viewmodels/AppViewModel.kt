@@ -190,6 +190,9 @@ class AppViewModel @Inject constructor(
     private val _quickPayData = MutableStateFlow<QuickPayData?>(null)
     val quickPayData = _quickPayData.asStateFlow()
 
+    private var activeScanJob: Job? = null
+    private var activeScanInput: String? = null
+
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
@@ -985,10 +988,34 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onAddressContinue(data: String) {
-        viewModelScope.launch {
-            handleScan(data)
+    private fun launchScan(source: ScanSource, data: String, delayMs: Long = 0) {
+        val normalized = data.removeLightningSchemes()
+        val scanId = if (data.length > 24) "${data.take(11)}…${data.takeLast(11)}" else data
+
+        if (normalized == activeScanInput && activeScanJob?.isActive == true) {
+            Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
+            return
         }
+
+        activeScanJob?.let {
+            Logger.info("Cancelling prior scan for new '${source.label}': '$scanId'", context = TAG)
+            it.cancel()
+        }
+
+        activeScanInput = normalized
+        Logger.debug("Scan from '${source.label}': '$scanId'", context = TAG)
+        activeScanJob = viewModelScope.launch {
+            try {
+                if (delayMs > 0) delay(delayMs)
+                handleScan(data)
+            } finally {
+                activeScanInput = null
+            }
+        }
+    }
+
+    private fun onAddressContinue(data: String) {
+        launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data)
     }
 
     private suspend fun onAmountChange(amount: ULong) {
@@ -1136,9 +1163,7 @@ class AppViewModel @Inject constructor(
             )
             return
         }
-        viewModelScope.launch {
-            handleScan(data)
-        }
+        launchScan(source = ScanSource.PASTE, data = data)
     }
 
     private fun onScanClick() {
@@ -1146,10 +1171,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onScanResult(data: String, delayMs: Long = 0) {
-        viewModelScope.launch {
-            delay(delayMs)
-            handleScan(data)
-        }
+        launchScan(source = ScanSource.SCAN_RESULT, data = data, delayMs = delayMs)
     }
 
     private suspend fun handleScan(result: String) = withContext(bgDispatcher) {
@@ -2314,9 +2336,7 @@ class AppViewModel @Inject constructor(
 
         if (!walletRepo.walletExists()) return@launch
 
-        val data = uri.toString()
-        delay(SCREEN_TRANSITION_DELAY_MS)
-        handleScan(data)
+        launchScan(source = ScanSource.DEEPLINK, data = uri.toString(), delayMs = SCREEN_TRANSITION_DELAY_MS)
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
@@ -2357,6 +2377,13 @@ class AppViewModel @Inject constructor(
         }.onFailure { e ->
             Logger.warn("Failure fetching new releases", e = e, context = TAG)
         }
+    }
+
+    private enum class ScanSource(val label: String) {
+        PASTE("paste"),
+        SCAN_RESULT("scan result"),
+        ADDRESS_CONTINUE("address continue"),
+        DEEPLINK("deeplink"),
     }
 
     companion object {
