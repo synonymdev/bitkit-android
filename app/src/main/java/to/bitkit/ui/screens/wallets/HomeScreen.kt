@@ -609,7 +609,7 @@ private fun SuggestionsSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(gridHeight)
-                .testTag("Suggestions")
+                .testTag("SuggestionsWidget")
         ) {
             items(
                 items = suggestions,
