@@ -21,7 +21,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -39,7 +40,7 @@ internal fun SignMessageSection(
     onVerifyMessage: () -> Unit,
 ) {
     Column {
-        Footnote(
+        Caption13Up(
             text = "Sign Message",
             color = Colors.White64,
         )
@@ -48,7 +49,7 @@ internal fun SignMessageSection(
         OutlinedTextField(
             value = uiState.messageToSign,
             onValueChange = onMessageChange,
-            label = { Footnote("Message", color = Colors.White50) },
+            label = { Caption("Message", color = Colors.White50) },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Colors.White,
@@ -89,7 +90,7 @@ internal fun SignMessageSection(
                 val onCopySignature = copyToClipboard(text = sig, label = "Signature")
                 Column {
                     VerticalSpacer(12.dp)
-                    Footnote(
+                    Caption(
                         text = "Signature:",
                         color = Colors.White50,
                     )
@@ -102,7 +103,7 @@ internal fun SignMessageSection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Footnote(
+                        Caption(
                             text = sig,
                             color = Colors.Brand,
                             maxLines = 3,

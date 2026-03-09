@@ -17,9 +17,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.Colors
 
@@ -34,7 +35,7 @@ internal fun PairingCodeDialog(
         onDismissRequest = onCancel,
         containerColor = Colors.Gray5,
         title = {
-            BodySSB(
+            Title(
                 text = "Enter Pairing Code",
                 color = Colors.White,
             )
@@ -80,7 +81,7 @@ internal fun PairingCodeDialog(
                 onClick = { onSubmit(code) },
                 enabled = code.length == 6,
             ) {
-                Footnote(
+                CaptionB(
                     "Submit",
                     color = if (code.length == 6) Colors.Brand else Colors.White32,
                 )
@@ -88,7 +89,7 @@ internal fun PairingCodeDialog(
         },
         dismissButton = {
             TextButton(onClick = onCancel) {
-                Footnote("Cancel", color = Colors.White64)
+                CaptionB("Cancel", color = Colors.White64)
             }
         },
     )

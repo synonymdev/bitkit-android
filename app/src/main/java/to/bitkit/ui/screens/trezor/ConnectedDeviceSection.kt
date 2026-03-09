@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.TrezorFeatures
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -43,11 +43,11 @@ internal fun InfoRow(label: String, value: String) {
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Footnote(
+        Caption(
             text = label,
             color = Colors.White50,
         )
-        Footnote(
+        Caption(
             text = value,
             color = Colors.White,
         )

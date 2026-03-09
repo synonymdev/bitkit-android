@@ -20,7 +20,8 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -41,13 +42,13 @@ internal fun PublicKeySection(
     }
 
     Column {
-        Footnote(
+        Caption13Up(
             text = "Public Key (xpub)",
             color = Colors.White64,
         )
         VerticalSpacer(8.dp)
 
-        Footnote(
+        Caption(
             text = "Account path: $accountPath",
             color = Colors.White50,
         )
@@ -80,7 +81,7 @@ internal fun PublicKeySection(
                 val onCopyPublicKey = copyToClipboard(text = response.publicKey, label = "Public Key")
                 Column {
                     VerticalSpacer(12.dp)
-                    Footnote(
+                    Caption(
                         text = "xpub:",
                         color = Colors.White50,
                     )
@@ -93,7 +94,7 @@ internal fun PublicKeySection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Footnote(
+                        Caption(
                             text = response.xpub,
                             color = Colors.Brand,
                             modifier = Modifier.weight(1f),
@@ -110,7 +111,7 @@ internal fun PublicKeySection(
                     }
 
                     VerticalSpacer(12.dp)
-                    Footnote(
+                    Caption(
                         text = "Public Key:",
                         color = Colors.White50,
                     )
@@ -123,7 +124,7 @@ internal fun PublicKeySection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Footnote(
+                        Caption(
                             text = response.publicKey,
                             color = Colors.Brand,
                             modifier = Modifier.weight(1f),

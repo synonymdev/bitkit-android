@@ -23,7 +23,8 @@ import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -51,7 +52,7 @@ internal fun BalanceLookupSection(
     onResetSend: () -> Unit,
 ) {
     Column {
-        Footnote(
+        Caption13Up(
             text = "Balance Lookup",
             color = Colors.White64,
         )
@@ -60,7 +61,7 @@ internal fun BalanceLookupSection(
         OutlinedTextField(
             value = uiState.lookupInput,
             onValueChange = onInputChange,
-            label = { Footnote("Address or xpub", color = Colors.White50) },
+            label = { Caption("Address or xpub", color = Colors.White50) },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Colors.White,
                 unfocusedTextColor = Colors.White,
@@ -136,7 +137,7 @@ private fun AccountInfoResultView(
 
         if (result.account.utxo.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Footnote(
+            Caption13Up(
                 text = "UTXOs (${result.account.utxo.size})",
                 color = Colors.White64,
             )
@@ -177,7 +178,7 @@ private fun AddressInfoResultView(result: SingleAddressInfoResult) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Footnote(
+                Caption(
                     text = result.address,
                     color = Colors.Brand,
                     modifier = Modifier.weight(1f),
@@ -200,7 +201,7 @@ private fun AddressInfoResultView(result: SingleAddressInfoResult) {
 
         if (result.utxos.isNotEmpty()) {
             VerticalSpacer(8.dp)
-            Footnote(
+            Caption13Up(
                 text = "UTXOs (${result.utxos.size})",
                 color = Colors.White64,
             )
@@ -221,7 +222,7 @@ private fun UtxoRow(utxo: AccountUtxo) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Footnote(
+            Caption(
                 text = "${utxo.txid.take(8)}...${utxo.txid.takeLast(8)}:${utxo.vout}",
                 color = Colors.Brand,
                 modifier = Modifier.weight(1f),

@@ -19,7 +19,8 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -37,13 +38,13 @@ internal fun AddressSection(
     onIncrementIndex: () -> Unit,
 ) {
     Column {
-        Footnote(
+        Caption13Up(
             text = "Address Generation",
             color = Colors.White64,
         )
         VerticalSpacer(8.dp)
 
-        Footnote(
+        Caption(
             text = "Path: ${uiState.derivationPath}",
             color = Colors.White50,
         )
@@ -75,7 +76,7 @@ internal fun AddressSection(
                 val onCopyAddress = copyToClipboard(text = response.address, label = "Address")
                 Column {
                     VerticalSpacer(12.dp)
-                    Footnote(
+                    Caption(
                         text = "Address:",
                         color = Colors.White50,
                     )
@@ -88,7 +89,7 @@ internal fun AddressSection(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Footnote(
+                        Caption(
                             text = response.address,
                             color = Colors.Brand,
                             modifier = Modifier.weight(1f),
