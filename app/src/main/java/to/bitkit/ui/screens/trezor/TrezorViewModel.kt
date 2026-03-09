@@ -1,4 +1,4 @@
-package to.bitkit.viewmodels
+package to.bitkit.ui.screens.trezor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorFeeLevel
 import com.synonym.bitkitcore.TrezorPrecomposeOutput
 import com.synonym.bitkitcore.TrezorPrecomposeParams
+import com.synonym.bitkitcore.TrezorPrecomposedOutput
 import com.synonym.bitkitcore.TrezorPrecomposedResult
 import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignTxParams
@@ -32,38 +33,6 @@ import to.bitkit.repositories.TrezorRepo
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
-
-data class TrezorUiState(
-    val selectedNetwork: TrezorCoinType = Env.network.toTrezorCoinType(),
-    val addressIndex: Int = 0,
-    val derivationPath: String =
-        "m/84'/${if (Env.network.toTrezorCoinType() == TrezorCoinType.BITCOIN) "0" else "1"}'/0'/0/0",
-    val messageToSign: String = "Hello, Trezor!",
-    val lastSignature: String? = null,
-    val lastSigningAddress: String? = null,
-    val isSigningMessage: Boolean = false,
-    val isGettingAddress: Boolean = false,
-    val isGettingPublicKey: Boolean = false,
-    val isVerifyingMessage: Boolean = false,
-    val lookupInput: String = "",
-    val isLookingUp: Boolean = false,
-    val accountInfoResult: AccountInfoResult? = null,
-    val addressInfoResult: SingleAddressInfoResult? = null,
-    val sendAddress: String = "",
-    val sendAmountSats: String = "",
-    val sendFeeRate: String = "2",
-    val isSendMax: Boolean = false,
-    val isComposing: Boolean = false,
-    val isSigning: Boolean = false,
-    val precomposedResult: TrezorPrecomposedResult.Final? = null,
-    val signedTxResult: TrezorSignedTx? = null,
-    val sendStep: SendStep = SendStep.FORM,
-    val sortingStrategy: TrezorSortingStrategy = TrezorSortingStrategy.BIP69,
-    val isBroadcasting: Boolean = false,
-    val broadcastTxid: String? = null,
-)
-
-enum class SendStep { FORM, REVIEW, SIGNED }
 
 @Suppress("TooManyFunctions")
 @HiltViewModel
@@ -520,15 +489,15 @@ class TrezorViewModel @Inject constructor(
             }
             finalResult.outputs.forEach {
                 when (it) {
-                    is com.synonym.bitkitcore.TrezorPrecomposedOutput.Payment ->
+                    is TrezorPrecomposedOutput.Payment ->
                         TrezorDebugLog.log("COMPOSE", "  output(payment): addr=${it.address}, amount=${it.amount}")
-                    is com.synonym.bitkitcore.TrezorPrecomposedOutput.Change ->
+                    is TrezorPrecomposedOutput.Change ->
                         TrezorDebugLog.log(
                             "COMPOSE",
                             "  output(change): addr=${it.address}, " +
                                 "amount=${it.amount}, path=${it.path}"
                         )
-                    is com.synonym.bitkitcore.TrezorPrecomposedOutput.OpReturn ->
+                    is TrezorPrecomposedOutput.OpReturn ->
                         TrezorDebugLog.log("COMPOSE", "  output(opreturn): ${it.dataHex}")
                 }
             }
@@ -680,3 +649,35 @@ class TrezorViewModel @Inject constructor(
         }
     }
 }
+
+data class TrezorUiState(
+    val selectedNetwork: TrezorCoinType = Env.network.toTrezorCoinType(),
+    val addressIndex: Int = 0,
+    val derivationPath: String =
+        "m/84'/${if (Env.network.toTrezorCoinType() == TrezorCoinType.BITCOIN) "0" else "1"}'/0'/0/0",
+    val messageToSign: String = "Hello, Trezor!",
+    val lastSignature: String? = null,
+    val lastSigningAddress: String? = null,
+    val isSigningMessage: Boolean = false,
+    val isGettingAddress: Boolean = false,
+    val isGettingPublicKey: Boolean = false,
+    val isVerifyingMessage: Boolean = false,
+    val lookupInput: String = "",
+    val isLookingUp: Boolean = false,
+    val accountInfoResult: AccountInfoResult? = null,
+    val addressInfoResult: SingleAddressInfoResult? = null,
+    val sendAddress: String = "",
+    val sendAmountSats: String = "",
+    val sendFeeRate: String = "2",
+    val isSendMax: Boolean = false,
+    val isComposing: Boolean = false,
+    val isSigning: Boolean = false,
+    val precomposedResult: TrezorPrecomposedResult.Final? = null,
+    val signedTxResult: TrezorSignedTx? = null,
+    val sendStep: SendStep = SendStep.FORM,
+    val sortingStrategy: TrezorSortingStrategy = TrezorSortingStrategy.BIP69,
+    val isBroadcasting: Boolean = false,
+    val broadcastTxid: String? = null,
+)
+
+enum class SendStep { FORM, REVIEW, SIGNED }

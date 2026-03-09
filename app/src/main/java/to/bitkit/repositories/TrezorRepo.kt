@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
@@ -36,22 +37,9 @@ import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.utils.Logger
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
-
-data class TrezorState(
-    val isInitialized: Boolean = false,
-    val isScanning: Boolean = false,
-    val isConnecting: Boolean = false,
-    val isAutoReconnecting: Boolean = false,
-    val knownDevices: List<KnownDevice> = emptyList(),
-    val nearbyDevices: List<TrezorDeviceInfo> = emptyList(),
-    val connectedDevice: TrezorFeatures? = null,
-    val connectedDeviceId: String? = null,
-    val lastAddress: TrezorAddressResponse? = null,
-    val lastPublicKey: TrezorPublicKeyResponse? = null,
-    val error: String? = null,
-)
 
 @Suppress("TooManyFunctions")
 @Singleton
@@ -138,8 +126,8 @@ class TrezorRepo @Inject constructor(
                 TrezorDeviceInfo(
                     id = known.id,
                     transportType = when (known.transportType) {
-                        "bluetooth" -> com.synonym.bitkitcore.TrezorTransportType.BLUETOOTH
-                        else -> com.synonym.bitkitcore.TrezorTransportType.USB
+                        "bluetooth" -> TrezorTransportType.BLUETOOTH
+                        else -> TrezorTransportType.USB
                     },
                     name = known.name,
                     path = known.path,
@@ -370,7 +358,7 @@ class TrezorRepo @Inject constructor(
                 val idMatch = knownDevices.firstNotNullOfOrNull { known ->
                     scannedDevices.find { it.id == known.id }
                 }
-                val match = usbDevice ?: idMatch ?: error("No known device found nearby")
+                val match = idMatch ?: usbDevice ?: error("No known device found nearby")
                 connect(match.id).getOrThrow()
             }
         }.onSuccess {
@@ -470,8 +458,8 @@ class TrezorRepo @Inject constructor(
             name = deviceInfo.name,
             path = deviceInfo.path,
             transportType = when (deviceInfo.transportType) {
-                com.synonym.bitkitcore.TrezorTransportType.BLUETOOTH -> "bluetooth"
-                com.synonym.bitkitcore.TrezorTransportType.USB -> "usb"
+                TrezorTransportType.BLUETOOTH -> "bluetooth"
+                TrezorTransportType.USB -> "usb"
             },
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
@@ -491,7 +479,7 @@ class TrezorRepo @Inject constructor(
 
     private fun saveKnownDevices(devices: List<KnownDevice>) {
         runCatching {
-            prefs.edit().putString(KEY_KNOWN_DEVICES, json.encodeToString(devices)).commit()
+            prefs.edit().putString(KEY_KNOWN_DEVICES, json.encodeToString(devices)).apply()
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
@@ -569,7 +557,7 @@ class TrezorRepo @Inject constructor(
                 throw e
             }
             TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
-            Logger.warn("Connection failed for $deviceId, retrying: ${e.message}", context = TAG)
+            Logger.warn("Connection failed for $deviceId, retrying", e, context = TAG)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
             val result = trezorService.connect(deviceId)
             logCredentialFileState(deviceId, "AFTER 2nd attempt (success)")
@@ -580,8 +568,8 @@ class TrezorRepo @Inject constructor(
 
     private fun logCredentialFileState(deviceId: String, label: String) {
         val sanitizedId = deviceId.replace(":", "_").replace("/", "_")
-        val credDir = java.io.File(context.filesDir, "trezor-thp-credentials")
-        val credFile = java.io.File(credDir, "$sanitizedId.json")
+        val credDir = File(context.filesDir, "trezor-thp-credentials")
+        val credFile = File(credDir, "$sanitizedId.json")
         val exists = credFile.exists()
         val size = if (exists) credFile.length() else 0
         TrezorDebugLog.log("CRED", "$label: file=$sanitizedId.json exists=$exists size=$size")
@@ -592,6 +580,21 @@ class TrezorRepo @Inject constructor(
         return "thp" in msg || "session" in msg || "timeout" in msg || "disconnect" in msg
     }
 }
+
+@Stable
+data class TrezorState(
+    val isInitialized: Boolean = false,
+    val isScanning: Boolean = false,
+    val isConnecting: Boolean = false,
+    val isAutoReconnecting: Boolean = false,
+    val knownDevices: List<KnownDevice> = emptyList(),
+    val nearbyDevices: List<TrezorDeviceInfo> = emptyList(),
+    val connectedDevice: TrezorFeatures? = null,
+    val connectedDeviceId: String? = null,
+    val lastAddress: TrezorAddressResponse? = null,
+    val lastPublicKey: TrezorPublicKeyResponse? = null,
+    val error: String? = null,
+)
 
 @Serializable
 data class KnownDevice(

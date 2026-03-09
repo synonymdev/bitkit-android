@@ -36,8 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,8 +71,6 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
-import to.bitkit.viewmodels.TrezorUiState
-import to.bitkit.viewmodels.TrezorViewModel
 
 private val bluetoothPermissions: List<String>
     get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -492,7 +492,7 @@ private fun DebugLogSection() {
                         color = Colors.White80,
                         fontSize = 9.sp,
                         lineHeight = 12.sp,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontFamily = FontFamily.Monospace,
                     )
                 }
             }
@@ -570,7 +570,7 @@ private fun StatusRow(trezorState: TrezorState) {
 }
 
 @Composable
-private fun StatusBadge(text: String, color: androidx.compose.ui.graphics.Color) {
+private fun StatusBadge(text: String, color: Color) {
     Footnote(
         text = text,
         color = color,

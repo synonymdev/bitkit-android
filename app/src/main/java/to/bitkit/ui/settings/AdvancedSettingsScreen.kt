@@ -66,9 +66,6 @@ fun AdvancedSettingsScreen(
         onAddressViewerClick = {
             navController.navigate(Routes.AddressViewer)
         },
-        onSweepFundsClick = {
-            navController.navigate(Routes.SweepNav)
-        },
         onTrezorClick = {
             navController.navigate(Routes.Trezor)
         },
@@ -95,7 +92,6 @@ private fun Content(
     onElectrumServerClick: () -> Unit = {},
     onRgsServerClick: () -> Unit = {},
     onAddressViewerClick: () -> Unit = {},
-    onSweepFundsClick: () -> Unit = {},
     onTrezorClick: () -> Unit = {},
     onSuggestionsResetClick: () -> Unit = {},
     onResetSuggestionsDialogConfirm: () -> Unit = {},

@@ -572,10 +572,10 @@
     <string name="settings__adv__reset_desc">Are you sure you want to reset the suggestions? They will reappear in case you have removed them from your Bitkit wallet overview.</string>
     <string name="settings__adv__reset_title">Reset Suggestions?</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
+    <string name="settings__adv__section_hardware_wallet">Hardware Wallet</string>
     <string name="settings__adv__section_networks">Networks</string>
     <string name="settings__adv__section_other">Other</string>
     <string name="settings__adv__section_payments">Payments</string>
-    <string name="settings__adv__section_hardware_wallet">Hardware Wallet</string>
     <string name="settings__adv__suggestions_reset">Reset Suggestions</string>
     <string name="settings__adv__trezor">Trezor</string>
     <string name="settings__advanced_title">Advanced</string>

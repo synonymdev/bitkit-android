@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -35,8 +36,6 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
-import to.bitkit.viewmodels.SendStep
-import to.bitkit.viewmodels.TrezorUiState
 
 private val textFieldColors
     @Composable get() = OutlinedTextFieldDefaults.colors(
@@ -82,20 +81,24 @@ internal fun SendTransactionSection(
                 onSortingStrategyChange = onSortingStrategyChange,
                 onCompose = onCompose,
             )
-            SendStep.REVIEW -> ReviewSection(
-                result = uiState.precomposedResult!!,
-                isDeviceConnected = isDeviceConnected,
-                isSigning = uiState.isSigning,
-                onSign = onSign,
-                onBack = onBack,
-            )
-            SendStep.SIGNED -> SignedResultSection(
-                signedTx = uiState.signedTxResult!!,
-                isBroadcasting = uiState.isBroadcasting,
-                broadcastTxid = uiState.broadcastTxid,
-                onBroadcast = onBroadcast,
-                onReset = onReset,
-            )
+            SendStep.REVIEW -> uiState.precomposedResult?.let { result ->
+                ReviewSection(
+                    result = result,
+                    isDeviceConnected = isDeviceConnected,
+                    isSigning = uiState.isSigning,
+                    onSign = onSign,
+                    onBack = onBack,
+                )
+            }
+            SendStep.SIGNED -> uiState.signedTxResult?.let { signedTx ->
+                SignedResultSection(
+                    signedTx = signedTx,
+                    isBroadcasting = uiState.isBroadcasting,
+                    broadcastTxid = uiState.broadcastTxid,
+                    onBroadcast = onBroadcast,
+                    onReset = onReset,
+                )
+            }
         }
     }
 }
@@ -367,7 +370,7 @@ private fun SignedResultSection(
                 )
                 HorizontalSpacer(8.dp)
                 Icon(
-                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_copy),
+                    painter = painterResource(R.drawable.ic_copy),
                     contentDescription = "Copy raw tx",
                     tint = Colors.Brand,
                     modifier = Modifier
@@ -416,7 +419,7 @@ private fun BroadcastResultCard(txid: String) {
             )
             HorizontalSpacer(8.dp)
             Icon(
-                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_copy),
+                painter = painterResource(R.drawable.ic_copy),
                 contentDescription = "Copy txid",
                 tint = Colors.Brand,
                 modifier = Modifier
