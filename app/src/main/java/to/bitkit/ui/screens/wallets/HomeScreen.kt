@@ -581,13 +581,6 @@ private fun WidgetsPage(
 
         TertiaryButton(
             text = stringResource(R.string.widgets__add),
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_plus),
-                    contentDescription = null,
-                    tint = Colors.White80,
-                )
-            },
             onClick = onClickAddWidget,
             modifier = Modifier.testTag("WidgetsAdd")
         )
