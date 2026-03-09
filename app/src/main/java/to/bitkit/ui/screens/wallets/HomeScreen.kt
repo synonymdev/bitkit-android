@@ -346,7 +346,7 @@ private fun Content(
 
         VerticalPager(
             state = pagerState,
-            userScrollEnabled = homeUiState.showWidgets,
+            userScrollEnabled = homeUiState.showWidgets && !homeUiState.isEditingWidgets,
             flingBehavior = PagerDefaults.flingBehavior(
                 state = pagerState,
                 snapPositionalThreshold = 0.2f,
