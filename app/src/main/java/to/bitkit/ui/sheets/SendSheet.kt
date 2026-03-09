@@ -20,6 +20,7 @@ import kotlinx.serialization.Serializable
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
@@ -73,26 +74,28 @@ fun SendSheet(
         LaunchedEffect(appViewModel, navController) {
             appViewModel.sendEffect.collect {
                 when (it) {
-                    is SendEffect.NavigateToAmount -> navController.navigate(SendRoute.Amount)
-                    is SendEffect.NavigateToAddress -> navController.navigate(SendRoute.Address)
-                    is SendEffect.NavigateToScan -> navController.navigate(SendRoute.QrScanner)
-                    is SendEffect.NavigateToCoinSelection -> navController.navigate(SendRoute.CoinSelection)
-                    is SendEffect.NavigateToConfirm -> navController.navigate(SendRoute.Confirm)
+                    is SendEffect.NavigateToAmount -> navController.navigateTo(SendRoute.Amount)
+                    is SendEffect.NavigateToAddress -> navController.navigateTo(SendRoute.Address)
+                    is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
+                    is SendEffect.NavigateToCoinSelection -> navController.navigateTo(SendRoute.CoinSelection)
+                    is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
                     is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                     is SendEffect.PaymentSuccess -> {
                         appViewModel.clearClipboardForAutoRead()
-                        navController.navigate(SendRoute.Success) {
+                        navController.navigateTo(SendRoute.Success) {
                             popUpTo(navController.graph.id) { inclusive = true }
                         }
                     }
 
-                    is SendEffect.NavigateToQuickPay -> navController.navigate(SendRoute.QuickPay)
-                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(SendRoute.WithdrawConfirm)
-                    is SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
-                    is SendEffect.NavigateToFee -> navController.navigate(SendRoute.FeeRate)
-                    is SendEffect.NavigateToFeeCustom -> navController.navigate(SendRoute.FeeCustom)
-                    is SendEffect.NavigateToComingSoon -> navController.navigate(SendRoute.ComingSoon)
-                    is SendEffect.NavigateToPending -> navController.navigate(
+                    is SendEffect.NavigateToQuickPay -> navController.navigateTo(SendRoute.QuickPay)
+                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigateTo(
+                        SendRoute.WithdrawConfirm
+                    )
+                    is SendEffect.NavigateToWithdrawError -> navController.navigateTo(SendRoute.WithdrawError)
+                    is SendEffect.NavigateToFee -> navController.navigateTo(SendRoute.FeeRate)
+                    is SendEffect.NavigateToFeeCustom -> navController.navigateTo(SendRoute.FeeCustom)
+                    is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
+                    is SendEffect.NavigateToPending -> navController.navigateTo(
                         SendRoute.Pending(it.paymentHash, it.amount)
                     ) { popUpTo(startDestination) { inclusive = true } }
                 }
@@ -187,9 +190,9 @@ fun SendSheet(
                         }
                     },
                     onEvent = { e -> appViewModel.setSendEvent(e) },
-                    onClickAddTag = { navController.navigate(SendRoute.AddTag) },
+                    onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
                     onClickTag = { tag -> appViewModel.removeTag(tag) },
-                    onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
+                    onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
                 )
             }
             composableWithDefaultTransitions<SendRoute.Success> {
@@ -218,8 +221,8 @@ fun SendSheet(
                 WithdrawErrorScreen(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
-                    onClickScan = { navController.navigate(SendRoute.QrScanner) },
-                    onClickSupport = { navController.navigate(SendRoute.Support) },
+                    onClickScan = { navController.navigateTo(SendRoute.QrScanner) },
+                    onClickSupport = { navController.navigateTo(SendRoute.Support) },
                 )
             }
             // TODO navigate to main support screen, not inside SEND sheet
@@ -269,12 +272,12 @@ fun SendSheet(
                         )
                     },
                     onPaymentPending = { paymentHash, amount ->
-                        navController.navigate(SendRoute.Pending(paymentHash, amount)) {
+                        navController.navigateTo(SendRoute.Pending(paymentHash, amount)) {
                             popUpTo(startDestination) { inclusive = true }
                         }
                     },
                     onShowError = { errorMessage ->
-                        navController.navigate(SendRoute.Error(errorMessage))
+                        navController.navigateTo(SendRoute.Error(errorMessage))
                     }
                 )
             }
@@ -294,7 +297,7 @@ fun SendSheet(
                         )
                     },
                     onPaymentError = {
-                        navController.navigate(SendRoute.Error()) {
+                        navController.navigateTo(SendRoute.Error()) {
                             popUpTo<SendRoute.Pending> { inclusive = true }
                         }
                     },
@@ -314,7 +317,7 @@ fun SendSheet(
                 SendErrorScreen(
                     message = route.message,
                     onRetry = {
-                        navController.navigate(SendRoute.Recipient) {
+                        navController.navigateTo(SendRoute.Recipient) {
                             popUpTo(navController.graph.id) { inclusive = true }
                         }
                     },

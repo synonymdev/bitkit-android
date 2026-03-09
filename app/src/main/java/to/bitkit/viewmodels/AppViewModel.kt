@@ -10,8 +10,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavOptions
-import androidx.navigation.navOptions
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.FeeRates
@@ -2326,9 +2324,7 @@ class AppViewModel @Inject constructor(
             mainScreenEffect(
                 MainScreenEffect.Navigate(
                     route = Routes.RecoveryMode,
-                    navOptions = navOptions {
-                        popUpTo(0) { inclusive = true }
-                    }
+                    clearStack = true,
                 )
             )
             return@launch
@@ -2368,9 +2364,7 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(
                     MainScreenEffect.Navigate(
                         route = Routes.CriticalUpdate,
-                        navOptions = navOptions {
-                            popUpTo(0) { inclusive = true }
-                        }
+                        clearStack = true,
                     )
                 )
             }
@@ -2464,7 +2458,7 @@ sealed class SendEffect {
 sealed class MainScreenEffect {
     data class Navigate(
         val route: Routes,
-        val navOptions: NavOptions? = null,
+        val clearStack: Boolean = false,
     ) : MainScreenEffect()
 
     data object WipeWallet : MainScreenEffect()

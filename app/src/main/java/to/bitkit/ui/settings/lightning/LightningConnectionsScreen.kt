@@ -56,6 +56,7 @@ import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -94,7 +95,7 @@ fun LightningConnectionsScreen(
             viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
         },
         onClickChannel = { channelUi ->
-            navController.navigate(Routes.ChannelDetail(channelUi.details.channelId))
+            navController.navigateTo(Routes.ChannelDetail(channelUi.details.channelId))
         },
         onRefresh = {
             viewModel.onPullToRefresh()

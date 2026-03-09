@@ -87,6 +87,7 @@ import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToTransferFunding
@@ -170,7 +171,7 @@ fun HomeScreen(
         onClickSuggestion = { suggestion ->
             when (suggestion) {
                 Suggestion.BUY -> {
-                    rootNavController.navigate(Routes.BuyIntro)
+                    rootNavController.navigateTo(Routes.BuyIntro)
                 }
 
                 Suggestion.LIGHTNING -> {
@@ -190,7 +191,7 @@ fun HomeScreen(
                 }
 
                 Suggestion.SUPPORT -> {
-                    rootNavController.navigate(Routes.Support)
+                    rootNavController.navigateTo(Routes.Support)
                 }
 
                 Suggestion.INVITE -> {
@@ -203,51 +204,51 @@ fun HomeScreen(
                 }
 
                 Suggestion.PROFILE -> {
-                    rootNavController.navigate(Routes.Profile)
+                    rootNavController.navigateTo(Routes.Profile)
                 }
 
                 Suggestion.SHOP -> {
                     if (!hasSeenShopIntro) {
-                        rootNavController.navigate(Routes.ShopIntro)
+                        rootNavController.navigateTo(Routes.ShopIntro)
                     } else {
-                        rootNavController.navigate(Routes.ShopDiscover)
+                        rootNavController.navigateTo(Routes.ShopDiscover)
                     }
                 }
 
                 Suggestion.QUICK_PAY -> {
                     if (!quickPayIntroSeen) {
-                        rootNavController.navigate(Routes.QuickPayIntro)
+                        rootNavController.navigateTo(Routes.QuickPayIntro)
                     } else {
-                        rootNavController.navigate(Routes.QuickPaySettings)
+                        rootNavController.navigateTo(Routes.QuickPaySettings)
                     }
                 }
 
                 Suggestion.NOTIFICATIONS -> {
                     if (bgPaymentsIntroSeen) {
-                        rootNavController.navigate(Routes.BackgroundPaymentsSettings)
+                        rootNavController.navigateTo(Routes.BackgroundPaymentsSettings)
                     } else {
-                        rootNavController.navigate(Routes.BackgroundPaymentsIntro)
+                        rootNavController.navigateTo(Routes.BackgroundPaymentsIntro)
                     }
                 }
             }
         },
         onClickAddWidget = {
             if (!hasSeenWidgetsIntro) {
-                rootNavController.navigate(Routes.WidgetsIntro)
+                rootNavController.navigateTo(Routes.WidgetsIntro)
             } else {
-                rootNavController.navigate(Routes.AddWidget)
+                rootNavController.navigateTo(Routes.AddWidget)
             }
         },
         onClickEditWidgetList = homeViewModel::onClickEditWidgetList,
         onClickEditWidget = { widgetType ->
             homeViewModel.disableEditMode()
             when (widgetType) {
-                WidgetType.BLOCK -> rootNavController.navigate(Routes.BlocksPreview)
-                WidgetType.CALCULATOR -> rootNavController.navigate(Routes.CalculatorPreview)
-                WidgetType.FACTS -> rootNavController.navigate(Routes.FactsPreview)
-                WidgetType.NEWS -> rootNavController.navigate(Routes.HeadlinesPreview)
-                WidgetType.PRICE -> rootNavController.navigate(Routes.PricePreview)
-                WidgetType.WEATHER -> rootNavController.navigate(Routes.WeatherPreview)
+                WidgetType.BLOCK -> rootNavController.navigateTo(Routes.BlocksPreview)
+                WidgetType.CALCULATOR -> rootNavController.navigateTo(Routes.CalculatorPreview)
+                WidgetType.FACTS -> rootNavController.navigateTo(Routes.FactsPreview)
+                WidgetType.NEWS -> rootNavController.navigateTo(Routes.HeadlinesPreview)
+                WidgetType.PRICE -> rootNavController.navigateTo(Routes.PricePreview)
+                WidgetType.WEATHER -> rootNavController.navigateTo(Routes.WeatherPreview)
             }
         },
         onClickDeleteWidget = { widgetType ->
@@ -343,7 +344,7 @@ private fun Content(
                             sats = balances.totalOnchainSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_btc_circle),
                             modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(Routes.Savings) }
+                                .clickableAlpha { walletNavController.navigateTo(Routes.Savings) }
                                 .padding(vertical = 4.dp)
                                 .testTag("ActivitySavings")
                         )
@@ -354,7 +355,7 @@ private fun Content(
                             sats = balances.totalLightningSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_ln_circle),
                             modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(Routes.Spending) }
+                                .clickableAlpha { walletNavController.navigateTo(Routes.Spending) }
                                 .padding(vertical = 4.dp)
                                 .testTag("ActivitySpending")
                         )
@@ -474,7 +475,9 @@ private fun Content(
                                     icon = banner.type.icon,
                                     onClick = {
                                         when (banner.type) {
-                                            ActivityBannerType.SPENDING -> rootNavController.navigate(Routes.SettingUp)
+                                            ActivityBannerType.SPENDING -> rootNavController.navigateTo(
+                                                Routes.SettingUp
+                                            )
                                             ActivityBannerType.SAVINGS -> Unit
                                         }
                                     },
@@ -631,7 +634,7 @@ private fun TopBar(
         TopAppBar(
             title = {},
             actions = {
-                AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
+                AppStatus(onClick = { rootNavController.navigateTo(Routes.AppStatus) })
                 HorizontalSpacer(4.dp)
                 IconButton(
                     onClick = { scope.launch { drawerState.open() } },

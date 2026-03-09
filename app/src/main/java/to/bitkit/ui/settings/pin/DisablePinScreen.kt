@@ -17,7 +17,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.navOptions
 import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AuthCheckAction
@@ -39,8 +38,7 @@ fun DisablePinScreen(
             navController.navigateToAuthCheck(
                 requirePin = true,
                 onSuccessActionId = AuthCheckAction.DISABLE_PIN,
-                navOptions = navOptions { popUpTo(Routes.SecuritySettings) },
-            )
+            ) { popUpTo(Routes.SecuritySettings) }
         },
         onBackClick = { navController.popBackStack() },
     )

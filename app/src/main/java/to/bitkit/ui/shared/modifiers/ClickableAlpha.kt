@@ -25,7 +25,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.launch
 
-private const val CLICK_DEBOUNCE_MS = 300L
+private const val CLICK_DEBOUNCE_MS = 500L
 
 private class ClickDebouncer(private val debounceMs: Long = CLICK_DEBOUNCE_MS) {
     private var lastClickTime = 0L

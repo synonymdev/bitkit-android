@@ -24,6 +24,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
@@ -44,25 +45,25 @@ fun AdvancedSettingsScreen(
         selectedAddressTypeName = selectedAddressTypeName,
         onBack = { navController.popBackStack() },
         onCoinSelectionClick = {
-            navController.navigate(Routes.CoinSelectPreference)
+            navController.navigateTo(Routes.CoinSelectPreference)
         },
         onAddressTypePreferenceClick = {
-            navController.navigate(Routes.AddressTypePreference)
+            navController.navigateTo(Routes.AddressTypePreference)
         },
         onLightningConnectionsClick = {
-            navController.navigate(Routes.LightningConnections)
+            navController.navigateTo(Routes.LightningConnections)
         },
         onLightningNodeClick = {
-            navController.navigate(Routes.NodeInfo)
+            navController.navigateTo(Routes.NodeInfo)
         },
         onElectrumServerClick = {
-            navController.navigate(Routes.ElectrumConfig)
+            navController.navigateTo(Routes.ElectrumConfig)
         },
         onRgsServerClick = {
-            navController.navigate(Routes.RgsServer)
+            navController.navigateTo(Routes.RgsServer)
         },
         onAddressViewerClick = {
-            navController.navigate(Routes.AddressViewer)
+            navController.navigateTo(Routes.AddressViewer)
         },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
         onResetSuggestionsDialogConfirm = {

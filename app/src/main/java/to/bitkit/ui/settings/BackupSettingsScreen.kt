@@ -42,6 +42,7 @@ import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAuthCheck
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -73,7 +74,7 @@ fun BackupSettingsScreen(
             if (isPinEnabled) {
                 navController.navigateToAuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET)
             } else {
-                navController.navigate(Routes.ResetAndRestoreSettings)
+                navController.navigateTo(Routes.ResetAndRestoreSettings)
             }
         },
         onRetryBackup = { category -> viewModel.retryBackup(category) },

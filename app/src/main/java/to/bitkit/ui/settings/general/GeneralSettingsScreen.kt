@@ -24,6 +24,7 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToLanguageSettings
 import to.bitkit.ui.navigateToLocalCurrencySettings
@@ -69,9 +70,9 @@ fun GeneralSettingsScreen(
         onLanguageSettingsClick = { navController.navigateToLanguageSettings() },
         onBgPaymentsClick = {
             if (bgPaymentsIntroSeen || notificationsGranted) {
-                navController.navigate(Routes.BackgroundPaymentsSettings)
+                navController.navigateTo(Routes.BackgroundPaymentsSettings)
             } else {
-                navController.navigate(Routes.BackgroundPaymentsIntro)
+                navController.navigateTo(Routes.BackgroundPaymentsIntro)
             }
         },
         selectedLanguage = languageUiState.selectedLanguage.displayName,
