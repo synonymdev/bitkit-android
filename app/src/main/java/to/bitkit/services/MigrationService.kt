@@ -364,7 +364,7 @@ class MigrationService @Inject constructor(
     suspend fun markChannelRecoveryChecked() {
         val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
         rnMigrationStore.edit { it[key] = "true" }
-        Logger.info("markChannelRecoveryChecked", TAG)
+        Logger.info("markChannelRecoveryChecked", context = TAG)
     }
 
     suspend fun hasRNWalletData(): Boolean {
@@ -1489,7 +1489,7 @@ class MigrationService @Inject constructor(
             }
 
             if (monitors.isNotEmpty()) {
-                Logger.info("Found ${monitors.size} channel monitors", TAG)
+                Logger.info("Found ${monitors.size} channel monitors", context = TAG)
                 pendingChannelMigration = PendingChannelMigration(
                     channelManager = managerData,
                     channelMonitors = monitors,
@@ -1645,6 +1645,7 @@ class MigrationService @Inject constructor(
                     )
                     null
                 }
+
                 else -> TransferEntity(
                     id = txId,
                     type = TransferType.TO_SPENDING,
