@@ -31,6 +31,7 @@ import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -86,6 +87,7 @@ fun FundingScreen(
                         modifier = Modifier.testTag("FundTransfer")
                     )
                     if (balances.channelFundableBalance == 0uL) {
+                        val debouncedClick = rememberDebouncedClick { showNoFundsAlert = true }
                         Box(
                             modifier = Modifier
                                 .matchParentSize()
@@ -93,7 +95,7 @@ fun FundingScreen(
                                     enabled = balances.channelFundableBalance == 0uL,
                                     interactionSource = null,
                                     indication = null,
-                                    onClick = { showNoFundsAlert = true }
+                                    onClick = debouncedClick,
                                 )
                                 .testTag("FundTransfer")
                         )

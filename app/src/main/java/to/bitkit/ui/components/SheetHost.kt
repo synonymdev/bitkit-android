@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
@@ -125,6 +126,7 @@ private fun Scrim(
     bottomSheetState: SheetState,
     onClick: () -> Unit,
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val isBottomSheetVisible = bottomSheetState.targetValue != SheetValue.Hidden
     val scrimAlpha by animateFloatAsState(
         targetValue = if (isBottomSheetVisible) 0.5f else 0f,
@@ -139,7 +141,7 @@ private fun Scrim(
                 .clickable(
                     interactionSource = null,
                     indication = null,
-                    onClick = onClick,
+                    onClick = debouncedClick,
                 )
         )
     }

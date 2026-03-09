@@ -48,6 +48,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateIfNotCurrent
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -235,6 +236,7 @@ private fun Scrim(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     AnimatedVisibility(
         visible = visible,
         modifier = modifier
@@ -246,7 +248,7 @@ private fun Scrim(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onClick,
+                    onClick = debouncedClick,
                 )
         )
     }
