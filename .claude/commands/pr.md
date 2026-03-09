@@ -1,5 +1,5 @@
 ---
-description: "Create a PR on GitHub, e.g. /pr --draft -- focus on the new wallet sync logic"
+description: "/pr [base] [--dry] [--draft] [-- instructions] — Create a PR on GitHub"
 argument_hint: "[branch] [--dry] [--draft] [-- instructions]"
 allowed_tools: Bash, Read, Glob, Grep, Write, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__get_file_contents, mcp__github__issue_read
 ---

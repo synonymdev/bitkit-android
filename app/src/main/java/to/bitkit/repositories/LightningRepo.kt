@@ -76,7 +76,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.io.File
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -109,10 +108,6 @@ class LightningRepo @Inject constructor(
     private val _nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 64)
     val nodeEvents = _nodeEvents.asSharedFlow()
 
-    private val pendingPayments = Collections.synchronizedSet(mutableSetOf<String>())
-    private val _pendingPaymentResolution = MutableSharedFlow<PendingPaymentResolution>(extraBufferCapacity = 1)
-    val pendingPaymentResolution = _pendingPaymentResolution.asSharedFlow()
-
     private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
 
     private val _eventHandlers = ConcurrentHashMap.newKeySet<NodeEventHandler>()
@@ -126,7 +121,6 @@ class LightningRepo @Inject constructor(
     private val syncRetryJob = AtomicReference<Job?>(null)
     private val lifecycleMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
-    private val _activePendingPaymentHash = AtomicReference<String?>(null)
 
     init {
         observeConnectivityForSyncRetry()
@@ -1383,40 +1377,16 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
         private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
-        val SEND_LIGHTNING_TIMEOUT = 10.seconds
-    }
-
-    fun trackPendingPayment(paymentHash: String) = pendingPayments.add(paymentHash)
-
-    fun setActivePendingPaymentHash(hash: String?) = run { _activePendingPaymentHash.set(hash) }
-
-    fun isActivePendingPayment(hash: String): Boolean = _activePendingPaymentHash.get() == hash
-
-    fun resolvePendingPayment(resolution: PendingPaymentResolution): Boolean {
-        val hash = when (resolution) {
-            is PendingPaymentResolution.Success -> resolution.paymentHash
-            is PendingPaymentResolution.Failure -> resolution.paymentHash
-        }
-        if (!pendingPayments.remove(hash)) return false
-        _pendingPaymentResolution.tryEmit(resolution)
-        return true
+        val SEND_LN_TIMEOUT = 10.seconds
     }
 }
 
-class PaymentPendingException(val paymentHash: String) : AppError("Payment pending")
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
-
-sealed interface PendingPaymentResolution {
-    val paymentHash: String
-
-    data class Success(override val paymentHash: String) : PendingPaymentResolution
-    data class Failure(override val paymentHash: String, val reason: String?) : PendingPaymentResolution
-}
 
 data class LightningState(
     val nodeId: String = "",
