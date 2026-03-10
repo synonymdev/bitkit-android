@@ -37,7 +37,7 @@ fun DragDropColumn(
         items.forEachIndexed { index, item ->
             val isDragging = draggedItem == index
 
-            val dragModifier = Modifier.pointerInput(Unit) {
+            val dragModifier = Modifier.pointerInput(index) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = {
                         draggedItem = index
