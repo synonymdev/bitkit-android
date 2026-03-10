@@ -64,6 +64,7 @@ fun QrCodeImage(
     size: Dp = LocalConfiguration.current.screenWidthDp.dp,
     onBitmapGenerated: (Bitmap?) -> Unit = {},
     testTag: String? = null,
+    copyContent: String? = null,
 ) {
     val context = LocalContext.current
     val tooltipState = rememberTooltipState()
@@ -96,7 +97,7 @@ fun QrCodeImage(
                         modifier = Modifier
                             .clickable(enabled = tipMessage.isNotBlank()) {
                                 coroutineScope.launch {
-                                    context.setClipboardText(content)
+                                    context.setClipboardText(copyContent ?: content)
                                     tooltipState.show()
                                 }
                             }
