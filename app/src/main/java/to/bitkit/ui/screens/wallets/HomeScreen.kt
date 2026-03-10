@@ -498,7 +498,7 @@ private fun WalletPage(
 }
 
 @Composable
-fun BalancesSection(
+private fun BalancesSection(
     balances: BalanceState,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
