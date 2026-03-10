@@ -204,9 +204,9 @@ class WidgetsRepo @Inject constructor(
 
     suspend fun refreshEnabledWidgets() = withContext(bgDispatcher) {
         coroutineScope {
-            widgetsDataFlow.first().widgets.forEach {
-                launch { refreshWidget(it.type) }
-            }
+            widgetsDataFlow.first().widgets
+                .filter { it.type != WidgetType.CALCULATOR && it.type != WidgetType.SUGGESTIONS }
+                .forEach { launch { refreshWidget(it.type) } }
         }
     }
 
