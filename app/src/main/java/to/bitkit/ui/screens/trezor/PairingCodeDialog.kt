@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.ui.components.ButtonSize
@@ -22,6 +23,7 @@ import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -94,4 +96,12 @@ internal fun PairingCodeDialog(
             )
         },
     )
+}
+
+@Preview
+@Composable
+private fun PreviewPairingCodeDialog() {
+    AppThemeSurface {
+        PairingCodeDialog(onSubmit = {}, onCancel = {})
+    }
 }

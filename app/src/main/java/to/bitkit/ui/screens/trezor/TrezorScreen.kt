@@ -45,9 +45,7 @@ import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.synonym.bitkitcore.TrezorCoinType
-import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorSortingStrategy
-import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
@@ -646,38 +644,26 @@ private fun PreviewInitialized() {
 @Preview
 @Composable
 private fun PreviewWithDevices() {
-    val knownDevices = listOf(
-        KnownDevice(
-            id = "usb-1",
-            transportType = "usb",
-            name = "Trezor Safe 5",
-            path = "/dev/usb/001",
-            label = "My Savings",
-            model = "Safe 5",
-            lastConnectedAt = System.currentTimeMillis(),
-        ),
-    )
-    val nearbyDevices = listOf(
-        TrezorDeviceInfo(
-            id = "ble-1",
-            transportType = TrezorTransportType.BLUETOOTH,
-            name = "Trezor Safe 7",
-            path = "AA:BB:CC:DD:EE:FF",
-            label = null,
-            model = "Safe 7",
-            isBootloader = false,
-        ),
-    )
-
     AppThemeSurface {
         TrezorContent(
             trezorState = TrezorState(
                 isInitialized = true,
-                knownDevices = knownDevices,
-                nearbyDevices = nearbyDevices,
-                connectedDeviceId = "usb-1",
+                knownDevices = listOf(TrezorPreviewData.sampleKnownDevice),
+                nearbyDevices = listOf(TrezorPreviewData.sampleNearbyDevice),
+                connectedDeviceId = TrezorPreviewData.sampleKnownDevice.id,
             ),
             uiState = TrezorUiState(),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewConnectedWithData() {
+    AppThemeSurface {
+        TrezorContent(
+            trezorState = TrezorPreviewData.connectedStateWithResults,
+            uiState = TrezorPreviewData.uiStateWithSignature,
         )
     }
 }

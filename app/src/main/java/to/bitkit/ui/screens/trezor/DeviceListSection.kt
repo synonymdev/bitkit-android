@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorTransportType
@@ -25,6 +26,7 @@ import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -133,6 +135,48 @@ internal fun KnownDeviceCard(
             modifier = Modifier
                 .size(20.dp)
                 .clickableAlpha(onClick = onForget)
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewDeviceCardBluetooth() {
+    AppThemeSurface {
+        DeviceCard(device = TrezorPreviewData.sampleNearbyDevice, onClick = {})
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewDeviceCardUsb() {
+    AppThemeSurface {
+        DeviceCard(device = TrezorPreviewData.sampleNearbyDeviceUsb, onClick = {})
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewKnownDeviceCardConnected() {
+    AppThemeSurface {
+        KnownDeviceCard(
+            device = TrezorPreviewData.sampleKnownDevice,
+            isConnected = true,
+            onClick = {},
+            onForget = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewKnownDeviceCardDisconnected() {
+    AppThemeSurface {
+        KnownDeviceCard(
+            device = TrezorPreviewData.sampleKnownDeviceBle,
+            isConnected = false,
+            onClick = {},
+            onForget = {},
         )
     }
 }

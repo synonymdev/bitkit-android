@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
@@ -28,6 +29,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 
@@ -122,5 +124,44 @@ internal fun SignMessageSection(
                 }
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSignMessageSectionDefault() {
+    AppThemeSurface {
+        SignMessageSection(
+            uiState = TrezorUiState(),
+            onMessageChange = {},
+            onSignMessage = {},
+            onVerifyMessage = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSignMessageSectionWithSignature() {
+    AppThemeSurface {
+        SignMessageSection(
+            uiState = TrezorPreviewData.uiStateWithSignature,
+            onMessageChange = {},
+            onSignMessage = {},
+            onVerifyMessage = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSignMessageSectionSigning() {
+    AppThemeSurface {
+        SignMessageSection(
+            uiState = TrezorUiState(isSigningMessage = true),
+            onMessageChange = {},
+            onSignMessage = {},
+            onVerifyMessage = {},
+        )
     }
 }

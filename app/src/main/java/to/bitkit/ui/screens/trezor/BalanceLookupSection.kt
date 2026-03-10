@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountUtxo
@@ -29,6 +30,7 @@ import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 
@@ -252,5 +254,97 @@ internal fun ResultCard(content: @Composable () -> Unit) {
             .padding(12.dp),
     ) {
         content()
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewBalanceLookupEmpty() {
+    AppThemeSurface {
+        BalanceLookupSection(
+            uiState = TrezorUiState(),
+            isDeviceConnected = false,
+            onInputChange = {},
+            onLookup = {},
+            onSendAddressChange = {},
+            onSendAmountChange = {},
+            onSendFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBackToForm = {},
+            onResetSend = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewBalanceLookupWithAccountInfo() {
+    AppThemeSurface {
+        BalanceLookupSection(
+            uiState = TrezorPreviewData.uiStateWithAccountInfo,
+            isDeviceConnected = true,
+            onInputChange = {},
+            onLookup = {},
+            onSendAddressChange = {},
+            onSendAmountChange = {},
+            onSendFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBackToForm = {},
+            onResetSend = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewBalanceLookupWithAddressInfo() {
+    AppThemeSurface {
+        BalanceLookupSection(
+            uiState = TrezorPreviewData.uiStateWithAddressInfo,
+            isDeviceConnected = false,
+            onInputChange = {},
+            onLookup = {},
+            onSendAddressChange = {},
+            onSendAmountChange = {},
+            onSendFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBackToForm = {},
+            onResetSend = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewBalanceLookupLoading() {
+    AppThemeSurface {
+        BalanceLookupSection(
+            uiState = TrezorUiState(lookupInput = "xpub6C...", isLookingUp = true),
+            isDeviceConnected = false,
+            onInputChange = {},
+            onLookup = {},
+            onSendAddressChange = {},
+            onSendAmountChange = {},
+            onSendFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBackToForm = {},
+            onResetSend = {},
+        )
     }
 }

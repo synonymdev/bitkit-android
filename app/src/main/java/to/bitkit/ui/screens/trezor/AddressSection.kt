@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
@@ -26,6 +27,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 
@@ -113,5 +115,44 @@ internal fun AddressSection(
                 }
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewAddressSectionEmpty() {
+    AppThemeSurface {
+        AddressSection(
+            trezorState = TrezorPreviewData.connectedState,
+            uiState = TrezorUiState(),
+            onGetAddress = {},
+            onIncrementIndex = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewAddressSectionWithAddress() {
+    AppThemeSurface {
+        AddressSection(
+            trezorState = TrezorPreviewData.connectedStateWithResults,
+            uiState = TrezorUiState(),
+            onGetAddress = {},
+            onIncrementIndex = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewAddressSectionLoading() {
+    AppThemeSurface {
+        AddressSection(
+            trezorState = TrezorPreviewData.connectedState,
+            uiState = TrezorUiState(isGettingAddress = true),
+            onGetAddress = {},
+            onIncrementIndex = {},
+        )
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.repositories.TrezorState
@@ -27,6 +28,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 
@@ -141,5 +143,41 @@ internal fun PublicKeySection(
                 }
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewPublicKeySectionEmpty() {
+    AppThemeSurface {
+        PublicKeySection(
+            trezorState = TrezorPreviewData.connectedState,
+            uiState = TrezorUiState(),
+            onGetPublicKey = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewPublicKeySectionWithKey() {
+    AppThemeSurface {
+        PublicKeySection(
+            trezorState = TrezorPreviewData.connectedStateWithResults,
+            uiState = TrezorUiState(),
+            onGetPublicKey = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewPublicKeySectionLoading() {
+    AppThemeSurface {
+        PublicKeySection(
+            trezorState = TrezorPreviewData.connectedState,
+            uiState = TrezorUiState(isGettingPublicKey = true),
+            onGetPublicKey = {},
+        )
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.TrezorPrecomposedOutput
 import com.synonym.bitkitcore.TrezorPrecomposedResult
@@ -33,6 +34,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 
@@ -420,6 +422,115 @@ private fun BroadcastResultCard(txid: String) {
         Caption(
             text = txid,
             color = Colors.Brand,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSendForm() {
+    AppThemeSurface {
+        SendTransactionSection(
+            uiState = TrezorUiState(),
+            isDeviceConnected = true,
+            onAddressChange = {},
+            onAmountChange = {},
+            onFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBack = {},
+            onReset = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSendFormFilled() {
+    AppThemeSurface {
+        SendTransactionSection(
+            uiState = TrezorUiState(
+                sendAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+                sendAmountSats = "45000",
+                sendFeeRate = "5",
+            ),
+            isDeviceConnected = true,
+            onAddressChange = {},
+            onAmountChange = {},
+            onFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBack = {},
+            onReset = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSendReview() {
+    AppThemeSurface {
+        SendTransactionSection(
+            uiState = TrezorPreviewData.uiStateReview,
+            isDeviceConnected = true,
+            onAddressChange = {},
+            onAmountChange = {},
+            onFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBack = {},
+            onReset = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSendSigned() {
+    AppThemeSurface {
+        SendTransactionSection(
+            uiState = TrezorPreviewData.uiStateSigned,
+            isDeviceConnected = true,
+            onAddressChange = {},
+            onAmountChange = {},
+            onFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBack = {},
+            onReset = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewSendBroadcast() {
+    AppThemeSurface {
+        SendTransactionSection(
+            uiState = TrezorPreviewData.uiStateBroadcast,
+            isDeviceConnected = true,
+            onAddressChange = {},
+            onAmountChange = {},
+            onFeeRateChange = {},
+            onToggleSendMax = {},
+            onSortingStrategyChange = {},
+            onCompose = {},
+            onSign = {},
+            onBroadcast = {},
+            onBack = {},
+            onReset = {},
         )
     }
 }

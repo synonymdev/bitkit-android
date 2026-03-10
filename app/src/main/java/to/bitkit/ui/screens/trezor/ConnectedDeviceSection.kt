@@ -10,9 +10,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.TrezorFeatures
 import to.bitkit.ui.components.Caption
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -32,6 +34,22 @@ internal fun ConnectedDeviceInfo(features: TrezorFeatures) {
         )
         InfoRow("PIN", if (features.pinProtection == true) "Enabled" else "Disabled")
         InfoRow("Passphrase", if (features.passphraseProtection == true) "Enabled" else "Disabled")
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewConnectedDeviceInfo() {
+    AppThemeSurface {
+        ConnectedDeviceInfo(TrezorPreviewData.sampleFeatures)
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewConnectedDeviceInfoMinimal() {
+    AppThemeSurface {
+        ConnectedDeviceInfo(TrezorPreviewData.sampleFeaturesMinimal)
     }
 }
 
