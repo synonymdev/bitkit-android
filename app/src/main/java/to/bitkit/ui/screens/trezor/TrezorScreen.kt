@@ -192,6 +192,7 @@ private fun TrezorContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 16.dp)
             .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
@@ -201,7 +202,7 @@ private fun TrezorContent(
             selectedNetwork = uiState.selectedNetwork,
             onNetworkChange = onNetworkChange,
         )
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         Card(
             colors = CardDefaults.cardColors(containerColor = Colors.White08),
@@ -232,7 +233,7 @@ private fun TrezorContent(
                     exit = fadeOut() + shrinkVertically(),
                 ) {
                     Column {
-                        VerticalSpacer(16.dp)
+                        VerticalSpacer(32.dp)
                         Caption13Up(
                             text = "My Devices (${trezorState.knownDevices.size})",
                             color = Colors.White64,
@@ -262,7 +263,7 @@ private fun TrezorContent(
                     exit = fadeOut() + shrinkVertically(),
                 ) {
                     Column {
-                        VerticalSpacer(16.dp)
+                        VerticalSpacer(32.dp)
                         Caption13Up(
                             text = "New Devices (${trezorState.nearbyDevices.size})",
                             color = Colors.White64,
@@ -290,7 +291,7 @@ private fun TrezorContent(
                 ) {
                     trezorState.connectedDevice?.let { features ->
                         Column {
-                            VerticalSpacer(16.dp)
+                            VerticalSpacer(32.dp)
                             Caption13Up(
                                 text = "Connected Device",
                                 color = Colors.White64,
@@ -299,7 +300,7 @@ private fun TrezorContent(
 
                             ConnectedDeviceInfo(features)
 
-                            VerticalSpacer(16.dp)
+                            VerticalSpacer(32.dp)
 
                             AddressSection(
                                 trezorState = trezorState,
@@ -308,7 +309,7 @@ private fun TrezorContent(
                                 onIncrementIndex = onIncrementIndex,
                             )
 
-                            VerticalSpacer(16.dp)
+                            VerticalSpacer(32.dp)
 
                             PublicKeySection(
                                 trezorState = trezorState,
@@ -316,7 +317,7 @@ private fun TrezorContent(
                                 onGetPublicKey = onGetPublicKey,
                             )
 
-                            VerticalSpacer(16.dp)
+                            VerticalSpacer(32.dp)
 
                             SignMessageSection(
                                 uiState = uiState,
@@ -333,7 +334,7 @@ private fun TrezorContent(
                     trezorState.error?.let { error ->
                         val onCopyError = copyToClipboard(text = error, label = "Trezor Error")
                         Column {
-                            VerticalSpacer(16.dp)
+                            VerticalSpacer(32.dp)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -372,7 +373,7 @@ private fun TrezorContent(
                 }
 
                 // Balance Lookup (always visible, no device needed)
-                VerticalSpacer(16.dp)
+                VerticalSpacer(32.dp)
                 BalanceLookupSection(
                     uiState = uiState,
                     isDeviceConnected = trezorState.connectedDevice != null,

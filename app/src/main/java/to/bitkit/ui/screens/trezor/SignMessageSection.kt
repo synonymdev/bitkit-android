@@ -62,7 +62,7 @@ internal fun SignMessageSection(
             singleLine = true,
         )
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -90,7 +90,7 @@ internal fun SignMessageSection(
             uiState.lastSignature?.let { sig ->
                 val onCopySignature = copyToClipboard(text = sig, label = "Signature")
                 Column {
-                    VerticalSpacer(12.dp)
+                    VerticalSpacer(16.dp)
                     Caption(
                         text = "Signature:",
                         color = Colors.White50,

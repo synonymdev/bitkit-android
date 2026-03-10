@@ -158,7 +158,7 @@ private fun ComposeForm(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         Caption13Up(
             text = "Coin Selection",
@@ -170,7 +170,7 @@ private fun ComposeForm(
             onChange = onSortingStrategyChange,
         )
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         PrimaryButton(
             text = if (uiState.isComposing) "Composing..." else "Compose Transaction",
@@ -256,7 +256,7 @@ private fun ReviewSection(
             }
         }
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -359,11 +359,11 @@ private fun SignedResultSection(
             }
         }
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         if (broadcastTxid != null) {
             BroadcastResultCard(txid = broadcastTxid)
-            VerticalSpacer(12.dp)
+            VerticalSpacer(16.dp)
         } else {
             PrimaryButton(
                 text = if (isBroadcasting) "Broadcasting..." else "Broadcast",

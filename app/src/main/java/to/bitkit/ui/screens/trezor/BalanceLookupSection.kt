@@ -74,7 +74,7 @@ internal fun BalanceLookupSection(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         PrimaryButton(
             text = if (uiState.isLookingUp) "Looking up..." else "Lookup",
@@ -128,7 +128,7 @@ private fun AccountInfoResultView(
     onResetSend: () -> Unit,
 ) {
     Column {
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
         ResultCard {
             InfoRow("Account Type", result.accountType.name)
             InfoRow("Balance", "${result.balance} sats")
@@ -150,7 +150,7 @@ private fun AccountInfoResultView(
         }
 
         if (result.balance > 0uL) {
-            VerticalSpacer(16.dp)
+            VerticalSpacer(32.dp)
             SendTransactionSection(
                 uiState = uiState,
                 isDeviceConnected = isDeviceConnected,
@@ -173,7 +173,7 @@ private fun AccountInfoResultView(
 private fun AddressInfoResultView(result: SingleAddressInfoResult) {
     val onCopyAddress = copyToClipboard(text = result.address, label = "Address")
     Column {
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
         ResultCard {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

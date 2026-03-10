@@ -54,7 +54,7 @@ internal fun PublicKeySection(
             color = Colors.White50,
         )
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -81,7 +81,7 @@ internal fun PublicKeySection(
                 val onCopyXpub = copyToClipboard(text = response.xpub, label = "xpub")
                 val onCopyPublicKey = copyToClipboard(text = response.publicKey, label = "Public Key")
                 Column {
-                    VerticalSpacer(12.dp)
+                    VerticalSpacer(16.dp)
                     Caption(
                         text = "xpub:",
                         color = Colors.White50,
@@ -111,7 +111,7 @@ internal fun PublicKeySection(
                         )
                     }
 
-                    VerticalSpacer(12.dp)
+                    VerticalSpacer(16.dp)
                     Caption(
                         text = "Public Key:",
                         color = Colors.White50,

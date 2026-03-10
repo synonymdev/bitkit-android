@@ -50,7 +50,7 @@ internal fun AddressSection(
             color = Colors.White50,
         )
 
-        VerticalSpacer(12.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -76,7 +76,7 @@ internal fun AddressSection(
             trezorState.lastAddress?.let { response ->
                 val onCopyAddress = copyToClipboard(text = response.address, label = "Address")
                 Column {
-                    VerticalSpacer(12.dp)
+                    VerticalSpacer(16.dp)
                     Caption(
                         text = "Address:",
                         color = Colors.White50,
