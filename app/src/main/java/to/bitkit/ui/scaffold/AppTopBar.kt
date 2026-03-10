@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -95,7 +96,7 @@ fun DrawerNavIcon(
 ) {
     val isPreview = LocalInspectionMode.current
     val drawerState = LocalDrawerState.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
     val debouncedClick = rememberDebouncedClick { scope.launch { drawerState?.open() } }
     if (drawerState != null || isPreview) {

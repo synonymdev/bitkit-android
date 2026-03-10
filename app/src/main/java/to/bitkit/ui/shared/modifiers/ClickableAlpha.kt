@@ -61,8 +61,9 @@ fun rememberDebouncedClick(debounce: Duration = CLICK_DEBOUNCE, onClick: () -> U
  */
 fun Modifier.clickableAlpha(
     pressedAlpha: Float = 0.7f,
+    enabled: Boolean = true,
     onClick: (() -> Unit)?,
-): Modifier = if (onClick != null) {
+): Modifier = if (onClick != null && enabled) {
     this.then(ClickableAlphaElement(pressedAlpha, onClick))
 } else {
     this

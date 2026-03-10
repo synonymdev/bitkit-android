@@ -157,7 +157,7 @@ private fun ShowMnemonicContent(
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.medium)
                         .background(color = Colors.White10)
-                        .clickableAlpha(onClick = if (showMnemonic && mnemonic.isNotEmpty()) onCopyClick else null)
+                        .clickableAlpha(enabled = showMnemonic && mnemonic.isNotEmpty(), onClick = onCopyClick)
                         .padding(32.dp)
                         .testTag("backup_mnemonic_words_box")
                 ) {
