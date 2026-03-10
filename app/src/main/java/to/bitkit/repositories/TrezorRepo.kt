@@ -56,6 +56,8 @@ class TrezorRepo @Inject constructor(
     companion object {
         private const val TAG = "TrezorRepo"
         private const val KEY_KNOWN_DEVICES = "known_devices"
+        private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
+        private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
     }
 
     private val prefs by lazy {
@@ -167,7 +169,7 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun getAddress(
-        path: String = "m/84'/0'/0'/0/0",
+        path: String = DEFAULT_ADDRESS_PATH,
         showOnTrezor: Boolean = false,
         scriptType: TrezorScriptType? = TrezorScriptType.SPEND_WITNESS,
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
@@ -189,7 +191,7 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun getPublicKey(
-        path: String = "m/84'/0'/0'",
+        path: String = DEFAULT_ACCOUNT_PATH,
         showOnTrezor: Boolean = false,
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
     ): Result<TrezorPublicKeyResponse> = withContext(bgDispatcher) {
@@ -333,7 +335,7 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun signMessage(
-        path: String = "m/84'/0'/0'/0/0",
+        path: String = DEFAULT_ADDRESS_PATH,
         message: String,
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
     ): Result<TrezorSignedMessageResponse> = withContext(bgDispatcher) {
