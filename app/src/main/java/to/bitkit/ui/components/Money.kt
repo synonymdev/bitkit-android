@@ -109,6 +109,7 @@ fun MoneyCaptionB(
     }
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun rememberMoneyText(
     sats: Long,
