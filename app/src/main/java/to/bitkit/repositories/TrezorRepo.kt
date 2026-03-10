@@ -39,6 +39,7 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
 import javax.inject.Inject
@@ -381,7 +382,7 @@ class TrezorRepo @Inject constructor(
     suspend fun autoReconnect(walletIndex: Int = 0): Result<TrezorFeatures> = withContext(bgDispatcher) {
         val knownDevices = _state.value.knownDevices.ifEmpty { loadKnownDevices() }
         if (knownDevices.isEmpty()) {
-            return@withContext Result.failure(IllegalStateException("No known devices"))
+            return@withContext Result.failure(AppError("No known devices"))
         }
 
         _state.update { it.copy(isAutoReconnecting = true, error = null) }
@@ -413,7 +414,7 @@ class TrezorRepo @Inject constructor(
 
     suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> = withContext(bgDispatcher) {
         if (_state.value.isConnecting) {
-            return@withContext Result.failure(IllegalStateException("Connection already in progress"))
+            return@withContext Result.failure(AppError("Connection already in progress"))
         }
         runCatching {
             _state.update { it.copy(isConnecting = true, error = null) }
@@ -432,7 +433,10 @@ class TrezorRepo @Inject constructor(
                 "Scan found ${scannedDevices.size} devices: ${scannedDevices.map { it.id }}",
             )
             val exactMatch = scannedDevices.find { it.id == deviceId }
-            val usbDevice = scannedDevices.find { it.transportType == TrezorTransportType.USB }
+            val knownIds = _state.value.knownDevices.map { it.id }.toSet()
+            val usbDevice = scannedDevices.find {
+                it.transportType == TrezorTransportType.USB && it.id in knownIds
+            }
             val device = if (exactMatch?.transportType == TrezorTransportType.BLUETOOTH && usbDevice != null) {
                 TrezorDebugLog.log("RECONNECT", "Preferring USB over BLE")
                 usbDevice

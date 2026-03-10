@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
 import to.bitkit.utils.Logger
@@ -291,7 +292,7 @@ class TrezorTransport @Inject constructor(
         synchronized(pairingCodeLock) {
             submittedPairingCode = ""
             pairingCodeRequest = PairingCodeRequest(isRequested = true, latch = latch)
-            _needsPairingCode.value = true
+            _needsPairingCode.update { true }
         }
 
         try {
@@ -300,7 +301,7 @@ class TrezorTransport @Inject constructor(
 
             if (!received) {
                 Logger.warn("Pairing code entry timed out", context = TAG)
-                _needsPairingCode.value = false
+                _needsPairingCode.update { false }
                 return ""
             }
 
@@ -309,7 +310,7 @@ class TrezorTransport @Inject constructor(
             return code
         } catch (e: InterruptedException) {
             Logger.error("Pairing code wait interrupted", e, context = TAG)
-            _needsPairingCode.value = false
+            _needsPairingCode.update { false }
             return ""
         }
     }
@@ -346,7 +347,7 @@ class TrezorTransport @Inject constructor(
         synchronized(pairingCodeLock) {
             Logger.info("Pairing code submitted (len='${code.length}')", context = TAG)
             submittedPairingCode = code
-            _needsPairingCode.value = false
+            _needsPairingCode.update { false }
             pairingCodeRequest.latch?.countDown()
         }
     }
@@ -843,6 +844,8 @@ class TrezorTransport @Inject constructor(
             Thread.sleep(100)
         } catch (e: Exception) {
             Logger.error("BLE close failed", e, context = TAG)
+        } finally {
+            userInitiatedCloseSet.remove(path)
         }
 
         Logger.info("BLE device closed: '$path'", context = TAG)
