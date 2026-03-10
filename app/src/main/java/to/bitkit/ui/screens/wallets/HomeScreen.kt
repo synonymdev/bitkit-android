@@ -1,6 +1,8 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -349,6 +351,7 @@ private fun Content(
             userScrollEnabled = homeUiState.showWidgets && !homeUiState.isEditingWidgets,
             flingBehavior = PagerDefaults.flingBehavior(
                 state = pagerState,
+                snapAnimationSpec = spring(stiffness = Spring.StiffnessMedium),
                 snapPositionalThreshold = 0.2f,
             ),
             modifier = Modifier
