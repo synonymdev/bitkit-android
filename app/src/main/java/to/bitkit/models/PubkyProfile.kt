@@ -19,7 +19,7 @@ data class PubkyProfile(
                 name = ffiProfile.name,
                 bio = ffiProfile.bio ?: "",
                 imageUrl = ffiProfile.image,
-                links = ffiProfile.links?.map { PubkyProfileLink(label = it.title, url = it.url) } ?: emptyList(),
+                links = ffiProfile.links.orEmpty().map { PubkyProfileLink(label = it.title, url = it.url) },
                 status = ffiProfile.status,
             )
         }
