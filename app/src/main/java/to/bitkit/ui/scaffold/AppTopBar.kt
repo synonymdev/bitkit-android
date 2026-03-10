@@ -98,8 +98,8 @@ fun DrawerNavIcon(
     val drawerState = LocalDrawerState.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
+    val debouncedClick = rememberDebouncedClick { scope.launch { drawerState?.open() } }
     if (drawerState != null || isPreview) {
-        val debouncedClick = rememberDebouncedClick { scope.launch { drawerState?.open() } }
         IconButton(
             onClick = debouncedClick,
             modifier = modifier.testTag("HeaderMenu")

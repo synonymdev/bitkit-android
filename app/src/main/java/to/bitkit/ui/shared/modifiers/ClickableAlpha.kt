@@ -26,15 +26,17 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
-private const val CLICK_DEBOUNCE_MS = 500L
+private val CLICK_DEBOUNCE = 500.milliseconds
 
-private class ClickDebouncer(private val debounceMs: Long = CLICK_DEBOUNCE_MS) {
+private class ClickDebouncer(private val debounce: Duration = CLICK_DEBOUNCE) {
     private var lastClickTime = 0L
 
     fun tryClick(onClick: () -> Unit): Boolean {
         val now = SystemClock.uptimeMillis()
-        if (now - lastClickTime >= debounceMs) {
+        if (now - lastClickTime >= debounce.inWholeMilliseconds) {
             lastClickTime = now
             onClick()
             return true
@@ -44,8 +46,8 @@ private class ClickDebouncer(private val debounceMs: Long = CLICK_DEBOUNCE_MS) {
 }
 
 @Composable
-fun rememberDebouncedClick(debounceMs: Long = CLICK_DEBOUNCE_MS, onClick: () -> Unit): () -> Unit {
-    val debouncer = remember { ClickDebouncer(debounceMs) }
+fun rememberDebouncedClick(debounce: Duration = CLICK_DEBOUNCE, onClick: () -> Unit): () -> Unit {
+    val debouncer = remember(debounce) { ClickDebouncer(debounce) }
     val currentOnClick by rememberUpdatedState(onClick)
     return remember(debouncer) { { debouncer.tryClick(currentOnClick) } }
 }

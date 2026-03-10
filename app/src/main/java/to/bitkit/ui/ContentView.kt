@@ -193,6 +193,7 @@ import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -1215,7 +1216,7 @@ private fun NavGraphBuilder.qrScanner(
         QrScanningScreen(navController = navController) { qrCode ->
             appViewModel.onScanResult(
                 data = qrCode,
-                delayMs = TRANSITION_SHEET_MS,
+                startDelay = TRANSITION_SHEET_MS.milliseconds,
             )
         }
     }
