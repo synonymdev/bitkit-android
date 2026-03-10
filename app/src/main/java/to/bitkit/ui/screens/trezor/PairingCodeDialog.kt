@@ -1,9 +1,12 @@
 package to.bitkit.ui.screens.trezor
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -36,6 +39,7 @@ internal fun PairingCodeDialog(
     AlertDialog(
         onDismissRequest = onCancel,
         containerColor = Colors.Gray5,
+        shape = MaterialTheme.shapes.medium,
         title = {
             Title(
                 text = "Enter Pairing Code",
@@ -98,10 +102,12 @@ internal fun PairingCodeDialog(
     )
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewPairingCodeDialog() {
     AppThemeSurface {
-        PairingCodeDialog(onSubmit = {}, onCancel = {})
+        Box(Modifier.fillMaxSize()) {
+            PairingCodeDialog(onSubmit = {}, onCancel = {})
+        }
     }
 }
