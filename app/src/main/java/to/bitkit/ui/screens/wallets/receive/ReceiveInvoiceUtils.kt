@@ -40,6 +40,20 @@ fun getInvoiceForTab(
 }
 
 /**
+ * Returns the appropriate text to copy to clipboard for the savings tab.
+ * Copies the plain address when there are no extra invoice details (no amount, no message),
+ * or the BIP21 URI (without lightning) when extra details are present.
+ *
+ * @param bip21 Full BIP21 URI (onchain + optional lightning)
+ * @param onchainAddress Plain Bitcoin address (fallback)
+ * @return Plain address if no extra params, BIP21 URI without lightning if there are extra params
+ */
+fun getSavingsCopyText(bip21: String, onchainAddress: String): String {
+    val bip21WithoutLightning = removeLightningFromBip21(bip21, onchainAddress)
+    return if ('?' in bip21WithoutLightning) bip21WithoutLightning else onchainAddress
+}
+
+/**
  * Removes the lightning parameter from a BIP21 URI while preserving all other parameters.
  *
  * @param bip21 Full BIP21 URI (e.g., bitcoin:address?amount=0.001&lightning=lnbc...)

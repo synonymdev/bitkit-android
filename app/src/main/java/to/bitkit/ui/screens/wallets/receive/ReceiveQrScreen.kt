@@ -255,9 +255,17 @@ fun ReceiveQrScreen(
 
                             else -> {
                                 val invoice = invoicesByTab[tab].orEmpty()
+                                val copyText = when (tab) {
+                                    ReceiveTab.SAVINGS -> getSavingsCopyText(
+                                        walletState.bip21,
+                                        walletState.onchainAddress,
+                                    )
+                                    else -> invoice
+                                }
 
                                 ReceiveQrView(
                                     uri = invoice,
+                                    copyText = copyText,
                                     qrLogoPainter = painterResource(getQrLogoResource(tab)),
                                     onClickEditInvoice = if (cjitInvoice.isNullOrEmpty()) {
                                         onClickEditInvoice
@@ -325,6 +333,7 @@ fun ReceiveQrScreen(
 @Composable
 private fun ReceiveQrView(
     uri: String,
+    copyText: String,
     qrLogoPainter: Painter,
     onClickEditInvoice: () -> Unit,
     tab: ReceiveTab,
@@ -345,6 +354,7 @@ private fun ReceiveQrView(
             tipMessage = stringResource(R.string.wallet__receive_copied),
             onBitmapGenerated = { bitmap -> qrBitmap = bitmap },
             testTag = "QRCode",
+            copyContent = copyText,
             modifier = Modifier.weight(1f, fill = false)
         )
 
@@ -380,7 +390,7 @@ private fun ReceiveQrView(
                         text = stringResource(R.string.common__copy),
                         size = ButtonSize.Small,
                         onClick = {
-                            context.setClipboardText(uri)
+                            context.setClipboardText(copyText)
                             coroutineScope.launch { qrButtonTooltipState.show() }
                         },
                         fullWidth = true,
@@ -403,8 +413,8 @@ private fun ReceiveQrView(
                 size = ButtonSize.Small,
                 onClick = {
                     qrBitmap?.let { bitmap ->
-                        shareQrCode(context, bitmap, uri)
-                    } ?: shareText(context, uri)
+                        shareQrCode(context, bitmap, copyText)
+                    } ?: shareText(context, copyText)
                 },
                 fullWidth = false,
                 color = Colors.White10,

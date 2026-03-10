@@ -1,6 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
-import org.junit.Assert.assertEquals
+import kotlin.test.assertEquals
 import org.junit.Test
 
 class ReceiveInvoiceUtilsTest {
@@ -213,5 +213,34 @@ class ReceiveInvoiceUtilsTest {
         )
 
         assertEquals(testBolt11, result)
+    }
+
+    @Test
+    fun `getSavingsCopyText returns plain address when no extra params`() {
+        val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
+        assertEquals(testAddress, getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns plain address when bip21 has no params`() {
+        val bip21 = "bitcoin:$testAddress"
+        assertEquals(testAddress, getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns bip21 without lightning when amount present`() {
+        val bip21 = "bitcoin:$testAddress?amount=0.001&lightning=$testBolt11"
+        assertEquals("bitcoin:$testAddress?amount=0.001", getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns bip21 without lightning when message present`() {
+        val bip21 = "bitcoin:$testAddress?message=Test&lightning=$testBolt11"
+        assertEquals("bitcoin:$testAddress?message=Test", getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns fallback address when bip21 is empty`() {
+        assertEquals(testAddress, getSavingsCopyText("", testAddress))
     }
 }
