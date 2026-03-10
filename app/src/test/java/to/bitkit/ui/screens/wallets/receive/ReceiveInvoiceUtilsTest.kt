@@ -1,7 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
-import kotlin.test.assertEquals
 import org.junit.Test
+import kotlin.test.assertEquals
 
 class ReceiveInvoiceUtilsTest {
 
