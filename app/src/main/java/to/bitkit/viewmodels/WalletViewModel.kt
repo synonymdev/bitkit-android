@@ -335,7 +335,10 @@ class WalletViewModel @Inject constructor(
 
         val allMonitorsRetrieved = runCatching {
             val allRetrieved = migrationService.fetchRNRemoteLdkData()
-            val channelMigration = buildChannelMigrationIfAvailable()
+            // don't overwrite channel manager, we only need the monitors for the sweep
+            val channelMigration = buildChannelMigrationIfAvailable()?.let {
+                ChannelDataMigration(channelManager = null, channelMonitors = it.channelMonitors)
+            }
 
             if (channelMigration == null) {
                 Logger.info("No channel monitors found on RN backup", context = TAG)
