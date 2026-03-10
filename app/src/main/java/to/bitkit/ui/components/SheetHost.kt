@@ -126,7 +126,6 @@ private fun Scrim(
     bottomSheetState: SheetState,
     onClick: () -> Unit,
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val isBottomSheetVisible = bottomSheetState.targetValue != SheetValue.Hidden
     val scrimAlpha by animateFloatAsState(
         targetValue = if (isBottomSheetVisible) 0.5f else 0f,
@@ -141,7 +140,7 @@ private fun Scrim(
                 .clickable(
                     interactionSource = null,
                     indication = null,
-                    onClick = debouncedClick,
+                    onClick = rememberDebouncedClick(onClick = onClick),
                 )
         )
     }

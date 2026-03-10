@@ -236,7 +236,6 @@ private fun Scrim(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     AnimatedVisibility(
         visible = visible,
         modifier = modifier
@@ -248,7 +247,7 @@ private fun Scrim(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = debouncedClick,
+                    onClick = rememberDebouncedClick(onClick = onClick),
                 )
         )
     }

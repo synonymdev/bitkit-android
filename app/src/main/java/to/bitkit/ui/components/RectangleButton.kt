@@ -46,9 +46,8 @@ fun RectangleButton(
     iconSize: Dp = 20.dp,
     onClick: () -> Unit = {},
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     Button(
-        onClick = debouncedClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         colors = ButtonDefaults.buttonColors(
             containerColor = Colors.Gray6,
         ),

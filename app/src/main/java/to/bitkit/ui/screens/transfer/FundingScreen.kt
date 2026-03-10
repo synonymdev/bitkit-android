@@ -77,7 +77,6 @@ fun FundingScreen(
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                val debouncedNoFundsClick = rememberDebouncedClick { showNoFundsAlert = true }
                 Box {
                     RectangleButton(
                         label = stringResource(R.string.lightning__funding__button1),
@@ -95,7 +94,7 @@ fun FundingScreen(
                                     enabled = balances.channelFundableBalance == 0uL,
                                     interactionSource = null,
                                     indication = null,
-                                    onClick = debouncedNoFundsClick,
+                                    onClick = rememberDebouncedClick { showNoFundsAlert = true },
                                 )
                                 .testTag("FundTransfer")
                         )

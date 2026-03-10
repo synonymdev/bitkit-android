@@ -67,12 +67,11 @@ fun PrimaryButton(
     color: Color? = null,
     enableGradient: Boolean = true,
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     val buttonShape = MaterialTheme.shapes.large
 
     Button(
-        onClick = debouncedClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.primaryColors.copy(
             containerColor = Color.Transparent,
@@ -138,11 +137,10 @@ fun SecondaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     val border = BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
     OutlinedButton(
-        onClick = debouncedClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.secondaryColors,
         contentPadding = contentPadding,
@@ -198,10 +196,9 @@ fun TertiaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     TextButton(
-        onClick = debouncedClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.tertiaryColors,
         contentPadding = contentPadding,

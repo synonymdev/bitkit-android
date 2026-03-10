@@ -77,9 +77,8 @@ fun BackNavIcon(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     IconButton(
-        onClick = debouncedClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         modifier = modifier.testTag("NavigationBack")
     ) {
         Icon(
@@ -118,9 +117,8 @@ fun ScanNavIcon(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val debouncedClick = rememberDebouncedClick(onClick = onClick)
     IconButton(
-        onClick = debouncedClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         modifier = modifier.testTag("NavigationAction")
     ) {
         Icon(
