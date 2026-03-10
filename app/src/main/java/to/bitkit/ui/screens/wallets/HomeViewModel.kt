@@ -20,7 +20,6 @@ import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
-import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
@@ -293,7 +292,6 @@ class HomeViewModel @Inject constructor(
                 )
             }
         }
-        val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
-        baseSuggestions.filterNot { it in dismissedList }
+        baseSuggestions.mapNotNull { it.takeIf { suggestion -> suggestion.name !in settings.dismissedSuggestions } }
     }
 }
