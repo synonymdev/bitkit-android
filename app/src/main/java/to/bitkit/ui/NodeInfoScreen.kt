@@ -32,6 +32,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.bitkitcore.ILspNode
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.BestBlock
@@ -39,9 +42,6 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PeerDetails
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.env.Peers
 import to.bitkit.ext.amountSats

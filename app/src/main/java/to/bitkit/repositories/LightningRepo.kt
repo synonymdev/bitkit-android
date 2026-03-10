@@ -1,6 +1,6 @@
 package to.bitkit.repositories
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
@@ -1392,7 +1392,7 @@ class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node t
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
 
-@Immutable
+@Stable
 data class LightningState(
     val nodeId: String = "",
     val nodeStatus: NodeStatus? = null,

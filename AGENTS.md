@@ -233,7 +233,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS prefer `sealed interface` over `sealed class` when no shared state or constructor is needed
 - NEVER duplicate error logging in `.onFailure {}` if the called method already logs the same error internally
 - ALWAYS use `ImmutableList`/`ImmutableMap`/`ImmutableSet` instead of `List`/`Map`/`Set` for composable function parameters and UiState data class fields
-- ALWAYS annotate UiState data classes with `@Immutable`
+- ALWAYS annotate UiState data classes with `@Immutable`; use `@Stable` instead when any field holds a non-immutable type (e.g. `Throwable`)
 - ALWAYS use `.toImmutableList()`, `.toImmutableMap()`, `.toImmutableSet()` when producing collections for UI state
 - ALWAYS use `persistentListOf()`, `persistentMapOf()`, `persistentSetOf()` for default values in UiState fields
 

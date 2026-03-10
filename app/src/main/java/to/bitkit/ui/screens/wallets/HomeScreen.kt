@@ -70,12 +70,12 @@ import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.HazeState
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.toImmutableList
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.dto.price.Change

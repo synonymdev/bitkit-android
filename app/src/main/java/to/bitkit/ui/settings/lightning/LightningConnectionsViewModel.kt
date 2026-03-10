@@ -2,6 +2,7 @@ package to.bitkit.ui.settings.lightning
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
@@ -10,7 +11,6 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.SortDirection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList

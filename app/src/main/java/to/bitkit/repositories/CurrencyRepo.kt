@@ -1,6 +1,6 @@
 package to.bitkit.repositories
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -252,7 +252,7 @@ class CurrencyRepo @Inject constructor(
     override fun convertSatsToFiatString(sats: Long): String = convertSatsToFiatPair(sats).getOrNull()?.second ?: ""
 }
 
-@Immutable
+@Stable
 data class CurrencyState(
     val rates: ImmutableList<FxRate> = persistentListOf(),
     val error: Throwable? = null,
