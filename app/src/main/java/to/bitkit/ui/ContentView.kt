@@ -1595,13 +1595,8 @@ fun NavController.navigateToCustomFeeSettings() = navigateTo(Routes.CustomFeeSet
 
 fun NavController.navigateToWidgetsSettings() = navigateTo(Routes.WidgetsSettings)
 
-fun NavController.navigateToQuickPaySettings(hasSeenIntro: Boolean = true) {
-    if (hasSeenIntro) {
-        navigateTo(Routes.QuickPaySettings)
-    } else {
-        navigateTo(Routes.QuickPayIntro)
-    }
-}
+fun NavController.navigateToQuickPaySettings(hasSeenIntro: Boolean = true) =
+    navigateTo(if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro)
 
 fun NavController.navigateToTagsSettings() = navigateTo(Routes.TagsSettings)
 
