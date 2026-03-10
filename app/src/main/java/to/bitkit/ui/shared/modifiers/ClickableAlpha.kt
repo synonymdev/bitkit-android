@@ -4,8 +4,10 @@ import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
@@ -30,19 +32,22 @@ private const val CLICK_DEBOUNCE_MS = 500L
 private class ClickDebouncer(private val debounceMs: Long = CLICK_DEBOUNCE_MS) {
     private var lastClickTime = 0L
 
-    fun tryClick(onClick: () -> Unit) {
+    fun tryClick(onClick: () -> Unit): Boolean {
         val now = SystemClock.uptimeMillis()
         if (now - lastClickTime >= debounceMs) {
             lastClickTime = now
             onClick()
+            return true
         }
+        return false
     }
 }
 
 @Composable
 fun rememberDebouncedClick(debounceMs: Long = CLICK_DEBOUNCE_MS, onClick: () -> Unit): () -> Unit {
     val debouncer = remember { ClickDebouncer(debounceMs) }
-    return { debouncer.tryClick(onClick) }
+    val currentOnClick by rememberUpdatedState(onClick)
+    return remember(debouncer) { { debouncer.tryClick(currentOnClick) } }
 }
 
 /**
@@ -99,10 +104,11 @@ private class ClickableAlphaNode(
                         }
                     },
                     onTap = {
-                        debouncer.tryClick(onClick)
-                        coroutineScope.launch {
-                            animatable.animateTo(pressedAlpha)
-                            animatable.animateTo(1f)
+                        if (debouncer.tryClick(onClick)) {
+                            coroutineScope.launch {
+                                animatable.animateTo(pressedAlpha)
+                                animatable.animateTo(1f)
+                            }
                         }
                     }
                 )
