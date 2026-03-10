@@ -35,7 +35,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.models.toTrezorCoinType
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
@@ -43,6 +43,7 @@ import to.bitkit.utils.Logger
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("TooManyFunctions")
 @Singleton
@@ -209,7 +210,7 @@ class TrezorRepo @Inject constructor(
 
     suspend fun getAccountInfo(
         extendedKey: String,
-        network: TrezorCoinType = Env.network.toTrezorCoinType(),
+        network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
     ): Result<AccountInfoResult> = withContext(bgDispatcher) {
         runCatching {
             trezorService.getAccountInfo(
@@ -225,7 +226,7 @@ class TrezorRepo @Inject constructor(
 
     suspend fun getAddressInfo(
         address: String,
-        network: TrezorCoinType = Env.network.toTrezorCoinType(),
+        network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
     ): Result<SingleAddressInfoResult> = withContext(bgDispatcher) {
         runCatching {
             trezorService.getAddressInfo(
@@ -284,7 +285,7 @@ class TrezorRepo @Inject constructor(
 
     suspend fun broadcastRawTx(
         serializedTx: String,
-        network: TrezorCoinType,
+        network: BitkitCoreNetwork,
     ): Result<String> = withContext(bgDispatcher) {
         runCatching {
             trezorService.broadcastRawTx(
@@ -524,9 +525,17 @@ class TrezorRepo @Inject constructor(
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
-    private fun keyFormatNetwork(network: TrezorCoinType): TrezorCoinType = when (network) {
-        TrezorCoinType.REGTEST -> TrezorCoinType.TESTNET
+    private fun keyFormatNetwork(network: BitkitCoreNetwork): BitkitCoreNetwork = when (network) {
+        BitkitCoreNetwork.REGTEST -> BitkitCoreNetwork.TESTNET
         else -> network
+    }
+
+    private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = when (network) {
+        BitkitCoreNetwork.BITCOIN -> "ssl://bitkit.to:9999"
+        BitkitCoreNetwork.TESTNET -> "ssl://electrum.blockstream.info:60002"
+        BitkitCoreNetwork.TESTNET4 -> "ssl://electrum.blockstream.info:60002"
+        BitkitCoreNetwork.REGTEST -> "ssl://electrs.bitkit.stag0.blocktank.to:9999"
+        BitkitCoreNetwork.SIGNET -> "ssl://electrum.blockstream.info:60002"
     }
 
     private fun electrumUrlForNetwork(network: TrezorCoinType): String = when (network) {

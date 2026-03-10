@@ -7,7 +7,6 @@ import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
-import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPrecomposedInput
@@ -19,6 +18,7 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 internal object TrezorPreviewData {
 
@@ -217,25 +217,25 @@ internal object TrezorPreviewData {
     )
 
     val uiStateWithSignature = TrezorUiState(
-        selectedNetwork = TrezorCoinType.REGTEST,
+        selectedNetwork = BitkitCoreNetwork.REGTEST,
         lastSignature = "H3bK9x...signature...base64==",
         lastSigningAddress = SAMPLE_ADDRESS,
     )
 
     val uiStateWithAccountInfo = TrezorUiState(
-        selectedNetwork = TrezorCoinType.REGTEST,
+        selectedNetwork = BitkitCoreNetwork.REGTEST,
         lookupInput = SAMPLE_XPUB,
         accountInfoResult = sampleAccountInfoResult,
     )
 
     val uiStateWithAddressInfo = TrezorUiState(
-        selectedNetwork = TrezorCoinType.REGTEST,
+        selectedNetwork = BitkitCoreNetwork.REGTEST,
         lookupInput = SAMPLE_ADDRESS,
         addressInfoResult = sampleAddressInfoResult,
     )
 
     val uiStateReview = TrezorUiState(
-        selectedNetwork = TrezorCoinType.REGTEST,
+        selectedNetwork = BitkitCoreNetwork.REGTEST,
         sendStep = SendStep.REVIEW,
         sendAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
         sendAmountSats = "45000",
@@ -244,13 +244,13 @@ internal object TrezorPreviewData {
     )
 
     val uiStateSigned = TrezorUiState(
-        selectedNetwork = TrezorCoinType.REGTEST,
+        selectedNetwork = BitkitCoreNetwork.REGTEST,
         sendStep = SendStep.SIGNED,
         signedTxResult = sampleSignedTx,
     )
 
     val uiStateBroadcast = TrezorUiState(
-        selectedNetwork = TrezorCoinType.REGTEST,
+        selectedNetwork = BitkitCoreNetwork.REGTEST,
         sendStep = SendStep.SIGNED,
         signedTxResult = sampleSignedTx,
         broadcastTxid = "c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5",

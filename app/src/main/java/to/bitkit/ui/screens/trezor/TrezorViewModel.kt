@@ -27,12 +27,14 @@ import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.models.Toast
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorRepo
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("TooManyFunctions")
 @HiltViewModel
@@ -135,7 +137,7 @@ class TrezorViewModel @Inject constructor(
                 path = state.derivationPath,
                 showOnTrezor = showOnTrezor,
                 scriptType = TrezorScriptType.SPEND_WITNESS,
-                coin = state.selectedNetwork,
+                coin = state.selectedNetwork.toTrezorCoinType(),
             )
                 .onSuccess {
                     _uiState.update { it.copy(isGettingAddress = false) }
@@ -156,7 +158,7 @@ class TrezorViewModel @Inject constructor(
             trezorRepo.getPublicKey(
                 path = accountPath,
                 showOnTrezor = showOnTrezor,
-                coin = state.selectedNetwork,
+                coin = state.selectedNetwork.toTrezorCoinType(),
             )
                 .onSuccess {
                     _uiState.update { it.copy(isGettingPublicKey = false) }
@@ -173,8 +175,8 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(derivationPath = path) }
     }
 
-    fun setSelectedNetwork(network: TrezorCoinType) {
-        val coinType = if (network == TrezorCoinType.BITCOIN) "0" else "1"
+    fun setSelectedNetwork(network: BitkitCoreNetwork) {
+        val coinType = if (network == BitkitCoreNetwork.BITCOIN) "0" else "1"
         _uiState.update {
             it.copy(
                 selectedNetwork = network,
@@ -187,7 +189,7 @@ class TrezorViewModel @Inject constructor(
     fun incrementAddressIndex() {
         _uiState.update { state ->
             val newIndex = state.addressIndex + 1
-            val coinType = if (state.selectedNetwork == TrezorCoinType.BITCOIN) "0" else "1"
+            val coinType = if (state.selectedNetwork == BitkitCoreNetwork.BITCOIN) "0" else "1"
             state.copy(
                 addressIndex = newIndex,
                 derivationPath = "m/84'/$coinType'/0'/0/$newIndex",
@@ -280,7 +282,11 @@ class TrezorViewModel @Inject constructor(
 
             _uiState.update { it.copy(isSigningMessage = true) }
             val state = _uiState.value
-            trezorRepo.signMessage(path = state.derivationPath, message = message, coin = state.selectedNetwork)
+            trezorRepo.signMessage(
+                path = state.derivationPath,
+                message = message,
+                coin = state.selectedNetwork.toTrezorCoinType()
+            )
                 .onSuccess { response ->
                     _uiState.update {
                         it.copy(
@@ -314,7 +320,7 @@ class TrezorViewModel @Inject constructor(
                 address = address,
                 signature = signature,
                 message = message,
-                coin = _uiState.value.selectedNetwork,
+                coin = _uiState.value.selectedNetwork.toTrezorCoinType(),
             )
                 .onSuccess { isValid ->
                     _uiState.update { it.copy(isVerifyingMessage = false) }
@@ -405,7 +411,7 @@ class TrezorViewModel @Inject constructor(
 
             _uiState.update { it.copy(isComposing = true) }
 
-            val coinStr = trezorRepo.coinStringForNetwork(state.selectedNetwork)
+            val coinStr = trezorRepo.coinStringForNetwork(state.selectedNetwork.toTrezorCoinType())
             TrezorDebugLog.log("COMPOSE", "=== composeTx START ===")
             TrezorDebugLog.log("COMPOSE", "address=${state.sendAddress}")
             TrezorDebugLog.log("COMPOSE", "amount=${state.sendAmountSats}, sendMax=${state.isSendMax}")
@@ -539,7 +545,7 @@ class TrezorViewModel @Inject constructor(
             trezorRepo.convertToSignParams(
                 inputs = result.inputs,
                 outputs = result.outputs,
-                coin = state.selectedNetwork,
+                coin = state.selectedNetwork.toTrezorCoinType(),
             ).onSuccess { logAndSign(it) }
                 .onFailure {
                     TrezorDebugLog.log("SIGN", "convertToSignParams FAILED: ${it.message}")
@@ -550,7 +556,7 @@ class TrezorViewModel @Inject constructor(
     }
 
     private suspend fun logAndSign(signParams: TrezorSignTxParams) {
-        val network = _uiState.value.selectedNetwork
+        val network = _uiState.value.selectedNetwork.toTrezorCoinType()
         val txids = signParams.inputs.map { it.prevHash }.distinct()
         TrezorDebugLog.log(
             "SIGN",
@@ -651,10 +657,10 @@ class TrezorViewModel @Inject constructor(
 }
 
 data class TrezorUiState(
-    val selectedNetwork: TrezorCoinType = Env.network.toTrezorCoinType(),
+    val selectedNetwork: BitkitCoreNetwork = Env.network.toCoreNetwork(),
     val addressIndex: Int = 0,
     val derivationPath: String =
-        "m/84'/${if (Env.network.toTrezorCoinType() == TrezorCoinType.BITCOIN) "0" else "1"}'/0'/0/0",
+        "m/84'/${if (Env.network.toCoreNetwork() == BitkitCoreNetwork.BITCOIN) "0" else "1"}'/0'/0/0",
     val messageToSign: String = "Hello, Trezor!",
     val lastSignature: String? = null,
     val lastSigningAddress: String? = null,

@@ -39,3 +39,11 @@ fun NetworkType.toLdkNetwork(): Network = when (this) {
     NetworkType.SIGNET -> Network.SIGNET
     NetworkType.REGTEST -> Network.REGTEST
 }
+
+fun BitkitCoreNetwork.toTrezorCoinType(): TrezorCoinType = when (this) {
+    BitkitCoreNetwork.BITCOIN -> TrezorCoinType.BITCOIN
+    BitkitCoreNetwork.TESTNET -> TrezorCoinType.TESTNET
+    BitkitCoreNetwork.TESTNET4 -> TrezorCoinType.TESTNET
+    BitkitCoreNetwork.SIGNET -> TrezorCoinType.SIGNET
+    BitkitCoreNetwork.REGTEST -> TrezorCoinType.REGTEST
+}

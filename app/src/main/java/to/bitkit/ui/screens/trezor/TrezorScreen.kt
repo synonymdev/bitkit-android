@@ -44,7 +44,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
@@ -67,6 +66,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 private val bluetoothPermissions: List<String>
     get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -176,7 +176,7 @@ private fun TrezorContent(
     onClearError: () -> Unit = {},
     onLookupInputChange: (String) -> Unit = {},
     onLookup: () -> Unit = {},
-    onNetworkChange: (TrezorCoinType) -> Unit = {},
+    onNetworkChange: (BitkitCoreNetwork) -> Unit = {},
     onSendAddressChange: (String) -> Unit = {},
     onSendAmountChange: (String) -> Unit = {},
     onSendFeeRateChange: (String) -> Unit = {},
@@ -400,20 +400,21 @@ private fun TrezorContent(
 
 @Composable
 private fun NetworkSelectorRow(
-    selectedNetwork: TrezorCoinType,
-    onNetworkChange: (TrezorCoinType) -> Unit,
+    selectedNetwork: BitkitCoreNetwork,
+    onNetworkChange: (BitkitCoreNetwork) -> Unit,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        TrezorCoinType.entries.filter { it != TrezorCoinType.SIGNET }.forEach { network ->
-            TagButton(
-                text = network.name,
-                onClick = { onNetworkChange(network) },
-                isSelected = network == selectedNetwork,
-            )
-        }
+        BitkitCoreNetwork.entries.filter { it != BitkitCoreNetwork.SIGNET && it != BitkitCoreNetwork.TESTNET4 }
+            .forEach { network ->
+                TagButton(
+                    text = network.name,
+                    onClick = { onNetworkChange(network) },
+                    isSelected = network == selectedNetwork,
+                )
+            }
     }
 }
 

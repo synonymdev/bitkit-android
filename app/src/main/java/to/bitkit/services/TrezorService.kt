@@ -22,14 +22,14 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTxInput
 import com.synonym.bitkitcore.TrezorTxOutput
 import com.synonym.bitkitcore.TrezorVerifyMessageParams
-import com.synonym.bitkitcore.trezorBroadcastRawTx
+import com.synonym.bitkitcore.onchainBroadcastRawTx
+import com.synonym.bitkitcore.onchainGetAccountInfo
+import com.synonym.bitkitcore.onchainGetAddressInfo
 import com.synonym.bitkitcore.trezorClearCredentials
 import com.synonym.bitkitcore.trezorConnect
 import com.synonym.bitkitcore.trezorDisconnect
 import com.synonym.bitkitcore.trezorFetchPrevTxs
-import com.synonym.bitkitcore.trezorGetAccountInfo
 import com.synonym.bitkitcore.trezorGetAddress
-import com.synonym.bitkitcore.trezorGetAddressInfo
 import com.synonym.bitkitcore.trezorGetConnectedDevice
 import com.synonym.bitkitcore.trezorGetPublicKey
 import com.synonym.bitkitcore.trezorInitialize
@@ -46,6 +46,7 @@ import com.synonym.bitkitcore.trezorVerifyMessage
 import to.bitkit.async.ServiceQueue
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("TooManyFunctions")
 @Singleton
@@ -246,18 +247,18 @@ class TrezorService @Inject constructor(
 
     suspend fun broadcastRawTx(serializedTx: String, electrumUrl: String): String {
         return ServiceQueue.CORE.background {
-            trezorBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
+            onchainBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
         }
     }
 
     suspend fun getAccountInfo(
         extendedKey: String,
         electrumUrl: String,
-        network: TrezorCoinType?,
+        network: BitkitCoreNetwork?,
         gapLimit: UInt? = 20u,
     ): AccountInfoResult {
         return ServiceQueue.CORE.background {
-            trezorGetAccountInfo(
+            onchainGetAccountInfo(
                 extendedKey = extendedKey,
                 electrumUrl = electrumUrl,
                 network = network,
@@ -269,10 +270,10 @@ class TrezorService @Inject constructor(
     suspend fun getAddressInfo(
         address: String,
         electrumUrl: String,
-        network: TrezorCoinType?,
+        network: BitkitCoreNetwork?,
     ): SingleAddressInfoResult {
         return ServiceQueue.CORE.background {
-            trezorGetAddressInfo(
+            onchainGetAddressInfo(
                 address = address,
                 electrumUrl = electrumUrl,
                 network = network,
