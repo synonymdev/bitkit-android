@@ -1003,13 +1003,9 @@ class AppViewModel @Inject constructor(
         activeScanInput = normalized
         Logger.debug("Scan from '${source.label}': '$scanId'", context = TAG)
         activeScanJob = viewModelScope.launch {
-            try {
-                if (delayMs > 0) delay(delayMs)
-                handleScan(data)
-            } finally {
-                activeScanInput = null
-            }
-        }
+            if (delayMs > 0) delay(delayMs)
+            handleScan(data)
+        }.also { it.invokeOnCompletion { activeScanInput = null } }
     }
 
     private fun onAddressContinue(data: String) {
@@ -2336,13 +2332,8 @@ class AppViewModel @Inject constructor(
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
-    private fun String.removeLightningSchemes(): String {
-        return this
-            .replace(Regex("^lightning:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurl:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurlw:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurlc:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurlp:", RegexOption.IGNORE_CASE), "")
+    private fun String.removeLightningSchemes(): String = LIGHTNING_SCHEME_PATTERNS.fold(this) { acc, regex ->
+        acc.replace(regex, "")
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
@@ -2382,6 +2373,8 @@ class AppViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "AppViewModel"
+        private val LIGHTNING_SCHEME_PATTERNS = listOf("lightning", "lnurl", "lnurlw", "lnurlc", "lnurlp")
+            .map { Regex("^$it:", RegexOption.IGNORE_CASE) }
         private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
         private const val TEN_USD = 10
         private const val MAX_BALANCE_FRACTION = 0.5
