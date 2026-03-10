@@ -984,7 +984,6 @@
     <string name="wallet__transfer_to_spending">Transfer To Spending</string>
     <string name="wallet__withdraw_error">Your withdrawal was unsuccessful. Please scan the QR code again or contact support.</string>
     <string name="widgets__add">Add Widget</string>
-    <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks.</string>
     <string name="widgets__blocks__field__block">Block</string>
     <string name="widgets__blocks__field__date">Date</string>
@@ -996,6 +995,7 @@
     <string name="widgets__calculator__name">Bitcoin Calculator</string>
     <string name="widgets__delete__description">Are you sure you want to delete ‘{name}‘ from your widgets?</string>
     <string name="widgets__delete__title">Delete Widget?</string>
+    <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__facts__description">Discover fun facts about Bitcoin, every time you open your wallet.</string>
     <string name="widgets__facts__name">Bitcoin Facts</string>
     <string name="widgets__news__description">Read the latest &amp; greatest Bitcoin headlines from various news sites.</string>
