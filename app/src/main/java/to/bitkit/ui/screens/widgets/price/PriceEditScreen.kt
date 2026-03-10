@@ -32,6 +32,8 @@ import to.bitkit.R
 import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
@@ -84,7 +86,7 @@ fun PriceEditScreen(
 fun PriceEditContent(
     onBack: () -> Unit,
     priceModel: PriceDTO,
-    allPeriodsUsd: List<PriceWidgetData>,
+    allPeriodsUsd: ImmutableList<PriceWidgetData>,
     onClickReset: () -> Unit,
     onClickGraph: (GraphPeriod) -> Unit,
     onClickTradingPair: (TradingPair) -> Unit,
@@ -321,7 +323,7 @@ private fun Preview() {
                 ),
                 source = "Kraken"
             ),
-            allPeriodsUsd = listOf(
+            allPeriodsUsd = persistentListOf(
                 PriceWidgetData(
                     pair = TradingPair.BTC_USD,
                     period = GraphPeriod.ONE_DAY,

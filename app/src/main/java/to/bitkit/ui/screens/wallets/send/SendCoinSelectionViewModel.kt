@@ -1,10 +1,17 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.Activity.Onchain
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,7 +40,7 @@ class SendCoinSelectionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CoinSelectionUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _tagsByTxId = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    private val _tagsByTxId = MutableStateFlow<ImmutableMap<String, List<String>>>(persistentMapOf())
     val tagsByTxId = _tagsByTxId.asStateFlow()
 
     private var onchainActivities: List<Activity> = emptyList()
@@ -57,8 +64,8 @@ class SendCoinSelectionViewModel @Inject constructor(
 
             _uiState.update { state ->
                 state.copy(
-                    availableUtxos = sortedUtxos,
-                    selectedUtxos = sortedUtxos,
+                    availableUtxos = sortedUtxos.toImmutableList(),
+                    selectedUtxos = sortedUtxos.toImmutableList(),
                     autoSelectCoinsOn = true,
                     totalRequiredSat = totalRequired,
                     totalSelectedSat = totalSelected,
@@ -82,7 +89,7 @@ class SendCoinSelectionViewModel @Inject constructor(
                     .onSuccess { tags ->
                         if (tags.isNotEmpty()) {
                             // add map entry linking tags to utxo.outpoint.txid
-                            _tagsByTxId.update { currentMap -> currentMap + (txId to tags) }
+                            _tagsByTxId.update { currentMap -> (currentMap + (txId to tags)).toImmutableMap() }
                         }
                     }
                     .onFailure {
@@ -105,7 +112,7 @@ class SendCoinSelectionViewModel @Inject constructor(
 
                 state.copy(
                     autoSelectCoinsOn = true,
-                    selectedUtxos = allSelected,
+                    selectedUtxos = allSelected.toImmutableList(),
                     totalSelectedSat = newTotalSat,
                     isSelectionValid = validateCoinSelection(newTotalSat, state.totalRequiredSat)
                 )
@@ -125,7 +132,7 @@ class SendCoinSelectionViewModel @Inject constructor(
             val newTotal = newSelection.sumOf { it.valueSats }
 
             state.copy(
-                selectedUtxos = newSelection,
+                selectedUtxos = newSelection.toImmutableList(),
                 totalSelectedSat = newTotal,
                 autoSelectCoinsOn = false,
                 isSelectionValid = validateCoinSelection(newTotal, state.totalRequiredSat)
@@ -155,9 +162,10 @@ class SendCoinSelectionViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class CoinSelectionUiState(
-    val availableUtxos: List<SpendableUtxo> = emptyList(),
-    val selectedUtxos: List<SpendableUtxo> = emptyList(),
+    val availableUtxos: ImmutableList<SpendableUtxo> = persistentListOf(),
+    val selectedUtxos: ImmutableList<SpendableUtxo> = persistentListOf(),
     val autoSelectCoinsOn: Boolean = true,
     val totalRequiredSat: ULong = 0u,
     val totalSelectedSat: ULong = 0u,

@@ -21,7 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +48,7 @@ fun LogsScreen(
     navController: NavController,
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
-    val logs by viewModel.logs.collectAsState()
+    val logs by viewModel.logs.collectAsStateWithLifecycle()
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -125,8 +125,8 @@ fun LogDetailScreen(
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val logs by viewModel.logs.collectAsState()
-    val logContent by viewModel.selectedLogContent.collectAsState()
+    val logs by viewModel.logs.collectAsStateWithLifecycle()
+    val logContent by viewModel.selectedLogContent.collectAsStateWithLifecycle()
     var isLoading by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
 

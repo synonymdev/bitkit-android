@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -82,7 +83,7 @@ class HomeViewModel @Inject constructor(
                         ) {
                             it.widgetsWithPosition
                         } else {
-                            widgetsData.widgets
+                            widgetsData.widgets.toImmutableList()
                         },
                         headlinePreferences = widgetsData.headlinePreferences,
                         factsPreferences = widgetsData.factsPreferences,
@@ -103,7 +104,7 @@ class HomeViewModel @Inject constructor(
 
         viewModelScope.launch {
             createSuggestionsFlow().collect { suggestions ->
-                _uiState.update { it.copy(suggestions = suggestions) }
+                _uiState.update { it.copy(suggestions = suggestions.toImmutableList()) }
             }
         }
 
@@ -223,7 +224,7 @@ class HomeViewModel @Inject constructor(
                 widget.copy(position = index)
             }
 
-            _uiState.update { it.copy(widgetsWithPosition = updatedWidgets) }
+            _uiState.update { it.copy(widgetsWithPosition = updatedWidgets.toImmutableList()) }
         }
     }
 
@@ -289,7 +290,7 @@ class HomeViewModel @Inject constructor(
                 ).takeIf { balanceState.balanceInTransferToSavings > 0uL },
             )
         }.collect { banners ->
-            _uiState.update { it.copy(banners = banners) }
+            _uiState.update { it.copy(banners = banners.toImmutableList()) }
         }
     }
 

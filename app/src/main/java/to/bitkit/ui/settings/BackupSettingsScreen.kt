@@ -54,6 +54,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.BackupCategoryUiState
 import to.bitkit.viewmodels.BackupStatusUiState
 import to.bitkit.viewmodels.toUiState
+import kotlinx.collections.immutable.toImmutableList
 import kotlin.time.ExperimentalTime
 
 @Composable
@@ -262,7 +263,7 @@ private fun Preview() {
 
     AppThemeSurface {
         BackupSettingsScreenContent(
-            uiState = BackupStatusUiState(categories = categories),
+            uiState = BackupStatusUiState(categories = categories.toImmutableList()),
             onBackupClick = {},
             onResetAndRestoreClick = {},
             onRetryBackup = {},

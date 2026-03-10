@@ -26,6 +26,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
 import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.R
@@ -85,7 +90,7 @@ fun SendCoinSelectionScreen(
 private fun Content(
     uiState: CoinSelectionUiState,
     modifier: Modifier = Modifier,
-    tagsByTxId: Map<String, List<String>> = emptyMap(),
+    tagsByTxId: ImmutableMap<String, List<String>> = persistentMapOf(),
     onBack: () -> Unit = {},
     onContinue: () -> Unit = {},
     onClickAuto: () -> Unit = {},
@@ -133,7 +138,7 @@ private fun Content(
                 UtxoRow(
                     utxo = utxo,
                     isSelected = uiState.selectedUtxos.any { it.outpoint == utxo.outpoint },
-                    tags = tagsByTxId[utxo.outpoint.txid] ?: emptyList(),
+                    tags = tagsByTxId[utxo.outpoint.txid]?.toImmutableList() ?: persistentListOf(),
                     onTap = { onClickUtxo(utxo) },
                     onRender = onRenderUtxo,
                 )
@@ -183,7 +188,7 @@ private fun Content(
 private fun UtxoRow(
     utxo: SpendableUtxo,
     isSelected: Boolean,
-    tags: List<String>,
+    tags: ImmutableList<String>,
     onTap: () -> Unit,
     onRender: (String) -> Unit = {},
 ) {
@@ -251,16 +256,16 @@ private fun Preview() {
                         SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
                         SpendableUtxo(outpoint = OutPoint(txid = "def456", vout = 1u), valueSats = 25000uL),
                         SpendableUtxo(outpoint = OutPoint(txid = "ghi789", vout = 0u), valueSats = 10000uL)
-                    ),
+                    ).toImmutableList(),
                     selectedUtxos = listOf(
                         SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
-                    ),
+                    ).toImmutableList(),
                     autoSelectCoinsOn = false,
                     totalRequiredSat = 30000uL,
                     totalSelectedSat = 50000uL,
                     isSelectionValid = true,
                 ),
-                tagsByTxId = mapOf(
+                tagsByTxId = persistentMapOf(
                     "abc123" to listOf("coffee", "work"),
                     "def456" to listOf("shopping", "groceries", "food"),
                 ),
@@ -277,13 +282,13 @@ private fun PreviewAuto() {
         BottomSheetPreview {
             Content(
                 uiState = CoinSelectionUiState(
-                    availableUtxos = emptyList(),
+                    availableUtxos = persistentListOf(),
                     autoSelectCoinsOn = true,
                     totalRequiredSat = 1000uL,
                     totalSelectedSat = 0uL,
                     isSelectionValid = false
                 ),
-                tagsByTxId = emptyMap(),
+                tagsByTxId = persistentMapOf(),
                 modifier = Modifier.sheetHeight(),
             )
         }

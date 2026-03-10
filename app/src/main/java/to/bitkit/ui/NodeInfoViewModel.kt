@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -29,7 +32,7 @@ class NodeInfoViewModel @Inject constructor(
     blocktankRepo: BlocktankRepo,
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
-    val peers: StateFlow<List<NodePeer>> = combine(
+    val peers: StateFlow<ImmutableList<NodePeer>> = combine(
         lightningRepo.lightningState.map { it.peers },
         blocktankRepo.blocktankState.map { it.info?.nodes },
     ) { peers, lspNodes ->
@@ -39,10 +42,10 @@ class NodeInfoViewModel @Inject constructor(
                 lspNode = lspNodes?.firstOrNull { it.pubkey == peer.nodeId },
                 name = Peers.Known.find(peer)?.name,
             )
-        }.sortedBy { it.alias() }
+        }.sortedBy { it.alias() }.toImmutableList()
     }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
     fun disconnectPeer(peer: PeerDetails) {
         viewModelScope.launch {

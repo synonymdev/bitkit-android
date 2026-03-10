@@ -1,5 +1,6 @@
 package to.bitkit.viewmodels
 
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
@@ -79,7 +80,7 @@ class AmountInputViewModelTest : BaseUnitTest() {
         primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
         displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     ) = CurrencyState(
-        rates = testRates,
+        rates = testRates.toImmutableList(),
         selectedCurrency = "USD",
         currencySymbol = "$",
         primaryDisplay = primaryDisplay,

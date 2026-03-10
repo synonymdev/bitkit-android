@@ -24,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PrimaryDisplay
@@ -187,7 +188,7 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 uiState = SendFeeUiState(
-                    fees = mapOf(
+                    fees = persistentMapOf(
                         FeeRate.FAST to 4000L,
                         FeeRate.NORMAL to 3000L,
                         FeeRate.SLOW to 2000L,
@@ -209,7 +210,7 @@ private fun PreviewCustom() {
         BottomSheetPreview {
             Content(
                 uiState = SendFeeUiState(
-                    fees = mapOf(
+                    fees = persistentMapOf(
                         FeeRate.FAST to 4000L,
                         FeeRate.NORMAL to 3000L,
                         FeeRate.SLOW to 2000L,

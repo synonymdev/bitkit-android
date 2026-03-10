@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +26,12 @@ import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.validateBitcoinAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -244,7 +251,7 @@ class AppViewModel @Inject constructor(
     fun addTagToSelected(newTag: String) {
         _sendUiState.update {
             it.copy(
-                selectedTags = (it.selectedTags + newTag).distinct()
+                selectedTags = (it.selectedTags + newTag).distinct().toImmutableList()
             )
         }
         viewModelScope.launch {
@@ -255,7 +262,7 @@ class AppViewModel @Inject constructor(
     fun removeTag(tag: String) {
         _sendUiState.update {
             it.copy(
-                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }.toImmutableList()
             )
         }
     }
@@ -1138,7 +1145,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
         _sendUiState.update {
-            it.copy(selectedUtxos = utxos)
+            it.copy(selectedUtxos = utxos.toImmutableList())
         }
         refreshFeeEstimates()
         setSendEffect(SendEffect.NavigateToConfirm)
@@ -1971,7 +1978,7 @@ class AppViewModel @Inject constructor(
                         )
                     }
                     .onSuccess { utxos ->
-                        _sendUiState.update { it.copy(selectedUtxos = utxos) }
+                        _sendUiState.update { it.copy(selectedUtxos = utxos?.toImmutableList()) }
                     }
             }
             refreshFeeEstimates()
@@ -2009,7 +2016,7 @@ class AppViewModel @Inject constructor(
 
         _sendUiState.update {
             it.copy(
-                fees = feesMap,
+                fees = feesMap.toImmutableMap(),
                 fee = SendFee.OnChain(currentFee),
             )
         }
@@ -2326,7 +2333,7 @@ class AppViewModel @Inject constructor(
             _sendUiState.update {
                 it.copy(
                     showSanityWarningDialog = null,
-                    confirmedWarnings = it.confirmedWarnings + warning
+                    confirmedWarnings = (it.confirmedWarnings + warning).toImmutableList()
                 )
             }
         }
@@ -2447,6 +2454,7 @@ class AppViewModel @Inject constructor(
 }
 
 // region send contract
+@Immutable
 data class SendUiState(
     val address: String = "",
     val bolt11: String? = null,
@@ -2456,19 +2464,19 @@ data class SendUiState(
     val isAmountInputValid: Boolean = false,
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
-    val selectedTags: List<String> = listOf(),
+    val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,
     val showSanityWarningDialog: SanityWarning? = null,
-    val confirmedWarnings: List<SanityWarning> = listOf(),
+    val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
     val shouldConfirmPay: Boolean = false,
-    val selectedUtxos: List<SpendableUtxo>? = null,
+    val selectedUtxos: ImmutableList<SpendableUtxo>? = null,
     val lnurl: LnurlParams? = null,
     val isLoading: Boolean = false,
     val speed: TransactionSpeed = TransactionSpeed.default(),
     val comment: String = "",
     val feeRates: FeeRates? = null,
     val fee: SendFee? = null,
-    val fees: Map<FeeRate, Long> = emptyMap(),
+    val fees: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val estimatedRoutingFee: ULong = 0uL,
 )
 

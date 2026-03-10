@@ -28,6 +28,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.bitkitcore.AddressType
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.AddressModel
@@ -354,14 +356,14 @@ private fun Preview() {
                         index = 4,
                         path = "m/84'/0'/0'/0/4"
                     ),
-                ),
+                ).toImmutableList(),
                 balances = mapOf(
                     "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" to 50000L,
                     "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4" to 0L,
                     "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3" to 1500000L,
                     "bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l" to 0L,
                     "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq" to 250000L,
-                ),
+                ).toImmutableMap(),
                 selectedAddress = AddressModel(
                     address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
                     index = 0,

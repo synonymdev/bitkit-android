@@ -3,6 +3,9 @@ package to.bitkit.ui.screens.widgets.price
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,9 +68,9 @@ class PriceViewModel @Inject constructor(
     private val _customPreferences = MutableStateFlow(PricePreferences())
     val customPreferences: StateFlow<PricePreferences> = _customPreferences.asStateFlow()
 
-    private val _allPeriodsUsd = MutableStateFlow(listOf<PriceWidgetData>())
-    val allPeriodsUsd: StateFlow<List<PriceWidgetData>> = _allPeriodsUsd.asStateFlow()
-    private val _allPrices = MutableStateFlow(listOf<PriceDTO>())
+    private val _allPeriodsUsd = MutableStateFlow<ImmutableList<PriceWidgetData>>(persistentListOf())
+    val allPeriodsUsd: StateFlow<ImmutableList<PriceWidgetData>> = _allPeriodsUsd.asStateFlow()
+    private val _allPrices = MutableStateFlow<ImmutableList<PriceDTO>>(persistentListOf())
 
     private val _previewPrice: MutableStateFlow<PriceDTO?> = MutableStateFlow(null)
     val previewPrice = _previewPrice.asStateFlow()
@@ -148,8 +151,8 @@ class PriceViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.update { true }
             widgetsRepo.fetchAllPeriods().onSuccess { data ->
-                _allPrices.update { data }
-                _allPeriodsUsd.update { data.map { priceDTO -> priceDTO.widgets.first() } }
+                _allPrices.update { data.toImmutableList() }
+                _allPeriodsUsd.update { data.map { priceDTO -> priceDTO.widgets.first() }.toImmutableList() }
                 _isLoading.update { false }
             }.onFailure {
                 Logger.warn("collectAllPeriodPrices error. Trying again in 1 second", context = TAG)

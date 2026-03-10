@@ -39,6 +39,9 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PeerDetails
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.env.Peers
 import to.bitkit.ext.amountSats
@@ -105,7 +108,7 @@ fun NodeInfoScreen(
 private fun Content(
     lightningState: LightningState,
     isRefreshing: Boolean = false,
-    peers: List<NodePeer> = emptyList(),
+    peers: ImmutableList<NodePeer> = persistentListOf(),
     onBack: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onDisconnectPeer: (PeerDetails) -> Unit = {},
@@ -138,7 +141,7 @@ private fun Content(
                     WalletBalancesSection(balanceDetails = details)
 
                     if (details.lightningBalances.isNotEmpty()) {
-                        LightningBalancesSection(balances = details.lightningBalances)
+                        LightningBalancesSection(balances = details.lightningBalances.toImmutableList())
                     }
                 }
                 if (lightningState.channels.isNotEmpty()) {
@@ -267,7 +270,7 @@ private fun WalletBalancesSection(balanceDetails: BalanceDetails) {
 }
 
 @Composable
-private fun LightningBalancesSection(balances: List<LightningBalance>) {
+private fun LightningBalancesSection(balances: ImmutableList<LightningBalance>) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.lightning__lightning_balances))
         balances.forEach { balance ->
@@ -307,7 +310,7 @@ private fun LightningBalancesSection(balances: List<LightningBalance>) {
 
 @Composable
 private fun ChannelsSection(
-    channels: List<ChannelDetails>,
+    channels: ImmutableList<ChannelDetails>,
     onCopy: (String) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -384,7 +387,7 @@ private fun ChannelsSection(
 
 @Composable
 private fun PeersSection(
-    peers: List<NodePeer>,
+    peers: ImmutableList<NodePeer>,
     onDisconnectPeer: (PeerDetails) -> Unit = {},
     onCopy: (String) -> Unit = {},
 ) {
@@ -467,7 +470,7 @@ private fun ChannelDetailRow(
     }
 }
 
-private fun previewPeers() = listOf(
+private fun previewPeers() = persistentListOf(
     NodePeer(
         peerDetails = Peers.stag,
         lspNode = ILspNode(
@@ -525,7 +528,7 @@ private fun Preview() {
                     latestPathfindingScoresSyncTimestamp = null,
                 ),
                 nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                peers = listOf(Peers.stag),
+                peers = listOf(Peers.stag).toImmutableList(),
                 channels = listOf(
                     createChannelDetails().copy(
                         channelId = "abc123def456789012345678901234567890123456789012345678901234567890",
@@ -554,7 +557,7 @@ private fun Preview() {
                         inboundHtlcMinimumMsat = 1000UL,
                         inboundHtlcMaximumMsat = 200000000UL,
                     ),
-                ),
+                ).toImmutableList(),
                 balances = BalanceDetails(
                     totalOnchainBalanceSats = 1000000UL,
                     spendableOnchainBalanceSats = 900000UL,

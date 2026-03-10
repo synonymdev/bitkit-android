@@ -39,6 +39,9 @@ import com.synonym.bitkitcore.IBtPayment
 import com.synonym.bitkitcore.IDiscount
 import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.IcJitEntry
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
@@ -74,8 +77,8 @@ fun ChannelOrdersScreen(
     LaunchedEffect(Unit) { blocktank.refreshOrders() }
 
     Content(
-        orders = orders,
-        cJitEntries = cJitEntries,
+        orders = orders.toImmutableList(),
+        cJitEntries = cJitEntries.toImmutableList(),
         onBack = onBackClick,
         onClickOrder = onOrderItemClick,
         onClickCjit = onCjitItemClick,
@@ -84,8 +87,8 @@ fun ChannelOrdersScreen(
 
 @Composable
 private fun Content(
-    orders: List<IBtOrder>,
-    cJitEntries: List<IcJitEntry>,
+    orders: ImmutableList<IBtOrder>,
+    cJitEntries: ImmutableList<IcJitEntry>,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onClickOrder: (String) -> Unit = {},
@@ -605,8 +608,8 @@ private val cjitEntry = IcJitEntry(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            orders = listOf(order),
-            cJitEntries = listOf(cjitEntry),
+            orders = persistentListOf(order),
+            cJitEntries = persistentListOf(cjitEntry),
         )
     }
 }
@@ -616,8 +619,8 @@ private fun Preview() {
 private fun PreviewEmpty() {
     AppThemeSurface {
         Content(
-            orders = emptyList(),
-            cJitEntries = emptyList(),
+            orders = persistentListOf(),
+            cJitEntries = persistentListOf(),
         )
     }
 }

@@ -22,13 +22,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun <T : TabItem> CustomTabRowWithSpacing(
-    tabs: List<T>,
+    tabs: ImmutableList<T>,
     currentTabIndex: Int,
     onTabChange: (T) -> Unit,
     modifier: Modifier = Modifier,

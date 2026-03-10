@@ -44,6 +44,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.FeeRates
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
@@ -177,26 +183,26 @@ fun ActivityDetailScreen(
                 var showAddTagSheet by remember { mutableStateOf(false) }
                 var showAssignSheet by remember { mutableStateOf(false) }
                 var isCpfpChild by remember { mutableStateOf(false) }
-                var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+                var boostTxDoesExist by remember { mutableStateOf<ImmutableMap<String, Boolean>>(persistentMapOf()) }
 
                 LaunchedEffect(item) {
                     if (item is Activity.Onchain) {
                         isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
                         boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
-                            detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                            detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds).toImmutableMap()
                         } else {
-                            emptyMap()
+                            persistentMapOf()
                         }
                     } else {
                         isCpfpChild = false
-                        boostTxDoesExist = emptyMap()
+                        boostTxDoesExist = persistentMapOf()
                     }
                 }
 
                 // Update boostTxDoesExist when boostTxIds change
                 LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else emptyList()) {
                     if (item is Activity.Onchain && item.v1.boostTxIds.isNotEmpty()) {
-                        boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                        boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds).toImmutableMap()
                     }
                 }
 
@@ -222,7 +228,7 @@ fun ActivityDetailScreen(
                     )
                     ActivityDetailContent(
                         item = item,
-                        tags = tags,
+                        tags = tags.toImmutableList(),
                         onRemoveTag = { detailViewModel.removeTag(it) },
                         onAddTagClick = { showAddTagSheet = true },
                         onAssignClick = { showAssignSheet = true },
@@ -308,7 +314,7 @@ fun ActivityDetailScreen(
 @Composable
 private fun ActivityDetailContent(
     item: Activity,
-    tags: List<String>,
+    tags: ImmutableList<String>,
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
     onAssignClick: () -> Unit,
@@ -317,7 +323,7 @@ private fun ActivityDetailContent(
     onChannelClick: ((String) -> Unit)?,
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
-    boostTxDoesExist: Map<String, Boolean> = emptyMap(),
+    boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
     hideBalance: Boolean = false,
     feeRates: FeeRates? = null,
@@ -885,7 +891,7 @@ private fun PreviewLightningSent() {
                     message = "Thanks for paying at the bar. Here's my share.",
                 )
             ),
-            tags = listOf("Lunch", "Drinks"),
+            tags = persistentListOf("Lunch", "Drinks"),
             onRemoveTag = {},
             onAddTagClick = {},
             onAssignClick = {},
@@ -916,7 +922,7 @@ private fun PreviewOnchain() {
                     confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
                 )
             ),
-            tags = emptyList(),
+            tags = persistentListOf(),
             onRemoveTag = {},
             onAddTagClick = {},
             onAssignClick = {},
@@ -948,7 +954,7 @@ private fun PreviewSheetSmallScreen() {
                         message = "Thanks for paying at the bar. Here's my share.",
                     )
                 ),
-                tags = listOf("Lunch", "Drinks"),
+                tags = persistentListOf("Lunch", "Drinks"),
                 onRemoveTag = {},
                 onAddTagClick = {},
                 onAssignClick = {},
@@ -966,7 +972,7 @@ private fun PreviewSheetSmallScreen() {
 private fun shouldEnableBoostButton(
     item: Activity,
     isCpfpChild: Boolean,
-    boostTxDoesExist: Map<String, Boolean>,
+    boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
     if (item !is Activity.Onchain) return false
 
@@ -986,7 +992,7 @@ private fun shouldEnableBoostButton(
 @Composable
 private fun isBoostCompleted(
     activity: OnchainActivity,
-    boostTxDoesExist: Map<String, Boolean>,
+    boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
     if (activity.boostTxIds.isEmpty()) return true
 

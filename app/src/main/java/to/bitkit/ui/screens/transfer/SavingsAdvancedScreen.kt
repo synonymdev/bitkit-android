@@ -12,6 +12,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,7 +82,7 @@ fun SavingsAdvancedScreen(
                 balance = it.amountOnClose,
                 isSelected = selectedChannelIds.contains(it.channelId),
             )
-        }
+        }.toImmutableList()
     }
 
     SavingsAdvancedContent(
@@ -97,7 +101,7 @@ fun SavingsAdvancedScreen(
 
 @Composable
 private fun SavingsAdvancedContent(
-    channelItems: List<TransferChannelUiState>,
+    channelItems: ImmutableList<TransferChannelUiState>,
     onChannelItemClick: (String) -> Unit = {},
     onAmountClick: () -> Unit = {},
     onContinueClick: () -> Unit = {},
@@ -192,6 +196,7 @@ fun ChannelItem(
     }
 }
 
+@Immutable
 private data class TransferChannelUiState(
     val channelId: String,
     val balance: ULong,
@@ -203,7 +208,7 @@ private data class TransferChannelUiState(
 private fun SavingsAdvancedScreenPreview() {
     AppThemeSurface {
         SavingsAdvancedContent(
-            channelItems = listOf(
+            channelItems = persistentListOf(
                 TransferChannelUiState(
                     channelId = "channelId_1",
                     balance = 45_000u,

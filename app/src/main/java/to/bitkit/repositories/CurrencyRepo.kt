@@ -1,5 +1,9 @@
 package to.bitkit.repositories
 
+import androidx.compose.runtime.Immutable
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -112,7 +116,7 @@ class CurrencyRepo @Inject constructor(
                     rate.quote == settings.selectedCurrency
                 }
                 _currencyState.value.copy(
-                    rates = cachedData.cachedRates,
+                    rates = cachedData.cachedRates.toImmutableList(),
                     selectedCurrency = settings.selectedCurrency,
                     displayUnit = settings.displayUnit,
                     primaryDisplay = settings.primaryDisplay,
@@ -248,8 +252,9 @@ class CurrencyRepo @Inject constructor(
     override fun convertSatsToFiatString(sats: Long): String = convertSatsToFiatPair(sats).getOrNull()?.second ?: ""
 }
 
+@Immutable
 data class CurrencyState(
-    val rates: List<FxRate> = emptyList(),
+    val rates: ImmutableList<FxRate> = persistentListOf(),
     val error: Throwable? = null,
     val hasStaleData: Boolean = false,
     val selectedCurrency: String = "USD",

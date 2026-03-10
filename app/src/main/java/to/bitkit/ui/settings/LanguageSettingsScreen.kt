@@ -25,6 +25,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.LanguageUiState
 import to.bitkit.viewmodels.LanguageViewModel
+import kotlinx.collections.immutable.toImmutableList
 
 @Composable
 fun LanguageSettingsScreen(
@@ -86,7 +87,7 @@ private fun Preview() {
         Content(
             uiState = LanguageUiState(
                 selectedLanguage = Language.SPANISH,
-                languages = Language.entries
+                languages = Language.entries.toImmutableList()
             ),
             onBackClick = {},
             onClickLanguage = {},

@@ -210,6 +210,7 @@ android {
 }
 
 composeCompiler {
+    stabilityConfigurationFile = project.layout.projectDirectory.file("compose_compiler_config.conf")
     featureFlags = setOf()
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
@@ -225,6 +226,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.biometric)
     implementation(libs.zxing)
     implementation(libs.barcode.scanning)

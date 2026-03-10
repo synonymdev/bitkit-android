@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.IBtOrder
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
@@ -154,7 +156,7 @@ class HealthRepoTest : BaseUnitTest() {
         }
         val lightningState = LightningState(
             nodeLifecycleState = NodeLifecycleState.Running,
-            channels = listOf(mockChannel),
+            channels = listOf(mockChannel).toImmutableList(),
         )
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
 
@@ -174,7 +176,7 @@ class HealthRepoTest : BaseUnitTest() {
         }
         val lightningState = LightningState(
             nodeLifecycleState = NodeLifecycleState.Running,
-            channels = listOf(mockChannel),
+            channels = listOf(mockChannel).toImmutableList(),
         )
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
 
@@ -191,7 +193,7 @@ class HealthRepoTest : BaseUnitTest() {
     fun `channels status is error when no channels exist`() = test {
         val lightningState = LightningState(
             nodeLifecycleState = NodeLifecycleState.Running,
-            channels = emptyList(),
+            channels = persistentListOf(),
         )
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
 
@@ -208,12 +210,12 @@ class HealthRepoTest : BaseUnitTest() {
     fun `paid orders override channels error to pending`() = test {
         val lightningState = LightningState(
             nodeLifecycleState = NodeLifecycleState.Running,
-            channels = emptyList(),
+            channels = persistentListOf(),
         )
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
 
         val paidOrder = mock<IBtOrder>()
-        val blocktankState = BlocktankState(paidOrders = listOf(paidOrder))
+        val blocktankState = BlocktankState(paidOrders = listOf(paidOrder).toImmutableList())
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(blocktankState))
 
         sut = createSut()
@@ -253,7 +255,7 @@ class HealthRepoTest : BaseUnitTest() {
         }
         val lightningState = LightningState(
             nodeLifecycleState = NodeLifecycleState.Running,
-            channels = listOf(mockChannel),
+            channels = listOf(mockChannel).toImmutableList(),
         )
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
 

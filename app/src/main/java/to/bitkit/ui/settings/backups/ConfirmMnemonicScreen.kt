@@ -26,6 +26,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -49,10 +51,10 @@ fun ConfirmMnemonicScreen(
     BlockScreenshots()
 
     val originalSeed = remember(uiState.bip39Mnemonic) {
-        uiState.bip39Mnemonic.split(" ").filter { it.isNotBlank() }
+        uiState.bip39Mnemonic.split(" ").filter { it.isNotBlank() }.toImmutableList()
     }
     val shuffledWords = remember(originalSeed) {
-        originalSeed.shuffled()
+        originalSeed.shuffled().toImmutableList()
     }
 
     var selectedWords by rememberSaveable {
@@ -107,8 +109,8 @@ fun ConfirmMnemonicScreen(
 
 @Composable
 private fun ConfirmMnemonicContent(
-    originalSeed: List<String>,
-    shuffledWords: List<String>,
+    originalSeed: ImmutableList<String>,
+    shuffledWords: ImmutableList<String>,
     selectedWords: Array<String?>,
     pressedStates: BooleanArray,
     isComplete: Boolean,
@@ -242,11 +244,11 @@ private fun SelectedWordItem(
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
-    val testWords = List(12) { "word${it + 1}" }
+    val testWords = List(12) { "word${it + 1}" }.toImmutableList()
     AppThemeSurface {
         ConfirmMnemonicContent(
             originalSeed = testWords,
-            shuffledWords = testWords.shuffled(),
+            shuffledWords = testWords.shuffled().toImmutableList(),
             selectedWords = arrayOfNulls(testWords.size),
             pressedStates = BooleanArray(testWords.size) { false },
             isComplete = false,
@@ -260,12 +262,12 @@ private fun Preview() {
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview2() {
-    val testWords = List(12) { "word${it + 1}" }
+    val testWords = List(12) { "word${it + 1}" }.toImmutableList()
     val half = testWords.size / 2
     AppThemeSurface {
         ConfirmMnemonicContent(
             originalSeed = testWords,
-            shuffledWords = testWords.shuffled(),
+            shuffledWords = testWords.shuffled().toImmutableList(),
             selectedWords = testWords.take(half).toTypedArray<String?>() + arrayOfNulls<String>(half),
             pressedStates = BooleanArray(testWords.size) { it < half },
             isComplete = false,
@@ -279,12 +281,12 @@ private fun Preview2() {
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview24Words() {
-    val testWords = List(24) { "word${it + 1}" }
+    val testWords = List(24) { "word${it + 1}" }.toImmutableList()
     val half = testWords.size / 2
     AppThemeSurface {
         ConfirmMnemonicContent(
             originalSeed = testWords,
-            shuffledWords = testWords.shuffled(),
+            shuffledWords = testWords.shuffled().toImmutableList(),
             selectedWords = testWords.take(half).toTypedArray<String?>() + arrayOfNulls<String>(half),
             pressedStates = BooleanArray(testWords.size) { it < half },
             isComplete = false,

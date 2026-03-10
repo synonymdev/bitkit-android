@@ -40,6 +40,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
@@ -160,7 +162,7 @@ private fun Content(
                     Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
                     ChannelList(
                         status = ChannelStatusUi.PENDING,
-                        channels = uiState.pendingConnections.reversed(),
+                        channels = uiState.pendingConnections.reversed().toImmutableList(),
                         onClickChannel = onClickChannel,
                     )
                 }
@@ -171,7 +173,7 @@ private fun Content(
                     Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
                     ChannelList(
                         status = ChannelStatusUi.OPEN,
-                        channels = uiState.openChannels.reversed(),
+                        channels = uiState.openChannels.reversed().toImmutableList(),
                         onClickChannel = onClickChannel,
                     )
                 }
@@ -183,7 +185,7 @@ private fun Content(
                         Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
                         ChannelList(
                             status = ChannelStatusUi.CLOSED,
-                            channels = uiState.failedOrders.reversed(),
+                            channels = uiState.failedOrders.reversed().toImmutableList(),
                             onClickChannel = onClickChannel,
                         )
                     }
@@ -288,7 +290,7 @@ private fun BalanceColumn(label: String, balance: ULong, icon: ImageVector, colo
 
 @Composable
 private fun ChannelList(
-    channels: List<ChannelUi>,
+    channels: ImmutableList<ChannelUi>,
     status: ChannelStatusUi = ChannelStatusUi.OPEN,
     onClickChannel: (ChannelUi) -> Unit,
 ) {
@@ -380,7 +382,7 @@ private fun Preview() {
                             inboundCapacityMsat = 100_000_000u,
                         ),
                     ),
-                ),
+                ).toImmutableList(),
                 openChannels = listOf(
                     ChannelUi(
                         name = "Connection 3",
@@ -391,7 +393,7 @@ private fun Preview() {
                             inboundCapacityMsat = 700_000_000u,
                         ),
                     ),
-                ),
+                ).toImmutableList(),
                 failedOrders = listOf(
                     ChannelUi(
                         name = "Connection 4",
@@ -413,7 +415,7 @@ private fun Preview() {
                             inboundCapacityMsat = 70_000_000u,
                         ),
                     ),
-                )
+                ).toImmutableList()
             )
         )
     }

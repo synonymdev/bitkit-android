@@ -70,6 +70,8 @@ import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.HazeState
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -309,7 +311,7 @@ private fun Content(
     isRefreshing: Boolean,
     homeUiState: HomeUiState,
     drawerState: DrawerState,
-    latestActivities: List<Activity>?,
+    latestActivities: ImmutableList<Activity>?,
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
     onClickSuggestion: (Suggestion) -> Unit = {},
@@ -930,7 +932,7 @@ private fun PreviewWithActivity() {
                     showWidgets = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = previewBalances,
             )
             TabBar()
@@ -949,7 +951,7 @@ private fun PreviewEmpty() {
                     showEmptyState = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = BalanceState(),
             )
             TabBar()
@@ -969,7 +971,7 @@ private fun PreviewWithBanners() {
                     banners = ActivityBannerType.entries.map { BannerItem(type = it, title = "") },
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = previewBalances,
             )
             TabBar()
@@ -989,7 +991,7 @@ private fun PreviewWithOnboardingHint() {
                     showWidgetsOnboardingHint = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = previewBalances,
             )
             TabBar()
@@ -1015,7 +1017,7 @@ private fun PreviewWidgetsPage() {
                     suggestions = Suggestion.entries.take(4),
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = previewBalances,
             )
             TabBar()
@@ -1041,7 +1043,7 @@ private fun PreviewWidgetsEditing() {
                     currentWeather = previewWeather,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = previewBalances,
             )
             TabBar()
@@ -1060,7 +1062,7 @@ private fun PreviewTabletLandscape() {
                     showWidgets = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = previewBalances,
             )
             TabBar()
@@ -1079,7 +1081,7 @@ private fun PreviewTabletPortrait() {
                     showWidgets = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3),
+                latestActivities = previewActivityItems.take(3).toImmutableList(),
                 balances = previewBalances,
             )
             TabBar()
