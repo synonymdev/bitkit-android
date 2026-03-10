@@ -58,6 +58,7 @@ import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -406,16 +407,10 @@ private fun NetworkSelectorRow(
         modifier = Modifier.fillMaxWidth(),
     ) {
         TrezorCoinType.entries.filter { it != TrezorCoinType.SIGNET }.forEach { network ->
-            val isSelected = network == selectedNetwork
-            val color = if (isSelected) Colors.Brand else Colors.White32
-            CaptionB(
+            TagButton(
                 text = network.name,
-                color = color,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(color.copy(alpha = 0.15f))
-                    .clickableAlpha(onClick = { onNetworkChange(network) })
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                onClick = { onNetworkChange(network) },
+                isSelected = network == selectedNetwork,
             )
         }
     }

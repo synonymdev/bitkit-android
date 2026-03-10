@@ -1,13 +1,10 @@
 package to.bitkit.ui.screens.trezor
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -15,7 +12,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -28,10 +24,11 @@ import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
@@ -141,15 +138,11 @@ private fun ComposeForm(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
-            val maxColor = if (uiState.isSendMax) Colors.Brand else Colors.White32
-            CaptionB(
+            TertiaryButton(
                 text = "MAX",
-                color = maxColor,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(maxColor.copy(alpha = 0.15f))
-                    .clickableAlpha(onClick = onToggleSendMax)
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                onClick = onToggleSendMax,
+                size = ButtonSize.Small,
+                fullWidth = false,
             )
         }
 
@@ -203,16 +196,10 @@ private fun SortingStrategyRow(
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TrezorSortingStrategy.entries.forEach { strategy ->
-            val isSelected = strategy == selected
-            val color = if (isSelected) Colors.Brand else Colors.White32
-            CaptionB(
+            TagButton(
                 text = labels[strategy] ?: strategy.name,
-                color = color,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(color.copy(alpha = 0.15f))
-                    .clickableAlpha(onClick = { onChange(strategy) })
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                onClick = { onChange(strategy) },
+                isSelected = strategy == selected,
             )
         }
     }
