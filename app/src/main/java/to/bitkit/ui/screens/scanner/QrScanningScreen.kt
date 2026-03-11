@@ -78,6 +78,8 @@ import java.util.concurrent.Executors
 
 const val SCAN_RESULT_KEY = "SCAN_RESULT"
 
+val CameraOverlayButtonSize = 40.dp
+
 private const val TAG = "QrScanningScreen"
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -272,7 +274,7 @@ private fun Content(
                     .padding(16.dp)
                     .clip(CircleShape)
                     .background(Colors.White64)
-                    .size(48.dp)
+                    .size(CameraOverlayButtonSize)
                     .align(Alignment.TopStart)
             ) {
                 Icon(
@@ -288,7 +290,7 @@ private fun Content(
                     .padding(16.dp)
                     .clip(CircleShape)
                     .background(Colors.White64)
-                    .size(48.dp)
+                    .size(CameraOverlayButtonSize)
                     .align(Alignment.TopEnd)
             ) {
                 Icon(
