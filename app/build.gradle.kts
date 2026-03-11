@@ -210,7 +210,6 @@ android {
 }
 
 composeCompiler {
-    stabilityConfigurationFile = project.layout.projectDirectory.file("compose_compiler_config.conf")
     featureFlags = setOf()
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
