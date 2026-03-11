@@ -40,7 +40,6 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.R
-import to.bitkit.ui.shared.modifiers.alphaFeedback
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.primaryButtonStyle
@@ -83,7 +82,7 @@ fun BoxScope.TabBar(
                     .weight(1f)
                     .height(60.dp)
                     .clip(buttonLeftShape)
-                    .clickableAlpha { onSendClick() }
+                    .clickableAlpha(ripple = true) { onSendClick() }
                     .testTag("Send")
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -104,7 +103,7 @@ fun BoxScope.TabBar(
                     .weight(1f)
                     .height(60.dp)
                     .clip(buttonRightShape)
-                    .clickableAlpha { onReceiveClick() }
+                    .clickableAlpha(ripple = true) { onReceiveClick() }
                     .testTag("Receive")
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,7 +178,7 @@ fun BoxScope.TabBar(
                         blendMode = BlendMode.DstIn
                     )
                 }
-                .clickableAlpha { onScanClick() }
+                .clickableAlpha(ripple = true) { onScanClick() }
                 .testTag("Scan")
         ) {
             Icon(

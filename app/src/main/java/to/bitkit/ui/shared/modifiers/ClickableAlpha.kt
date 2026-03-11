@@ -2,6 +2,7 @@ package to.bitkit.ui.shared.modifiers
 
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,18 +56,27 @@ fun rememberDebouncedClick(debounce: Duration = CLICK_DEBOUNCE, onClick: () -> U
 /**
  * Adjusts the alpha of a composable when it is pressed and makes it clickable.
  * When pressed, the alpha is reduced to provide visual feedback.
- * If `onClick` is null, the clickable behavior is disabled.
+ * If `onClick` is null or `enabled` is false, the clickable behavior is disabled.
+ *
+ * Set `ripple` to true to show the standard Material ripple indication alongside
+ * the alpha animation (useful for list items, menu buttons, etc.).
  *
  * Analogue of `TouchableOpacity` in React Native.
  */
+@Composable
 fun Modifier.clickableAlpha(
     pressedAlpha: Float = 0.7f,
     enabled: Boolean = true,
+    ripple: Boolean = false,
     onClick: (() -> Unit)?,
-): Modifier = if (onClick != null && enabled) {
-    this.then(ClickableAlphaElement(pressedAlpha, onClick))
-} else {
-    this
+): Modifier = when {
+    onClick == null || !enabled -> this
+    ripple ->
+        this
+            .alphaFeedback(pressedAlpha)
+            .clickable(onClick = rememberDebouncedClick(onClick = onClick))
+
+    else -> this.then(ClickableAlphaElement(pressedAlpha, onClick))
 }
 
 private data class ClickableAlphaElement(
