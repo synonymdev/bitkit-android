@@ -50,6 +50,12 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
 
+private inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
+    if (currentBackStackEntry?.destination?.hasRoute<T>() != true) {
+        navigateTo(route)
+    }
+}
+
 private const val Z_INDEX_SCRIM = 10f
 private const val Z_INDEX_MENU = 11f
 private val bgScrim = Colors.Black50
@@ -98,16 +104,16 @@ fun DrawerMenu(
             drawerState = drawerState,
             onClickAddWidget = {
                 if (!hasSeenWidgetsIntro) {
-                    rootNavController.navigateTo(Routes.WidgetsIntro)
+                    rootNavController.navigateIfNotCurrent(Routes.WidgetsIntro)
                 } else {
-                    rootNavController.navigateTo(Routes.AddWidget)
+                    rootNavController.navigateIfNotCurrent(Routes.AddWidget)
                 }
             },
             onClickShop = {
                 if (!hasSeenShopIntro) {
-                    rootNavController.navigateTo(Routes.ShopIntro)
+                    rootNavController.navigateIfNotCurrent(Routes.ShopIntro)
                 } else {
-                    rootNavController.navigateTo(Routes.ShopDiscover)
+                    rootNavController.navigateIfNotCurrent(Routes.ShopDiscover)
                 }
             },
         )
@@ -147,7 +153,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__activity),
             iconRes = R.drawable.ic_heartbeat,
             onClick = {
-                rootNavController.navigateTo(Routes.AllActivity)
+                rootNavController.navigateIfNotCurrent(Routes.AllActivity)
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerActivity")
@@ -157,7 +163,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__contacts),
             iconRes = R.drawable.ic_users,
             onClick = {
-                rootNavController.navigateTo(Routes.Contacts)
+                rootNavController.navigateIfNotCurrent(Routes.Contacts)
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerContacts")
@@ -167,7 +173,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__profile),
             iconRes = R.drawable.ic_user_square,
             onClick = {
-                rootNavController.navigateTo(Routes.Profile)
+                rootNavController.navigateIfNotCurrent(Routes.Profile)
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerProfile")
@@ -197,7 +203,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__settings),
             iconRes = R.drawable.ic_settings,
             onClick = {
-                rootNavController.navigateTo(Routes.Settings)
+                rootNavController.navigateIfNotCurrent(Routes.Settings)
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerSettings")
@@ -210,7 +216,7 @@ private fun Menu(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickableAlpha {
-                    rootNavController.navigateTo(Routes.AppStatus)
+                    rootNavController.navigateIfNotCurrent(Routes.AppStatus)
                     scope.launch { drawerState.close() }
                 }
         ) {

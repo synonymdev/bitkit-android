@@ -32,10 +32,10 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private val CLICK_DEBOUNCE = 500.milliseconds
 
-private class ClickDebouncer(private val debounce: Duration = CLICK_DEBOUNCE) {
+private class ClickDebouncer {
     private var lastClickTime = 0L
 
-    fun tryClick(onClick: () -> Unit): Boolean {
+    fun tryClick(debounce: Duration = CLICK_DEBOUNCE, onClick: () -> Unit): Boolean {
         val now = SystemClock.uptimeMillis()
         if (now - lastClickTime >= debounce.inWholeMilliseconds) {
             lastClickTime = now
@@ -48,9 +48,9 @@ private class ClickDebouncer(private val debounce: Duration = CLICK_DEBOUNCE) {
 
 @Composable
 fun rememberDebouncedClick(debounce: Duration = CLICK_DEBOUNCE, onClick: () -> Unit): () -> Unit {
-    val debouncer = remember(debounce) { ClickDebouncer(debounce) }
+    val debouncer = remember { ClickDebouncer() }
     val currentOnClick by rememberUpdatedState(onClick)
-    return remember(debouncer) { { debouncer.tryClick(currentOnClick) } }
+    return remember(debouncer, debounce) { { debouncer.tryClick(debounce, currentOnClick) } }
 }
 
 /**
@@ -68,37 +68,42 @@ fun Modifier.clickableAlpha(
     pressedAlpha: Float = 0.7f,
     enabled: Boolean = true,
     ripple: Boolean = false,
+    debounce: Duration = CLICK_DEBOUNCE,
     onClick: (() -> Unit)?,
 ): Modifier = when {
     onClick == null || !enabled -> this
     ripple ->
         this
             .alphaFeedback(pressedAlpha)
-            .clickable(onClick = rememberDebouncedClick(onClick = onClick))
+            .clickable(onClick = rememberDebouncedClick(debounce, onClick))
 
-    else -> this.then(ClickableAlphaElement(pressedAlpha, onClick))
+    else -> this.then(ClickableAlphaElement(pressedAlpha, debounce, onClick))
 }
 
 private data class ClickableAlphaElement(
     val pressedAlpha: Float,
+    val debounce: Duration,
     val onClick: () -> Unit,
 ) : ModifierNodeElement<ClickableAlphaNode>() {
-    override fun create(): ClickableAlphaNode = ClickableAlphaNode(pressedAlpha, onClick)
+    override fun create(): ClickableAlphaNode = ClickableAlphaNode(pressedAlpha, debounce, onClick)
 
     override fun update(node: ClickableAlphaNode) {
         node.pressedAlpha = pressedAlpha
+        node.debounce = debounce
         node.onClick = onClick
     }
 
     override fun InspectorInfo.inspectableProperties() {
         name = "clickableAlpha"
         properties["pressedAlpha"] = pressedAlpha
+        properties["debounce"] = debounce
         properties["onClick"] = onClick
     }
 }
 
 private class ClickableAlphaNode(
     var pressedAlpha: Float,
+    var debounce: Duration,
     var onClick: () -> Unit,
 ) : DelegatingNode(), LayoutModifierNode, SemanticsModifierNode {
 
@@ -117,7 +122,7 @@ private class ClickableAlphaNode(
                         }
                     },
                     onTap = {
-                        if (debouncer.tryClick(onClick)) {
+                        if (debouncer.tryClick(debounce, onClick)) {
                             coroutineScope.launch {
                                 animatable.animateTo(pressedAlpha)
                                 animatable.animateTo(1f)
@@ -142,7 +147,7 @@ private class ClickableAlphaNode(
     override fun SemanticsPropertyReceiver.applySemantics() {
         role = Role.Button
         onClick {
-            debouncer.tryClick(onClick)
+            debouncer.tryClick(debounce, onClick)
             true
         }
     }
