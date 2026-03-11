@@ -720,10 +720,6 @@
     <string name="settings__widgets__nav_title">الأدوات</string>
     <string name="settings__widgets__showWidgetTitles">عرض عناوين الأدوات</string>
     <string name="settings__widgets__showWidgets">الأدوات</string>
-    <string name="slashtags__onboarding_profile1_header">امتلك\n&lt;accent&gt;ملفك الشخصي&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">أعد ملفك الشخصي العام وروابطك، حتى تتمكن جهات اتصال Bitkit من الوصول إليك أو الدفع لك في أي وقت وأي مكان.</string>
-    <string name="slashtags__profile">الملف الشخصي</string>
-    <string name="slashtags__profile_create">إنشاء ملف شخصي</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">يرجى الانتظار بينما يبحث Bitkit عن أموال في عناوين غير مدعومة (Legacy و Nested SegWit و Taproot).</string>
     <string name="sweep__checking_loading">جارٍ البحث عن أموال...</string>

@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.profile
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -13,11 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +34,9 @@ import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -71,12 +67,6 @@ fun PubkyRingAuthScreen(
         }
     }
 
-    LaunchedEffect(uiState.isWaitingForRing) {
-        if (uiState.isWaitingForRing) {
-            viewModel.waitForApproval()
-        }
-    }
-
     Content(
         uiState = uiState,
         onBackClick = onBackClick,
@@ -98,9 +88,7 @@ private fun Content(
 ) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .systemBarsPadding()
+            .screen()
             .clipToBounds()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -180,21 +168,15 @@ private fun Content(
     }
 
     if (uiState.showRingNotInstalledDialog) {
-        AlertDialog(
-            onDismissRequest = onDismissDialog,
-            title = { Text(stringResource(R.string.profile__ring_not_installed_title)) },
-            text = { Text(stringResource(R.string.profile__ring_not_installed_description)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDismissDialog()
-                    onDownload()
-                }) { Text(stringResource(R.string.profile__ring_download)) }
+        AppAlertDialog(
+            title = stringResource(R.string.profile__ring_not_installed_title),
+            text = stringResource(R.string.profile__ring_not_installed_description),
+            confirmText = stringResource(R.string.profile__ring_download),
+            onConfirm = {
+                onDismissDialog()
+                onDownload()
             },
-            dismissButton = {
-                TextButton(onClick = onDismissDialog) {
-                    Text(stringResource(R.string.common__dialog_cancel))
-                }
-            },
+            onDismiss = onDismissDialog,
         )
     }
 }

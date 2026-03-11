@@ -46,19 +46,20 @@ All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensu
 
 Manages auth state, session lifecycle, and profile data. Singleton scoped.
 
-### Session Persistence
+### Initialization
 
-- Session secret is stored in `Keychain` under `PAYKIT_SESSION` key
-- On app launch, `initialize()` attempts to restore the session via `importSession()`
+- `PubkyRepo` self-initializes via `init {}` block — no external trigger needed
+- `AppViewModel` injects `PubkyRepo` to ensure Hilt creates it at app startup
+- `initialize()` attempts to restore any saved session via `importSession()`
 - If restoration fails, the stale keychain entry is deleted to allow a clean retry
 - Session secret is only persisted **after** `importSession()` succeeds to avoid stale entries on failure
 
 ### Profile Loading
 
 - `loadProfile()` fetches the profile for the authenticated public key
-- Uses a `Mutex` with `tryLock()` to prevent concurrent loads
+- Uses a `Mutex` with `tryLock()` to prevent concurrent loads (skips if already loading)
 - The mutex is released in a `finally` block to handle coroutine cancellation
-- Profile name and image URI are cached in `SharedPreferences` for instant display on launch before the full profile loads
+- Profile name and image URI are cached in `PubkyStore` (DataStore) for instant display on launch before the full profile loads
 
 ### Exposed State
 
@@ -73,7 +74,14 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 
 ## PubkyImage Component
 
-Composable for loading and displaying images from `pubky://` URIs.
+Composable for loading and displaying images from `pubky://` URIs, backed by `PubkyImageViewModel`.
+
+### Architecture
+
+- `PubkyImageViewModel` manages image state as a `Map<String, PubkyImageState>` keyed by URI
+- The composable calls `viewModel.loadImage(uri)` via `LaunchedEffect`
+- Image fetching is delegated to `PubkyRepo.fetchImage()` which handles cache lookup and network fetching
+- Business logic follows `UI -> ViewModel -> Repository -> RUST` flow
 
 ### Caching Strategy (`PubkyImageCache`)
 
@@ -86,11 +94,11 @@ Two-tier cache:
 
 1. Check memory cache → return if hit
 2. Check disk cache → decode, populate memory, return if hit
-3. Fetch via `PubkyService.fetchFile(uri)`
+3. Fetch via `PubkyRepo.fetchImage(uri)` which delegates to `PubkyService.fetchFile()`
 4. If response is a JSON file descriptor with a `src` field, follow the indirection and fetch the blob
-5. Decode the blob into a `Bitmap`, store in both caches
+5. Decode and store via `PubkyImageCache.decodeAndStore()`
 
-### Display States
+### Display States (`PubkyImageState`)
 
 - **Loading** — `CircularProgressIndicator`
 - **Loaded** — circular-clipped `Image`
@@ -99,7 +107,7 @@ Two-tier cache:
 ## Domain Model (`PubkyProfile`)
 
 - `publicKey`, `name`, `bio`, `imageUrl`, `links`, `status`
-- `truncatedPublicKey` — computed property showing first/last 4 chars
+- `truncatedPublicKey` — uses `String.ellipsisMiddle()` extension
 - `PubkyProfileLink` — `label` + `url` pair
 - `fromFfi()` — maps from paykit's `FfiProfile` FFI type
 
@@ -116,6 +124,7 @@ Two-tier cache:
 | `services/PubkyService.kt` | FFI wrapper |
 | `repositories/PubkyRepo.kt` | Auth state and session management |
 | `data/PubkyImageCache.kt` | Two-tier image cache |
+| `data/PubkyStore.kt` | DataStore for cached profile metadata |
 | `models/PubkyProfile.kt` | Domain model |
 | `ui/components/PubkyImage.kt` | Image composable |
 | `ui/screens/profile/ProfileIntroScreen.kt` | Intro screen |

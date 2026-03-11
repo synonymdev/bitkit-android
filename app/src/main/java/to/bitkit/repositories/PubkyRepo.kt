@@ -1,10 +1,6 @@
 package to.bitkit.repositories
 
-import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -12,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -20,8 +17,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import to.bitkit.data.PubkyImageCache
+import to.bitkit.data.PubkyStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.di.BgDispatcher
+import to.bitkit.di.IoDispatcher
 import to.bitkit.models.PubkyProfile
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.Logger
@@ -32,22 +30,18 @@ enum class PubkyAuthState { Idle, Authenticating, Authenticated }
 
 @Singleton
 class PubkyRepo @Inject constructor(
-    @ApplicationContext private val context: Context,
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val pubkyService: PubkyService,
     private val keychain: Keychain,
     private val imageCache: PubkyImageCache,
+    private val pubkyStore: PubkyStore,
 ) {
     companion object {
         private const val TAG = "PubkyRepo"
-        private const val PREFS_NAME = "pubky_profile_cache"
-        private const val KEY_CACHED_NAME = "cached_name"
-        private const val KEY_CACHED_IMAGE_URI = "cached_image_uri"
         private const val PUBKY_SCHEME = "pubky://"
     }
 
-    private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
-    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
     private val loadProfileMutex = Mutex()
 
     private val _authState = MutableStateFlow(PubkyAuthState.Idle)
@@ -64,12 +58,13 @@ class PubkyRepo @Inject constructor(
     val isAuthenticated: StateFlow<Boolean> = _authState.map { it == PubkyAuthState.Authenticated }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
-    val displayName: StateFlow<String?> = _profile.map { it?.name ?: prefs.getString(KEY_CACHED_NAME, null) }
-        .stateIn(scope, SharingStarted.Eagerly, prefs.getString(KEY_CACHED_NAME, null))
+    val displayName: StateFlow<String?> = combine(_profile, pubkyStore.data) { profile, cached ->
+        profile?.name ?: cached.cachedName
+    }.stateIn(scope, SharingStarted.Eagerly, null)
 
-    val displayImageUri: StateFlow<String?> = _profile
-        .map { it?.imageUrl ?: prefs.getString(KEY_CACHED_IMAGE_URI, null) }
-        .stateIn(scope, SharingStarted.Eagerly, prefs.getString(KEY_CACHED_IMAGE_URI, null))
+    val displayImageUri: StateFlow<String?> = combine(_profile, pubkyStore.data) { profile, cached ->
+        profile?.imageUrl ?: cached.cachedImageUri
+    }.stateIn(scope, SharingStarted.Eagerly, null)
 
     private sealed interface InitResult {
         data object NoSession : InitResult
@@ -77,9 +72,13 @@ class PubkyRepo @Inject constructor(
         data object RestorationFailed : InitResult
     }
 
-    suspend fun initialize() {
+    init {
+        scope.launch { initialize() }
+    }
+
+    private suspend fun initialize() {
         val result = runCatching {
-            withContext(bgDispatcher) {
+            withContext(ioDispatcher) {
                 pubkyService.initialize()
 
                 val savedSecret = runCatching {
@@ -119,7 +118,7 @@ class PubkyRepo @Inject constructor(
     suspend fun startAuthentication(): Result<String> {
         _authState.update { PubkyAuthState.Authenticating }
         return runCatching {
-            withContext(bgDispatcher) { pubkyService.startAuth() }
+            withContext(ioDispatcher) { pubkyService.startAuth() }
         }.onFailure {
             _authState.update { PubkyAuthState.Idle }
         }
@@ -127,7 +126,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun completeAuthentication(): Result<Unit> {
         return runCatching {
-            withContext(bgDispatcher) {
+            withContext(ioDispatcher) {
                 val sessionSecret = pubkyService.completeAuth()
                 val pk = pubkyService.importSession(sessionSecret)
 
@@ -148,7 +147,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun cancelAuthentication() {
         runCatching {
-            withContext(bgDispatcher) { pubkyService.cancelAuth() }
+            withContext(ioDispatcher) { pubkyService.cancelAuth() }
         }.onFailure { Logger.warn("Cancel auth failed", it, context = TAG) }
         _authState.update { PubkyAuthState.Idle }
     }
@@ -164,7 +163,7 @@ class PubkyRepo @Inject constructor(
         _isLoadingProfile.update { true }
         try {
             runCatching {
-                withContext(bgDispatcher) {
+                withContext(ioDispatcher) {
                     val ffiProfile = pubkyService.getProfile(pk)
                     Logger.debug("Profile loaded — name: ${ffiProfile.name}, image: ${ffiProfile.image}", context = TAG)
                     PubkyProfile.fromFfi(pk, ffiProfile)
@@ -182,16 +181,16 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun signOut(): Result<Unit> = runCatching {
-        withContext(bgDispatcher) {
+        withContext(ioDispatcher) {
             runCatching { pubkyService.signOut() }
-                .onFailure {
+                .recoverCatching {
                     Logger.warn("Server sign out failed, forcing local sign out", it, context = TAG)
-                    runCatching { pubkyService.forceSignOut() }
+                    pubkyService.forceSignOut()
                 }
             runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
             runCatching { imageCache.clear() }
         }
-        clearCachedMetadata()
+        pubkyStore.reset()
         _publicKey.update { null }
         _profile.update { null }
         _authState.update { PubkyAuthState.Idle }
@@ -200,15 +199,12 @@ class PubkyRepo @Inject constructor(
     fun cachedImage(uri: String): Bitmap? = imageCache.memoryImage(uri)
 
     suspend fun fetchImage(uri: String): Result<Bitmap> = runCatching {
-        withContext(bgDispatcher) {
+        withContext(ioDispatcher) {
             imageCache.image(uri)?.let { return@withContext it }
 
             val data = pubkyService.fetchFile(uri)
             val blobData = resolveImageData(data)
-            val image = BitmapFactory.decodeByteArray(blobData, 0, blobData.size)
-                ?: error("Could not decode image blob (${blobData.size} bytes)")
-            imageCache.store(image, blobData, uri)
-            image
+            imageCache.decodeAndStore(blobData, uri).getOrThrow()
         }
     }
 
@@ -225,14 +221,9 @@ class PubkyRepo @Inject constructor(
         }.getOrDefault(data)
     }
 
-    private fun cacheMetadata(profile: PubkyProfile) {
-        prefs.edit()
-            .putString(KEY_CACHED_NAME, profile.name)
-            .putString(KEY_CACHED_IMAGE_URI, profile.imageUrl)
-            .apply()
-    }
-
-    private fun clearCachedMetadata() {
-        prefs.edit().clear().apply()
+    private suspend fun cacheMetadata(profile: PubkyProfile) {
+        pubkyStore.update {
+            it.copy(cachedName = profile.name, cachedImageUri = profile.imageUrl)
+        }
     }
 }

@@ -720,10 +720,6 @@
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Mostrar Títulos dos Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
-    <string name="slashtags__onboarding_profile1_header">Tenha seu próprio\n&lt;accent&gt;perfil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Configure seu perfil público e seus links, para que seus contatos possam pagá-lo a qualquer hora e em qualquer lugar.</string>
-    <string name="slashtags__profile">Perfil</string>
-    <string name="slashtags__profile_create">Criar Perfil</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Aguarde enquanto a Bitkit procura fundos em endereços não suportados (Legacy, Nested SegWit e Taproot).</string>
     <string name="sweep__checking_loading">PROCURANDO FUNDOS...</string>

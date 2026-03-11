@@ -720,10 +720,6 @@
     <string name="settings__rgs__button_connect">Połącz</string>
     <string name="settings__rgs__update_success_title">Rapid-Gossip-Sync zaktualizowany</string>
     <string name="settings__rgs__update_success_description">Zmiana może wymagać ponownego uruchomienia aplikacji raz lub dwa razy.</string>
-    <string name="slashtags__onboarding_profile1_header">Własny\n&lt;accent&gt;profil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Skonfiguruj swój publiczny profil i linki, aby Twoje kontakty w Bitkit mogły skontaktować się z Tobą lub zapłacić Ci w dowolnym miejscu i czasie.</string>
-    <string name="slashtags__profile">Profil</string>
-    <string name="slashtags__profile_create">Utwórz profil</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Proszę czekać, Bitkit szuka środków na nieobsługiwanych adresach (Legacy, Nested SegWit i Taproot).</string>
     <string name="sweep__checking_loading">SZUKANIE ŚRODKÓW...</string>

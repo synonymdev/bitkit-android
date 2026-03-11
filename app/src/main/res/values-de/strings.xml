@@ -752,10 +752,6 @@
     <string name="sweep__total">Gesamt</string>
     <string name="sweep__utxo_format">%1$s, %2$d UTXO</string>
     <string name="sweep__utxos_format">%1$s, %2$d UTXOs</string>
-    <string name="slashtags__onboarding_profile1_header">Besitzen Sie Ihr\n&lt;accent&gt;Profil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Richte dein öffentliches Profil und Links ein, damit deine Bitkit-Kontakte dich erreichen oder bezahlen können, jederzeit und überall.</string>
-    <string name="slashtags__profile">Profil</string>
-    <string name="slashtags__profile_create">Profil erstellen</string>
     <string name="wallet__drawer__wallet">Wallet</string>
     <string name="wallet__drawer__activity">Aktivität</string>
     <string name="wallet__drawer__contacts">Kontakte</string>

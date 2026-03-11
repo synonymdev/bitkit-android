@@ -74,6 +74,7 @@ class PubkyRingAuthViewModel @Inject constructor(
 
                     _uiState.update { it.copy(isWaitingForRing = true) }
                     context.startActivity(intent)
+                    waitForApproval()
                 }
                 .onFailure {
                     Logger.error("Authentication failed", it, context = TAG)
@@ -87,7 +88,7 @@ class PubkyRingAuthViewModel @Inject constructor(
         }
     }
 
-    fun waitForApproval() {
+    private fun waitForApproval() {
         if (approvalJob?.isActive == true) return
 
         approvalJob = viewModelScope.launch {

@@ -719,10 +719,6 @@
     <string name="settings__cs__srd_desc">Seleção aleatória para privacidade</string>
     <string name="settings__cs__srd_title">Single Random Draw</string>
     <string name="settings__language_title">Idioma</string>
-    <string name="slashtags__onboarding_profile1_header">Tenha seu próprio\n&lt;accent&gt;perfil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Configure seu perfil público e seus links, para que seus contatos possam pagá-lo a qualquer hora e em qualquer lugar.</string>
-    <string name="slashtags__profile">Perfil</string>
-    <string name="slashtags__profile_create">Criar Perfil</string>
     <string name="wallet__drawer__wallet">Carteira</string>
     <string name="wallet__drawer__activity">Atividade</string>
     <string name="wallet__drawer__contacts">Contatos</string>

@@ -15,13 +15,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,21 +31,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
@@ -114,20 +113,12 @@ private fun Content(
     }
 
     if (uiState.showSignOutDialog) {
-        AlertDialog(
-            onDismissRequest = onDismissSignOutDialog,
-            title = { Text(stringResource(R.string.profile__sign_out_title)) },
-            text = { Text(stringResource(R.string.profile__sign_out_description)) },
-            confirmButton = {
-                TextButton(onClick = onConfirmSignOut) {
-                    Text(stringResource(R.string.profile__sign_out))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissSignOutDialog) {
-                    Text(stringResource(R.string.common__dialog_cancel))
-                }
-            },
+        AppAlertDialog(
+            title = stringResource(R.string.profile__sign_out_title),
+            text = stringResource(R.string.profile__sign_out_description),
+            confirmText = stringResource(R.string.profile__sign_out),
+            onConfirm = onConfirmSignOut,
+            onDismiss = onDismissSignOutDialog,
         )
     }
 }
@@ -155,12 +146,7 @@ private fun ProfileBody(
             Column(modifier = Modifier.weight(1f)) {
                 Headline(text = AnnotatedString(profile.name))
                 VerticalSpacer(8.dp)
-                Text(
-                    text = profile.truncatedPublicKey,
-                    color = Colors.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                )
+                BodySSB(text = profile.truncatedPublicKey)
             }
 
             if (profile.imageUrl != null) {
@@ -186,12 +172,7 @@ private fun ProfileBody(
         VerticalSpacer(16.dp)
 
         if (profile.bio.isNotEmpty()) {
-            Text(
-                text = profile.bio,
-                color = Colors.White64,
-                fontSize = 18.sp,
-                lineHeight = 26.sp,
-            )
+            BodyM(text = profile.bio, color = Colors.White64)
             VerticalSpacer(8.dp)
         }
         HorizontalDivider()
@@ -233,10 +214,8 @@ private fun ProfileBody(
             }
         }
         VerticalSpacer(12.dp)
-        Text(
+        BodyS(
             text = stringResource(R.string.profile__qr_scan_label).replace("{name}", profile.name),
-            color = Colors.White,
-            fontSize = 15.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -288,20 +267,9 @@ private fun ActionButton(
 private fun ProfileLinkRow(label: String, value: String) {
     Column(modifier = Modifier.fillMaxWidth()) {
         VerticalSpacer(16.dp)
-        Text(
-            text = label.uppercase(),
-            color = Colors.White64,
-            fontWeight = FontWeight.Medium,
-            fontSize = 13.sp,
-            letterSpacing = 1.sp,
-        )
+        Text13Up(text = label, color = Colors.White64)
         VerticalSpacer(8.dp)
-        Text(
-            text = value,
-            color = Colors.White,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 15.sp,
-        )
+        BodySSB(text = value)
         VerticalSpacer(16.dp)
         HorizontalDivider()
     }

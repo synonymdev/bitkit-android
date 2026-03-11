@@ -1,9 +1,6 @@
 package to.bitkit.ui.screens.profile
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,10 +15,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.shared.util.shareText
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -94,8 +93,7 @@ class ProfileViewModel @Inject constructor(
 
     fun copyPublicKey() {
         val pk = pubkyRepo.publicKey.value ?: return
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.profile__public_key), pk))
+        context.setClipboardText(pk, context.getString(R.string.profile__public_key))
         viewModelScope.launch {
             ToastEventBus.send(
                 type = Toast.ToastType.SUCCESS,
@@ -106,11 +104,7 @@ class ProfileViewModel @Inject constructor(
 
     fun sharePublicKey() {
         val pk = pubkyRepo.publicKey.value ?: return
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, pk)
-        }
-        context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        shareText(context, pk)
     }
 }
 

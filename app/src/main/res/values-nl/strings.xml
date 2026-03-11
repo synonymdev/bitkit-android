@@ -720,10 +720,6 @@
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Widgettitels tonen</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
-    <string name="slashtags__onboarding_profile1_header">Beheer je\n&lt;accent&gt;profiel&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Stel je openbare profiel en links in, zodat je Bitkit-contacten je kunnen bereiken of betalen, altijd en overal.</string>
-    <string name="slashtags__profile">Profiel</string>
-    <string name="slashtags__profile_create">Profiel aanmaken</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Even geduld terwijl Bitkit zoekt naar geld op niet-ondersteunde adressen (Legacy, Nested SegWit en Taproot).</string>
     <string name="sweep__checking_loading">ZOEKEN NAAR GELD...</string>

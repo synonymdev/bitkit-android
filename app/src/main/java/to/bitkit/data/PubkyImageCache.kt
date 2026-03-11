@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
+import to.bitkit.ext.toHex
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -31,22 +32,27 @@ class PubkyImageCache @Inject constructor(
         return null
     }
 
-    fun store(bitmap: Bitmap, data: ByteArray, uri: String) {
-        memoryCache[uri] = bitmap
-        runCatching { diskPath(uri).writeBytes(data) }
+    fun decodeAndStore(data: ByteArray, uri: String): Result<Bitmap> = runCatching {
+        val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+            ?: error("Could not decode image blob (${data.size} bytes)")
+        store(bitmap, data, uri)
+        bitmap
     }
 
-    fun clear() {
+    fun store(bitmap: Bitmap, data: ByteArray, uri: String): Result<Unit> = runCatching {
+        memoryCache[uri] = bitmap
+        diskPath(uri).writeBytes(data)
+    }
+
+    fun clear(): Result<Unit> = runCatching {
         memoryCache.clear()
-        runCatching {
-            diskDir.deleteRecursively()
-            diskDir.mkdirs()
-        }
+        diskDir.deleteRecursively()
+        diskDir.mkdirs()
     }
 
     private fun diskPath(uri: String): File {
         val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }
+        val hash = digest.digest(uri.toByteArray()).toHex()
         return File(diskDir, hash)
     }
 }

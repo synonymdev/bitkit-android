@@ -720,10 +720,6 @@
     <string name="settings__widgets__nav_title">Ginys</string>
     <string name="settings__widgets__showWidgetTitles">Mostrar títols de ginys</string>
     <string name="settings__widgets__showWidgets">Ginys</string>
-    <string name="slashtags__onboarding_profile1_header">Sigues propietari\n&lt;accent&gt;del teu perfil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Configura el teu perfil públic i enllaços, perquè els teus contactes de Bitkit puguin contactar-te o pagar-te en qualsevol moment i lloc.</string>
-    <string name="slashtags__profile">Perfil</string>
-    <string name="slashtags__profile_create">Crear perfil</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Si us plau, espera mentre Bitkit cerca fons en adreces no compatibles (Legacy, Nested SegWit i Taproot).</string>
     <string name="sweep__checking_loading">CERCANT FONS...</string>

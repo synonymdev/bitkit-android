@@ -164,7 +164,7 @@ class AppViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val coreService: CoreService,
-    private val pubkyRepo: PubkyRepo,
+    @Suppress("UnusedPrivateProperty") private val pubkyRepo: PubkyRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
@@ -255,7 +255,6 @@ class AppViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch { pubkyRepo.initialize() }
         viewModelScope.launch {
             ToastEventBus.events.collect {
                 toast(it)

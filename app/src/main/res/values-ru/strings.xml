@@ -736,10 +736,6 @@
     <string name="settings__widgets__nav_title">Виджеты</string>
     <string name="settings__widgets__showWidgetTitles">Показывать Заголовки Виджетов</string>
     <string name="settings__widgets__showWidgets">Виджеты</string>
-    <string name="slashtags__onboarding_profile1_header">Владейте своим\n&lt;accent&gt;профилем&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Настройте свой публичный профиль и ссылки, чтобы ваши контакты Bitkit могли связаться с вами или заплатить вам в любое время и в любом месте.</string>
-    <string name="slashtags__profile">Профиль</string>
-    <string name="slashtags__profile_create">Создать Профиль</string>
     <string name="sweep__balance_format">%1\$s sats</string>
     <string name="sweep__checking_description">Пожалуйста, подождите, пока Bitkit ищет средства на неподдерживаемых адресах (Legacy, Nested SegWit и Taproot).</string>
     <string name="sweep__checking_loading">ПОИСК СРЕДСТВ...</string>
