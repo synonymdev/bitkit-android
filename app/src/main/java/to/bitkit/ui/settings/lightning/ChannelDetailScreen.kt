@@ -98,12 +98,48 @@ fun ChannelDetailScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    Content(
+        uiState = uiState,
+        onBack = { navController.popBackStack() },
+        onRefresh = { viewModel.onPullToRefresh() },
+        onCopyText = { text ->
+            context.setClipboardText(text)
+            app.toast(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.common__copied),
+                description = text,
+            )
+        },
+        onOpenUrl = { txId ->
+            val url = getBlockExplorerUrl(txId)
+            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+            context.startActivity(intent)
+        },
+        onSupport = { order, channel -> contactSupport(order, channel, uiState.nodeId, context) },
+        onCloseConnection = { channelDetailId ->
+            navController.navigate(Routes.CloseConnection(channelId = channelDetailId))
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Suppress("CyclomaticComplexMethod")
+@Composable
+private fun Content(
+    uiState: ChannelDetailUiState = ChannelDetailUiState(),
+    onBack: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onCopyText: (String) -> Unit = {},
+    onOpenUrl: (String) -> Unit = {},
+    onSupport: (Any, ChannelUi) -> Unit = { _, _ -> },
+    onCloseConnection: (String) -> Unit = {},
+) {
     when (val loadState = uiState.channelLoadState) {
         is ChannelLoadState.Loading -> {
             ScreenColumn {
                 AppTopBar(
                     titleText = "",
-                    onBackClick = { navController.popBackStack() },
+                    onBackClick = onBack,
                     actions = { DrawerNavIcon() },
                 )
                 Box(
@@ -116,39 +152,23 @@ fun ChannelDetailScreen(
         }
 
         is ChannelLoadState.NotFound -> {
-            LaunchedEffect(Unit) {
-                navController.popBackStack()
-            }
+            LaunchedEffect(Unit) { onBack() }
         }
 
         is ChannelLoadState.Success -> {
-            val channel = loadState.channel
-            Content(
-                channel = channel,
+            ChannelDetailContent(
+                channel = loadState.channel,
                 blocktankOrders = uiState.paidOrders,
                 cjitEntries = uiState.cjitEntries,
                 txTime = uiState.txTime,
                 isRefreshing = uiState.isRefreshing,
                 isClosedChannel = uiState.isClosedChannel,
-                onBack = { navController.popBackStack() },
-                onRefresh = { viewModel.onPullToRefresh() },
-                onCopyText = { text ->
-                    context.setClipboardText(text)
-                    app.toast(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.common__copied),
-                        description = text,
-                    )
-                },
-                onOpenUrl = { txId ->
-                    val url = getBlockExplorerUrl(txId)
-                    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                    context.startActivity(intent)
-                },
-                onSupport = { order -> contactSupport(order, channel, uiState.nodeId, context) },
-                onCloseConnection = {
-                    navController.navigate(Routes.CloseConnection(channelId = channel.details.channelId))
-                },
+                onBack = onBack,
+                onRefresh = onRefresh,
+                onCopyText = onCopyText,
+                onOpenUrl = onOpenUrl,
+                onSupport = { onSupport(it, loadState.channel) },
+                onCloseConnection = { onCloseConnection(loadState.channel.details.channelId) },
             )
         }
     }
@@ -157,7 +177,7 @@ fun ChannelDetailScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("CyclomaticComplexMethod")
 @Composable
-private fun Content(
+private fun ChannelDetailContent(
     channel: ChannelUi,
     blocktankOrders: List<IBtOrder> = emptyList(),
     cjitEntries: List<IcJitEntry> = emptyList(),
@@ -640,7 +660,7 @@ private fun createSupportEmailIntent(
 @Composable
 private fun PreviewOpenChannel() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 1",
                 details = createChannelDetails().copy(
@@ -661,7 +681,7 @@ private fun PreviewOpenChannel() {
 @Composable
 private fun PreviewChannelWithOrder() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 2",
                 details = createChannelDetails().copy(
@@ -747,7 +767,7 @@ private fun PreviewChannelWithOrder() {
 @Composable
 private fun PreviewPendingOrder() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 3 (Pending)",
                 details = createChannelDetails().copy(
@@ -834,7 +854,7 @@ private fun PreviewPendingOrder() {
 @Composable
 private fun PreviewExpiredOrder() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 4 (Failed)",
                 details = createChannelDetails().copy(
@@ -904,7 +924,7 @@ private fun PreviewExpiredOrder() {
 @Composable
 private fun PreviewChannelWithCjit() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "CJIT Connection",
                 details = createChannelDetails().copy(

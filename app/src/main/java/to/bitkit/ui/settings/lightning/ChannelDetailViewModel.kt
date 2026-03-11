@@ -23,6 +23,7 @@ import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.Toast
+import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -100,7 +101,7 @@ class ChannelDetailViewModel @Inject constructor(
                     channelId = order.id,
                     counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
                     fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-                    channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
+                    channelValueSats = order.clientBalanceSat.safe() + order.lspBalanceSat.safe(),
                     outboundCapacityMsat = order.clientBalanceSat * 1000u,
                     inboundCapacityMsat = order.lspBalanceSat * 1000u,
                 ).mapToUiModel(channels, blocktankState.paidOrders, connectionText)
@@ -189,6 +190,8 @@ class ChannelDetailViewModel @Inject constructor(
                                 nodeId = lightningRepo.getNodeId().orEmpty(),
                             )
                         }
+                    } else {
+                        _uiState.update { it.copy(channelLoadState = ChannelLoadState.NotFound) }
                     }
                 }
             }

@@ -28,6 +28,7 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
 import to.bitkit.models.Toast
+import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -35,6 +36,7 @@ import to.bitkit.repositories.LogsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 
 @HiltViewModel
 class LightningConnectionsViewModel @Inject constructor(
@@ -131,7 +133,7 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             refreshObservedState()
-            delay(500)
+            delay(500.milliseconds)
             _uiState.update { it.copy(isRefreshing = false) }
         }
     }
@@ -188,7 +190,7 @@ internal fun getPendingOrdersAsChannels(
             channelId = order.id,
             counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
             fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-            channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
+            channelValueSats = order.clientBalanceSat.safe() + order.lspBalanceSat.safe(),
             outboundCapacityMsat = order.clientBalanceSat * 1000u,
             inboundCapacityMsat = order.lspBalanceSat * 1000u,
         )
@@ -205,7 +207,7 @@ internal fun getFailedOrdersAsChannels(
             channelId = order.id,
             counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
             fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-            channelValueSats = order.clientBalanceSat + order.lspBalanceSat,
+            channelValueSats = order.clientBalanceSat.safe() + order.lspBalanceSat.safe(),
             outboundCapacityMsat = order.clientBalanceSat * 1000u,
             inboundCapacityMsat = order.lspBalanceSat * 1000u,
             isChannelReady = false,
