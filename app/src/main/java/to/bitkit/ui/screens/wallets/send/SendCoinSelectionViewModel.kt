@@ -1,6 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -164,7 +164,7 @@ class SendCoinSelectionViewModel @Inject constructor(
     }
 }
 
-@Immutable
+@Stable
 data class CoinSelectionUiState(
     val availableUtxos: ImmutableList<SpendableUtxo> = persistentListOf(),
     val selectedUtxos: ImmutableList<SpendableUtxo> = persistentListOf(),

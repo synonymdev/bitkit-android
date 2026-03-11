@@ -1,7 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.vssclient.KeyVersion
@@ -229,7 +229,7 @@ class VssDebugViewModel @Inject constructor(
     }
 }
 
-@Immutable
+@Stable
 data class VssDebugUiState(
     val isLoading: Boolean = false,
     val vssKeys: ImmutableList<KeyVersion> = persistentListOf(),

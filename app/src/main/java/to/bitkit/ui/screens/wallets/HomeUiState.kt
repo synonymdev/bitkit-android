@@ -1,6 +1,6 @@
 package to.bitkit.ui.screens.wallets
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.data.dto.price.PriceDTO
@@ -17,7 +17,7 @@ import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 
-@Immutable
+@Stable
 data class HomeUiState(
     val suggestions: ImmutableList<Suggestion> = persistentListOf(),
     val banners: ImmutableList<BannerItem> = persistentListOf(),

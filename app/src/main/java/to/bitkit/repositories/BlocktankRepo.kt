@@ -1,6 +1,6 @@
 package to.bitkit.repositories
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.ChannelLiquidityParams
@@ -520,7 +520,7 @@ class BlocktankRepo @Inject constructor(
     }
 }
 
-@Immutable
+@Stable
 data class BlocktankState(
     val orders: ImmutableList<IBtOrder> = persistentListOf(),
     val paidOrders: ImmutableList<IBtOrder> = persistentListOf(),

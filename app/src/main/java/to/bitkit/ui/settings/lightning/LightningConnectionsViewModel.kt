@@ -2,7 +2,7 @@ package to.bitkit.ui.settings.lightning
 
 import android.content.Context
 import android.net.Uri
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
@@ -290,7 +290,7 @@ internal fun ClosedChannelDetails.toChannelUi(
     )
 }
 
-@Immutable
+@Stable
 data class LightningConnectionsUiState(
     val isNodeRunning: Boolean = true,
     val isRefreshing: Boolean = false,

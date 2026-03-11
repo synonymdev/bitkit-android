@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.annotation.StringRes
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -2454,7 +2453,7 @@ class AppViewModel @Inject constructor(
 }
 
 // region send contract
-@Immutable
+@Stable
 data class SendUiState(
     val address: String = "",
     val bolt11: String? = null,
