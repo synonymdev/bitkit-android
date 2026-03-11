@@ -42,7 +42,6 @@ class PubkyRepo @Inject constructor(
     companion object {
         private const val TAG = "PubkyRepo"
         private const val PUBKY_SCHEME = "pubky://"
-        private const val PUBKY_PREFIX = "pubky"
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
@@ -224,6 +223,7 @@ class PubkyRepo @Inject constructor(
                     }
                 }
             }.onSuccess { loadedContacts ->
+                if (_publicKey.value == null) return@onSuccess
                 _contacts.update { loadedContacts }
             }.onFailure {
                 Logger.error("Failed to load contacts", it, context = TAG)
@@ -291,5 +291,5 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun String.ensurePubkyPrefix(): String =
-        if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
+        if (startsWith(PUBKY_SCHEME)) this else "$PUBKY_SCHEME$this"
 }
