@@ -40,7 +40,7 @@ class SendCoinSelectionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CoinSelectionUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _tagsByTxId = MutableStateFlow<ImmutableMap<String, List<String>>>(persistentMapOf())
+    private val _tagsByTxId = MutableStateFlow<ImmutableMap<String, ImmutableList<String>>>(persistentMapOf())
     val tagsByTxId = _tagsByTxId.asStateFlow()
 
     private var onchainActivities: List<Activity> = emptyList()
@@ -89,7 +89,9 @@ class SendCoinSelectionViewModel @Inject constructor(
                     .onSuccess { tags ->
                         if (tags.isNotEmpty()) {
                             // add map entry linking tags to utxo.outpoint.txid
-                            _tagsByTxId.update { currentMap -> (currentMap + (txId to tags)).toImmutableMap() }
+                            _tagsByTxId.update {
+                                (it + (txId to tags.toImmutableList())).toImmutableMap()
+                            }
                         }
                     }
                     .onFailure {

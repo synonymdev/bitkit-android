@@ -90,7 +90,7 @@ fun SendCoinSelectionScreen(
 private fun Content(
     uiState: CoinSelectionUiState,
     modifier: Modifier = Modifier,
-    tagsByTxId: ImmutableMap<String, List<String>> = persistentMapOf(),
+    tagsByTxId: ImmutableMap<String, ImmutableList<String>> = persistentMapOf(),
     onBack: () -> Unit = {},
     onContinue: () -> Unit = {},
     onClickAuto: () -> Unit = {},
@@ -138,7 +138,7 @@ private fun Content(
                 UtxoRow(
                     utxo = utxo,
                     isSelected = uiState.selectedUtxos.any { it.outpoint == utxo.outpoint },
-                    tags = tagsByTxId[utxo.outpoint.txid]?.toImmutableList() ?: persistentListOf(),
+                    tags = tagsByTxId[utxo.outpoint.txid] ?: persistentListOf(),
                     onTap = { onClickUtxo(utxo) },
                     onRender = onRenderUtxo,
                 )
@@ -266,8 +266,8 @@ private fun Preview() {
                     isSelectionValid = true,
                 ),
                 tagsByTxId = persistentMapOf(
-                    "abc123" to listOf("coffee", "work"),
-                    "def456" to listOf("shopping", "groceries", "food"),
+                    "abc123" to persistentListOf("coffee", "work"),
+                    "def456" to persistentListOf("shopping", "groceries", "food"),
                 ),
                 modifier = Modifier.sheetHeight(),
             )
