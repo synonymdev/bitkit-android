@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +29,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("TooManyFunctions")
 @HiltViewModel
@@ -45,6 +47,7 @@ class ChannelDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ChannelDetailUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var observerJob: Job? = null
     private val connectionText by lazy { context.getString(R.string.lightning__connection) }
 
     fun loadChannel(channelId: String) = viewModelScope.launch {
@@ -70,18 +73,19 @@ class ChannelDetailViewModel @Inject constructor(
                 paidOrders = blocktankRepo.blocktankState.value.paidOrders,
                 cjitEntries = blocktankRepo.blocktankState.value.cjitEntries,
                 isClosedChannel = isClosedChannel,
+                nodeId = lightningRepo.getNodeId().orEmpty(),
             )
         }
 
         fetchActivityTimestamp(channelId)
-        observeChannelUpdates(channelId, closedChannels)
+        observeChannelUpdates(channelId)
     }
 
     fun onPullToRefresh() = viewModelScope.launch {
         _uiState.update { it.copy(isRefreshing = true) }
         lightningRepo.sync()
         blocktankRepo.refreshOrders()
-        delay(500)
+        delay(500.milliseconds)
         _uiState.update { it.copy(isRefreshing = false) }
     }
 
@@ -151,26 +155,41 @@ class ChannelDetailViewModel @Inject constructor(
         }
     }
 
-    private fun observeChannelUpdates(channelId: String, closedChannels: List<ChannelUi>) = viewModelScope.launch {
-        combine(
-            lightningRepo.lightningState,
-            blocktankRepo.blocktankState,
-        ) { lightningState, blocktankState ->
-            val channels = lightningState.channels
-
-            val updatedChannel = resolveActiveChannel(channelId, channels, blocktankState.paidOrders)
-            val isClosedChannel = closedChannels.any { it.details.channelId == channelId }
-
-            Triple(updatedChannel, blocktankState, isClosedChannel)
-        }.collect { (updatedChannel, blocktankState, isClosedChannel) ->
-            if (updatedChannel != null) {
-                _uiState.update {
-                    it.copy(
-                        channelLoadState = ChannelLoadState.Success(updatedChannel),
-                        paidOrders = blocktankState.paidOrders,
-                        cjitEntries = blocktankState.cjitEntries,
-                        isClosedChannel = isClosedChannel,
-                    )
+    private fun observeChannelUpdates(channelId: String) {
+        observerJob?.cancel()
+        observerJob = viewModelScope.launch {
+            combine(
+                lightningRepo.lightningState,
+                blocktankRepo.blocktankState,
+            ) { lightningState, blocktankState ->
+                val channels = lightningState.channels
+                val updatedChannel = resolveActiveChannel(channelId, channels, blocktankState.paidOrders)
+                Pair(updatedChannel, blocktankState)
+            }.collect { (updatedChannel, blocktankState) ->
+                if (updatedChannel != null) {
+                    _uiState.update {
+                        it.copy(
+                            channelLoadState = ChannelLoadState.Success(updatedChannel),
+                            paidOrders = blocktankState.paidOrders,
+                            cjitEntries = blocktankState.cjitEntries,
+                            nodeId = lightningRepo.getNodeId().orEmpty(),
+                        )
+                    }
+                } else {
+                    val freshClosed = loadClosedChannels()
+                    val isNowClosed = freshClosed.any { it.details.channelId == channelId }
+                    if (isNowClosed) {
+                        val closedChannel = freshClosed.first { it.details.channelId == channelId }
+                        _uiState.update {
+                            it.copy(
+                                channelLoadState = ChannelLoadState.Success(closedChannel),
+                                isClosedChannel = true,
+                                paidOrders = blocktankState.paidOrders,
+                                cjitEntries = blocktankState.cjitEntries,
+                                nodeId = lightningRepo.getNodeId().orEmpty(),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -184,6 +203,7 @@ data class ChannelDetailUiState(
     val txTime: ULong? = null,
     val isRefreshing: Boolean = false,
     val isClosedChannel: Boolean = false,
+    val nodeId: String = "",
 )
 
 sealed interface ChannelLoadState {

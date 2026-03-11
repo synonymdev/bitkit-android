@@ -69,8 +69,8 @@ class CloseConnectionViewModel @Inject constructor(
                         )
                     }
                 },
-                onFailure = { error ->
-                    Logger.error("Failed to close channel", error, context = TAG)
+                onFailure = {
+                    Logger.error("Failed to close channel", it, context = TAG)
 
                     ToastEventBus.send(
                         type = Toast.ToastType.WARNING,

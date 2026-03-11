@@ -46,6 +46,10 @@ class LightningConnectionsViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "LightningConnectionsViewModel"
+    }
+
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -166,10 +170,6 @@ class LightningConnectionsViewModel @Inject constructor(
                     )
                 }
         }
-    }
-
-    companion object {
-        private const val TAG = "LightningConnectionsViewModel"
     }
 }
 

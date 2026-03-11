@@ -21,6 +21,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -144,7 +145,7 @@ fun ChannelDetailScreen(
                     val intent = Intent(Intent.ACTION_VIEW, url.toUri())
                     context.startActivity(intent)
                 },
-                onSupport = { order -> contactSupport(order, channel, context) },
+                onSupport = { order -> contactSupport(order, channel, uiState.nodeId, context) },
                 onCloseConnection = {
                     navController.navigate(Routes.CloseConnection(channelId = channel.details.channelId))
                 },
@@ -177,19 +178,19 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
 
-        // Check if the channel was opened via CJIT
-        val cjitEntry = cjitEntries.find { entry ->
-            entry.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
+        val cjitEntry = remember(cjitEntries, channel) {
+            cjitEntries.find { entry ->
+                entry.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
+            }
         }
 
-        // Check if the channel was opened via blocktank order
-        val blocktankOrder = blocktankOrders.find { order ->
-            // real channel
-            if (channel.details.fundingTxo?.txid != null) {
-                order.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
-            } else {
-                // fake channel
-                order.id == channel.details.channelId
+        val blocktankOrder = remember(blocktankOrders, channel) {
+            blocktankOrders.find { order ->
+                if (channel.details.fundingTxo?.txid != null) {
+                    order.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
+                } else {
+                    order.id == channel.details.channelId
+                }
             }
         }
 
@@ -584,11 +585,13 @@ private fun formatUnixTimestamp(timestamp: Long): String {
 private fun contactSupport(
     order: Any,
     channel: ChannelUi,
+    nodeId: String,
     context: Context,
 ) {
     val intent = createSupportEmailIntent(
         order = order,
         channel = channel,
+        nodeId = nodeId,
     )
     runCatching {
         context.startActivity(Intent.createChooser(intent, context.getString(R.string.lightning__support)))
@@ -601,6 +604,7 @@ private fun contactSupport(
 private fun createSupportEmailIntent(
     order: Any, // IBtOrder or IcJitEntry
     channel: ChannelUi,
+    nodeId: String,
 ): Intent {
     val subject = "Bitkit Support [Channel]"
 
@@ -624,6 +628,7 @@ private fun createSupportEmailIntent(
         appendLine()
         appendLine("Platform: ${Env.platform}")
         appendLine("Version: ${Env.version}")
+        appendLine("LDK node ID: $nodeId")
     }.trim()
 
     val uri = "mailto:${Env.SUPPORT_EMAIL}?subject=${Uri.encode(subject)}&body=${Uri.encode(body)}".toUri()
