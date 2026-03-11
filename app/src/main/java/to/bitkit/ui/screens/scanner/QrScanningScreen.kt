@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -72,7 +71,6 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
-import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
@@ -89,7 +87,6 @@ private const val TAG = "QrScanningScreen"
 @Composable
 fun QrScanningScreen(
     navController: NavController,
-    inSheet: Boolean = false,
     onBack: () -> Unit = { navController.popBackStack() },
     onScanSuccess: (String) -> Unit,
 ) {
@@ -205,7 +202,6 @@ fun QrScanningScreen(
         deniedContent = {
             DeniedContent(
                 shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
-                inSheet = inSheet,
                 onClickOpenSettings = {
                     context.startActivityAppSettings()
                 },
@@ -217,14 +213,10 @@ fun QrScanningScreen(
         grantedContent = {
             Column(
                 modifier = Modifier
-                    .then(if (inSheet) Modifier.gradientBackground() else Modifier)
-                    .then(if (inSheet) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
+                    .gradientBackground()
+                    .navigationBarsPadding()
             ) {
-                if (inSheet) {
-                    SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
-                } else {
-                    AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = onBack)
-                }
+                SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
 
                 Content(
                     previewView = previewView,
