@@ -14,7 +14,6 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.PubkyImageCache
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
@@ -59,7 +58,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `startAuthentication should return auth uri on success`() = test {
         val authUri = "pubky://auth?capabilities=..."
-        wheneverBlocking { pubkyService.startAuth() }.thenReturn(authUri)
+        whenever(pubkyService.startAuth()).thenReturn(authUri)
 
         val result = sut.startAuthentication()
 
@@ -69,7 +68,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `startAuthentication should reset state on failure`() = test {
-        wheneverBlocking { pubkyService.startAuth() }.thenThrow(RuntimeException("Auth failed"))
+        whenever(pubkyService.startAuth()).thenThrow(RuntimeException("Auth failed"))
 
         val result = sut.startAuthentication()
 
@@ -83,8 +82,8 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `completeAuthentication should save session and update state`() = test {
         val testSecret = "session_secret"
         val testPk = "completed_pk"
-        wheneverBlocking { pubkyService.completeAuth() }.thenReturn(testSecret)
-        wheneverBlocking { pubkyService.importSession(testSecret) }.thenReturn(testPk)
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
 
         val ffiProfile = mock<FfiProfile>()
         whenever(ffiProfile.name).thenReturn("User")
@@ -92,7 +91,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(ffiProfile.image).thenReturn(null)
         whenever(ffiProfile.links).thenReturn(null)
         whenever(ffiProfile.status).thenReturn(null)
-        wheneverBlocking { pubkyService.getProfile(testPk) }.thenReturn(ffiProfile)
+        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
 
         val result = sut.completeAuthentication()
 
@@ -104,7 +103,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `completeAuthentication should reset state on failure`() = test {
-        wheneverBlocking { pubkyService.completeAuth() }.thenThrow(RuntimeException("Failed"))
+        whenever(pubkyService.completeAuth()).thenThrow(RuntimeException("Failed"))
 
         val result = sut.completeAuthentication()
 
@@ -115,7 +114,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `cancelAuthentication should reset state to idle`() = test {
-        wheneverBlocking { pubkyService.startAuth() }.thenReturn("auth_uri")
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         sut.startAuthentication()
 
         sut.cancelAuthentication()
@@ -134,7 +133,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(ffiProfile.image).thenReturn("pubky://image_uri")
         whenever(ffiProfile.links).thenReturn(null)
         whenever(ffiProfile.status).thenReturn("active")
-        wheneverBlocking { pubkyService.getProfile(pk) }.thenReturn(ffiProfile)
+        whenever(pubkyService.getProfile(pk)).thenReturn(ffiProfile)
 
         sut.loadProfile()
 
@@ -153,7 +152,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNotNull(existingProfile)
 
         val pk = sut.publicKey.value!!
-        wheneverBlocking { pubkyService.getProfile(pk) }.thenThrow(RuntimeException("Network error"))
+        whenever(pubkyService.getProfile(pk)).thenThrow(RuntimeException("Network error"))
 
         sut.loadProfile()
 
@@ -179,7 +178,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(ffiProfile.image).thenReturn("pubky://cached_image")
         whenever(ffiProfile.links).thenReturn(null)
         whenever(ffiProfile.status).thenReturn(null)
-        wheneverBlocking { pubkyService.getProfile(pk) }.thenReturn(ffiProfile)
+        whenever(pubkyService.getProfile(pk)).thenReturn(ffiProfile)
 
         sut.loadProfile()
 
@@ -204,7 +203,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut should force sign out when server sign out fails`() = test {
         authenticateForTesting()
-        wheneverBlocking { pubkyService.signOut() }.thenThrow(RuntimeException("Server error"))
+        whenever(pubkyService.signOut()).thenThrow(RuntimeException("Server error"))
 
         val result = sut.signOut()
 
@@ -250,7 +249,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `fetchImage should fail when fetch throws`() = test {
         val testUri = "pubky://failing_image"
         whenever(imageCache.image(testUri)).thenReturn(null)
-        wheneverBlocking { pubkyService.fetchFile(testUri) }.thenThrow(RuntimeException("Network error"))
+        whenever(pubkyService.fetchFile(testUri)).thenThrow(RuntimeException("Network error"))
 
         val result = sut.fetchImage(testUri)
 
@@ -284,8 +283,8 @@ class PubkyRepoTest : BaseUnitTest() {
     private suspend fun authenticateForTesting() {
         val testSecret = "test_secret"
         val testPk = "test_pk_12345"
-        wheneverBlocking { pubkyService.completeAuth() }.thenReturn(testSecret)
-        wheneverBlocking { pubkyService.importSession(testSecret) }.thenReturn(testPk)
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
 
         val ffiProfile = mock<FfiProfile>()
         whenever(ffiProfile.name).thenReturn("Test")
@@ -293,7 +292,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(ffiProfile.image).thenReturn(null)
         whenever(ffiProfile.links).thenReturn(null)
         whenever(ffiProfile.status).thenReturn(null)
-        wheneverBlocking { pubkyService.getProfile(testPk) }.thenReturn(ffiProfile)
+        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
 
         sut.completeAuthentication()
     }

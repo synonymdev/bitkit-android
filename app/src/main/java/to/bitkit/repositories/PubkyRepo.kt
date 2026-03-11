@@ -106,7 +106,7 @@ class PubkyRepo @Inject constructor(
             is InitResult.Restored -> {
                 _publicKey.update { result.publicKey }
                 _authState.update { PubkyAuthState.Authenticated }
-                Logger.info("Paykit session restored for ${result.publicKey}", context = TAG)
+                Logger.info("Paykit session restored for '${result.publicKey}'", context = TAG)
                 loadProfile()
             }
             is InitResult.RestorationFailed -> {
@@ -140,7 +140,7 @@ class PubkyRepo @Inject constructor(
         }.onSuccess { pk ->
             _publicKey.update { pk }
             _authState.update { PubkyAuthState.Authenticated }
-            Logger.info("Pubky auth completed for $pk", context = TAG)
+            Logger.info("Pubky auth completed for '$pk'", context = TAG)
             loadProfile()
         }.map {}
     }
@@ -165,10 +165,14 @@ class PubkyRepo @Inject constructor(
             runCatching {
                 withContext(ioDispatcher) {
                     val ffiProfile = pubkyService.getProfile(pk)
-                    Logger.debug("Profile loaded — name: ${ffiProfile.name}, image: ${ffiProfile.image}", context = TAG)
+                    Logger.debug(
+                        "Profile loaded — name: '${ffiProfile.name}', image: '${ffiProfile.image}'",
+                        context = TAG,
+                    )
                     PubkyProfile.fromFfi(pk, ffiProfile)
                 }
             }.onSuccess { loadedProfile ->
+                if (_publicKey.value == null) return@onSuccess
                 _profile.update { loadedProfile }
                 cacheMetadata(loadedProfile)
             }.onFailure {
@@ -213,7 +217,7 @@ class PubkyRepo @Inject constructor(
             val json = JSONObject(String(data))
             val src = json.optString("src", "")
             if (src.isNotEmpty() && src.startsWith(PUBKY_SCHEME)) {
-                Logger.debug("File descriptor found, fetching blob from: $src", context = TAG)
+                Logger.debug("File descriptor found, fetching blob from: '$src'", context = TAG)
                 pubkyService.fetchFile(src)
             } else {
                 data

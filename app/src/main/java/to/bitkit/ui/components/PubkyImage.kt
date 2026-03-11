@@ -61,7 +61,7 @@ class PubkyImageViewModel @Inject constructor(
                     _images.update { it + (uri to PubkyImageState.Loaded(bitmap)) }
                 }
                 .onFailure {
-                    Logger.error("Failed to load pubky image", it, context = TAG)
+                    Logger.error("Failed to load pubky image '$uri'", it, context = TAG)
                     _images.update { it + (uri to PubkyImageState.Failed) }
                 }
         }
