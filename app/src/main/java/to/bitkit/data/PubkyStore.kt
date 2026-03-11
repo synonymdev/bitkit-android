@@ -11,7 +11,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private val Context.pubkyDataStore: DataStore<PubkyStoreData> by dataStore(
-    fileName = "pubky_profile_cache.json",
+    fileName = "pubky.json",
     serializer = PubkyStoreSerializer,
 )
 

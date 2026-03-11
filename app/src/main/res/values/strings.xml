@@ -67,6 +67,12 @@
     <string name="common__usable">Usable</string>
     <string name="common__yes">Yes</string>
     <string name="common__yes_proceed">Yes, Proceed</string>
+    <string name="contacts__detail_title">Contact</string>
+    <string name="contacts__empty_state">You don\'t have any contacts yet.</string>
+    <string name="contacts__intro_description">Get automatic updates from contacts, pay them, and follow their public profiles.</string>
+    <string name="contacts__intro_title">Dynamic\n&lt;accent&gt;contacts&lt;/accent&gt;</string>
+    <string name="contacts__my_profile">MY PROFILE</string>
+    <string name="contacts__nav_title">Contacts</string>
     <string name="fee__custom__description">Depends on the fee</string>
     <string name="fee__custom__shortDescription">Depends on the fee</string>
     <string name="fee__custom__title">Custom</string>

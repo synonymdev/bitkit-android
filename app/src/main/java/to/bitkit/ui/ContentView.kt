@@ -59,7 +59,11 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
-import to.bitkit.ui.screens.common.ComingSoonScreen
+import to.bitkit.ui.screens.contacts.ContactDetailScreen
+import to.bitkit.ui.screens.contacts.ContactDetailViewModel
+import to.bitkit.ui.screens.contacts.ContactsIntroScreen
+import to.bitkit.ui.screens.contacts.ContactsScreen
+import to.bitkit.ui.screens.contacts.ContactsViewModel
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.profile.ProfileScreen
 import to.bitkit.ui.screens.profile.ProfileViewModel
@@ -365,6 +369,7 @@ fun ContentView(
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
         val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
 
@@ -493,6 +498,7 @@ fun ContentView(
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
                 hasSeenProfileIntro = hasSeenProfileIntro,
+                hasSeenContactsIntro = hasSeenContactsIntro,
                 isProfileAuthenticated = isProfileAuthenticated,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
@@ -527,7 +533,7 @@ private fun RootNavHost(
             navController = navController,
         )
         settings(navController, settingsViewModel)
-        comingSoon(navController)
+        contacts(navController, settingsViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
         generalSettings(navController)
@@ -908,13 +914,41 @@ private fun NavGraphBuilder.settings(
     }
 }
 
-private fun NavGraphBuilder.comingSoon(
+private fun NavGraphBuilder.contacts(
     navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Contacts> {
-        ComingSoonScreen(
-            onWalletOverviewClick = { navController.navigateToHome() },
-            onBackClick = { navController.popBackStack() }
+        val viewModel: ContactsViewModel = hiltViewModel()
+        ContactsScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onClickContact = { navController.navigate(Routes.ContactDetail(it)) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactsIntro> {
+        val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        ContactsIntroScreen(
+            onContinue = {
+                settingsViewModel.setHasSeenContactsIntro(true)
+                val destination = when {
+                    isAuthenticated -> Routes.Contacts
+                    hasSeenProfileIntro -> Routes.PubkyRingAuth
+                    else -> Routes.ProfileIntro
+                }
+                navController.navigate(destination) {
+                    popUpTo(Routes.Home)
+                }
+            },
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactDetail> {
+        val viewModel: ContactDetailViewModel = hiltViewModel()
+        ContactDetailScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
         )
     }
 }
@@ -1543,6 +1577,15 @@ inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
     }
 }
 
+fun NavController.navigateToProfile(
+    isAuthenticated: Boolean,
+    hasSeenIntro: Boolean,
+) = when {
+    isAuthenticated -> navigateIfNotCurrent(Routes.Profile)
+    hasSeenIntro -> navigateIfNotCurrent(Routes.PubkyRingAuth)
+    else -> navigateIfNotCurrent(Routes.ProfileIntro)
+}
+
 fun NavController.navigateToGeneralSettings() = navigate(
     route = Routes.GeneralSettings,
 )
@@ -1689,14 +1732,6 @@ fun NavController.navigateToAboutSettings() = navigate(
 
 @Stable
 sealed interface Routes {
-    companion object {
-        fun profileRoute(isAuthenticated: Boolean, hasSeenIntro: Boolean): Routes = when {
-            isAuthenticated -> Profile
-            hasSeenIntro -> PubkyRingAuth
-            else -> ProfileIntro
-        }
-    }
-
     @Serializable
     data object Home : Routes
 
@@ -1929,6 +1964,12 @@ sealed interface Routes {
 
     @Serializable
     data object Contacts : Routes
+
+    @Serializable
+    data object ContactsIntro : Routes
+
+    @Serializable
+    data class ContactDetail(val publicKey: String) : Routes
 
     @Serializable
     data object Profile : Routes

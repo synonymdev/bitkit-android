@@ -93,6 +93,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val hasSeenContactsIntro = settingsStore.data.map { it.hasSeenContactsIntro }
+        .asStateFlow(initialValue = false)
+
+    fun setHasSeenContactsIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(hasSeenContactsIntro = value) }
+        }
+    }
+
     val isPubkyAuthenticated = pubkyRepo.isAuthenticated
 
     val quickPayIntroSeen = settingsStore.data.map { it.quickPayIntroSeen }

@@ -3,6 +3,7 @@ package to.bitkit.services
 import com.synonym.bitkitcore.PubkyProfile
 import com.synonym.bitkitcore.cancelPubkyAuth
 import com.synonym.bitkitcore.completePubkyAuth
+import com.synonym.bitkitcore.fetchPubkyContacts
 import com.synonym.bitkitcore.fetchPubkyFile
 import com.synonym.bitkitcore.fetchPubkyProfile
 import com.synonym.bitkitcore.startPubkyAuth
@@ -42,6 +43,9 @@ class PubkyService @Inject constructor() {
 
     suspend fun getProfile(publicKey: String): PubkyProfile =
         ServiceQueue.CORE.background { fetchPubkyProfile(publicKey) }
+
+    suspend fun getContacts(publicKey: String): List<String> =
+        ServiceQueue.CORE.background { fetchPubkyContacts(publicKey) }
 
     suspend fun signOut() =
         ServiceQueue.CORE.background { paykitSignOut() }

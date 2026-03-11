@@ -47,6 +47,7 @@ import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateIfNotCurrent
 import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
@@ -67,6 +68,7 @@ fun DrawerMenu(
     hasSeenShopIntro: Boolean,
     modifier: Modifier = Modifier,
     hasSeenProfileIntro: Boolean = false,
+    hasSeenContactsIntro: Boolean = false,
     isProfileAuthenticated: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
@@ -115,8 +117,19 @@ fun DrawerMenu(
                     rootNavController.navigateIfNotCurrent(Routes.ShopDiscover)
                 }
             },
+            onClickContacts = {
+                when {
+                    !hasSeenContactsIntro -> rootNavController.navigateIfNotCurrent(Routes.ContactsIntro)
+                    isProfileAuthenticated -> rootNavController.navigateIfNotCurrent(Routes.Contacts)
+                    hasSeenProfileIntro -> rootNavController.navigateIfNotCurrent(Routes.PubkyRingAuth)
+                    else -> rootNavController.navigateIfNotCurrent(Routes.ProfileIntro)
+                }
+            },
             onClickProfile = {
-                rootNavController.navigateIfNotCurrent(Routes.profileRoute(isProfileAuthenticated, hasSeenProfileIntro))
+                rootNavController.navigateToProfile(
+                    isAuthenticated = isProfileAuthenticated,
+                    hasSeenIntro = hasSeenProfileIntro,
+                )
             },
         )
     }
@@ -128,6 +141,7 @@ private fun Menu(
     drawerState: DrawerState,
     onClickAddWidget: () -> Unit,
     onClickShop: () -> Unit,
+    onClickContacts: () -> Unit,
     onClickProfile: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -166,7 +180,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__contacts),
             iconRes = R.drawable.ic_users,
             onClick = {
-                rootNavController.navigateIfNotCurrent(Routes.Contacts)
+                onClickContacts()
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerContacts")

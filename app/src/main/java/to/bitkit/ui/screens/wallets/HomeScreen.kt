@@ -94,6 +94,7 @@ import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
+import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -161,7 +162,10 @@ fun HomeScreen(
     }
 
     val navigateToProfile = {
-        rootNavController.navigate(Routes.profileRoute(isPubkyAuthenticated, hasSeenProfileIntro))
+        rootNavController.navigateToProfile(
+            isAuthenticated = isPubkyAuthenticated,
+            hasSeenIntro = hasSeenProfileIntro,
+        )
     }
 
     Content(

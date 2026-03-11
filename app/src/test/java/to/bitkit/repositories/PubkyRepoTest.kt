@@ -126,7 +126,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `loadProfile should update profile on success`() = test {
         authenticateForTesting()
 
-        val pk = sut.publicKey.value!!
+        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("Profile Name")
         whenever(ffiProfile.bio).thenReturn("A bio")
@@ -151,7 +151,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val existingProfile = sut.profile.value
         assertNotNull(existingProfile)
 
-        val pk = sut.publicKey.value!!
+        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
         whenever(pubkyService.getProfile(pk)).thenThrow(RuntimeException("Network error"))
 
         sut.loadProfile()
@@ -171,7 +171,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `loadProfile should cache metadata on success`() = test {
         authenticateForTesting()
 
-        val pk = sut.publicKey.value!!
+        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("Cached Name")
         whenever(ffiProfile.bio).thenReturn("")
@@ -280,6 +280,124 @@ class PubkyRepoTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `loadContacts should populate contacts on success`() = test {
+        authenticateForTesting()
+        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
+        val contactKey = "pubkycontact1"
+        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(contactKey))
+
+        val contactProfile = mock<CorePubkyProfile>()
+        whenever(contactProfile.name).thenReturn("Alice")
+        whenever(contactProfile.bio).thenReturn(null)
+        whenever(contactProfile.image).thenReturn(null)
+        whenever(contactProfile.links).thenReturn(null)
+        whenever(contactProfile.status).thenReturn(null)
+        whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
+
+        sut.loadContacts()
+
+        val contacts = sut.contacts.value
+        assertEquals(1, contacts.size)
+        assertEquals("Alice", contacts.first().name)
+        assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
+    fun `loadContacts should return early when no public key`() = test {
+        sut.loadContacts()
+
+        verify(pubkyService, never()).getContacts(any())
+    }
+
+    @Test
+    fun `loadContacts should use placeholder when profile fetch fails`() = test {
+        authenticateForTesting()
+        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
+        val contactKey = "pubkycontact2"
+        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(contactKey))
+        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Network error"))
+
+        sut.loadContacts()
+
+        val contacts = sut.contacts.value
+        assertEquals(1, contacts.size)
+        assertEquals(contactKey, contacts.first().publicKey)
+        assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
+    fun `fetchContactProfile should return profile on success`() = test {
+        val contactKey = "pubkycontact3"
+        val contactProfile = mock<CorePubkyProfile>()
+        whenever(contactProfile.name).thenReturn("Bob")
+        whenever(contactProfile.bio).thenReturn("Bio")
+        whenever(contactProfile.image).thenReturn(null)
+        whenever(contactProfile.links).thenReturn(null)
+        whenever(contactProfile.status).thenReturn(null)
+        whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
+
+        val result = sut.fetchContactProfile(contactKey)
+
+        assertTrue(result.isSuccess)
+        assertEquals("Bob", result.getOrNull()?.name)
+    }
+
+    @Test
+    fun `fetchContactProfile should return failure on error`() = test {
+        val contactKey = "pubkyfailing"
+        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Failed"))
+
+        val result = sut.fetchContactProfile(contactKey)
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `signOut should clear contacts`() = test {
+        authenticateForTesting()
+        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
+        val contactKey = "pubkycontact4"
+        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(contactKey))
+
+        val contactProfile = mock<CorePubkyProfile>()
+        whenever(contactProfile.name).thenReturn("Charlie")
+        whenever(contactProfile.bio).thenReturn(null)
+        whenever(contactProfile.image).thenReturn(null)
+        whenever(contactProfile.links).thenReturn(null)
+        whenever(contactProfile.status).thenReturn(null)
+        whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
+
+        sut.loadContacts()
+        assertEquals(1, sut.contacts.value.size)
+
+        sut.signOut()
+
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
+    fun `loadContacts should prefix keys missing pubky prefix`() = test {
+        authenticateForTesting()
+        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
+        val bareKey = "abc123"
+        val prefixedKey = "pubkyabc123"
+        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(bareKey))
+
+        val contactProfile = mock<CorePubkyProfile>()
+        whenever(contactProfile.name).thenReturn("Prefixed")
+        whenever(contactProfile.bio).thenReturn(null)
+        whenever(contactProfile.image).thenReturn(null)
+        whenever(contactProfile.links).thenReturn(null)
+        whenever(contactProfile.status).thenReturn(null)
+        whenever(pubkyService.getProfile(prefixedKey)).thenReturn(contactProfile)
+
+        sut.loadContacts()
+
+        verify(pubkyService).getProfile(prefixedKey)
+        assertEquals("Prefixed", sut.contacts.value.first().name)
+    }
+
     private suspend fun authenticateForTesting() {
         val testSecret = "test_secret"
         val testPk = "test_pk_12345"
@@ -293,6 +411,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(ffiProfile.links).thenReturn(null)
         whenever(ffiProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
+        whenever(pubkyService.getContacts(testPk)).thenReturn(emptyList())
 
         sut.completeAuthentication()
     }
