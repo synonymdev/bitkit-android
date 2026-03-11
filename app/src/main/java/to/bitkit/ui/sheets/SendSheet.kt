@@ -133,11 +133,12 @@ fun SendSheet(
             }
             composableWithDefaultTransitions<SendRoute.QrScanner> {
                 QrScanningScreen(
-                    navController = navController,
-                ) { qrCode ->
-                    navController.popBackStack()
-                    appViewModel.onScanResult(data = qrCode)
-                }
+                    onBack = { navController.popBackStack() },
+                    onScanSuccess = { qrCode ->
+                        navController.popBackStack()
+                        appViewModel.onScanResult(data = qrCode)
+                    },
+                )
             }
             composableWithDefaultTransitions<SendRoute.CoinSelection> {
                 val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()

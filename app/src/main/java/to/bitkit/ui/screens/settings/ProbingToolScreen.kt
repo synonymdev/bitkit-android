@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -40,7 +41,6 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
-import to.bitkit.ui.navigateToScanner
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScanNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -58,6 +58,7 @@ fun ProbingToolScreen(
     viewModel: ProbingToolViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val app = appViewModel ?: return
 
     LaunchedEffect(savedStateHandle) {
         savedStateHandle.getStateFlow<String?>(SCAN_RESULT_KEY, null)
@@ -71,7 +72,11 @@ fun ProbingToolScreen(
     ProbingToolContent(
         uiState = uiState,
         onBackClick = { navController.popBackStack() },
-        onScanClick = { navController.navigateToScanner(isCalledForResult = true) },
+        onScanClick = {
+            app.showScannerSheet { result ->
+                savedStateHandle[SCAN_RESULT_KEY] = result
+            }
+        },
         onInvoiceChange = viewModel::updateInvoice,
         onAmountChange = viewModel::updateAmountSats,
         onPasteInvoice = viewModel::pasteInvoice,

@@ -2097,6 +2097,24 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Sheets
+    private var scanResultHandler: ((String) -> Unit)? = null
+
+    fun showScannerSheet(onResult: ((String) -> Unit)? = null) {
+        scanResultHandler = onResult
+        showSheet(Sheet.QrScanner)
+    }
+
+    fun onScannerSheetResult(data: String) {
+        val handler = scanResultHandler
+        scanResultHandler = null
+        hideSheet()
+        if (handler != null) {
+            handler(data)
+        } else {
+            onScanResult(data)
+        }
+    }
+
     fun showSheet(sheetType: Sheet) {
         viewModelScope.launch {
             _currentSheet.value?.let {

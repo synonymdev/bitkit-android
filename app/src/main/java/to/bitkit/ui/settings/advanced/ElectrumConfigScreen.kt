@@ -42,7 +42,6 @@ import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.navigateToScanner
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScanNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -97,7 +96,11 @@ fun ElectrumConfigScreen(
     Content(
         uiState = uiState,
         onBack = { navController.popBackStack() },
-        onScan = { navController.navigateToScanner(isCalledForResult = true) },
+        onScan = {
+            app.showScannerSheet { result ->
+                savedStateHandle[SCAN_RESULT_KEY] = result
+            }
+        },
         onChangeHost = viewModel::setHost,
         onChangePort = viewModel::setPort,
         onChangeProtocol = viewModel::setProtocol,

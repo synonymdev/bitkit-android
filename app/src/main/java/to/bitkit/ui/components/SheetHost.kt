@@ -46,6 +46,7 @@ sealed interface Sheet {
     data object ForceTransfer : Sheet
     data class Gift(val code: String, val amount: ULong) : Sheet
     data object ConnectionClosed : Sheet
+    data object QrScanner : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet
 }

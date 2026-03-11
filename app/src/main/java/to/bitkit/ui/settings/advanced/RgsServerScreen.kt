@@ -35,7 +35,6 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.navigateToScanner
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScanNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -88,7 +87,11 @@ fun RgsServerScreen(
     Content(
         uiState = uiState,
         onBack = { navController.popBackStack() },
-        onScan = { navController.navigateToScanner(isCalledForResult = true) },
+        onScan = {
+            app.showScannerSheet { result ->
+                savedStateHandle[SCAN_RESULT_KEY] = result
+            }
+        },
         onChangeUrl = viewModel::setRgsUrl,
         onClickReset = viewModel::resetToDefault,
         onClickConnect = viewModel::onClickConnect,

@@ -49,7 +49,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
@@ -58,7 +57,6 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -78,7 +76,6 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
-const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
 const val SCAN_RESULT_KEY = "SCAN_RESULT"
 
 private const val TAG = "QrScanningScreen"
@@ -86,8 +83,7 @@ private const val TAG = "QrScanningScreen"
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
-    navController: NavController,
-    onBack: () -> Unit = { navController.popBackStack() },
+    onBack: () -> Unit,
     onScanSuccess: (String) -> Unit,
 ) {
     val app = appViewModel ?: return
@@ -97,20 +93,7 @@ fun QrScanningScreen(
     // Handle scan result
     LaunchedEffect(scanResult) {
         scanResult?.let { qrCode ->
-            delay(100) // wait to prevent navigation result race conditions
-
-            val prev = navController.previousBackStackEntry
-            val wasCalledForResult = prev?.savedStateHandle?.contains(SCAN_REQUEST_KEY) == true
-            if (wasCalledForResult) {
-                prev.savedStateHandle[SCAN_RESULT_KEY] = qrCode
-                onBack()
-                prev.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
-            } else {
-                onBack()
-                onScanSuccess(qrCode)
-            }
-
-            // Reset scan result to allow new scans
+            onScanSuccess(qrCode)
             setScanResult(null)
         }
     }
