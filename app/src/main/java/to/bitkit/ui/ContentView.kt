@@ -1186,10 +1186,7 @@ private fun NavGraphBuilder.activityItem(
             route = it.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
             onChannelClick = { channelId ->
-                navController.currentBackStackEntry?.savedStateHandle?.set("selectedChannelId", channelId)
-                navController.navigate(Routes.ConnectionsNav) {
-                    launchSingleTop = true
-                }
+                navController.navigate(Routes.ChannelDetail(channelId))
             },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
