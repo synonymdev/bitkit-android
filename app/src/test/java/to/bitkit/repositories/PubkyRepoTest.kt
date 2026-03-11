@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import android.graphics.Bitmap
 import app.cash.turbine.test
-import com.synonym.paykit.FfiProfile
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -26,6 +25,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import com.synonym.bitkitcore.PubkyProfile as CorePubkyProfile
 
 class PubkyRepoTest : BaseUnitTest() {
     private lateinit var sut: PubkyRepo
@@ -85,7 +85,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.completeAuth()).thenReturn(testSecret)
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
 
-        val ffiProfile = mock<FfiProfile>()
+        val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("User")
         whenever(ffiProfile.bio).thenReturn(null)
         whenever(ffiProfile.image).thenReturn(null)
@@ -127,7 +127,7 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting()
 
         val pk = sut.publicKey.value!!
-        val ffiProfile = mock<FfiProfile>()
+        val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("Profile Name")
         whenever(ffiProfile.bio).thenReturn("A bio")
         whenever(ffiProfile.image).thenReturn("pubky://image_uri")
@@ -172,7 +172,7 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting()
 
         val pk = sut.publicKey.value!!
-        val ffiProfile = mock<FfiProfile>()
+        val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("Cached Name")
         whenever(ffiProfile.bio).thenReturn("")
         whenever(ffiProfile.image).thenReturn("pubky://cached_image")
@@ -286,7 +286,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.completeAuth()).thenReturn(testSecret)
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
 
-        val ffiProfile = mock<FfiProfile>()
+        val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("Test")
         whenever(ffiProfile.bio).thenReturn(null)
         whenever(ffiProfile.image).thenReturn(null)

@@ -1,7 +1,7 @@
 package to.bitkit.models
 
-import com.synonym.paykit.FfiProfile
 import to.bitkit.ext.ellipsisMiddle
+import com.synonym.bitkitcore.PubkyProfile as CorePubkyProfile
 
 data class PubkyProfileLink(val label: String, val url: String)
 
@@ -16,7 +16,7 @@ data class PubkyProfile(
     companion object {
         private const val TRUNCATED_PK_LENGTH = 11
 
-        fun fromFfi(publicKey: String, ffiProfile: FfiProfile): PubkyProfile {
+        fun fromFfi(publicKey: String, ffiProfile: CorePubkyProfile): PubkyProfile {
             return PubkyProfile(
                 publicKey = publicKey,
                 name = ffiProfile.name,

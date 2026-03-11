@@ -1,12 +1,12 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.PubkyProfile
 import com.synonym.bitkitcore.cancelPubkyAuth
 import com.synonym.bitkitcore.completePubkyAuth
 import com.synonym.bitkitcore.fetchPubkyFile
+import com.synonym.bitkitcore.fetchPubkyProfile
 import com.synonym.bitkitcore.startPubkyAuth
-import com.synonym.paykit.FfiProfile
 import com.synonym.paykit.paykitForceSignOut
-import com.synonym.paykit.paykitGetProfile
 import com.synonym.paykit.paykitImportSession
 import com.synonym.paykit.paykitInitialize
 import com.synonym.paykit.paykitSignOut
@@ -40,8 +40,8 @@ class PubkyService @Inject constructor() {
     suspend fun fetchFile(uri: String): ByteArray =
         ServiceQueue.CORE.background { fetchPubkyFile(uri) }
 
-    suspend fun getProfile(publicKey: String): FfiProfile =
-        ServiceQueue.CORE.background { paykitGetProfile(publicKey) }
+    suspend fun getProfile(publicKey: String): PubkyProfile =
+        ServiceQueue.CORE.background { fetchPubkyProfile(publicKey) }
 
     suspend fun signOut() =
         ServiceQueue.CORE.background { paykitSignOut() }
