@@ -785,10 +785,7 @@ private fun NavGraphBuilder.home(
             )
         }
     }
-    composable<Routes.Savings>(
-        enterTransition = { Transitions.slideInHorizontally },
-        exitTransition = { Transitions.slideOutHorizontally },
-    ) {
+    composableWithDefaultTransitions<Routes.Savings> {
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
@@ -811,10 +808,7 @@ private fun NavGraphBuilder.home(
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
-    composable<Routes.Spending>(
-        enterTransition = { Transitions.slideInHorizontally },
-        exitTransition = { Transitions.slideOutHorizontally },
-    ) {
+    composableWithDefaultTransitions<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
