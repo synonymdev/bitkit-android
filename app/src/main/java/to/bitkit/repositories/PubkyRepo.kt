@@ -4,6 +4,9 @@ import android.graphics.Bitmap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,10 +42,12 @@ class PubkyRepo @Inject constructor(
     companion object {
         private const val TAG = "PubkyRepo"
         private const val PUBKY_SCHEME = "pubky://"
+        private const val PUBKY_PREFIX = "pubky"
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
     private val loadProfileMutex = Mutex()
+    private val loadContactsMutex = Mutex()
 
     private val _authState = MutableStateFlow(PubkyAuthState.Idle)
 
@@ -54,6 +59,12 @@ class PubkyRepo @Inject constructor(
 
     private val _isLoadingProfile = MutableStateFlow(false)
     val isLoadingProfile: StateFlow<Boolean> = _isLoadingProfile.asStateFlow()
+
+    private val _contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+    val contacts: StateFlow<List<PubkyProfile>> = _contacts.asStateFlow()
+
+    private val _isLoadingContacts = MutableStateFlow(false)
+    val isLoadingContacts: StateFlow<Boolean> = _isLoadingContacts.asStateFlow()
 
     val isAuthenticated: StateFlow<Boolean> = _authState.map { it == PubkyAuthState.Authenticated }
         .stateIn(scope, SharingStarted.Eagerly, false)
@@ -108,6 +119,7 @@ class PubkyRepo @Inject constructor(
                 _authState.update { PubkyAuthState.Authenticated }
                 Logger.info("Paykit session restored for '${result.publicKey}'", context = TAG)
                 loadProfile()
+                loadContacts()
             }
             is InitResult.RestorationFailed -> {
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
@@ -142,7 +154,8 @@ class PubkyRepo @Inject constructor(
             _authState.update { PubkyAuthState.Authenticated }
             Logger.info("Pubky auth completed for '$pk'", context = TAG)
             loadProfile()
-        }.map {}
+            loadContacts()
+        }.map { }
     }
 
     suspend fun cancelAuthentication() {
@@ -184,19 +197,65 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun signOut(): Result<Unit> = runCatching {
-        withContext(ioDispatcher) {
-            runCatching { pubkyService.signOut() }
-                .recoverCatching {
-                    Logger.warn("Server sign out failed, forcing local sign out", it, context = TAG)
-                    pubkyService.forceSignOut()
+    suspend fun loadContacts() {
+        val pk = _publicKey.value ?: return
+        if (!loadContactsMutex.tryLock()) return
+
+        _isLoadingContacts.update { true }
+        try {
+            runCatching {
+                withContext(ioDispatcher) {
+                    val contactKeys = pubkyService.getContacts(pk)
+                    Logger.debug("Fetched '${contactKeys.size}' contact keys", context = TAG)
+                    coroutineScope {
+                        contactKeys.map { contactPk ->
+                            val prefixedKey = contactPk.ensurePubkyPrefix()
+                            async {
+                                runCatching {
+                                    val ffiProfile = pubkyService.getProfile(prefixedKey)
+                                    PubkyProfile.fromFfi(prefixedKey, ffiProfile)
+                                }.onFailure {
+                                    Logger.warn("Failed to load contact profile '$prefixedKey'", it, context = TAG)
+                                }.getOrElse {
+                                    PubkyProfile.placeholder(prefixedKey)
+                                }
+                            }
+                        }.awaitAll().sortedBy { it.name.lowercase() }
+                    }
                 }
-            runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-            runCatching { imageCache.clear() }
+            }.onSuccess { loadedContacts ->
+                _contacts.update { loadedContacts }
+            }.onFailure {
+                Logger.error("Failed to load contacts", it, context = TAG)
+            }
+        } finally {
+            _isLoadingContacts.update { false }
+            loadContactsMutex.unlock()
         }
-        pubkyStore.reset()
+    }
+
+    suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> = runCatching {
+        withContext(ioDispatcher) {
+            val prefixedKey = publicKey.ensurePubkyPrefix()
+            val ffiProfile = pubkyService.getProfile(prefixedKey)
+            PubkyProfile.fromFfi(prefixedKey, ffiProfile)
+        }
+    }.onFailure {
+        Logger.error("Failed to load contact profile '$publicKey'", it, context = TAG)
+    }
+
+    suspend fun signOut(): Result<Unit> = runCatching {
+        withContext(ioDispatcher) { pubkyService.signOut() }
+    }.recoverCatching {
+        Logger.warn("Server sign out failed, forcing local sign out", it, context = TAG)
+        withContext(ioDispatcher) { pubkyService.forceSignOut() }
+    }.also {
+        runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) } }
+        runCatching { withContext(ioDispatcher) { imageCache.clear() } }
+        runCatching { withContext(ioDispatcher) { pubkyStore.reset() } }
         _publicKey.update { null }
         _profile.update { null }
+        _contacts.update { emptyList() }
         _authState.update { PubkyAuthState.Idle }
     }
 
@@ -230,4 +289,7 @@ class PubkyRepo @Inject constructor(
             it.copy(cachedName = profile.name, cachedImageUri = profile.imageUrl)
         }
     }
+
+    private fun String.ensurePubkyPrefix(): String =
+        if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
 }

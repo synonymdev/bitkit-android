@@ -99,6 +99,7 @@ data class SettingsData(
     val hasSeenSavingsIntro: Boolean = false,
     val hasSeenShopIntro: Boolean = false,
     val hasSeenProfileIntro: Boolean = false,
+    val hasSeenContactsIntro: Boolean = false,
     val quickPayIntroSeen: Boolean = false,
     val bgPaymentsIntroSeen: Boolean = false,
     val isQuickPayEnabled: Boolean = false,

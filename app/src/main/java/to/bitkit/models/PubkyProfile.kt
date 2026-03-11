@@ -26,6 +26,15 @@ data class PubkyProfile(
                 status = ffiProfile.status,
             )
         }
+
+        fun placeholder(publicKey: String) = PubkyProfile(
+            publicKey = publicKey,
+            name = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
+            bio = "",
+            imageUrl = null,
+            links = emptyList(),
+            status = null,
+        )
     }
 
     val truncatedPublicKey: String

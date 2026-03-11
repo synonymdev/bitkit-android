@@ -1,8 +1,8 @@
-# Pubky Profile Integration
+# Pubky Integration
 
 ## Overview
 
-Bitkit integrates [Pubky](https://pubky.org) decentralized identity, allowing users to connect their Pubky profile via [Pubky Ring](https://play.google.com/store/apps/details?id=to.pubky.ring) authentication. Once connected, the user's profile name and avatar appear on the home screen header, and a full profile page shows their bio, links, and a shareable QR code.
+Bitkit integrates [Pubky](https://pubky.org) decentralized identity, allowing users to connect their Pubky profile via [Pubky Ring](https://play.google.com/store/apps/details?id=to.pubky.ring) authentication. Once connected, the user's profile name and avatar appear on the home screen header, a full profile page shows their bio, links, and a shareable QR code, and the contacts screen shows followed Pubky users.
 
 ## Auth Flow
 
@@ -35,10 +35,10 @@ The auth handshake uses a relay-based protocol:
 
 Wraps two FFI libraries:
 
-- **paykit-ffi** (`com.synonym:paykit-android`) — session management and profile fetching
-  - `paykitInitialize()`, `paykitImportSession()`, `paykitGetProfile()`, `paykitSignOut()`, `paykitForceSignOut()`
-- **bitkit-core** (`com.synonym:bitkit-core-android`) — auth relay and file fetching
-  - `startPubkyAuth()`, `completePubkyAuth()`, `cancelPubkyAuth()`, `fetchPubkyFile()`
+- **paykit-ffi** (`com.synonym:paykit-android`) — session management
+  - `paykitInitialize()`, `paykitImportSession()`, `paykitSignOut()`, `paykitForceSignOut()`
+- **bitkit-core** (`com.synonym:bitkit-core-android`) — auth relay, profile/contacts fetching, and file fetching
+  - `startPubkyAuth()`, `completePubkyAuth()`, `cancelPubkyAuth()`, `fetchPubkyProfile()`, `fetchPubkyContacts()`, `fetchPubkyFile()`
 
 All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensure serial access to the underlying Rust state.
 
@@ -58,7 +58,7 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 
 - `loadProfile()` fetches the profile for the authenticated public key
 - Uses a `Mutex` with `tryLock()` to prevent concurrent loads (skips if already loading)
-- The mutex is released in a `finally` block to handle coroutine cancellation
+- Re-checks `_publicKey` after the network call to guard against a concurrent `signOut()`
 - Profile name and image URI are cached in `PubkyStore` (DataStore) for instant display on launch before the full profile loads
 
 ### Exposed State
@@ -71,6 +71,26 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 | `displayName` | Profile name with cached fallback |
 | `displayImageUri` | Profile image URI with cached fallback |
 | `isLoadingProfile` | Loading indicator |
+| `contacts` | List of followed `PubkyProfile` contacts |
+| `isLoadingContacts` | Contacts loading indicator |
+
+### Contacts
+
+- `loadContacts()` fetches the authenticated user's contact keys via `fetchPubkyContacts`, then concurrently fetches each contact's profile
+- Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before passing to `fetchPubkyProfile`
+- If a contact profile fetch fails, a `PubkyProfile.placeholder()` is used to ensure the contact still appears in the list with a truncated public key
+- `fetchContactProfile()` fetches a single contact's profile on demand (used by the detail screen)
+
+## Contacts Flow
+
+```
+ContactsIntroScreen → (if authenticated) ContactsScreen → ContactDetailScreen
+                     → (if not authenticated) PubkyRingAuthScreen → ContactsScreen
+```
+
+1. **ContactsIntroScreen** — presents the contacts feature with a "Continue" button; marks `hasSeenContactsIntro` in settings
+2. **ContactsScreen** — displays a searchable, alphabetically grouped list of followed Pubky users
+3. **ContactDetailScreen** — shows a contact's profile details (name, bio, links) with copy and share actions
 
 ## PubkyImage Component
 
@@ -109,7 +129,8 @@ Two-tier cache:
 - `publicKey`, `name`, `bio`, `imageUrl`, `links`, `status`
 - `truncatedPublicKey` — uses `String.ellipsisMiddle()` extension
 - `PubkyProfileLink` — `label` + `url` pair
-- `fromFfi()` — maps from paykit's `FfiProfile` FFI type
+- `fromFfi()` — maps from bitkitcore's `PubkyProfile` FFI type
+- `placeholder()` — creates a stub profile with the truncated public key as the name
 
 ## Home Screen Integration
 
@@ -132,3 +153,8 @@ Two-tier cache:
 | `ui/screens/profile/PubkyRingAuthViewModel.kt` | Auth ViewModel |
 | `ui/screens/profile/ProfileScreen.kt` | Profile display |
 | `ui/screens/profile/ProfileViewModel.kt` | Profile ViewModel |
+| `ui/screens/contacts/ContactsIntroScreen.kt` | Contacts intro screen |
+| `ui/screens/contacts/ContactsScreen.kt` | Contacts list |
+| `ui/screens/contacts/ContactsViewModel.kt` | Contacts list ViewModel |
+| `ui/screens/contacts/ContactDetailScreen.kt` | Contact detail display |
+| `ui/screens/contacts/ContactDetailViewModel.kt` | Contact detail ViewModel |
