@@ -42,7 +42,7 @@ fun SyncNodeView(modifier: Modifier) {
                 .withAccent(accentColor = Colors.Purple),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 32.dp)
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -52,7 +52,7 @@ fun SyncNodeView(modifier: Modifier) {
             color = Colors.White64,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 32.dp)
         )
 
         Spacer(modifier = Modifier.height(45.dp))
@@ -74,7 +74,7 @@ private fun Preview() {
             modifier = Modifier
                 .fillMaxSize()
                 .gradientBackground()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 32.dp)
         )
     }
 }
