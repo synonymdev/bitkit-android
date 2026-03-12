@@ -702,9 +702,8 @@ private fun RootNavHost(
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
                         onScanClick = {
-                            val entry = navController.currentBackStackEntry
                             appViewModel.showScannerSheet { result ->
-                                entry?.savedStateHandle?.set(SCAN_RESULT_KEY, result)
+                                it.savedStateHandle[SCAN_RESULT_KEY] = result
                             }
                         },
                         onBackClick = { navController.popBackStack() },

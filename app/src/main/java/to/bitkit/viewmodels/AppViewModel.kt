@@ -2126,6 +2126,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun hideSheet() {
+        scanResultHandler = null
         when {
             currentSheet.value is Sheet.TimedSheet -> {
                 // Only dismiss if manager still has a sheet (user initiated)
