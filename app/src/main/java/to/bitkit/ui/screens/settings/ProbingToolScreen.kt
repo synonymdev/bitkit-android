@@ -73,8 +73,8 @@ fun ProbingToolScreen(
         uiState = uiState,
         onBackClick = { navController.popBackStack() },
         onScanClick = {
-            app.showScannerSheet { result ->
-                savedStateHandle[SCAN_RESULT_KEY] = result
+            app.showScannerSheet {
+                savedStateHandle[SCAN_RESULT_KEY] = it
             }
         },
         onInvoiceChange = viewModel::updateInvoice,

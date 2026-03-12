@@ -97,8 +97,8 @@ fun ElectrumConfigScreen(
         uiState = uiState,
         onBack = { navController.popBackStack() },
         onScan = {
-            app.showScannerSheet { result ->
-                savedStateHandle[SCAN_RESULT_KEY] = result
+            app.showScannerSheet {
+                savedStateHandle[SCAN_RESULT_KEY] = it
             }
         },
         onChangeHost = viewModel::setHost,
