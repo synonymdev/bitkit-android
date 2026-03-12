@@ -163,12 +163,17 @@ Create `.ai/` directory if it doesn't exist. Save to `.ai/release-notes-{newVers
 Then prepend the English summary to the draft release body on GitHub:
 
 ```bash
-# Read existing body and prepend store summary via temp file (avoids shell expansion issues)
-EXISTING=$(gh release view v{newVersionName} --json body --jq .body)
-printf '%s\n\n%s\n\n---\n\n%s\n' \
-  '## Store Release Notes' \
-  '{english summary}' \
-  "$EXISTING" > /tmp/release-notes.md
+# Write store summary via heredoc (avoids shell expansion of apostrophes, $, backticks)
+cat > /tmp/release-notes.md <<'NOTES_EOF'
+## Store Release Notes
+
+{english summary}
+
+---
+
+NOTES_EOF
+# Append existing auto-generated notes
+gh release view v{newVersionName} --json body --jq .body >> /tmp/release-notes.md
 gh release edit v{newVersionName} --notes-file /tmp/release-notes.md
 ```
 
