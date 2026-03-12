@@ -8,12 +8,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.theme.Colors
@@ -28,23 +30,24 @@ fun GradientCircularProgressIndicator(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1100, easing = LinearEasing)
+            animation = tween(durationMillis = 2000, easing = LinearEasing)
         ),
         label = "rotation"
     )
 
+    val brush = remember { Brush.sweepGradient(listOf(Color.Transparent, Colors.White)) }
+    val strokeWidthPx = with(LocalDensity.current) { strokeWidth.toPx() }
+    val stroke = remember(strokeWidthPx) { Stroke(width = strokeWidthPx, cap = StrokeCap.Round) }
+
     Canvas(
         modifier = modifier.graphicsLayer { rotationZ = angle }
     ) {
-        val strokeWidthPx = strokeWidth.toPx()
         drawArc(
-            brush = Brush.sweepGradient(
-                colors = listOf(Color.Transparent, Colors.White)
-            ),
+            brush = brush,
             startAngle = 0f,
             sweepAngle = 360f,
             useCenter = false,
-            style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
+            style = stroke
         )
     }
 }
