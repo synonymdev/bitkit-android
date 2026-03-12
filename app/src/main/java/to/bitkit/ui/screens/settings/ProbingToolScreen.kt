@@ -63,8 +63,8 @@ fun ProbingToolScreen(
     LaunchedEffect(savedStateHandle) {
         savedStateHandle.getStateFlow<String?>(SCAN_RESULT_KEY, null)
             .filterNotNull()
-            .collect { scannedData ->
-                viewModel.updateInvoice(scannedData)
+            .collect {
+                viewModel.updateInvoice(it)
                 savedStateHandle.remove<String>(SCAN_RESULT_KEY)
             }
     }
