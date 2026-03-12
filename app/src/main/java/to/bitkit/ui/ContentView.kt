@@ -1354,7 +1354,7 @@ private fun NavGraphBuilder.widgets(
                 }
             },
             fiatSymbol = LocalCurrencies.current.currencySymbol,
-            onBackCLick = { navController.popBackStack() },
+            onBackClick = { navController.popBackStack() },
             showWidgets = showWidgets,
             onEnableInSettingsClick = { navController.navigate(Routes.WidgetsSettings) },
         )

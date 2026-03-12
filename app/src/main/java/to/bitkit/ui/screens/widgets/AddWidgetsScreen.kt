@@ -24,7 +24,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 @Composable
 fun AddWidgetsScreen(
     onWidgetSelected: (WidgetType) -> Unit,
-    onBackCLick: () -> Unit,
+    onBackClick: () -> Unit,
     fiatSymbol: String,
     showWidgets: Boolean = true,
     onEnableInSettingsClick: () -> Unit = {},
@@ -32,7 +32,7 @@ fun AddWidgetsScreen(
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.widgets__add),
-            onBackClick = onBackCLick,
+            onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
 
@@ -135,7 +135,7 @@ private fun Preview() {
         AddWidgetsScreen(
             onWidgetSelected = {},
             fiatSymbol = "$",
-            onBackCLick = {},
+            onBackClick = {},
         )
     }
 }
@@ -147,7 +147,7 @@ private fun PreviewDisabled() {
         AddWidgetsScreen(
             onWidgetSelected = {},
             fiatSymbol = "$",
-            onBackCLick = {},
+            onBackClick = {},
             showWidgets = false,
         )
     }
