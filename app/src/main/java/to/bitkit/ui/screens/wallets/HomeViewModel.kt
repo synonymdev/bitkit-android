@@ -5,12 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -59,6 +61,7 @@ class HomeViewModel @Inject constructor(
         setupFactRotation()
     }
 
+    @Suppress("LongMethod")
     private fun setupStateObservation() {
         viewModelScope.launch {
             combine(
@@ -68,31 +71,36 @@ class HomeViewModel @Inject constructor(
                 _currentArticle,
                 _currentFact,
             ) { suggestions, settings, widgetsData, currentArticle, currentFact ->
-                _uiState.value.copy(
-                    suggestions = suggestions,
-                    showWidgets = settings.showWidgets,
-                    showWidgetTitles = settings.showWidgetTitles,
-                    widgetsWithPosition = if (_uiState.value.isEditingWidgets) {
-                        _uiState.value.widgetsWithPosition
-                    } else {
-                        widgetsData.widgets
-                    },
-                    headlinePreferences = widgetsData.headlinePreferences,
-                    factsPreferences = widgetsData.factsPreferences,
-                    blocksPreferences = widgetsData.blocksPreferences,
-                    weatherPreferences = widgetsData.weatherPreferences,
-                    pricePreferences = widgetsData.pricePreferences,
-                    currentArticle = currentArticle,
-                    currentFact = currentFact,
-                    currentBlock = widgetsData.block?.toBlockModel(),
-                    currentWeather = widgetsData.weather?.toWeatherModel(),
-                    currentPrice = widgetsData.price,
-                    showWidgetsOnboardingHint = settings.showWidgets &&
-                        !settings.widgetsOnboardingHintDismissed,
-                )
-            }.collect { newState ->
-                _uiState.update { newState }
-            }
+                _uiState.update {
+                    it.copy(
+                        suggestions = suggestions,
+                        showWidgets = settings.showWidgets,
+                        showWidgetTitles = settings.showWidgetTitles,
+                        widgetsWithPosition = if (it.isEditingWidgets) {
+                            it.widgetsWithPosition
+                        } else {
+                            widgetsData.widgets
+                        },
+                        headlinePreferences = widgetsData.headlinePreferences,
+                        factsPreferences = widgetsData.factsPreferences,
+                        blocksPreferences = widgetsData.blocksPreferences,
+                        weatherPreferences = widgetsData.weatherPreferences,
+                        pricePreferences = widgetsData.pricePreferences,
+                        currentArticle = currentArticle,
+                        currentFact = currentFact,
+                        currentBlock = widgetsData.block?.toBlockModel(),
+                        currentWeather = widgetsData.weather?.toWeatherModel(),
+                        currentPrice = widgetsData.price,
+                        showWidgetsOnboardingHint = settings.showWidgets &&
+                            !settings.widgetsOnboardingHintDismissed,
+                    )
+                }
+            }.collect {}
+        }
+
+        @OptIn(ExperimentalCoroutinesApi::class)
+        val hasActivityFlow = activityRepo.activitiesChanged.mapLatest {
+            activityRepo.getActivities(limit = 1u).getOrNull()?.isNotEmpty() == true
         }
 
         viewModelScope.launch {
@@ -100,21 +108,19 @@ class HomeViewModel @Inject constructor(
                 settingsStore.data,
                 walletRepo.balanceState,
                 transferRepo.activeTransfers,
-                activityRepo.activitiesChanged,
-            ) { settings, balanceState, activeTransfers, _ ->
-                val hasActivity = activityRepo.getActivities(limit = 1u)
-                    .getOrNull()?.isNotEmpty() == true
-                _uiState.value.copy(
-                    showEmptyState = settings.showEmptyBalanceView &&
-                        !hasActivity &&
-                        balanceState.totalSats == 0uL &&
-                        balanceState.balanceInTransferToSpending == 0uL &&
-                        balanceState.balanceInTransferToSavings == 0uL &&
-                        activeTransfers.isEmpty()
-                )
-            }.collect { newState ->
-                _uiState.update { newState }
-            }
+                hasActivityFlow,
+            ) { settings, balanceState, activeTransfers, hasActivity ->
+                _uiState.update {
+                    it.copy(
+                        showEmptyState = settings.showEmptyBalanceView &&
+                            !hasActivity &&
+                            balanceState.totalSats == 0uL &&
+                            balanceState.balanceInTransferToSpending == 0uL &&
+                            balanceState.balanceInTransferToSavings == 0uL &&
+                            activeTransfers.isEmpty()
+                    )
+                }
+            }.collect {}
         }
         viewModelScope.launch { createBannersFlow() }
     }
@@ -130,7 +136,7 @@ class HomeViewModel @Inject constructor(
                 if (showWidgets && articlesList.isNotEmpty()) {
                     startArticleRotation(articlesList)
                 } else {
-                    _currentArticle.value = null
+                    _currentArticle.update { null }
                 }
             }
         }
@@ -147,7 +153,7 @@ class HomeViewModel @Inject constructor(
                 if (showWidgets && factList.isNotEmpty()) {
                     startFactsRotation(factList = factList)
                 } else {
-                    _currentFact.value = null
+                    _currentFact.update { null }
                 }
             }
         }
@@ -155,18 +161,18 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun startArticleRotation(articlesList: List<ArticleModel>) {
         while (_uiState.value.showWidgets && articlesList.isNotEmpty()) {
-            _currentArticle.value = articlesList.randomOrNull()
+            _currentArticle.update { articlesList.randomOrNull() }
             delay(30.seconds)
         }
-        _currentArticle.value = null
+        _currentArticle.update { null }
     }
 
     private suspend fun startFactsRotation(factList: List<String>) {
         while (_uiState.value.showWidgets && factList.isNotEmpty()) {
-            _currentFact.value = factList.randomOrNull()
+            _currentFact.update { factList.randomOrNull() }
             delay(20.seconds)
         }
-        _currentFact.value = null
+        _currentFact.update { null }
     }
 
     fun onPageChanged(page: Int) {
@@ -238,15 +244,11 @@ class HomeViewModel @Inject constructor(
     }
 
     fun displayAlertDeleteWidget(widgetType: WidgetType) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(deleteWidgetAlert = widgetType) }
-        }
+        _uiState.update { it.copy(deleteWidgetAlert = widgetType) }
     }
 
     fun dismissAlertDeleteWidget() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(deleteWidgetAlert = null) }
-        }
+        _uiState.update { it.copy(deleteWidgetAlert = null) }
     }
 
     private fun enableEditMode() {
