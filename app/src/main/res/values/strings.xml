@@ -236,6 +236,7 @@
     <string name="lightning__spending_label">Spending balance</string>
     <string name="lightning__status">Status</string>
     <string name="lightning__support">Support</string>
+    <string name="lightning__sync_connecting">&lt;accent&gt;Connecting&lt;/accent&gt;\nto network</string>
     <string name="lightning__total_anchor_channels_reserve">Total Anchor Channels Reserve</string>
     <string name="lightning__total_lightning">Total Lightning</string>
     <string name="lightning__total_onchain">Total Onchain</string>

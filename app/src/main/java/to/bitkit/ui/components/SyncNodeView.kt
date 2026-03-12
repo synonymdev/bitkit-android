@@ -3,6 +3,7 @@ package to.bitkit.ui.components
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,6 +18,7 @@ import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun SyncNodeView(modifier: Modifier) {
@@ -34,10 +36,23 @@ fun SyncNodeView(modifier: Modifier) {
         )
 
         Spacer(modifier = Modifier.weight(1f))
+
+        Display(
+            text = stringResource(R.string.lightning__sync_connecting)
+                .withAccent(accentColor = Colors.Purple),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         BodyM(
             text = stringResource(R.string.lightning__wait_text_top),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
         )
 
         Spacer(modifier = Modifier.height(45.dp))
@@ -47,7 +62,7 @@ fun SyncNodeView(modifier: Modifier) {
             modifier = Modifier.size(24.dp)
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
