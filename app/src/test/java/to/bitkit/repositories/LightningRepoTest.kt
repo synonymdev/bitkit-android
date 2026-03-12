@@ -17,6 +17,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -51,6 +52,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.LdkError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -1086,4 +1088,84 @@ class LightningRepoTest : BaseUnitTest() {
         // Verify start was only called once (no retry)
         verify(lightningService, times(1)).start(anyOrNull(), any())
     }
+
+    // region Bug #845: NodeLifecycleState stuck in ErrorStarting(AlreadyRunning)
+
+    @Test
+    fun `start should get stuck in ErrorStarting when AlreadyRunning and node is actually running`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(mock())
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+
+        // Node is actually running at LDK level
+        val nodeStatus = mock<NodeStatus> { on { isRunning } doReturn true }
+        whenever(lightningService.status).thenReturn(nodeStatus)
+
+        // But lightningService.start() throws because it's already running
+        whenever(lightningService.start(anyOrNull(), any()))
+            .thenAnswer { throw LdkError(NodeException.AlreadyRunning("already running")) }
+
+        val result = sut.start()
+
+        // Bug: start fails instead of detecting already-running node
+        assertTrue(result.isFailure)
+
+        // Bug: state gets permanently stuck in ErrorStarting
+        val state = sut.lightningState.value.nodeLifecycleState
+        assertTrue(state is NodeLifecycleState.ErrorStarting)
+
+        // Bug: getStatus() returns null due to circular guard (checks isRunning() but state is ErrorStarting)
+        assertNull(sut.getStatus())
+
+        // Bug: operations fail because canRun() returns false for ErrorStarting
+        val addressResult = sut.newAddress()
+        assertTrue(addressResult.isFailure)
+    }
+
+    @Test
+    fun `getStatus returns null when node is running but state is not Running`() = test {
+        sut.setInitNodeLifecycleState()
+
+        // Node is actually running at LDK level
+        val nodeStatus = mock<NodeStatus> { on { isRunning } doReturn true }
+        whenever(lightningService.status).thenReturn(nodeStatus)
+
+        // Bug: getStatus() only checks nodeLifecycleState.isRunning(), not actual node status
+        // State is Initializing, so getStatus() returns null despite the node running
+        assertNull(sut.getStatus())
+    }
+
+    @Test
+    fun `operations fail when state is ErrorStarting despite node running`() = test {
+        // Reach ErrorStarting state via AlreadyRunning error
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(mock())
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+
+        val nodeStatus = mock<NodeStatus> { on { isRunning } doReturn true }
+        whenever(lightningService.status).thenReturn(nodeStatus)
+        whenever(lightningService.start(anyOrNull(), any()))
+            .thenAnswer { throw LdkError(NodeException.AlreadyRunning("already running")) }
+
+        sut.start()
+
+        // Verify we're stuck in ErrorStarting
+        val state = sut.lightningState.value.nodeLifecycleState
+        assertTrue(state is NodeLifecycleState.ErrorStarting)
+
+        // Bug: executeWhenNodeRunning fast-fails because canRun() returns false for ErrorStarting
+        val addressResult = sut.newAddress()
+        assertTrue(addressResult.isFailure)
+        assertTrue(addressResult.exceptionOrNull()?.message?.contains("not starting") == true)
+
+        val invoiceResult = sut.createInvoice(description = "test")
+        assertTrue(invoiceResult.isFailure)
+        assertTrue(invoiceResult.exceptionOrNull()?.message?.contains("not starting") == true)
+    }
+
+    // endregion
 }
