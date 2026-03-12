@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,14 +24,6 @@ fun SyncNodeView(modifier: Modifier) {
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(32.dp))
-
-        BodyM(
-            text = stringResource(R.string.lightning__wait_text_top),
-            color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
         Spacer(modifier = Modifier.weight(1f))
 
         TransferAnimationView(
@@ -41,8 +34,18 @@ fun SyncNodeView(modifier: Modifier) {
         )
 
         Spacer(modifier = Modifier.weight(1f))
+        BodyM(
+            text = stringResource(R.string.lightning__wait_text_top),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
 
-        BodySSB(text = stringResource(R.string.lightning__wait_text_bottom), color = Colors.White32)
+        Spacer(modifier = Modifier.height(45.dp))
+
+        GradientCircularProgressIndicator(
+            strokeWidth = 1.dp,
+            modifier = Modifier.size(24.dp)
+        )
 
         Spacer(modifier = Modifier.height(32.dp))
     }
