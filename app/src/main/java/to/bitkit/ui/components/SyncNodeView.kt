@@ -74,7 +74,6 @@ private fun Preview() {
             modifier = Modifier
                 .fillMaxSize()
                 .gradientBackground()
-                .padding(horizontal = 32.dp)
         )
     }
 }
