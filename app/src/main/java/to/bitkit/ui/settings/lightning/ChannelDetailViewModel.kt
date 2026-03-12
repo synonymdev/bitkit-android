@@ -179,6 +179,7 @@ class ChannelDetailViewModel @Inject constructor(
                 } else {
                     val freshClosed = loadClosedChannels()
                     val isNowClosed = freshClosed.any { it.details.channelId == channelId }
+                    val isPendingOrder = blocktankState.orders.any { it.id == channelId }
                     if (isNowClosed) {
                         val closedChannel = freshClosed.first { it.details.channelId == channelId }
                         _uiState.update {
@@ -190,7 +191,7 @@ class ChannelDetailViewModel @Inject constructor(
                                 nodeId = lightningRepo.getNodeId().orEmpty(),
                             )
                         }
-                    } else {
+                    } else if (!isPendingOrder) {
                         _uiState.update { it.copy(channelLoadState = ChannelLoadState.NotFound) }
                     }
                 }
