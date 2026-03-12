@@ -788,10 +788,7 @@ private fun NavGraphBuilder.home(
             )
         }
     }
-    composable<Routes.Savings>(
-        enterTransition = { Transitions.slideInHorizontally },
-        exitTransition = { Transitions.slideOutHorizontally },
-    ) {
+    composableWithDefaultTransitions<Routes.Savings> {
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
@@ -814,10 +811,7 @@ private fun NavGraphBuilder.home(
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
-    composable<Routes.Spending>(
-        enterTransition = { Transitions.slideInHorizontally },
-        exitTransition = { Transitions.slideOutHorizontally },
-    ) {
+    composableWithDefaultTransitions<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
@@ -1169,19 +1163,17 @@ private fun NavGraphBuilder.lightningConnections(
             LightningConnectionsScreen(navController, viewModel)
         }
         composableWithDefaultTransitions<Routes.ChannelDetail> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
-            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            val route = it.toRoute<Routes.ChannelDetail>()
             ChannelDetailScreen(
+                channelId = route.channelId,
                 navController = navController,
-                viewModel = viewModel,
             )
         }
         composableWithDefaultTransitions<Routes.CloseConnection> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
-            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
+                channelId = route.channelId,
                 navController = navController,
-                viewModel = viewModel,
             )
         }
     }
@@ -1197,10 +1189,7 @@ private fun NavGraphBuilder.activityItem(
             route = it.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
             onChannelClick = { channelId ->
-                navController.currentBackStackEntry?.savedStateHandle?.set("selectedChannelId", channelId)
-                navController.navigate(Routes.ConnectionsNav) {
-                    launchSingleTop = true
-                }
+                navController.navigate(Routes.ChannelDetail(channelId))
             },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
@@ -1764,10 +1753,10 @@ sealed interface Routes {
     data object LightningConnections : Routes
 
     @Serializable
-    data object ChannelDetail : Routes
+    data class ChannelDetail(val channelId: String) : Routes
 
     @Serializable
-    data object CloseConnection : Routes
+    data class CloseConnection(val channelId: String) : Routes
 
     @Serializable
     data object DevSettings : Routes
