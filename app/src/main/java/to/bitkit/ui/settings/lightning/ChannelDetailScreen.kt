@@ -234,7 +234,6 @@ private fun ChannelDetailContent(
                     .navigationBarsPadding()
                     .testTag("ChannelScrollView")
             ) {
-                // Channel Display Section
                 VerticalSpacer(16.dp)
                 LightningChannel(
                     capacity = capacity,
@@ -245,7 +244,6 @@ private fun ChannelDetailContent(
                 VerticalSpacer(32.dp)
                 HorizontalDivider()
 
-                // Status Section
                 SectionTitle(stringResource(R.string.lightning__status))
                 ChannelStatusView(
                     channel = channel,
@@ -255,7 +253,6 @@ private fun ChannelDetailContent(
                 VerticalSpacer(16.dp)
                 HorizontalDivider()
 
-                // Order Details Section
                 if (order != null) {
                     SectionTitle(stringResource(R.string.lightning__order_details))
 
@@ -290,7 +287,6 @@ private fun ChannelDetailContent(
                         }
                     )
 
-                    // Order expiry for pending blocktank orders only
                     if (blocktankOrder != null &&
                         (blocktankOrder.state2 == BtOrderState2.CREATED || blocktankOrder.state2 == BtOrderState2.PAID)
                     ) {
@@ -302,7 +298,6 @@ private fun ChannelDetailContent(
                         )
                     }
 
-                    // Transaction details if available
                     val fundingTxId = when (order) {
                         is IBtOrder -> order.channel?.fundingTx?.id
                         is IcJitEntry -> order.channel?.fundingTx?.id
@@ -326,7 +321,6 @@ private fun ChannelDetailContent(
                         )
                     }
 
-                    // Order fee
                     val orderFee = when (order) {
                         is IBtOrder -> order.feeSat - order.clientBalanceSat
                         is IcJitEntry -> order.feeSat
@@ -342,7 +336,6 @@ private fun ChannelDetailContent(
                     }
                 }
 
-                // Balance Section
                 SectionTitle(stringResource(R.string.lightning__balance))
 
                 SectionRow(
@@ -374,7 +367,6 @@ private fun ChannelDetailContent(
                     modifier = Modifier.testTag("TotalSize")
                 )
 
-                // Fees Section
                 SectionTitle(stringResource(R.string.lightning__fees))
 
                 SectionRow(
@@ -394,7 +386,6 @@ private fun ChannelDetailContent(
                     }
                 )
 
-                // Other Section
                 SectionTitle(stringResource(R.string.lightning__other))
 
                 SectionRow(
@@ -420,7 +411,6 @@ private fun ChannelDetailContent(
                     )
                 }
 
-                // Closed date for closed channels
                 val orderClosedAt = when (order) {
                     is IBtOrder -> order.channel?.close?.registeredAt
                     is IcJitEntry -> order.channel?.close?.registeredAt
@@ -435,7 +425,6 @@ private fun ChannelDetailContent(
                     )
                 }
 
-                // Channel ID
                 SectionRow(
                     name = stringResource(R.string.lightning__channel_id),
                     valueContent = {
@@ -449,7 +438,6 @@ private fun ChannelDetailContent(
                     onClick = { onCopyText(channel.details.channelId) }
                 )
 
-                // Channel point (funding transaction + output index)
                 channel.details.fundingTxo?.let { fundingTxo ->
                     val channelPoint = "${fundingTxo.txid}:${fundingTxo.vout}"
                     SectionRow(
@@ -466,7 +454,6 @@ private fun ChannelDetailContent(
                     )
                 }
 
-                // Peer ID
                 SectionRow(
                     name = stringResource(R.string.lightning__channel_node_id),
                     valueContent = {
@@ -480,7 +467,6 @@ private fun ChannelDetailContent(
                     onClick = { onCopyText(channel.details.counterpartyNodeId) }
                 )
 
-                // Closure reason for closed channels
                 channel.closureReason?.let { closureReason ->
                     SectionRow(
                         name = stringResource(R.string.lightning__closure_reason),
@@ -490,7 +476,6 @@ private fun ChannelDetailContent(
                     )
                 }
 
-                // Action Buttons
                 FillHeight()
                 VerticalSpacer(32.dp)
                 Row(
@@ -616,13 +601,12 @@ private fun contactSupport(
     runCatching {
         context.startActivity(Intent.createChooser(intent, context.getString(R.string.lightning__support)))
     }.onFailure {
-        // Fallback to opening support website
         context.startActivity(Intent(Intent.ACTION_VIEW, Env.SYNONYM_CONTACT.toUri()))
     }
 }
 
 private fun createSupportEmailIntent(
-    order: Any, // IBtOrder or IcJitEntry
+    order: Any,
     channel: ChannelUi,
     nodeId: String,
 ): Intent {

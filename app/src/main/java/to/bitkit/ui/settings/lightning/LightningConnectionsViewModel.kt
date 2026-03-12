@@ -81,8 +81,8 @@ class LightningConnectionsViewModel @Inject constructor(
                         )
                     }
                 }
-                .onFailure { e ->
-                    Logger.error("Failed to load closed channels", e, context = TAG)
+                .onFailure {
+                    Logger.error("Failed to load closed channels", it, context = TAG)
                 }
         }
     }
@@ -93,24 +93,25 @@ class LightningConnectionsViewModel @Inject constructor(
                 lightningRepo.lightningState,
                 blocktankRepo.blocktankState,
             ) { lightningState, blocktankState ->
+                Pair(lightningState, blocktankState)
+            }.collect { (lightningState, blocktankState) ->
                 val channels = lightningState.channels
-                val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
                 val connectionText = context.getString(R.string.lightning__connection)
 
-                _uiState.value.copy(
-                    isNodeRunning = isNodeRunning,
-                    openChannels = channels.filterOpen().map { channel ->
-                        channel.mapToUiModel(channels, blocktankState.paidOrders, connectionText)
-                    },
-                    pendingConnections = getPendingConnections(channels, blocktankState.paidOrders)
-                        .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
-                    failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders)
-                        .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
-                    localBalance = calculateLocalBalance(channels),
-                    remoteBalance = channels.calculateRemoteBalance(),
-                )
-            }.collect { newState ->
-                _uiState.update { newState }
+                _uiState.update {
+                    it.copy(
+                        isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                        openChannels = channels.filterOpen().map { channel ->
+                            channel.mapToUiModel(channels, blocktankState.paidOrders, connectionText)
+                        },
+                        pendingConnections = getPendingConnections(channels, blocktankState.paidOrders)
+                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
+                        failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders)
+                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
+                        localBalance = calculateLocalBalance(channels),
+                        remoteBalance = channels.calculateRemoteBalance(),
+                    )
+                }
             }
         }
     }
@@ -119,7 +120,10 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.nodeEvents.collect { event ->
                 if (event is Event.ChannelPending || event is Event.ChannelReady || event is Event.ChannelClosed) {
-                    Logger.debug("Channel event received: ${event::class.simpleName}, triggering refresh")
+                    Logger.debug(
+                        "Received channel event '${event::class.simpleName}', triggering refresh",
+                        context = TAG,
+                    )
                     refreshObservedState()
                     if (event is Event.ChannelClosed) {
                         loadClosedChannels()
