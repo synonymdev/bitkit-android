@@ -1005,7 +1005,7 @@ class AppViewModel @Inject constructor(
         }
 
         activeScanInput = normalized
-        Logger.debug("Scan from '${source.label}': '$scanId'", context = TAG)
+        Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
         activeScanJob = viewModelScope.launch {
             if (startDelay > Duration.ZERO) delay(startDelay)
             handleScan(data)

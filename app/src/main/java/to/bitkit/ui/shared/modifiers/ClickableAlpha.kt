@@ -127,6 +127,8 @@ private class ClickableAlphaNode(
                                 animatable.animateTo(pressedAlpha)
                                 animatable.animateTo(1f)
                             }
+                        } else {
+                            coroutineScope.launch { animatable.animateTo(1f) }
                         }
                     }
                 )
