@@ -1,5 +1,5 @@
 ---
-description: "Create a new release: bump version, create PR, build mainnet, publish draft release"
+description: "Create a new release: bump version, create PR, build mainnet, tag, draft release"
 allowed_tools: Bash, Read, Edit, Write, Glob, Grep, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__pull_request_read, mcp__github__get_file_contents, mcp__github__update_pull_request
 ---
 
@@ -39,13 +39,36 @@ The user can always pick "Other" to enter a custom version string.
 
 Store the chosen version as `newVersionName` and compute `newVersionCode = versionCode + 1`.
 
+### 2b. Ask for Base (patch releases only)
+
+If the user chose a **patch** release, use `AskUserQuestion`:
+
+**Question:** `"Branch from? Patch releases can be cut from master or from a previous tag with cherry-picked commits."`
+
+**Options:**
+1. "master" (Recommended) — description: "Branch from latest master"
+2. "Previous tag" — description: "Branch from a tag (e.g. v{oldVersionName}), then cherry-pick commits"
+
+If "Previous tag": ask `"Which tag?"` with a text input (default: `v{oldVersionName}`). Store as `{baseRef}`.
+
+If "master" or if the release is minor/major: `{baseRef} = master`.
+
 ### 3. Create Release Branch & Bump Version
 
 ```bash
-git checkout master
-git pull origin master
+git fetch origin
+git checkout {baseRef}
+# If baseRef is master, pull latest:
+# git pull origin master
 git checkout -b release/{newVersionCode}
 ```
+
+If the base is a tag (not master), print:
+```
+Release branch created from {baseRef}.
+Cherry-pick the commits you need onto this branch now, then continue.
+```
+Wait for the user to confirm they are done cherry-picking before proceeding.
 
 Edit `app/build.gradle.kts`:
 - Change `versionCode = {old}` to `versionCode = {newVersionCode}`
@@ -83,17 +106,9 @@ N/A
 
 Store the PR URL for the summary.
 
-### 5. Build Mainnet Release
+### 5. Tag & Draft GitHub Release
 
-```bash
-./gradlew assembleMainnetRelease
-```
-
-Expected APK path: `app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk`
-
-Verify the file exists. If the build fails, stop and report the error to the user.
-
-### 6. Tag & Push
+Create the tag and draft release early so auto-generated release notes are available during QA.
 
 Determine the previous version tag for changelog generation: `v{oldVersionName}`.
 
@@ -102,15 +117,73 @@ git tag -a v{newVersionName} -m "v{newVersionName}"
 git push origin v{newVersionName}
 ```
 
-### 7. Create Draft GitHub Release
-
 ```bash
 gh release create v{newVersionName} \
   --title "v{newVersionName}" \
   --draft \
   --generate-notes \
-  --notes-start-tag v{oldVersionName}
+  --notes-start-tag v{oldVersionName} \
+  --target release/{newVersionCode}
 ```
+
+### 6. Generate Store Release Notes
+
+Fetch the auto-generated release notes from the draft release:
+
+```bash
+gh release view v{newVersionName} --json body --jq .body
+```
+
+Using those notes as context, write a concise user-facing summary of the release (2-3 sentences max, no commit hashes or PR numbers, written for end users not developers). Focus on new features and important bug fixes. Omit chores, maintenance, refactoring, CI changes, and test coverage improvements — these are not relevant to Play Store users. Translate the summary into 5 languages.
+
+Create `.ai/` directory if it doesn't exist. Save to `.ai/release-notes-{newVersionName}.md`:
+
+```markdown
+# Release Notes v{newVersionName}
+
+## English
+{summary}
+
+## French
+{french translation}
+
+## Spanish
+{spanish translation}
+
+## Portuguese
+{portuguese translation}
+
+## German
+{german translation}
+```
+
+Then prepend the English summary to the draft release body on GitHub:
+
+```bash
+# Read existing body
+EXISTING=$(gh release view v{newVersionName} --json body --jq .body)
+
+# Prepend store summary
+gh release edit v{newVersionName} --notes "## Store Release Notes
+
+{english summary}
+
+---
+
+$EXISTING"
+```
+
+Print the path to the release notes file so the user can share it for review.
+
+### 7. Build Mainnet Release
+
+```bash
+./gradlew assembleMainnetRelease
+```
+
+Expected APK path: `app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk`
+
+Verify the file exists. If the build fails, stop and report the error to the user.
 
 ### 8. Upload APK to Draft Release
 
@@ -135,6 +208,13 @@ Release branch: release/{newVersionCode}
 Tag: v{newVersionName}
 Draft release: {release URL}
 APK uploaded: bitkit-mainnet-release-{newVersionCode}-universal.apk
+Store release notes: .ai/release-notes-{newVersionName}.md
 
-Next: publish the draft release on GitHub when ready.
+Next steps:
+- Share release notes with Jacobo for review
+- QA the APK
+- If patching the release branch: increment only versionCode, re-tag, rebuild, and re-upload
+- Submit to Play Store when QA passes
+- Publish the draft release on GitHub after store release
+- Merge release branch PR into master
 ```
