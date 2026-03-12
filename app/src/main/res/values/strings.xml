@@ -96,6 +96,7 @@
     <string name="lightning__block_height">Block Height</string>
     <string name="lightning__channel_id">Channel ID</string>
     <string name="lightning__channel_node_id">Peer ID</string>
+    <string name="lightning__channel_not_found">Channel not found</string>
     <string name="lightning__channel_opened_msg">You can now pay anyone, anywhere, instantly.</string>
     <string name="lightning__channel_opened_title">Spending Balance Ready</string>
     <string name="lightning__channel_point">Channel point</string>
