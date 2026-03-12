@@ -105,8 +105,6 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
-import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewScreen
-import to.bitkit.ui.screens.widgets.suggestions.SuggestionsViewModel
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
@@ -121,6 +119,8 @@ import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
 import to.bitkit.ui.screens.widgets.price.PriceEditScreen
 import to.bitkit.ui.screens.widgets.price.PricePreviewScreen
 import to.bitkit.ui.screens.widgets.price.PriceViewModel
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewScreen
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsViewModel
 import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
