@@ -95,7 +95,7 @@ class HomeViewModel @Inject constructor(
                             !settings.widgetsOnboardingHintDismissed,
                     )
                 }
-            }.collect {}
+            }.collect()
         }
 
         @OptIn(ExperimentalCoroutinesApi::class)
@@ -120,7 +120,7 @@ class HomeViewModel @Inject constructor(
                             activeTransfers.isEmpty()
                     )
                 }
-            }.collect {}
+            }.collect()
         }
         viewModelScope.launch { createBannersFlow() }
     }
