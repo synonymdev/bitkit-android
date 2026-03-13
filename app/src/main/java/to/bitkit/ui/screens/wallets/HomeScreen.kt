@@ -49,7 +49,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -329,7 +330,8 @@ private fun Content(
         }
     }
 
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp
+    val density = LocalDensity.current
+    val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp().value.toInt() }
     val activityCount = if (screenHeightDp < SMALL_SCREEN_HEIGHT_DP) {
         SMALL_SCREEN_ACTIVITY_COUNT
     } else {
