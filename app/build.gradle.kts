@@ -267,6 +267,8 @@ dependencies {
     implementation(libs.charts)
     implementation(libs.haze)
     implementation(libs.haze.materials)
+    // Image Loading
+    implementation(libs.coil.compose)
     // Compose Navigation
     implementation(libs.navigation.compose)
     androidTestImplementation(libs.navigation.testing)
