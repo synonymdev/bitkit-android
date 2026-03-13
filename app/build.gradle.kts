@@ -268,6 +268,7 @@ dependencies {
     implementation(libs.haze)
     implementation(libs.haze.materials)
     // Image Loading
+    implementation(platform(libs.coil.bom))
     implementation(libs.coil.compose)
     // Compose Navigation
     implementation(libs.navigation.compose)
