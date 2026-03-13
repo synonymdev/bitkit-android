@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Devices.PIXEL_TABLET
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -910,7 +911,7 @@ private val previewWeather = WeatherModel(
     icon = "\u2600\uFE0F",
 )
 
-@Preview(name = "With Activity", showSystemUi = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewWithActivity() {
     AppThemeSurface {
@@ -929,7 +930,7 @@ private fun PreviewWithActivity() {
     }
 }
 
-@Preview(name = "Empty", showSystemUi = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewEmpty() {
     AppThemeSurface {
@@ -948,7 +949,7 @@ private fun PreviewEmpty() {
     }
 }
 
-@Preview(name = "With Banners", showSystemUi = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewWithBanners() {
     AppThemeSurface {
@@ -968,7 +969,7 @@ private fun PreviewWithBanners() {
     }
 }
 
-@Preview(name = "Onboarding Hint", showSystemUi = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewWithOnboardingHint() {
     AppThemeSurface {
@@ -988,7 +989,7 @@ private fun PreviewWithOnboardingHint() {
     }
 }
 
-@Preview(name = "Widgets Page", showSystemUi = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewWidgetsPage() {
     AppThemeSurface {
@@ -1014,7 +1015,7 @@ private fun PreviewWidgetsPage() {
     }
 }
 
-@Preview(name = "Widgets Editing", showSystemUi = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewWidgetsEditing() {
     AppThemeSurface {
@@ -1030,6 +1031,44 @@ private fun PreviewWidgetsEditing() {
                     currentArticle = previewArticle,
                     currentPrice = previewPrice,
                     currentWeather = previewWeather,
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewActivityItems.take(3),
+                balances = previewBalances,
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true, device = PIXEL_TABLET)
+@Composable
+private fun PreviewTabletLandscape() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    showWidgets = true,
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewActivityItems.take(3),
+                balances = previewBalances,
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true, device = "spec:width=1200dp,height=2000dp,dpi=240")
+@Composable
+private fun PreviewTabletPortrait() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    showWidgets = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),
