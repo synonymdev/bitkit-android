@@ -411,11 +411,11 @@ class TrezorViewModel @Inject constructor(
 
             _uiState.update { it.copy(isComposing = true) }
 
-            val coinStr = trezorRepo.coinStringForNetwork(state.selectedNetwork.toTrezorCoinType())
+            val coin = state.selectedNetwork.toTrezorCoinType()
             TrezorDebugLog.log("COMPOSE", "=== composeTx START ===")
             TrezorDebugLog.log("COMPOSE", "address=${state.sendAddress}")
             TrezorDebugLog.log("COMPOSE", "amount=${state.sendAmountSats}, sendMax=${state.isSendMax}")
-            TrezorDebugLog.log("COMPOSE", "feeRate=${state.sendFeeRate} sat/vB, coin=$coinStr")
+            TrezorDebugLog.log("COMPOSE", "feeRate=${state.sendFeeRate} sat/vB, coin=$coin")
             TrezorDebugLog.log("COMPOSE", "account.path=${accountInfo.account.path}")
             TrezorDebugLog.log("COMPOSE", "utxos=${accountInfo.account.utxo.size}, balance=${accountInfo.balance}")
 
@@ -427,7 +427,7 @@ class TrezorViewModel @Inject constructor(
 
             val params = TrezorPrecomposeParams(
                 outputs = listOf(output),
-                coin = coinStr,
+                coin = coin,
                 account = accountInfo.account,
                 feeLevels = listOf(
                     TrezorFeeLevel(feePerUnit = state.sendFeeRate, baseFee = null, floorBaseFee = null)

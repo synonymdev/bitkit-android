@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
@@ -256,6 +257,7 @@ class TrezorService @Inject constructor(
         electrumUrl: String,
         network: BitkitCoreNetwork?,
         gapLimit: UInt? = 20u,
+        scriptType: AccountType? = null,
     ): AccountInfoResult {
         return ServiceQueue.CORE.background {
             onchainGetAccountInfo(
@@ -263,6 +265,7 @@ class TrezorService @Inject constructor(
                 electrumUrl = electrumUrl,
                 network = network,
                 gapLimit = gapLimit,
+                scriptType = scriptType,
             )
         }
     }

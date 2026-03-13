@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import android.content.Context
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
@@ -214,12 +215,14 @@ class TrezorRepo @Inject constructor(
     suspend fun getAccountInfo(
         extendedKey: String,
         network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
+        scriptType: AccountType? = null,
     ): Result<AccountInfoResult> = withContext(bgDispatcher) {
         runCatching {
             trezorService.getAccountInfo(
                 extendedKey = extendedKey,
                 electrumUrl = electrumUrlForNetwork(network),
                 network = keyFormatNetwork(network),
+                scriptType = scriptType,
             )
         }.onFailure { e ->
             Logger.error("Trezor getAccountInfo failed", e, context = TAG)
@@ -311,13 +314,6 @@ class TrezorRepo @Inject constructor(
             Logger.error("Trezor signTxWithParams failed", it, context = TAG)
             _state.update { s -> s.copy(error = it.message) }
         }
-    }
-
-    fun coinStringForNetwork(network: TrezorCoinType): String = when (network) {
-        TrezorCoinType.BITCOIN -> "Bitcoin"
-        TrezorCoinType.TESTNET -> "Testnet"
-        TrezorCoinType.REGTEST -> "Regtest"
-        TrezorCoinType.SIGNET -> "Signet"
     }
 
     suspend fun disconnect(): Result<Unit> = withContext(bgDispatcher) {
