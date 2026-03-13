@@ -699,8 +699,8 @@ private fun RootNavHost(
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
                         onScanClick = {
-                            appViewModel.showScannerSheet { result ->
-                                viewModel.parseNodeUri(result)
+                            appViewModel.showScannerSheet {
+                                viewModel.parseNodeUri(it)
                             }
                         },
                         onBackClick = { navController.popBackStack() },
