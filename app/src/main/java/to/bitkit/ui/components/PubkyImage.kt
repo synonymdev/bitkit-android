@@ -43,7 +43,7 @@ fun PubkyImage(
                 CircularProgressIndicator(
                     strokeWidth = 2.dp,
                     color = Colors.White32,
-                    modifier = Modifier.size(size / 3),
+                    modifier = Modifier.size(size / 3)
                 )
             }
         },
@@ -67,7 +67,7 @@ fun PubkyImage(
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
-                    },
+                    }
             )
         },
         error = {
@@ -75,18 +75,18 @@ fun PubkyImage(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .matchParentSize()
-                    .background(Colors.Gray5, CircleShape),
+                    .background(Colors.Gray5, CircleShape)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_user_square),
                     contentDescription = null,
                     tint = Colors.White32,
-                    modifier = Modifier.size(size / 2),
+                    modifier = Modifier.size(size / 2)
                 )
             }
         },
         modifier = modifier
             .size(size)
-            .clip(CircleShape),
+            .clip(CircleShape)
     )
 }
