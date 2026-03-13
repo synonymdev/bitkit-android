@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -134,7 +135,6 @@ import to.bitkit.viewmodels.WalletViewModel
 private const val SMALL_SCREEN_HEIGHT_DP = 700
 private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
 private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
-private const val ANIMATION_DURATION_MS = 300
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -624,9 +624,9 @@ private fun SuggestionsSection(
                     modifier = Modifier
                         .testTag("Suggestion-${item.name.lowercase()}")
                         .animateItem(
-                            fadeInSpec = tween(durationMillis = ANIMATION_DURATION_MS),
-                            fadeOutSpec = tween(durationMillis = ANIMATION_DURATION_MS),
-                            placementSpec = tween(durationMillis = ANIMATION_DURATION_MS),
+                            fadeInSpec = tween(durationMillis = AnimationConstants.DefaultDurationMillis),
+                            fadeOutSpec = tween(durationMillis = AnimationConstants.DefaultDurationMillis),
+                            placementSpec = tween(durationMillis = AnimationConstants.DefaultDurationMillis),
                         )
                 )
             }
