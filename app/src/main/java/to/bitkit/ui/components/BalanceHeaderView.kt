@@ -202,20 +202,16 @@ fun LargeRow(
         modifier = modifier,
     ) {
         if (!hideBalance && prefix != null) {
-            Display(
+            SecondaryDisplay(
                 text = prefix,
-                fontWeight = FontWeight.ExtraBold,
-                color = Colors.White64,
                 modifier = Modifier
                     .padding(end = 8.dp)
                     .testTag("MoneySign")
             )
         }
         if (showSymbol && !isSymbolSuffix) {
-            Display(
+            SecondaryDisplay(
                 text = symbol,
-                fontWeight = FontWeight.ExtraBold,
-                color = Colors.White64,
                 modifier = Modifier
                     .padding(end = 8.dp)
                     .testTag("MoneyFiatSymbol")
@@ -232,16 +228,24 @@ fun LargeRow(
             )
         }
         if (showSymbol && isSymbolSuffix) {
-            Display(
+            SecondaryDisplay(
                 text = symbol,
-                fontWeight = FontWeight.ExtraBold,
-                color = Colors.White64,
                 modifier = Modifier
                     .padding(start = 8.dp)
                     .testTag("MoneyFiatSymbol")
             )
         }
     }
+}
+
+@Composable
+private fun SecondaryDisplay(text: String, modifier: Modifier = Modifier) {
+    Display(
+        text = text,
+        fontWeight = FontWeight.ExtraBold,
+        color = Colors.White64,
+        modifier = modifier,
+    )
 }
 
 @Composable
