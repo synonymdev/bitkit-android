@@ -366,7 +366,7 @@ private fun Content(
             userScrollEnabled = homeUiState.showWidgets && !homeUiState.isEditingWidgets,
             flingBehavior = PagerDefaults.flingBehavior(
                 state = pagerState,
-                snapAnimationSpec = spring(stiffness = Spring.StiffnessLow),
+                snapAnimationSpec = spring(stiffness = Spring.StiffnessMedium),
                 snapPositionalThreshold = 0.1f,
             ),
             modifier = Modifier
