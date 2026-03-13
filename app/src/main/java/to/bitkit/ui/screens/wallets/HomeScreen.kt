@@ -136,6 +136,7 @@ import to.bitkit.viewmodels.WalletViewModel
 private const val SMALL_SCREEN_HEIGHT_DP = 700
 private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
 private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
+private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -485,7 +486,7 @@ private fun WalletPage(
                     }
                 }
 
-                VerticalSpacer(TAB_BAR_HEIGHT.dp + TAB_BAR_PADDING_BOTTOM.dp + 36.dp + Insets.Bottom)
+                VerticalSpacer(BOTTOM_SPACER_HEIGHT + Insets.Bottom)
             }
         }
 
