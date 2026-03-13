@@ -233,9 +233,7 @@ class WidgetsRepo @Inject constructor(
 
             WidgetType.CALCULATOR,
             WidgetType.SUGGESTIONS,
-            -> {
-                throw NotImplementedError("Widget doesn't need a service")
-            }
+            -> throw NotImplementedError("Widget doesn't need a service")
 
             WidgetType.FACTS -> updateWidget(factsService) { facts ->
                 widgetsStore.updateFacts(facts)
