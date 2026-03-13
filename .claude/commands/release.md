@@ -58,9 +58,12 @@ If "master" or if the release is minor/major: `{baseRef} = master`.
 ```bash
 git fetch origin
 git checkout {baseRef}
-# If baseRef is master, pull latest:
-# git pull origin master
-git checkout -b release/{newVersionCode}
+```
+
+If `{baseRef}` is `master`, pull latest: `git pull origin master`. Skip pull if baseRef is a tag.
+
+```bash
+git checkout -b release-{newVersionName}
 ```
 
 If the base is a tag (not master), print:
@@ -77,7 +80,7 @@ Edit `app/build.gradle.kts`:
 ```bash
 git add app/build.gradle.kts
 git commit -m "chore: version {newVersionName}"
-git push -u origin release/{newVersionCode}
+git push -u origin release-{newVersionName}
 ```
 
 ### 4. Create Version Bump PR
@@ -123,7 +126,7 @@ gh release create v{newVersionName} \
   --draft \
   --generate-notes \
   --notes-start-tag v{oldVersionName} \
-  --target release/{newVersionCode}
+  --target release-{newVersionName}
 ```
 
 ### 6. Generate Store Release Notes
@@ -160,17 +163,18 @@ Create `.ai/` directory if it doesn't exist. Save to `.ai/release-notes-{newVers
 Then prepend the English summary to the draft release body on GitHub:
 
 ```bash
-# Read existing body
-EXISTING=$(gh release view v{newVersionName} --json body --jq .body)
-
-# Prepend store summary
-gh release edit v{newVersionName} --notes "## Store Release Notes
+# Write store summary via heredoc (avoids shell expansion of apostrophes, $, backticks)
+cat > /tmp/release-notes.md <<'NOTES_EOF'
+## Store Release Notes
 
 {english summary}
 
 ---
 
-$EXISTING"
+NOTES_EOF
+# Append existing auto-generated notes
+gh release view v{newVersionName} --json body --jq .body >> /tmp/release-notes.md
+gh release edit v{newVersionName} --notes-file /tmp/release-notes.md
 ```
 
 Print the path to the release notes file so the user can share it for review.
@@ -204,7 +208,7 @@ git checkout master
 Release v{newVersionName} (build {newVersionCode})
 
 Version bump PR: {PR URL}
-Release branch: release/{newVersionCode}
+Release branch: release-{newVersionName}
 Tag: v{newVersionName}
 Draft release: {release URL}
 APK uploaded: bitkit-mainnet-release-{newVersionCode}-universal.apk
