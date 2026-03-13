@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,10 +26,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ButtonSize
@@ -44,7 +41,6 @@ import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScanNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ProbeResult
@@ -53,28 +49,18 @@ import to.bitkit.viewmodels.ProbingToolViewModel
 
 @Composable
 fun ProbingToolScreen(
-    savedStateHandle: SavedStateHandle,
     navController: NavController,
     viewModel: ProbingToolViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
 
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow<String?>(SCAN_RESULT_KEY, null)
-            .filterNotNull()
-            .collect {
-                viewModel.updateInvoice(it)
-                savedStateHandle.remove<String>(SCAN_RESULT_KEY)
-            }
-    }
-
     ProbingToolContent(
         uiState = uiState,
         onBackClick = { navController.popBackStack() },
         onScanClick = {
             app.showScannerSheet {
-                savedStateHandle[SCAN_RESULT_KEY] = it
+                viewModel.updateInvoice(it)
             }
         },
         onInvoiceChange = viewModel::updateInvoice,

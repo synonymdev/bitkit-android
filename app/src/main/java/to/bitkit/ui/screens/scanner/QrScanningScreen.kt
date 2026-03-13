@@ -76,8 +76,6 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
-const val SCAN_RESULT_KEY = "SCAN_RESULT"
-
 val CameraOverlayButtonSize = 40.dp
 
 private const val TAG = "QrScanningScreen"

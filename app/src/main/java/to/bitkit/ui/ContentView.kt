@@ -64,7 +64,6 @@ import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
-import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.settings.LdkDebugScreen
@@ -697,12 +696,11 @@ private fun RootNavHost(
 
                     ExternalConnectionScreen(
                         route = route,
-                        savedStateHandle = it.savedStateHandle,
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
                         onScanClick = {
                             appViewModel.showScannerSheet { result ->
-                                it.savedStateHandle[SCAN_RESULT_KEY] = result
+                                viewModel.parseNodeUri(result)
                             }
                         },
                         onBackClick = { navController.popBackStack() },
@@ -882,7 +880,7 @@ private fun NavGraphBuilder.settings(
         VssDebugScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ProbingTool> {
-        ProbingToolScreen(it.savedStateHandle, navController)
+        ProbingToolScreen(navController)
     }
     composableWithDefaultTransitions<Routes.FeeSettings> {
         FeeSettingsScreen(navController)
@@ -1010,7 +1008,7 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
         ElectrumConfigScreen(navController)
     }
     composableWithDefaultTransitions<Routes.RgsServer> {
-        RgsServerScreen(it.savedStateHandle, navController)
+        RgsServerScreen(navController)
     }
     composableWithDefaultTransitions<Routes.AddressTypePreference> {
         AddressTypePreferenceScreen(navController)
