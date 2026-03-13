@@ -128,7 +128,7 @@ fun AddWidgetsScreen(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -140,7 +140,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewDisabled() {
     AppThemeSurface {
