@@ -390,6 +390,7 @@ private fun Content(
                 )
 
                 1 -> WidgetsPage(
+                    hazeState = hazeState,
                     homeUiState = homeUiState,
                     onRemoveSuggestion = onRemoveSuggestion,
                     onClickSuggestion = onClickSuggestion,
@@ -550,6 +551,7 @@ private fun BalancesSection(
 @Suppress("MagicNumber")
 @Composable
 private fun WidgetsPage(
+    hazeState: HazeState,
     homeUiState: HomeUiState,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
@@ -606,16 +608,18 @@ private fun WidgetsPage(
             VerticalSpacer(150.dp)
         }
         if (!isKeyboardVisible) {
+            val bottomGradient = Brush.verticalGradient(
+                colors = listOf(Color.Transparent, Colors.Black),
+            )
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(GRADIENT_HEIGHT.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Colors.Black),
-                        )
-                    )
+                    .hazeEffect(state = hazeState) {
+                        mask = bottomGradient
+                    }
+                    .background(bottomGradient)
             )
         }
     }
