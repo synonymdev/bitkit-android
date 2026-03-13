@@ -840,10 +840,7 @@ private fun NavGraphBuilder.allActivity(
     composableWithDefaultTransitions<Routes.AllActivity> {
         AllActivityScreen(
             viewModel = activityListViewModel,
-            onBack = {
-                activityListViewModel.clearFilters()
-                navController.navigateToHome()
-            },
+            onBack = { navController.popBackStack() },
             onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
         )
     }
