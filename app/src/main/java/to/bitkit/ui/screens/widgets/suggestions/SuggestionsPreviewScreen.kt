@@ -65,8 +65,8 @@ fun SuggestionsPreviewScreen(
 
 @Composable
 private fun Content(
-    onBack: () -> Unit,
     isSuggestionsWidgetEnabled: Boolean,
+    onBack: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
 ) {
