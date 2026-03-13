@@ -24,10 +24,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServerPeer
@@ -45,29 +43,17 @@ import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScanNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun ElectrumConfigScreen(
-    savedStateHandle: SavedStateHandle,
     navController: NavController,
     viewModel: ElectrumConfigViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
     val context = LocalContext.current
-
-    // Handle result from Scanner
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow<String?>(SCAN_RESULT_KEY, null)
-            .filterNotNull()
-            .collect { scannedData ->
-                viewModel.onScan(scannedData)
-                savedStateHandle.remove<String>(SCAN_RESULT_KEY)
-            }
-    }
 
     // Monitor connection results
     LaunchedEffect(uiState.connectionResult) {
@@ -98,7 +84,7 @@ fun ElectrumConfigScreen(
         onBack = { navController.popBackStack() },
         onScan = {
             app.showScannerSheet {
-                savedStateHandle[SCAN_RESULT_KEY] = it
+                viewModel.onScan(it)
             }
         },
         onChangeHost = viewModel::setHost,

@@ -178,7 +178,6 @@ import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
-import to.bitkit.ui.utils.Transitions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.utils.Logger
@@ -1008,7 +1007,7 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
         CoinSelectPreferenceScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ElectrumConfig> {
-        ElectrumConfigScreen(it.savedStateHandle, navController)
+        ElectrumConfigScreen(navController)
     }
     composableWithDefaultTransitions<Routes.RgsServer> {
         RgsServerScreen(it.savedStateHandle, navController)
