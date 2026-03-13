@@ -132,6 +132,7 @@ import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
+import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -141,6 +142,7 @@ import to.bitkit.viewmodels.WalletViewModel
 private const val SMALL_SCREEN_HEIGHT_DP = 700
 private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
 private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
+private const val GRADIENT_HEIGHT = 134
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
 @Suppress("CyclomaticComplexMethod")
@@ -369,6 +371,7 @@ private fun Content(
             ),
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .hazeSource(state = hazeState)
                 .zIndex(0f)
         ) { page ->
@@ -555,12 +558,13 @@ private fun WidgetsPage(
     onClickDeleteWidget: (WidgetType) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
 ) {
+    val isKeyboardVisible by keyboardAsState()
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
-                .imePadding()
                 .verticalScroll(rememberScrollState())
         ) {
             StatusBarSpacer()
@@ -601,17 +605,19 @@ private fun WidgetsPage(
 
             VerticalSpacer(150.dp)
         }
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(134.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Colors.Black),
+        if (!isKeyboardVisible) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(GRADIENT_HEIGHT.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Colors.Black),
+                        )
                     )
-                )
-        )
+            )
+        }
     }
 }
 
