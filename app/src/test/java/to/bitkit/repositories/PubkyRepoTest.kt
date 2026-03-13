@@ -1,7 +1,7 @@
 package to.bitkit.repositories
 
-import android.graphics.Bitmap
 import app.cash.turbine.test
+import coil3.ImageLoader
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -13,7 +13,6 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
-import to.bitkit.data.PubkyImageCache
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
@@ -32,7 +31,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     private val pubkyService = mock<PubkyService>()
     private val keychain = mock<Keychain>()
-    private val imageCache = mock<PubkyImageCache>()
+    private val imageLoader = mock<ImageLoader>()
     private val pubkyStore = mock<PubkyStore>()
 
     @Before
@@ -45,7 +44,7 @@ class PubkyRepoTest : BaseUnitTest() {
         ioDispatcher = testDispatcher,
         pubkyService = pubkyService,
         keychain = keychain,
-        imageCache = imageCache,
+        imageLoader = imageLoader,
         pubkyStore = pubkyStore,
     )
 
@@ -189,7 +188,6 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.profile.value)
         assertFalse(sut.isAuthenticated.value)
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
-        verify(imageCache).clear()
         verifyBlocking(pubkyStore) { reset() }
     }
 
@@ -203,50 +201,6 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verifyBlocking(pubkyService) { forceSignOut() }
         assertFalse(sut.isAuthenticated.value)
-    }
-
-    @Test
-    fun `cachedImage should delegate to imageCache`() = test {
-        val testUri = "pubky://test_image"
-        val bitmap = mock<Bitmap>()
-        whenever(imageCache.memoryImage(testUri)).thenReturn(bitmap)
-
-        val result = sut.cachedImage(testUri)
-
-        assertEquals(bitmap, result)
-    }
-
-    @Test
-    fun `cachedImage should return null when not cached`() = test {
-        whenever(imageCache.memoryImage(any())).thenReturn(null)
-
-        val result = sut.cachedImage("pubky://missing")
-
-        assertNull(result)
-    }
-
-    @Test
-    fun `fetchImage should return cached image from disk`() = test {
-        val testUri = "pubky://disk_cached"
-        val bitmap = mock<Bitmap>()
-        whenever(imageCache.image(testUri)).thenReturn(bitmap)
-
-        val result = sut.fetchImage(testUri)
-
-        assertTrue(result.isSuccess)
-        assertEquals(bitmap, result.getOrNull())
-        verify(pubkyService, never()).fetchFile(any())
-    }
-
-    @Test
-    fun `fetchImage should fail when fetch throws`() = test {
-        val testUri = "pubky://failing_image"
-        whenever(imageCache.image(testUri)).thenReturn(null)
-        whenever(pubkyService.fetchFile(testUri)).thenThrow(RuntimeException("Network error"))
-
-        val result = sut.fetchImage(testUri)
-
-        assertTrue(result.isFailure)
     }
 
     @Test

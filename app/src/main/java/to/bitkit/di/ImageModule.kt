@@ -10,7 +10,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import to.bitkit.data.PubkyFetcher
+import to.bitkit.data.PubkyImageFetcher
 import to.bitkit.services.PubkyService
 import javax.inject.Singleton
 
@@ -24,7 +24,7 @@ object ImageModule {
         @ApplicationContext context: Context,
         pubkyService: PubkyService,
     ): ImageLoader = ImageLoader.Builder(context)
-        .components { add(PubkyFetcher.Factory(pubkyService)) }
+        .components { add(PubkyImageFetcher.Factory(pubkyService)) }
         .memoryCache {
             MemoryCache.Builder()
                 .maxSizePercent(context, percent = 0.15)

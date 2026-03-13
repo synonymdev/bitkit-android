@@ -1,6 +1,6 @@
 package to.bitkit.repositories
 
-import android.graphics.Bitmap
+import coil3.ImageLoader
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -18,8 +18,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import to.bitkit.data.PubkyImageCache
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
@@ -36,7 +34,7 @@ class PubkyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val pubkyService: PubkyService,
     private val keychain: Keychain,
-    private val imageCache: PubkyImageCache,
+    private val imageLoader: ImageLoader,
     private val pubkyStore: PubkyStore,
 ) {
     companion object {
@@ -251,7 +249,7 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) { pubkyService.forceSignOut() }
     }.also {
         runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) } }
-        runCatching { withContext(ioDispatcher) { imageCache.clear() } }
+        evictPubkyImages()
         runCatching { withContext(ioDispatcher) { pubkyStore.reset() } }
         _publicKey.update { null }
         _profile.update { null }
@@ -259,29 +257,17 @@ class PubkyRepo @Inject constructor(
         _authState.update { PubkyAuthState.Idle }
     }
 
-    fun cachedImage(uri: String): Bitmap? = imageCache.memoryImage(uri)
-
-    suspend fun fetchImage(uri: String): Result<Bitmap> = runCatching {
-        withContext(ioDispatcher) {
-            imageCache.image(uri)?.let { return@withContext it }
-
-            val data = pubkyService.fetchFile(uri)
-            val blobData = resolveImageData(data)
-            imageCache.decodeAndStore(blobData, uri).getOrThrow()
+    private fun evictPubkyImages() {
+        imageLoader.memoryCache?.let { cache ->
+            cache.keys.filter { it.key.startsWith(PUBKY_SCHEME) }.forEach { cache.remove(it) }
         }
-    }
-
-    private suspend fun resolveImageData(data: ByteArray): ByteArray {
-        return runCatching {
-            val json = JSONObject(String(data))
-            val src = json.optString("src", "")
-            if (src.isNotEmpty() && src.startsWith(PUBKY_SCHEME)) {
-                Logger.debug("File descriptor found, fetching blob from: '$src'", context = TAG)
-                pubkyService.fetchFile(src)
-            } else {
-                data
-            }
-        }.getOrDefault(data)
+        val imageUris = buildList {
+            _profile.value?.imageUrl?.let { add(it) }
+            addAll(_contacts.value.mapNotNull { it.imageUrl })
+        }
+        imageLoader.diskCache?.let { cache ->
+            imageUris.forEach { cache.remove(it) }
+        }
     }
 
     private suspend fun cacheMetadata(profile: PubkyProfile) {

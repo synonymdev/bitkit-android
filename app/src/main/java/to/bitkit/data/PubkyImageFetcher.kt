@@ -1,6 +1,7 @@
 package to.bitkit.data
 
 import coil3.ImageLoader
+import coil3.Uri
 import coil3.decode.DataSource
 import coil3.decode.ImageSource
 import coil3.fetch.FetchResult
@@ -12,10 +13,10 @@ import org.json.JSONObject
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.Logger
 
-private const val TAG = "PubkyFetcher"
+private const val TAG = "PubkyImageFetcher"
 private const val PUBKY_SCHEME = "pubky://"
 
-class PubkyFetcher(
+class PubkyImageFetcher(
     private val uri: String,
     private val options: Options,
     private val pubkyService: PubkyService,
@@ -39,10 +40,11 @@ class PubkyFetcher(
         }
     }.getOrDefault(data)
 
-    class Factory(private val pubkyService: PubkyService) : Fetcher.Factory<String> {
-        override fun create(data: String, options: Options, imageLoader: ImageLoader): Fetcher? {
-            if (!data.startsWith(PUBKY_SCHEME)) return null
-            return PubkyFetcher(data, options, pubkyService)
+    class Factory(private val pubkyService: PubkyService) : Fetcher.Factory<Uri> {
+        override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
+            val uri = data.toString()
+            if (!uri.startsWith(PUBKY_SCHEME)) return null
+            return PubkyImageFetcher(uri, options, pubkyService)
         }
     }
 }
