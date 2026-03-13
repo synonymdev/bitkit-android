@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ShapeDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,13 +32,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.outerGlow
-import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -168,15 +166,9 @@ fun ActivityBanner(
                 modifier = Modifier.size(20.dp)
             )
 
-            // Using Text directly instead of Headline20 to preserve lowercase time units (e.g., "~10m")
-            Text(
-                text = title,
-                style = AppTextStyles.Headline.merge(
-                    fontSize = 20.sp,
-                    lineHeight = 20.sp,
-                    letterSpacing = (-.5).sp,
-                    color = Colors.White,
-                ),
+            Headline20(
+                text = AnnotatedString(title),
+                color = Colors.White,
             )
         }
     }

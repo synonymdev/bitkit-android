@@ -73,7 +73,7 @@ fun Headline20(
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
-        text = text.toUpperCase(),
+        text = text,
         style = AppTextStyles.Headline.merge(
             fontSize = 20.sp,
             lineHeight = 20.sp,

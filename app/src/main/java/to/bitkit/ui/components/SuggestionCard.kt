@@ -148,7 +148,7 @@ fun SuggestionCard(
             }
 
             Headline20(
-                text = AnnotatedString(title),
+                text = AnnotatedString(title.uppercase()),
                 color = Colors.White,
                 modifier = Modifier.padding(top = 4.dp),
             )
