@@ -23,10 +23,10 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun AddWidgetsScreen(
-    onWidgetSelected: (WidgetType) -> Unit,
-    onBackClick: () -> Unit,
     fiatSymbol: String,
     showWidgets: Boolean = true,
+    onWidgetSelected: (WidgetType) -> Unit,
+    onBackClick: () -> Unit,
     onEnableInSettingsClick: () -> Unit = {},
 ) {
     ScreenColumn {
