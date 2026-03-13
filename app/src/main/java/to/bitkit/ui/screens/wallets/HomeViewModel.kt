@@ -10,13 +10,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.entities.TransferEntity
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
@@ -290,47 +293,51 @@ class HomeViewModel @Inject constructor(
         transferRepo.activeTransfers,
     ) { balanceState, settings, transfers ->
         val baseSuggestions = when {
-            balanceState.totalLightningSats > 0uL -> { // With Lightning (spending)
-                listOfNotNull(
-                    Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
-                    Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
-                    Suggestion.SHOP,
-                    Suggestion.PROFILE,
-                    Suggestion.SUPPORT,
-                    Suggestion.INVITE,
-                    Suggestion.BUY,
-                )
-            }
-
-            balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
-                listOfNotNull(
-                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.LIGHTNING.takeIf {
-                        transfers.all { it.type != TransferType.TO_SPENDING }
-                    },
-                    Suggestion.SUPPORT,
-                    Suggestion.PROFILE,
-                    Suggestion.INVITE,
-                    Suggestion.BUY,
-                )
-            }
-
-            else -> { // Empty wallet
-                listOfNotNull(
-                    Suggestion.BUY,
-                    Suggestion.LIGHTNING.takeIf {
-                        transfers.all { it.type != TransferType.TO_SPENDING }
-                    },
-                    Suggestion.SUPPORT,
-                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.PROFILE,
-                    Suggestion.INVITE,
-                )
-            }
+            balanceState.totalLightningSats > 0uL -> spendingSuggestions(settings)
+            balanceState.totalOnchainSats > 0uL -> savingsOnlySuggestions(settings, transfers)
+            else -> emptyWalletSuggestions(settings, transfers)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions.filterNot { it in dismissedList }.take(MAX_SUGGESTIONS)
     }
+
+    private fun spendingSuggestions(settings: SettingsData) = listOfNotNull(
+        Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
+        Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
+        Suggestion.SHOP,
+        Suggestion.PROFILE,
+        Suggestion.SUPPORT,
+        Suggestion.INVITE,
+        Suggestion.BUY,
+    )
+
+    private fun savingsOnlySuggestions(
+        settings: SettingsData,
+        transfers: List<TransferEntity>,
+    ) = listOfNotNull(
+        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
+        Suggestion.LIGHTNING.takeIf {
+            transfers.all { it.type != TransferType.TO_SPENDING }
+        },
+        Suggestion.SUPPORT,
+        Suggestion.PROFILE,
+        Suggestion.INVITE,
+        Suggestion.BUY,
+    )
+
+    private fun emptyWalletSuggestions(
+        settings: SettingsData,
+        transfers: List<TransferEntity>,
+    ) = listOfNotNull(
+        Suggestion.BUY,
+        Suggestion.LIGHTNING.takeIf {
+            transfers.all { it.type != TransferType.TO_SPENDING }
+        },
+        Suggestion.SUPPORT,
+        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
+        Suggestion.PROFILE,
+        Suggestion.INVITE,
+    )
 }
