@@ -23,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.spaceToNewline
 import to.bitkit.models.Suggestion
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
@@ -88,7 +89,7 @@ private fun Content(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__suggestions__name).replace(" ", "\n")),
+                    text = AnnotatedString(stringResource(R.string.widgets__suggestions__name).spaceToNewline()),
                 )
                 Icon(
                     painter = painterResource(R.drawable.widget_suggestions),

@@ -24,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.spaceToNewline
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.ui.components.BodyM
@@ -108,7 +109,7 @@ fun BlocksPreviewContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__blocks__name).replace(" ", "\n")),
+                    text = AnnotatedString(stringResource(R.string.widgets__blocks__name).spaceToNewline()),
                     modifier = Modifier.testTag("widget_title"),
                 )
                 Icon(

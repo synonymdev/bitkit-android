@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.spaceToNewline
 import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
@@ -127,7 +128,7 @@ fun PricePreviewContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__price__name).replace(" ", "\n")),
+                    text = AnnotatedString(stringResource(R.string.widgets__price__name).spaceToNewline()),
                     modifier = Modifier.testTag("widget_title"),
                 )
                 Icon(

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.spaceToNewline
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline
@@ -113,7 +114,7 @@ fun CalculatorPreviewContent(
                     ) {
                         Headline(
                             text = AnnotatedString(
-                                stringResource(R.string.widgets__calculator__name).replace(" ", "\n"),
+                                stringResource(R.string.widgets__calculator__name).spaceToNewline(),
                             ),
                             modifier = Modifier.testTag("widget_title"),
                         )

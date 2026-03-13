@@ -24,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.spaceToNewline
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.components.BodyM
@@ -108,7 +109,7 @@ fun HeadlinesPreviewContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__news__name).replace(" ", "\n")),
+                    text = AnnotatedString(stringResource(R.string.widgets__news__name).spaceToNewline()),
                     modifier = Modifier.testTag("widget_title"),
                 )
                 Icon(

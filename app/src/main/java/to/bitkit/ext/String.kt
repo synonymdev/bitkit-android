@@ -22,6 +22,8 @@ fun String.truncate(length: Int): String {
 
 fun String.removeSpaces() = this.filterNot { it.isWhitespace() }
 
+fun String.spaceToNewline() = replace(" ", "\n")
+
 fun String.toLongOrDefault(defaultValue: Long = 0): Long = toLongOrNull() ?: defaultValue
 
 /**
