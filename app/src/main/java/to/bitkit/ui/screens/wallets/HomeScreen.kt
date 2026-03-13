@@ -555,50 +555,63 @@ private fun WidgetsPage(
     onClickDeleteWidget: (WidgetType) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .fillMaxSize()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-    ) {
-        StatusBarSpacer()
-        TopBarSpacer()
-        VerticalSpacer(16.dp)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxSize()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+        ) {
+            StatusBarSpacer()
+            TopBarSpacer()
+            VerticalSpacer(16.dp)
 
-        if (homeUiState.isEditingWidgets) {
-            DragDropColumn(
-                items = homeUiState.widgetsWithPosition,
-                onMove = onMoveWidget,
-                modifier = Modifier.fillMaxWidth()
-            ) { widgetWithPosition, isDragging, dragModifier ->
-                DragAndDropWidget(
-                    iconRes = widgetWithPosition.type.iconRes,
-                    title = stringResource(widgetWithPosition.type.title),
-                    onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
-                    onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    dragModifier = dragModifier,
+            if (homeUiState.isEditingWidgets) {
+                DragDropColumn(
+                    items = homeUiState.widgetsWithPosition,
+                    onMove = onMoveWidget,
+                    modifier = Modifier.fillMaxWidth()
+                ) { widgetWithPosition, isDragging, dragModifier ->
+                    DragAndDropWidget(
+                        iconRes = widgetWithPosition.type.iconRes,
+                        title = stringResource(widgetWithPosition.type.title),
+                        onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
+                        onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        dragModifier = dragModifier,
+                    )
+                }
+            } else {
+                Widgets(
+                    homeUiState = homeUiState,
+                    onRemoveSuggestion = onRemoveSuggestion,
+                    onClickSuggestion = onClickSuggestion,
                 )
             }
-        } else {
-            Widgets(
-                homeUiState = homeUiState,
-                onRemoveSuggestion = onRemoveSuggestion,
-                onClickSuggestion = onClickSuggestion,
+
+            VerticalSpacer(16.dp)
+
+            TertiaryButton(
+                text = stringResource(R.string.widgets__add),
+                onClick = onClickAddWidget,
+                modifier = Modifier.testTag("WidgetsAdd")
             )
+
+            VerticalSpacer(150.dp)
         }
-
-        VerticalSpacer(16.dp)
-
-        TertiaryButton(
-            text = stringResource(R.string.widgets__add),
-            onClick = onClickAddWidget,
-            modifier = Modifier.testTag("WidgetsAdd")
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(134.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Colors.Black),
+                    )
+                )
         )
-
-        VerticalSpacer(150.dp)
     }
 }
 
