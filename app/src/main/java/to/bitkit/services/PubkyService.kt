@@ -11,6 +11,7 @@ import com.synonym.paykit.paykitForceSignOut
 import com.synonym.paykit.paykitImportSession
 import com.synonym.paykit.paykitInitialize
 import com.synonym.paykit.paykitSignOut
+import kotlinx.coroutines.CompletableDeferred
 import to.bitkit.async.ServiceQueue
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,33 +24,55 @@ class PubkyService @Inject constructor() {
             "/pub/paykit.app/v0/:rw,/pub/pubky.app/profile.json:rw,/pub/pubky.app/follows/:rw"
     }
 
-    suspend fun initialize() =
-        ServiceQueue.CORE.background { paykitInitialize() }
+    private val isSetup = CompletableDeferred<Unit>()
 
-    suspend fun importSession(secret: String): String =
-        ServiceQueue.CORE.background { paykitImportSession(secret) }
+    suspend fun initialize() = ServiceQueue.CORE.background {
+        paykitInitialize()
+        isSetup.complete(Unit)
+    }
 
-    suspend fun startAuth(): String =
-        ServiceQueue.CORE.background { startPubkyAuth(REQUIRED_CAPABILITIES) }
+    suspend fun importSession(secret: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitImportSession(secret)
+    }
 
-    suspend fun completeAuth(): String =
-        ServiceQueue.CORE.background { completePubkyAuth() }
+    suspend fun startAuth(): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        startPubkyAuth(REQUIRED_CAPABILITIES)
+    }
 
-    suspend fun cancelAuth() =
-        ServiceQueue.CORE.background { cancelPubkyAuth() }
+    suspend fun completeAuth(): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        completePubkyAuth()
+    }
 
-    suspend fun fetchFile(uri: String): ByteArray =
-        ServiceQueue.CORE.background { fetchPubkyFile(uri) }
+    suspend fun cancelAuth() = ServiceQueue.CORE.background {
+        isSetup.await()
+        cancelPubkyAuth()
+    }
 
-    suspend fun getProfile(publicKey: String): PubkyProfile =
-        ServiceQueue.CORE.background { fetchPubkyProfile(publicKey) }
+    suspend fun fetchFile(uri: String): ByteArray = ServiceQueue.CORE.background {
+        isSetup.await()
+        fetchPubkyFile(uri)
+    }
 
-    suspend fun getContacts(publicKey: String): List<String> =
-        ServiceQueue.CORE.background { fetchPubkyContacts(publicKey) }
+    suspend fun getProfile(publicKey: String): PubkyProfile = ServiceQueue.CORE.background {
+        isSetup.await()
+        fetchPubkyProfile(publicKey)
+    }
 
-    suspend fun signOut() =
-        ServiceQueue.CORE.background { paykitSignOut() }
+    suspend fun getContacts(publicKey: String): List<String> = ServiceQueue.CORE.background {
+        isSetup.await()
+        fetchPubkyContacts(publicKey)
+    }
 
-    suspend fun forceSignOut() =
-        ServiceQueue.CORE.background { paykitForceSignOut() }
+    suspend fun signOut() = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitSignOut()
+    }
+
+    suspend fun forceSignOut() = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitForceSignOut()
+    }
 }

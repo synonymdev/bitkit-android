@@ -208,7 +208,7 @@ private fun EmptyState() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     val contacts = listOf(

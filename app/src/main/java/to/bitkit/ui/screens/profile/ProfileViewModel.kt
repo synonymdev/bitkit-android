@@ -20,7 +20,6 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.ui.shared.util.shareText
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -100,11 +99,6 @@ class ProfileViewModel @Inject constructor(
                 title = context.getString(R.string.common__copied),
             )
         }
-    }
-
-    fun sharePublicKey() {
-        val pk = pubkyRepo.publicKey.value ?: return
-        shareText(context, pk)
     }
 }
 

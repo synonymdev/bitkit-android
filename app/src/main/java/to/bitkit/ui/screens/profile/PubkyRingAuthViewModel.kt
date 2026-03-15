@@ -41,7 +41,6 @@ class PubkyRingAuthViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         if (_uiState.value.isWaitingForRing || _uiState.value.isAuthenticating) {
-            approvalJob?.cancel()
             pubkyRepo.cancelAuthenticationSync()
         }
     }

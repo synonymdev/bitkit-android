@@ -17,7 +17,6 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.ui.shared.util.shareText
 import javax.inject.Inject
 
 @HiltViewModel
@@ -66,8 +65,6 @@ class ContactDetailViewModel @Inject constructor(
             )
         }
     }
-
-    fun sharePublicKey() = shareText(context, publicKey)
 }
 
 data class ContactDetailUiState(

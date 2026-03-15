@@ -87,10 +87,6 @@ class PubkyRepoTest : BaseUnitTest() {
 
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("User")
-        whenever(ffiProfile.bio).thenReturn(null)
-        whenever(ffiProfile.image).thenReturn(null)
-        whenever(ffiProfile.links).thenReturn(null)
-        whenever(ffiProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
 
         val result = sut.completeAuthentication()
@@ -131,7 +127,6 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(ffiProfile.name).thenReturn("Profile Name")
         whenever(ffiProfile.bio).thenReturn("A bio")
         whenever(ffiProfile.image).thenReturn("pubky://image_uri")
-        whenever(ffiProfile.links).thenReturn(null)
         whenever(ffiProfile.status).thenReturn("active")
         whenever(pubkyService.getProfile(pk)).thenReturn(ffiProfile)
 
@@ -176,8 +171,6 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(ffiProfile.name).thenReturn("Cached Name")
         whenever(ffiProfile.bio).thenReturn("")
         whenever(ffiProfile.image).thenReturn("pubky://cached_image")
-        whenever(ffiProfile.links).thenReturn(null)
-        whenever(ffiProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(pk)).thenReturn(ffiProfile)
 
         sut.loadProfile()
@@ -289,10 +282,6 @@ class PubkyRepoTest : BaseUnitTest() {
 
         val contactProfile = mock<CorePubkyProfile>()
         whenever(contactProfile.name).thenReturn("Alice")
-        whenever(contactProfile.bio).thenReturn(null)
-        whenever(contactProfile.image).thenReturn(null)
-        whenever(contactProfile.links).thenReturn(null)
-        whenever(contactProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
 
         sut.loadContacts()
@@ -332,9 +321,6 @@ class PubkyRepoTest : BaseUnitTest() {
         val contactProfile = mock<CorePubkyProfile>()
         whenever(contactProfile.name).thenReturn("Bob")
         whenever(contactProfile.bio).thenReturn("Bio")
-        whenever(contactProfile.image).thenReturn(null)
-        whenever(contactProfile.links).thenReturn(null)
-        whenever(contactProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
 
         val result = sut.fetchContactProfile(contactKey)
@@ -362,10 +348,6 @@ class PubkyRepoTest : BaseUnitTest() {
 
         val contactProfile = mock<CorePubkyProfile>()
         whenever(contactProfile.name).thenReturn("Charlie")
-        whenever(contactProfile.bio).thenReturn(null)
-        whenever(contactProfile.image).thenReturn(null)
-        whenever(contactProfile.links).thenReturn(null)
-        whenever(contactProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
 
         sut.loadContacts()
@@ -386,10 +368,6 @@ class PubkyRepoTest : BaseUnitTest() {
 
         val contactProfile = mock<CorePubkyProfile>()
         whenever(contactProfile.name).thenReturn("Prefixed")
-        whenever(contactProfile.bio).thenReturn(null)
-        whenever(contactProfile.image).thenReturn(null)
-        whenever(contactProfile.links).thenReturn(null)
-        whenever(contactProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(prefixedKey)).thenReturn(contactProfile)
 
         sut.loadContacts()
@@ -406,10 +384,6 @@ class PubkyRepoTest : BaseUnitTest() {
 
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("Test")
-        whenever(ffiProfile.bio).thenReturn(null)
-        whenever(ffiProfile.image).thenReturn(null)
-        whenever(ffiProfile.links).thenReturn(null)
-        whenever(ffiProfile.status).thenReturn(null)
         whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
         whenever(pubkyService.getContacts(testPk)).thenReturn(emptyList())
 
