@@ -5,7 +5,6 @@ import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
-import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 import to.bitkit.BuildConfig.VERSION_NAME
 import to.bitkit.ext.ensureDir
 import to.bitkit.ext.of
@@ -14,6 +13,7 @@ import to.bitkit.models.NodePeer
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
 internal object Env {
