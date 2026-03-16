@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -50,6 +49,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.util.gradientBackground
@@ -157,7 +157,7 @@ private fun ShowMnemonicContent(
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.medium)
                         .background(color = Colors.White10)
-                        .clickable(enabled = showMnemonic && mnemonic.isNotEmpty(), onClick = onCopyClick)
+                        .clickableAlpha(enabled = showMnemonic && mnemonic.isNotEmpty(), onClick = onCopyClick)
                         .padding(32.dp)
                         .testTag("backup_mnemonic_words_box")
                 ) {

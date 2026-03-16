@@ -33,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.shared.modifiers.alphaFeedback
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppButtonDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -70,7 +71,7 @@ fun PrimaryButton(
     val buttonShape = MaterialTheme.shapes.large
 
     Button(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.primaryColors.copy(
             containerColor = Color.Transparent,
@@ -139,7 +140,7 @@ fun SecondaryButton(
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     val border = BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
     OutlinedButton(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.secondaryColors,
         contentPadding = contentPadding,
@@ -197,7 +198,7 @@ fun TertiaryButton(
 ) {
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
     TextButton(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.tertiaryColors,
         contentPadding = contentPadding,

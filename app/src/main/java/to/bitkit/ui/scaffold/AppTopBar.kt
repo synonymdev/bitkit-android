@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +28,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.LocalDrawerState
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,7 +79,7 @@ fun BackNavIcon(
     modifier: Modifier = Modifier,
 ) {
     IconButton(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         modifier = modifier.testTag("NavigationBack")
     ) {
         Icon(
@@ -94,11 +96,12 @@ fun DrawerNavIcon(
 ) {
     val isPreview = LocalInspectionMode.current
     val drawerState = LocalDrawerState.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
+    val debouncedClick = rememberDebouncedClick { scope.launch { drawerState?.open() } }
     if (drawerState != null || isPreview) {
         IconButton(
-            onClick = { scope.launch { drawerState?.open() } },
+            onClick = debouncedClick,
             modifier = modifier.testTag("HeaderMenu")
         ) {
             Icon(
@@ -116,7 +119,7 @@ fun ScanNavIcon(
     modifier: Modifier = Modifier,
 ) {
     IconButton(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         modifier = modifier.testTag("NavigationAction")
     ) {
         Icon(

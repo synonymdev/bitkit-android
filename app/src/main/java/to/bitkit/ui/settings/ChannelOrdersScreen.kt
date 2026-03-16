@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -342,7 +341,7 @@ private fun OrderCard(model: IBtOrder, onClick: (String) -> Unit) {
         colors = cardColors,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick(model.id) }
+            .clickableAlpha { onClick(model.id) }
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -404,7 +403,7 @@ private fun CJitCard(model: IcJitEntry, onClick: (String) -> Unit) {
         colors = cardColors,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick(model.id) }
+            .clickableAlpha { onClick(model.id) }
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),

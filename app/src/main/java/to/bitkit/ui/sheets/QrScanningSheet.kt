@@ -11,12 +11,14 @@ import to.bitkit.viewmodels.AppViewModel
 @Composable
 fun QrScanningSheet(appViewModel: AppViewModel) {
     Content(
+        onBack = { appViewModel.hideScannerSheet() },
         onScanSuccess = { appViewModel.onScannerSheetResult(it) },
     )
 }
 
 @Composable
 private fun Content(
+    onBack: () -> Unit,
     onScanSuccess: (String) -> Unit,
 ) {
     Column(
@@ -26,6 +28,7 @@ private fun Content(
     ) {
         QrScanningScreen(
             onScanSuccess = onScanSuccess,
+            onBack = onBack,
         )
     }
 }

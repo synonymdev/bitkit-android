@@ -38,6 +38,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
+import kotlin.time.Duration
 
 const val KEY_DELETE = "delete"
 const val KEY_000 = "000"
@@ -228,7 +229,7 @@ fun NumberPadKey(
         modifier = modifier
             .height(height)
             .fillMaxWidth()
-            .clickableAlpha(ALPHA_PRESSED) {
+            .clickableAlpha(ALPHA_PRESSED, debounce = Duration.ZERO) {
                 haptics.performHapticFeedback(haptic)
                 onClick()
             },
