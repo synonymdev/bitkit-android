@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -70,20 +71,20 @@ fun ReceiveSheet(
                     lightningState = lightningState,
                     onClickReceiveCjit = {
                         if (lightningState.isGeoBlocked) {
-                            navController.navigate(ReceiveRoute.GeoBlock)
+                            navController.navigateTo(ReceiveRoute.GeoBlock)
                         } else {
                             showCreateCjit.value = true
-                            navController.navigate(ReceiveRoute.Amount)
+                            navController.navigateTo(ReceiveRoute.Amount)
                         }
                     },
-                    onClickEditInvoice = { navController.navigate(ReceiveRoute.EditInvoice) },
+                    onClickEditInvoice = { navController.navigateTo(ReceiveRoute.EditInvoice) },
                 )
             }
             composableWithDefaultTransitions<ReceiveRoute.Amount> {
                 ReceiveAmountScreen(
                     onCjitCreated = { entry ->
                         cjitEntryDetails.value = entry
-                        navController.navigate(ReceiveRoute.Confirm)
+                        navController.navigateTo(ReceiveRoute.Confirm)
                     },
                     onBack = { navController.popBackStack() },
                 )
@@ -98,10 +99,10 @@ fun ReceiveSheet(
                 cjitEntryDetails.value?.let { entryDetails ->
                     ReceiveConfirmScreen(
                         entry = entryDetails,
-                        onLearnMore = { navController.navigate(ReceiveRoute.Liquidity) },
+                        onLearnMore = { navController.navigateTo(ReceiveRoute.Liquidity) },
                         onContinue = { invoice ->
                             cjitInvoice.value = invoice
-                            navController.navigate(ReceiveRoute.QR) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
+                            navController.navigateTo(ReceiveRoute.QR) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
                         },
                         onBack = { navController.popBackStack() },
                     )
@@ -111,10 +112,10 @@ fun ReceiveSheet(
                 cjitEntryDetails.value?.let { entryDetails ->
                     ReceiveConfirmScreen(
                         entry = entryDetails,
-                        onLearnMore = { navController.navigate(ReceiveRoute.LiquidityAdditional) },
+                        onLearnMore = { navController.navigateTo(ReceiveRoute.LiquidityAdditional) },
                         onContinue = { invoice ->
                             cjitInvoice.value = invoice
-                            navController.navigate(ReceiveRoute.QR) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
+                            navController.navigateTo(ReceiveRoute.QR) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
                         },
                         isAdditional = true,
                         onBack = { navController.popBackStack() },
@@ -158,12 +159,12 @@ fun ReceiveSheet(
                     walletUiState = walletUiState,
                     onBack = { navController.popBackStack() },
                     updateInvoice = wallet::updateBip21Invoice,
-                    onClickAddTag = { navController.navigate(ReceiveRoute.AddTag) },
+                    onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
                     onClickTag = wallet::removeTag,
                     onDescriptionUpdate = wallet::updateBip21Description,
                     navigateReceiveConfirm = { entry ->
                         cjitEntryDetails.value = entry
-                        navController.navigate(ReceiveRoute.ConfirmIncreaseInbound)
+                        navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
                     }
                 )
             }

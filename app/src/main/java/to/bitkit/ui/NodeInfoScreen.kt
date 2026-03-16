@@ -69,6 +69,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
@@ -438,7 +439,7 @@ private fun PeerCard(
                 maxLines = 1,
             )
         }
-        IconButton(onClick = { onDisconnectPeer(peer.peerDetails) }) {
+        IconButton(onClick = rememberDebouncedClick { onDisconnectPeer(peer.peerDetails) }) {
             Icon(
                 imageVector = Icons.Default.RemoveCircleOutline,
                 contentDescription = stringResource(R.string.common__close),

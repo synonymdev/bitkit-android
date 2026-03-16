@@ -17,6 +17,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -67,7 +68,7 @@ fun AppAlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(
-                onClick = onConfirm,
+                onClick = rememberDebouncedClick(onClick = onConfirm),
                 modifier = Modifier.testTag("DialogConfirm")
             ) {
                 BodyMSB(text = confirmText)
@@ -75,7 +76,7 @@ fun AppAlertDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = onDismiss,
+                onClick = rememberDebouncedClick(onClick = onDismiss),
                 modifier = Modifier.testTag("DialogCancel")
             ) {
                 BodyMSB(text = dismissText, color = Colors.White64)

@@ -32,7 +32,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
-import androidx.navigation.NavOptions
+import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -190,6 +190,7 @@ import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -257,7 +258,11 @@ fun ContentView(
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
-                is MainScreenEffect.Navigate -> navController.navigate(it.route, navOptions = it.navOptions)
+                is MainScreenEffect.Navigate -> if (it.clearStack) {
+                    navController.navigateTo(it.route) { popUpTo(0) { inclusive = true } }
+                } else {
+                    navController.navigateTo(it.route)
+                }
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
                     if (!isOnHome) {
@@ -382,7 +387,7 @@ fun ContentView(
                             ReceiveSheet(
                                 walletState = walletState,
                                 navigateToExternalConnection = {
-                                    navController.navigate(ExternalConnection())
+                                    navController.navigateTo(ExternalConnection())
                                     appViewModel.hideSheet()
                                 }
                             )
@@ -417,7 +422,7 @@ fun ContentView(
                                     BackgroundPaymentsIntroSheet(
                                         onContinue = {
                                             appViewModel.dismissTimedSheet()
-                                            navController.navigate(Routes.BackgroundPaymentsSettings)
+                                            navController.navigateTo(Routes.BackgroundPaymentsSettings)
                                             settingsViewModel.setBgPaymentsIntroSeen(true)
                                         },
                                     )
@@ -427,7 +432,7 @@ fun ContentView(
                                     QuickPayIntroSheet(
                                         onContinue = {
                                             appViewModel.dismissTimedSheet()
-                                            navController.navigate(Routes.QuickPaySettings)
+                                            navController.navigateTo(Routes.QuickPaySettings)
                                         },
                                     )
                                 }
@@ -564,7 +569,7 @@ private fun RootNavHost(
             composableWithDefaultTransitions<Routes.SavingsIntro> {
                 SavingsIntroScreen(
                     onContinueClick = {
-                        navController.navigate(Routes.SavingsAvailability)
+                        navController.navigateTo(Routes.SavingsAvailability)
                         settingsViewModel.setHasSeenSavingsIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
@@ -574,13 +579,13 @@ private fun RootNavHost(
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
+                    onContinueClick = { navController.navigateTo(Routes.SavingsConfirm) },
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsConfirm> {
                 SavingsConfirmScreen(
-                    onConfirm = { navController.navigate(Routes.SavingsProgress) },
-                    onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
+                    onConfirm = { navController.navigateTo(Routes.SavingsProgress) },
+                    onAdvancedClick = { navController.navigateTo(Routes.SavingsAdvanced) },
                     onBackClick = { navController.popBackStack() },
                 )
             }
@@ -602,7 +607,7 @@ private fun RootNavHost(
             composableWithDefaultTransitions<Routes.SpendingIntro> {
                 SpendingIntroScreen(
                     onContinueClick = {
-                        navController.navigate(Routes.SpendingAmount)
+                        navController.navigateTo(Routes.SpendingAmount)
                         settingsViewModel.setHasSeenSpendingIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
@@ -612,7 +617,7 @@ private fun RootNavHost(
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
+                    onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
                     toast = { title, description ->
                         appViewModel.toast(
@@ -628,9 +633,9 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
-                    onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) },
-                    onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) },
-                    onConfirm = { navController.navigate(Routes.SettingUp) },
+                    onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
+                    onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
+                    onConfirm = { navController.navigateTo(Routes.SettingUp) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingAdvanced> {
@@ -674,7 +679,7 @@ private fun RootNavHost(
                             appViewModel.showSheet(Sheet.Receive)
                         }
                     },
-                    onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
+                    onAdvanced = { navController.navigateTo(Routes.FundingAdvanced) },
                     onBackClick = { navController.popBackStack() },
                     isGeoBlocked = isGeoBlocked,
                 )
@@ -682,7 +687,7 @@ private fun RootNavHost(
             composableWithDefaultTransitions<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
                     onLnurl = { appViewModel.showScannerSheet() },
-                    onManual = { navController.navigate(Routes.ExternalNav) },
+                    onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                 )
             }
@@ -697,7 +702,7 @@ private fun RootNavHost(
                     ExternalConnectionScreen(
                         route = route,
                         viewModel = viewModel,
-                        onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
+                        onNodeConnected = { navController.navigateTo(Routes.ExternalAmount) },
                         onScanClick = {
                             appViewModel.showScannerSheet {
                                 viewModel.parseNodeUri(it)
@@ -712,7 +717,7 @@ private fun RootNavHost(
 
                     ExternalAmountScreen(
                         viewModel = viewModel,
-                        onContinue = { navController.navigate(Routes.ExternalConfirm) },
+                        onContinue = { navController.navigateTo(Routes.ExternalConfirm) },
                         onBackClick = { navController.popBackStack() },
                     )
                 }
@@ -724,7 +729,7 @@ private fun RootNavHost(
                         viewModel = viewModel,
                         onConfirm = {
                             walletViewModel.refreshState()
-                            navController.navigate(Routes.ExternalSuccess)
+                            navController.navigateTo(Routes.ExternalSuccess)
                         },
                         onBackClick = { navController.popBackStack() },
                     )
@@ -732,7 +737,7 @@ private fun RootNavHost(
                 composableWithDefaultTransitions<Routes.LnurlChannel> {
                     LnurlChannelScreen(
                         route = it.toRoute<Routes.LnurlChannel>(),
-                        onConnected = { navController.navigate(Routes.ExternalSuccess) },
+                        onConnected = { navController.navigateTo(Routes.ExternalSuccess) },
                         onBack = { navController.popBackStack() },
                         onClose = { navController.navigateToHome() },
                     )
@@ -861,7 +866,7 @@ private fun NavGraphBuilder.settings(
             onBack = { navController.popBackStack() },
             onContinue = {
                 settingsViewModel.setQuickPayIntroSeen(true)
-                navController.navigate(Routes.QuickPaySettings)
+                navController.navigateTo(Routes.QuickPaySettings)
             }
         )
     }
@@ -920,7 +925,7 @@ private fun NavGraphBuilder.profile(
         ProfileIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenProfileIntro(true)
-                navController.navigate(Routes.CreateProfile)
+                navController.navigateTo(Routes.CreateProfile)
             },
             onBackClick = { navController.popBackStack() }
         )
@@ -941,7 +946,7 @@ private fun NavGraphBuilder.shop(
         ShopIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenShopIntro(true)
-                navController.navigate(Routes.ShopDiscover)
+                navController.navigateTo(Routes.ShopDiscover)
             },
             onBackClick = {
                 navController.popBackStack()
@@ -952,7 +957,7 @@ private fun NavGraphBuilder.shop(
         ShopDiscoverScreen(
             onBack = { navController.popBackStack() },
             navigateWebView = { page, title ->
-                navController.navigate(Routes.ShopWebView(page = page, title = title))
+                navController.navigateTo(Routes.ShopWebView(page = page, title = title))
             }
         )
     }
@@ -991,7 +996,7 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
             onContinue = {
-                navController.navigate(Routes.BackgroundPaymentsSettings)
+                navController.navigateTo(Routes.BackgroundPaymentsSettings)
             }
         )
     }
@@ -1186,7 +1191,7 @@ private fun NavGraphBuilder.activityItem(
             route = it.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
             onChannelClick = { channelId ->
-                navController.navigate(Routes.ChannelDetail(channelId))
+                navController.navigateTo(Routes.ChannelDetail(channelId))
             },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
@@ -1250,7 +1255,7 @@ private fun NavGraphBuilder.recoveryMode(
     composableWithDefaultTransitions<Routes.RecoveryMode> {
         RecoveryModeScreen(
             onNavigateToSeed = {
-                navController.navigate(Routes.RecoveryMnemonic)
+                navController.navigateTo(Routes.RecoveryMnemonic)
             },
             appViewModel = appViewModel
         )
@@ -1280,9 +1285,9 @@ private fun NavGraphBuilder.support(
             onBack = { navController.popBackStack() },
             navigateResultScreen = { isSuccess ->
                 if (isSuccess) {
-                    navController.navigate(Routes.ReportIssueSuccess)
+                    navController.navigateTo(Routes.ReportIssueSuccess)
                 } else {
-                    navController.navigate(Routes.ReportIssueFailure)
+                    navController.navigateTo(Routes.ReportIssueFailure)
                 }
             }
         )
@@ -1315,7 +1320,7 @@ private fun NavGraphBuilder.widgets(
         WidgetsIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenWidgetsIntro(true)
-                navController.navigate(Routes.AddWidget)
+                navController.navigateTo(Routes.AddWidget)
             },
             onBackClick = { navController.popBackStack() },
         )
@@ -1324,12 +1329,12 @@ private fun NavGraphBuilder.widgets(
         AddWidgetsScreen(
             onWidgetSelected = { widgetType ->
                 when (widgetType) {
-                    WidgetType.BLOCK -> navController.navigate(Routes.BlocksPreview)
-                    WidgetType.CALCULATOR -> navController.navigate(Routes.CalculatorPreview)
-                    WidgetType.FACTS -> navController.navigate(Routes.FactsPreview)
-                    WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
-                    WidgetType.PRICE -> navController.navigate(Routes.PricePreview)
-                    WidgetType.WEATHER -> navController.navigate(Routes.WeatherPreview)
+                    WidgetType.BLOCK -> navController.navigateTo(Routes.BlocksPreview)
+                    WidgetType.CALCULATOR -> navController.navigateTo(Routes.CalculatorPreview)
+                    WidgetType.FACTS -> navController.navigateTo(Routes.FactsPreview)
+                    WidgetType.NEWS -> navController.navigateTo(Routes.HeadlinesPreview)
+                    WidgetType.PRICE -> navController.navigateTo(Routes.PricePreview)
+                    WidgetType.WEATHER -> navController.navigateTo(Routes.WeatherPreview)
                 }
             },
             fiatSymbol = LocalCurrencies.current.currencySymbol,
@@ -1354,7 +1359,7 @@ private fun NavGraphBuilder.widgets(
                 headlinesViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.HeadlinesEdit) },
+                navigateEditWidget = { navController.navigateTo(Routes.HeadlinesEdit) },
             )
         }
         composableWithDefaultTransitions<Routes.HeadlinesEdit> {
@@ -1365,7 +1370,7 @@ private fun NavGraphBuilder.widgets(
                 headlinesViewModel = viewModel,
                 onBack = { navController.popBackStack() },
                 navigatePreview = {
-                    navController.navigate(Routes.HeadlinesPreview)
+                    navController.navigateTo(Routes.HeadlinesPreview)
                 }
             )
         }
@@ -1381,7 +1386,7 @@ private fun NavGraphBuilder.widgets(
                 factsViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.FactsEdit) },
+                navigateEditWidget = { navController.navigateTo(Routes.FactsEdit) },
             )
         }
         composableWithDefaultTransitions<Routes.FactsEdit> {
@@ -1391,7 +1396,7 @@ private fun NavGraphBuilder.widgets(
             FactsEditScreen(
                 factsViewModel = viewModel,
                 onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.FactsPreview) }
+                navigatePreview = { navController.navigateTo(Routes.FactsPreview) }
             )
         }
     }
@@ -1406,7 +1411,7 @@ private fun NavGraphBuilder.widgets(
                 blocksViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.BlocksEdit) },
+                navigateEditWidget = { navController.navigateTo(Routes.BlocksEdit) },
             )
         }
         composableWithDefaultTransitions<Routes.BlocksEdit> {
@@ -1416,7 +1421,7 @@ private fun NavGraphBuilder.widgets(
             BlocksEditScreen(
                 blocksViewModel = viewModel,
                 onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.BlocksPreview) }
+                navigatePreview = { navController.navigateTo(Routes.BlocksPreview) }
             )
         }
     }
@@ -1431,7 +1436,7 @@ private fun NavGraphBuilder.widgets(
                 weatherViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.WeatherEdit) },
+                navigateEditWidget = { navController.navigateTo(Routes.WeatherEdit) },
             )
         }
         composableWithDefaultTransitions<Routes.WeatherEdit> {
@@ -1441,7 +1446,7 @@ private fun NavGraphBuilder.widgets(
             WeatherEditScreen(
                 weatherViewModel = viewModel,
                 onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.WeatherPreview) }
+                navigatePreview = { navController.navigateTo(Routes.WeatherPreview) }
             )
         }
     }
@@ -1456,7 +1461,7 @@ private fun NavGraphBuilder.widgets(
                 priceViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.PriceEdit) },
+                navigateEditWidget = { navController.navigateTo(Routes.PriceEdit) },
             )
         }
         composableWithDefaultTransitions<Routes.PriceEdit> {
@@ -1465,7 +1470,7 @@ private fun NavGraphBuilder.widgets(
             PriceEditScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.PricePreview) }
+                navigatePreview = { navController.navigateTo(Routes.PricePreview) }
             )
         }
     }
@@ -1477,164 +1482,106 @@ private fun NavGraphBuilder.widgets(
 fun NavController.navigateToHome() {
     val popped = popBackStack<Routes.Home>(inclusive = false)
     if (!popped) {
-        navigate(Routes.Home) {
-            popUpTo(graph.startDestinationId)
-            launchSingleTop = true
-        }
+        navigateTo(Routes.Home) { popUpTo(graph.startDestinationId) }
     }
 }
 
-fun NavController.navigateToAllActivity() {
-    navigate(Routes.AllActivity) {
+fun NavController.navigateToAllActivity() = navigateTo(Routes.AllActivity)
+
+/**
+ * Navigates to [route] with [launchSingleTop] always enabled to prevent
+ * duplicate destinations on the back stack (e.g. from double-taps).
+ *
+ * Use the optional [builder] to add extra nav options like `popUpTo`.
+ */
+inline fun <reified T : Any> NavController.navigateTo(
+    route: T,
+    noinline builder: NavOptionsBuilder.() -> Unit = {},
+) {
+    navigate(route) {
+        builder()
         launchSingleTop = true
     }
 }
 
-/**
- * Navigates to the specified route only if not already on that route.
- */
-inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
-    val isOnRoute = currentBackStackEntry?.destination?.hasRoute<T>() ?: false
-    if (!isOnRoute) {
-        navigate(route)
-    }
-}
+fun NavController.navigateToGeneralSettings() = navigateTo(Routes.GeneralSettings)
 
-fun NavController.navigateToGeneralSettings() = navigate(
-    route = Routes.GeneralSettings,
+fun NavController.navigateToSecuritySettings() = navigateTo(Routes.SecuritySettings)
+
+fun NavController.navigateToDisablePin() = navigateTo(Routes.DisablePin)
+
+fun NavController.navigateToChangePin() = navigateTo(Routes.ChangePin)
+
+fun NavController.navigateToChangePinNew() = navigateTo(Routes.ChangePinNew)
+
+fun NavController.navigateToChangePinConfirm(newPin: String) = navigateTo(
+    Routes.ChangePinConfirm(newPin),
 )
 
-fun NavController.navigateToSecuritySettings() = navigate(
-    route = Routes.SecuritySettings,
-)
-
-fun NavController.navigateToDisablePin() = navigate(
-    route = Routes.DisablePin,
-)
-
-fun NavController.navigateToChangePin() = navigate(
-    route = Routes.ChangePin,
-)
-
-fun NavController.navigateToChangePinNew() = navigate(
-    route = Routes.ChangePinNew,
-)
-
-fun NavController.navigateToChangePinConfirm(newPin: String) = navigate(
-    route = Routes.ChangePinConfirm(newPin),
-)
-
-fun NavController.navigateToChangePinResult() = navigate(
-    route = Routes.ChangePinResult,
-)
+fun NavController.navigateToChangePinResult() = navigateTo(Routes.ChangePinResult)
 
 fun NavController.navigateToAuthCheck(
     showLogoOnPin: Boolean = false,
     requirePin: Boolean = false,
     requireBiometrics: Boolean = false,
     onSuccessActionId: String,
-    navOptions: NavOptions? = null,
-) = navigate(
+    builder: NavOptionsBuilder.() -> Unit = {},
+) = navigateTo(
     route = Routes.AuthCheck(
         showLogoOnPin = showLogoOnPin,
         requirePin = requirePin,
         requireBiometrics = requireBiometrics,
         onSuccessActionId = onSuccessActionId,
     ),
-    navOptions = navOptions,
+    builder = builder,
 )
 
-fun NavController.navigateToDefaultUnitSettings() = navigate(
-    route = Routes.DefaultUnitSettings,
-)
+fun NavController.navigateToDefaultUnitSettings() = navigateTo(Routes.DefaultUnitSettings)
 
-fun NavController.navigateToLocalCurrencySettings() = navigate(
-    route = Routes.LocalCurrencySettings,
-)
+fun NavController.navigateToLocalCurrencySettings() = navigateTo(Routes.LocalCurrencySettings)
 
-fun NavController.navigateToBackupSettings() = navigate(
-    route = Routes.BackupSettings,
-)
+fun NavController.navigateToBackupSettings() = navigateTo(Routes.BackupSettings)
 
-fun NavController.navigateToOrderDetail(id: String) = navigate(
-    route = Routes.OrderDetail(id),
-)
+fun NavController.navigateToOrderDetail(id: String) = navigateTo(Routes.OrderDetail(id))
 
-fun NavController.navigateToCjitDetail(id: String) = navigate(
-    route = Routes.CjitDetail(id),
-)
+fun NavController.navigateToCjitDetail(id: String) = navigateTo(Routes.CjitDetail(id))
 
-fun NavController.navigateToDevSettings() = navigate(
-    route = Routes.DevSettings,
-)
+fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 
-fun NavController.navigateToTransferSavingsIntro() = navigate(
-    route = Routes.SavingsIntro,
-)
+fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
 
-fun NavController.navigateToTransferSavingsAvailability() = navigate(
-    route = Routes.SavingsAvailability,
-)
+fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
-fun NavController.navigateToTransferSpendingIntro() = navigate(
-    route = Routes.SpendingIntro,
-)
+fun NavController.navigateToTransferSpendingIntro() = navigateTo(Routes.SpendingIntro)
 
-fun NavController.navigateToTransferSpendingAmount() = navigate(
-    route = Routes.SpendingAmount,
-)
+fun NavController.navigateToTransferSpendingAmount() = navigateTo(Routes.SpendingAmount)
 
-fun NavController.navigateToTransferIntro() = navigate(
-    route = Routes.TransferIntro,
-)
+fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
-fun NavController.navigateToTransferFunding() = navigate(
-    route = Routes.Funding,
-)
+fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
 
-fun NavController.navigateToActivityItem(id: String) = navigate(
-    route = Routes.ActivityDetail(id),
-)
+fun NavController.navigateToActivityItem(id: String) = navigateTo(Routes.ActivityDetail(id))
 
-fun NavController.navigateToActivityExplore(id: String) = navigate(
-    route = Routes.ActivityExplore(id),
-)
+fun NavController.navigateToActivityExplore(id: String) = navigateTo(Routes.ActivityExplore(id))
 
-fun NavController.navigateToLogDetail(fileName: String) = navigate(
-    route = Routes.LogDetail(fileName),
-)
+fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogDetail(fileName))
 
-fun NavController.navigateToTransactionSpeedSettings() = navigate(
-    route = Routes.TransactionSpeedSettings,
-)
+fun NavController.navigateToTransactionSpeedSettings() = navigateTo(Routes.TransactionSpeedSettings)
 
-fun NavController.navigateToCustomFeeSettings() = navigate(
-    route = Routes.CustomFeeSettings,
-)
+fun NavController.navigateToCustomFeeSettings() = navigateTo(Routes.CustomFeeSettings)
 
-fun NavController.navigateToWidgetsSettings() = navigate(
-    route = Routes.WidgetsSettings,
-)
+fun NavController.navigateToWidgetsSettings() = navigateTo(Routes.WidgetsSettings)
 
-fun NavController.navigateToQuickPaySettings(hasSeenIntro: Boolean = true) = navigate(
-    route = if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro,
-)
+fun NavController.navigateToQuickPaySettings(hasSeenIntro: Boolean = true) =
+    navigateTo(if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro)
 
-fun NavController.navigateToTagsSettings() = navigate(
-    route = Routes.TagsSettings,
-)
+fun NavController.navigateToTagsSettings() = navigateTo(Routes.TagsSettings)
 
-fun NavController.navigateToLanguageSettings() = navigate(
-    route = Routes.LanguageSettings,
-)
+fun NavController.navigateToLanguageSettings() = navigateTo(Routes.LanguageSettings)
 
-fun NavController.navigateToAdvancedSettings() = navigate(
-    route = Routes.AdvancedSettings,
-)
+fun NavController.navigateToAdvancedSettings() = navigateTo(Routes.AdvancedSettings)
 
-fun NavController.navigateToAboutSettings() = navigate(
-    route = Routes.AboutSettings,
-)
+fun NavController.navigateToAboutSettings() = navigateTo(Routes.AboutSettings)
 // endregion
 
 @Stable

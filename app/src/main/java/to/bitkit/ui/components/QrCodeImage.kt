@@ -5,7 +5,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -95,12 +95,18 @@ fun QrCodeImage(
                         contentDescription = content,
                         contentScale = ContentScale.Inside,
                         modifier = Modifier
-                            .clickable(enabled = tipMessage.isNotBlank()) {
-                                coroutineScope.launch {
-                                    context.setClipboardText(copyContent ?: content)
-                                    tooltipState.show()
+                            .clickableAlpha(
+                                onClick = if (tipMessage.isNotBlank()) {
+                                    {
+                                        coroutineScope.launch {
+                                            context.setClipboardText(copyContent ?: content)
+                                            tooltipState.show()
+                                        }
+                                    }
+                                } else {
+                                    null
                                 }
-                            }
+                            )
                             .then(testTag?.let { Modifier.testTag(it) } ?: Modifier)
                     )
                 }

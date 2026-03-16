@@ -30,6 +30,7 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAboutSettings
 import to.bitkit.ui.navigateToAdvancedSettings
 import to.bitkit.ui.navigateToBackupSettings
@@ -62,7 +63,7 @@ fun SettingsScreen(
         onSecurityClick = { navController.navigateToSecuritySettings() },
         onBackupClick = { navController.navigateToBackupSettings() },
         onAdvancedClick = { navController.navigateToAdvancedSettings() },
-        onSupportClick = { navController.navigate(Routes.Support) },
+        onSupportClick = { navController.navigateTo(Routes.Support) },
         onAboutClick = { navController.navigateToAboutSettings() },
         onDevClick = { navController.navigateToDevSettings() },
         onBackClick = { navController.popBackStack() },

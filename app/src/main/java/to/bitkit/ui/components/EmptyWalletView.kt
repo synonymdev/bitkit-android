@@ -27,6 +27,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -66,9 +67,7 @@ fun EmptyStateView(
         }
         if (onClose != null) {
             IconButton(
-                onClick = {
-                    onClose()
-                },
+                onClick = rememberDebouncedClick(onClick = onClose),
                 modifier = Modifier
                     .size(40.dp)
                     .align(Alignment.TopEnd)

@@ -10,6 +10,7 @@ import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.settings.pin.PinBiometricsScreen
 import to.bitkit.ui.settings.pin.PinChooseScreen
 import to.bitkit.ui.settings.pin.PinConfirmScreen
@@ -39,14 +40,14 @@ fun PinSheet(
             composableWithDefaultTransitions<PinRoute.Prompt> {
                 PinPromptScreen(
                     showLaterButton = it.toRoute<PinRoute.Prompt>().showLaterButton,
-                    onContinue = { navController.navigate(PinRoute.Choose) },
+                    onContinue = { navController.navigateTo(PinRoute.Choose) },
                     onLater = onDismiss,
                 )
             }
             composableWithDefaultTransitions<PinRoute.Choose> {
                 PinChooseScreen(
                     onPinChosen = { pin ->
-                        navController.navigate(PinRoute.Confirm(pin))
+                        navController.navigateTo(PinRoute.Confirm(pin))
                     },
                     onBack = { navController.popBackStack() },
                 )
@@ -54,16 +55,16 @@ fun PinSheet(
             composableWithDefaultTransitions<PinRoute.Confirm> {
                 PinConfirmScreen(
                     originalPin = it.toRoute<PinRoute.Confirm>().pin,
-                    onPinConfirmed = { navController.navigate(PinRoute.Biometrics) },
+                    onPinConfirmed = { navController.navigateTo(PinRoute.Biometrics) },
                     onBack = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<PinRoute.Biometrics> {
                 PinBiometricsScreen(
                     onContinue = { isBioOn ->
-                        navController.navigate(PinRoute.Result(isBioOn))
+                        navController.navigateTo(PinRoute.Result(isBioOn))
                     },
-                    onSkip = { navController.navigate(PinRoute.Result(isBioOn = false)) },
+                    onSkip = { navController.navigateTo(PinRoute.Result(isBioOn = false)) },
                     onBack = onDismiss,
                 )
             }
