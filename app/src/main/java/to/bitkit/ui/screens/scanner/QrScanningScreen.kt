@@ -60,6 +60,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
+import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
@@ -189,7 +190,7 @@ fun QrScanningScreen(
             permissionState = cameraPermissionState,
             deniedContent = {
                 DeniedContent(
-                    onClickRetry = cameraPermissionState::launchPermissionRequest,
+                    onClickRetry = { context.startActivityAppSettings() },
                     onClickPaste = handlePaste(context, app, setScanResult),
                 )
             },
