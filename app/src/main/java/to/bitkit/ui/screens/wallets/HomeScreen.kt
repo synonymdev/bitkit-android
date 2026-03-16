@@ -266,7 +266,6 @@ fun HomeScreen(
             }
         },
         onClickAddWidget = {
-            homeViewModel.disableEditMode()
             if (!hasSeenWidgetsIntro) {
                 rootNavController.navigate(Routes.WidgetsIntro)
             } else {
@@ -275,6 +274,7 @@ fun HomeScreen(
         },
         onClickEditWidgetList = homeViewModel::onClickEditWidgetList,
         onClickEditWidget = { widgetType ->
+            homeViewModel.disableEditMode()
             when (widgetType) {
                 WidgetType.BLOCK -> rootNavController.navigate(Routes.BlocksPreview)
                 WidgetType.CALCULATOR -> rootNavController.navigate(Routes.CalculatorPreview)

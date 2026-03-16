@@ -79,7 +79,9 @@ class HomeViewModel @Inject constructor(
                         suggestions = suggestions,
                         showWidgets = settings.showWidgets,
                         showWidgetTitles = settings.showWidgetTitles,
-                        widgetsWithPosition = if (it.isEditingWidgets) {
+                        widgetsWithPosition = if (it.isEditingWidgets &&
+                            it.widgetsWithPosition.size == widgetsData.widgets.size
+                        ) {
                             it.widgetsWithPosition
                         } else {
                             widgetsData.widgets
