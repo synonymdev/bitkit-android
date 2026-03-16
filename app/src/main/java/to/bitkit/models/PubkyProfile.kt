@@ -35,6 +35,19 @@ data class PubkyProfile(
             links = emptyList(),
             status = null,
         )
+
+        fun forDisplay(
+            publicKey: String,
+            name: String?,
+            imageUrl: String?,
+        ) = PubkyProfile(
+            publicKey = publicKey,
+            name = name ?: publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
+            bio = "",
+            imageUrl = imageUrl,
+            links = emptyList(),
+            status = null,
+        )
     }
 
     val truncatedPublicKey: String

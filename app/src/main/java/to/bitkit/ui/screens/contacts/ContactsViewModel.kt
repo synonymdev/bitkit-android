@@ -21,12 +21,21 @@ class ContactsViewModel @Inject constructor(
 
     private val _searchText = MutableStateFlow("")
 
+    private val myProfile: StateFlow<PubkyProfile?> = combine(
+        pubkyRepo.profile,
+        pubkyRepo.publicKey,
+        pubkyRepo.displayName,
+        pubkyRepo.displayImageUri,
+    ) { profile, publicKey, displayName, displayImageUri ->
+        profile ?: publicKey?.let { PubkyProfile.forDisplay(it, displayName, displayImageUri) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     val uiState: StateFlow<ContactsUiState> = combine(
         pubkyRepo.contacts,
         pubkyRepo.isLoadingContacts,
-        pubkyRepo.profile,
+        myProfile,
         _searchText,
-    ) { contacts, isLoading, myProfile, search ->
+    ) { contacts, isLoading, myProfileValue, search ->
         val filtered = if (search.isBlank()) {
             contacts
         } else {
@@ -39,7 +48,7 @@ class ContactsViewModel @Inject constructor(
             .toSortedMap()
         ContactsUiState(
             groupedContacts = grouped,
-            myProfile = myProfile,
+            myProfile = myProfileValue,
             isLoading = isLoading,
             searchText = search,
         )

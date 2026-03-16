@@ -19,6 +19,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,12 +77,12 @@ fun ProfileScreen(
     Content(
         uiState = uiState,
         onBackClick = onBackClick,
-        onCopy = { viewModel.copyPublicKey() },
-        onShare = { uiState.publicKey?.let { shareText(context, it) } },
-        onSignOut = { viewModel.showSignOutConfirmation() },
+        onClickCopy = { viewModel.copyPublicKey() },
+        onClickShare = { uiState.publicKey?.let { shareText(context, it) } },
+        onClickSignOut = { viewModel.showSignOutConfirmation() },
         onDismissSignOutDialog = { viewModel.dismissSignOutDialog() },
         onConfirmSignOut = { viewModel.signOut() },
-        onRetry = { viewModel.loadProfile() },
+        onClickRetry = { viewModel.loadProfile() },
     )
 }
 
@@ -89,12 +90,12 @@ fun ProfileScreen(
 private fun Content(
     uiState: ProfileUiState,
     onBackClick: () -> Unit,
-    onCopy: () -> Unit,
-    onShare: () -> Unit,
-    onSignOut: () -> Unit,
+    onClickCopy: () -> Unit,
+    onClickShare: () -> Unit,
+    onClickSignOut: () -> Unit,
     onDismissSignOutDialog: () -> Unit,
     onConfirmSignOut: () -> Unit,
-    onRetry: () -> Unit,
+    onClickRetry: () -> Unit,
 ) {
     val currentProfile = uiState.profile
 
@@ -110,11 +111,11 @@ private fun Content(
             currentProfile != null -> ProfileBody(
                 profile = currentProfile,
                 isSigningOut = uiState.isSigningOut,
-                onCopy = onCopy,
-                onShare = onShare,
-                onSignOut = onSignOut,
+                onClickCopy = onClickCopy,
+                onClickShare = onClickShare,
+                onClickSignOut = onClickSignOut,
             )
-            else -> EmptyState(onRetry = onRetry)
+            else -> EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
         }
     }
 
@@ -133,9 +134,9 @@ private fun Content(
 private fun ProfileBody(
     profile: PubkyProfile,
     isSigningOut: Boolean,
-    onCopy: () -> Unit,
-    onShare: () -> Unit,
-    onSignOut: () -> Unit,
+    onClickCopy: () -> Unit,
+    onClickShare: () -> Unit,
+    onClickSignOut: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -186,11 +187,11 @@ private fun ProfileBody(
         VerticalSpacer(24.dp)
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ActionButton(iconRes = R.drawable.ic_copy, onClick = onCopy)
-            ActionButton(iconRes = R.drawable.ic_share, onClick = onShare)
+            ActionButton(iconRes = R.drawable.ic_copy, onClick = onClickCopy)
+            ActionButton(iconRes = R.drawable.ic_share, onClick = onClickShare)
             ActionButton(
                 imageVector = Icons.AutoMirrored.Filled.Logout,
-                onClick = onSignOut,
+                onClick = onClickSignOut,
                 enabled = !isSigningOut,
             )
         }
@@ -292,7 +293,10 @@ private fun LoadingState() {
 }
 
 @Composable
-private fun EmptyState(onRetry: () -> Unit) {
+private fun EmptyState(
+    onClickRetry: () -> Unit,
+    onClickSignOut: () -> Unit,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -304,8 +308,12 @@ private fun EmptyState(onRetry: () -> Unit) {
         VerticalSpacer(16.dp)
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
-            onClick = onRetry,
+            onClick = onClickRetry,
         )
+        VerticalSpacer(8.dp)
+        TextButton(onClick = rememberDebouncedClick(onClick = onClickSignOut)) {
+            BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
+        }
     }
 }
 
@@ -325,12 +333,12 @@ private fun Preview() {
                 ),
             ),
             onBackClick = {},
-            onCopy = {},
-            onShare = {},
-            onSignOut = {},
+            onClickCopy = {},
+            onClickShare = {},
+            onClickSignOut = {},
             onDismissSignOutDialog = {},
             onConfirmSignOut = {},
-            onRetry = {},
+            onClickRetry = {},
         )
     }
 }

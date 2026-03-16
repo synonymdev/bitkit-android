@@ -13,16 +13,12 @@ import com.synonym.paykit.paykitInitialize
 import com.synonym.paykit.paykitSignOut
 import kotlinx.coroutines.CompletableDeferred
 import to.bitkit.async.ServiceQueue
+import to.bitkit.env.Env
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PubkyService @Inject constructor() {
-
-    companion object {
-        const val REQUIRED_CAPABILITIES =
-            "/pub/paykit.app/v0/:rw,/pub/pubky.app/profile.json:rw,/pub/pubky.app/follows/:rw"
-    }
 
     private val isSetup = CompletableDeferred<Unit>()
 
@@ -38,7 +34,7 @@ class PubkyService @Inject constructor() {
 
     suspend fun startAuth(): String = ServiceQueue.CORE.background {
         isSetup.await()
-        startPubkyAuth(REQUIRED_CAPABILITIES)
+        startPubkyAuth(Env.pubkyCapabilities)
     }
 
     suspend fun completeAuth(): String = ServiceQueue.CORE.background {
