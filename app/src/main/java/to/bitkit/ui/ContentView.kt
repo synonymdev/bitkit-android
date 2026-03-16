@@ -190,7 +190,6 @@ import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("CyclomaticComplexMethod")
 @Composable

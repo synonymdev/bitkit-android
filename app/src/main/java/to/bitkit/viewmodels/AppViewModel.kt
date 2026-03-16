@@ -2143,8 +2143,13 @@ class AppViewModel @Inject constructor(
                 handler(data)
             }
         } else {
-            onScanResult(data, startDelay = SCREEN_TRANSITION_DELAY)
+            launchScan(source = ScanSource.SCANNER_SHEET, data = data, startDelay = SCREEN_TRANSITION_DELAY)
         }
+    }
+
+    fun hideScannerSheet() {
+        scanResultHandler = null
+        hideSheet()
     }
 
     fun showSheet(sheetType: Sheet) {
@@ -2402,6 +2407,7 @@ class AppViewModel @Inject constructor(
     private enum class ScanSource(val label: String) {
         PASTE("paste"),
         SCAN_RESULT("scan result"),
+        SCANNER_SHEET("scanner sheet"),
         ADDRESS_CONTINUE("address continue"),
         DEEPLINK("deeplink"),
     }

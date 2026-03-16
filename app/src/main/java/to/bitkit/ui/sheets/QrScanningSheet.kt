@@ -11,7 +11,7 @@ import to.bitkit.viewmodels.AppViewModel
 @Composable
 fun QrScanningSheet(appViewModel: AppViewModel) {
     Content(
-        onBack = { appViewModel.hideSheet() },
+        onBack = { appViewModel.hideScannerSheet() },
         onScanSuccess = { appViewModel.onScannerSheetResult(it) },
     )
 }
