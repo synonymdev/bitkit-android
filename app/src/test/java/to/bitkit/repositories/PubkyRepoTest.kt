@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import coil3.ImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -189,6 +191,29 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.isAuthenticated.value)
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(pubkyStore) { reset() }
+    }
+
+    @Test
+    fun `signOut should evict pubky images from caches`() = test {
+        authenticateForTesting()
+        val pk = checkNotNull(sut.publicKey.value)
+        val ffiProfile = mock<CorePubkyProfile>()
+        whenever(ffiProfile.name).thenReturn("Test")
+        whenever(ffiProfile.image).thenReturn("pubky://image_uri")
+        whenever(pubkyService.getProfile(pk)).thenReturn(ffiProfile)
+        sut.loadProfile()
+
+        val memoryCache = mock<MemoryCache>()
+        val diskCache = mock<DiskCache>()
+        val memoryCacheKey = MemoryCache.Key("pubky://image_uri")
+        whenever(memoryCache.keys).thenReturn(setOf(memoryCacheKey))
+        whenever(imageLoader.memoryCache).thenReturn(memoryCache)
+        whenever(imageLoader.diskCache).thenReturn(diskCache)
+
+        sut.signOut()
+
+        verify(memoryCache).remove(memoryCacheKey)
+        verify(diskCache).remove("pubky://image_uri")
     }
 
     @Test

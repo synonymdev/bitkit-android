@@ -98,7 +98,7 @@ Composable for loading and displaying images from `pubky://` URIs, backed by Coi
 
 ### Architecture
 
-- `PubkyImage` is a stateless composable wrapping Coil's `SubcomposeAsyncImage`
+- `PubkyImage` is a stateless composable wrapping Coil's `AsyncImage`
 - `PubkyImageFetcher` is a Coil `Fetcher` that handles `pubky://` URIs via `PubkyService.fetchFile()`
 - `ImageModule` provides a singleton `ImageLoader` with `PubkyImageFetcher.Factory`, memory cache, and disk cache
 
