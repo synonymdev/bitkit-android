@@ -1,7 +1,6 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -86,7 +85,7 @@ fun BoxScope.TabBar(
                     .weight(1f)
                     .height(TAB_BAR_HEIGHT.dp)
                     .clip(buttonLeftShape)
-                    .clickable { onSendClick() }
+                    .clickableAlpha(ripple = true) { onSendClick() }
                     .testTag("Send")
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -107,7 +106,7 @@ fun BoxScope.TabBar(
                     .weight(1f)
                     .height(TAB_BAR_HEIGHT.dp)
                     .clip(buttonRightShape)
-                    .clickable { onReceiveClick() }
+                    .clickableAlpha(ripple = true) { onReceiveClick() }
                     .testTag("Receive")
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -182,7 +181,7 @@ fun BoxScope.TabBar(
                         blendMode = BlendMode.DstIn
                     )
                 }
-                .clickableAlpha { onScanClick() }
+                .clickableAlpha(ripple = true) { onScanClick() }
                 .testTag("Scan")
         ) {
             Icon(

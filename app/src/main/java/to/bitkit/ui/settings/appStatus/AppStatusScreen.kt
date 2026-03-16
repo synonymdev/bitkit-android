@@ -37,6 +37,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -59,10 +60,10 @@ fun AppStatusScreen(
         uiState = uiState,
         onBack = { navController.popBackStack() },
         onInternetClick = { context.startActivityAppSettings() },
-        onElectrumClick = { navController.navigate(Routes.ElectrumConfig) },
-        onNodeClick = { navController.navigate(Routes.NodeInfo) },
-        onChannelsClick = { navController.navigate(Routes.LightningConnections) },
-        onBackupClick = { navController.navigate(Routes.BackupSettings) },
+        onElectrumClick = { navController.navigateTo(Routes.ElectrumConfig) },
+        onNodeClick = { navController.navigateTo(Routes.NodeInfo) },
+        onChannelsClick = { navController.navigateTo(Routes.LightningConnections) },
+        onBackupClick = { navController.navigateTo(Routes.BackupSettings) },
     )
 }
 
