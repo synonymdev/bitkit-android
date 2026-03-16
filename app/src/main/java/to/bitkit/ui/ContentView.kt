@@ -64,8 +64,6 @@ import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
-import to.bitkit.ui.screens.scanner.QrScanningScreen
-import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.settings.LdkDebugScreen
@@ -173,13 +171,12 @@ import to.bitkit.ui.sheets.GiftSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
+import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
-import to.bitkit.ui.theme.TRANSITION_SHEET_MS
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
-import to.bitkit.ui.utils.Transitions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.utils.Logger
@@ -193,7 +190,6 @@ import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -407,6 +403,7 @@ fun ContentView(
                         )
 
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
+                        Sheet.QrScanner -> QrScanningSheet(appViewModel)
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
                                 TimedSheetType.APP_UPDATE -> {
@@ -480,7 +477,7 @@ fun ContentView(
                         TabBar(
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive) },
-                            onScanClick = { navController.navigateToScanner() },
+                            onScanClick = { appViewModel.showScannerSheet() },
                             modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     }
@@ -547,7 +544,6 @@ private fun RootNavHost(
         cjitDetailSettings(navController)
         lightningConnections(navController)
         activityItem(activityListViewModel, navController)
-        qrScanner(appViewModel, navController)
         authCheck(navController)
         logs(navController)
         suggestions(navController)
@@ -689,7 +685,7 @@ private fun RootNavHost(
             }
             composableWithDefaultTransitions<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
-                    onLnurl = { navController.navigateToScanner() },
+                    onLnurl = { appViewModel.showScannerSheet() },
                     onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                 )
@@ -704,10 +700,13 @@ private fun RootNavHost(
 
                     ExternalConnectionScreen(
                         route = route,
-                        savedStateHandle = it.savedStateHandle,
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigateTo(Routes.ExternalAmount) },
-                        onScanClick = { navController.navigateToScanner(isCalledForResult = true) },
+                        onScanClick = {
+                            appViewModel.showScannerSheet {
+                                viewModel.parseNodeUri(it)
+                            }
+                        },
                         onBackClick = { navController.popBackStack() },
                     )
                 }
@@ -885,7 +884,7 @@ private fun NavGraphBuilder.settings(
         VssDebugScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ProbingTool> {
-        ProbingToolScreen(it.savedStateHandle, navController)
+        ProbingToolScreen(navController)
     }
     composableWithDefaultTransitions<Routes.FeeSettings> {
         FeeSettingsScreen(navController)
@@ -1010,10 +1009,10 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
         CoinSelectPreferenceScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ElectrumConfig> {
-        ElectrumConfigScreen(it.savedStateHandle, navController)
+        ElectrumConfigScreen(navController)
     }
     composableWithDefaultTransitions<Routes.RgsServer> {
-        RgsServerScreen(it.savedStateHandle, navController)
+        RgsServerScreen(navController)
     }
     composableWithDefaultTransitions<Routes.AddressTypePreference> {
         AddressTypePreferenceScreen(navController)
@@ -1202,23 +1201,6 @@ private fun NavGraphBuilder.activityItem(
             route = it.toRoute(),
             onBackClick = { navController.popBackStack() },
         )
-    }
-}
-
-private fun NavGraphBuilder.qrScanner(
-    appViewModel: AppViewModel,
-    navController: NavHostController,
-) {
-    composableWithDefaultTransitions<Routes.QrScanner>(
-        enterTransition = { Transitions.slideInVertically },
-        popExitTransition = { Transitions.slideOutVertically },
-    ) {
-        QrScanningScreen(navController = navController) { qrCode ->
-            appViewModel.onScanResult(
-                data = qrCode,
-                startDelay = TRANSITION_SHEET_MS.milliseconds,
-            )
-        }
     }
 }
 
@@ -1581,13 +1563,6 @@ fun NavController.navigateToActivityItem(id: String) = navigateTo(Routes.Activit
 
 fun NavController.navigateToActivityExplore(id: String) = navigateTo(Routes.ActivityExplore(id))
 
-fun NavController.navigateToScanner(isCalledForResult: Boolean = false) {
-    if (isCalledForResult) {
-        currentBackStackEntry?.savedStateHandle?.set(SCAN_REQUEST_KEY, true)
-    }
-    navigateTo(Routes.QrScanner)
-}
-
 fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogDetail(fileName))
 
 fun NavController.navigateToTransactionSpeedSettings() = navigateTo(Routes.TransactionSpeedSettings)
@@ -1812,9 +1787,6 @@ sealed interface Routes {
 
     @Serializable
     data class ActivityExplore(val id: String) : Routes
-
-    @Serializable
-    data object QrScanner : Routes
 
     @Serializable
     data object BuyIntro : Routes
