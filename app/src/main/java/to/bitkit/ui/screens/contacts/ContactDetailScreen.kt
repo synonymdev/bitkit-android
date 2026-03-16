@@ -43,6 +43,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -164,7 +165,7 @@ private fun ActionButton(
     onClick: () -> Unit,
 ) {
     IconButton(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
