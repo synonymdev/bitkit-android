@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import to.bitkit.di.BgDispatcher
+import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorDebugLog
@@ -53,7 +53,7 @@ class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trezorService: TrezorService,
     private val trezorTransport: TrezorTransport,
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
         private const val TAG = "TrezorRepo"
@@ -91,7 +91,7 @@ class TrezorRepo @Inject constructor(
         trezorTransport.cancelPairingCode()
     }
 
-    suspend fun initialize(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun initialize(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             val credentialPath = "${Env.bitkitCoreStoragePath(walletIndex)}/trezor-credentials.json"
             Logger.debug("Initializing Trezor with credential path: '$credentialPath'", context = TAG)
@@ -104,7 +104,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun scan(): Result<List<TrezorDeviceInfo>> = withContext(bgDispatcher) {
+    suspend fun scan(): Result<List<TrezorDeviceInfo>> = withContext(ioDispatcher) {
         runCatching {
             _state.update { it.copy(isScanning = true, error = null) }
             val devices = trezorService.scan()
@@ -118,7 +118,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun listDevices(): Result<List<TrezorDeviceInfo>> = withContext(bgDispatcher) {
+    suspend fun listDevices(): Result<List<TrezorDeviceInfo>> = withContext(ioDispatcher) {
         runCatching {
             val devices = trezorService.listDevices()
             val knownIds = _state.value.knownDevices.map { it.id }.toSet()
@@ -131,7 +131,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun connect(deviceId: String): Result<TrezorFeatures> = withContext(bgDispatcher) {
+    suspend fun connect(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
         runCatching {
             _state.update { it.copy(isConnecting = true, error = null) }
             TrezorDebugLog.log("CONNECT", "connect() called for deviceId=$deviceId")
@@ -175,7 +175,7 @@ class TrezorRepo @Inject constructor(
         showOnTrezor: Boolean = false,
         scriptType: TrezorScriptType? = TrezorScriptType.SPEND_WITNESS,
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
-    ): Result<TrezorAddressResponse> = withContext(bgDispatcher) {
+    ): Result<TrezorAddressResponse> = withContext(ioDispatcher) {
         runCatching {
             ensureConnected()
             val response = trezorService.getAddress(
@@ -196,7 +196,7 @@ class TrezorRepo @Inject constructor(
         path: String = DEFAULT_ACCOUNT_PATH,
         showOnTrezor: Boolean = false,
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
-    ): Result<TrezorPublicKeyResponse> = withContext(bgDispatcher) {
+    ): Result<TrezorPublicKeyResponse> = withContext(ioDispatcher) {
         runCatching {
             ensureConnected()
             val response = trezorService.getPublicKey(
@@ -216,7 +216,7 @@ class TrezorRepo @Inject constructor(
         extendedKey: String,
         network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
         scriptType: AccountType? = null,
-    ): Result<AccountInfoResult> = withContext(bgDispatcher) {
+    ): Result<AccountInfoResult> = withContext(ioDispatcher) {
         runCatching {
             trezorService.getAccountInfo(
                 extendedKey = extendedKey,
@@ -233,7 +233,7 @@ class TrezorRepo @Inject constructor(
     suspend fun getAddressInfo(
         address: String,
         network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
-    ): Result<SingleAddressInfoResult> = withContext(bgDispatcher) {
+    ): Result<SingleAddressInfoResult> = withContext(ioDispatcher) {
         runCatching {
             trezorService.getAddressInfo(
                 address = address,
@@ -248,7 +248,7 @@ class TrezorRepo @Inject constructor(
 
     suspend fun precomposeTransaction(
         params: TrezorPrecomposeParams,
-    ): Result<List<TrezorPrecomposedResult>> = withContext(bgDispatcher) {
+    ): Result<List<TrezorPrecomposedResult>> = withContext(ioDispatcher) {
         runCatching {
             trezorService.precomposeTransaction(params = params)
         }.onFailure {
@@ -261,7 +261,7 @@ class TrezorRepo @Inject constructor(
         inputs: List<TrezorPrecomposedInput>,
         outputs: List<TrezorPrecomposedOutput>,
         coin: TrezorCoinType?,
-    ): Result<TrezorSignTxParams> = withContext(bgDispatcher) {
+    ): Result<TrezorSignTxParams> = withContext(ioDispatcher) {
         runCatching {
             trezorService.precomposedToSignParams(
                 inputs = inputs,
@@ -277,7 +277,7 @@ class TrezorRepo @Inject constructor(
     suspend fun fetchPrevTxs(
         txids: List<String>,
         network: TrezorCoinType,
-    ): Result<List<TrezorPrevTx>> = withContext(bgDispatcher) {
+    ): Result<List<TrezorPrevTx>> = withContext(ioDispatcher) {
         runCatching {
             trezorService.fetchPrevTxs(
                 txids = txids,
@@ -292,7 +292,7 @@ class TrezorRepo @Inject constructor(
     suspend fun broadcastRawTx(
         serializedTx: String,
         network: BitkitCoreNetwork,
-    ): Result<String> = withContext(bgDispatcher) {
+    ): Result<String> = withContext(ioDispatcher) {
         runCatching {
             trezorService.broadcastRawTx(
                 serializedTx = serializedTx,
@@ -304,7 +304,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun signTxWithParams(params: TrezorSignTxParams): Result<TrezorSignedTx> = withContext(bgDispatcher) {
+    suspend fun signTxWithParams(params: TrezorSignTxParams): Result<TrezorSignedTx> = withContext(ioDispatcher) {
         runCatching {
             ensureConnected()
             val response = trezorService.signTxWithParams(params)
@@ -316,7 +316,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun disconnect(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=${_state.value.connectedDeviceId}")
             runCatching { trezorService.disconnect() }
@@ -335,7 +335,7 @@ class TrezorRepo @Inject constructor(
         path: String = DEFAULT_ADDRESS_PATH,
         message: String,
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
-    ): Result<TrezorSignedMessageResponse> = withContext(bgDispatcher) {
+    ): Result<TrezorSignedMessageResponse> = withContext(ioDispatcher) {
         runCatching {
             ensureConnected()
             val response = trezorService.signMessage(
@@ -356,7 +356,7 @@ class TrezorRepo @Inject constructor(
         signature: String,
         message: String,
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
-    ): Result<Boolean> = withContext(bgDispatcher) {
+    ): Result<Boolean> = withContext(ioDispatcher) {
         runCatching {
             ensureConnected()
             val result = trezorService.verifyMessage(
@@ -375,7 +375,7 @@ class TrezorRepo @Inject constructor(
 
     fun hasKnownDevices(): Boolean = _state.value.knownDevices.isNotEmpty()
 
-    suspend fun autoReconnect(walletIndex: Int = 0): Result<TrezorFeatures> = withContext(bgDispatcher) {
+    suspend fun autoReconnect(walletIndex: Int = 0): Result<TrezorFeatures> = withContext(ioDispatcher) {
         val knownDevices = _state.value.knownDevices.ifEmpty { loadKnownDevices() }
         if (knownDevices.isEmpty()) {
             return@withContext Result.failure(AppError("No known devices"))
@@ -408,7 +408,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> = withContext(bgDispatcher) {
+    suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
         if (_state.value.isConnecting) {
             return@withContext Result.failure(AppError("Connection already in progress"))
         }
@@ -456,7 +456,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun forgetDevice(deviceId: String): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun forgetDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             if (_state.value.connectedDeviceId == deviceId) {
@@ -563,7 +563,7 @@ class TrezorRepo @Inject constructor(
         coin: TrezorCoinType = TrezorCoinType.BITCOIN,
         lockTime: UInt? = null,
         version: UInt? = null,
-    ): Result<TrezorSignedTx> = withContext(bgDispatcher) {
+    ): Result<TrezorSignedTx> = withContext(ioDispatcher) {
         runCatching {
             ensureConnected()
             val response = trezorService.signTx(
@@ -581,7 +581,7 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun clearCredentials(deviceId: String): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun clearCredentials(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             trezorService.clearCredentials(deviceId)
             _state.update { it.copy(error = null) }
