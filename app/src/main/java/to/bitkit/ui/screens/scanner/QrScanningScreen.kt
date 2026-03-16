@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -50,7 +49,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
@@ -59,7 +57,6 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -72,7 +69,6 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
-import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
@@ -80,17 +76,14 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
-const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
-const val SCAN_RESULT_KEY = "SCAN_RESULT"
+val CameraOverlayButtonSize = 40.dp
 
 private const val TAG = "QrScanningScreen"
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
-    navController: NavController,
-    inSheet: Boolean = false,
-    onBack: () -> Unit = { navController.popBackStack() },
+    onBack: () -> Unit,
     onScanSuccess: (String) -> Unit,
 ) {
     val app = appViewModel ?: return
@@ -100,20 +93,7 @@ fun QrScanningScreen(
     // Handle scan result
     LaunchedEffect(scanResult) {
         scanResult?.let { qrCode ->
-            delay(100) // wait to prevent navigation result race conditions
-
-            val prev = navController.previousBackStackEntry
-            val wasCalledForResult = prev?.savedStateHandle?.contains(SCAN_REQUEST_KEY) == true
-            if (wasCalledForResult) {
-                prev.savedStateHandle[SCAN_RESULT_KEY] = qrCode
-                onBack()
-                prev.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
-            } else {
-                onBack()
-                onScanSuccess(qrCode)
-            }
-
-            // Reset scan result to allow new scans
+            onScanSuccess(qrCode)
             setScanResult(null)
         }
     }
@@ -205,7 +185,6 @@ fun QrScanningScreen(
         deniedContent = {
             DeniedContent(
                 shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
-                inSheet = inSheet,
                 onClickOpenSettings = {
                     context.startActivityAppSettings()
                 },
@@ -217,14 +196,10 @@ fun QrScanningScreen(
         grantedContent = {
             Column(
                 modifier = Modifier
-                    .then(if (inSheet) Modifier.gradientBackground() else Modifier)
-                    .then(if (inSheet) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
+                    .gradientBackground()
+                    .navigationBarsPadding()
             ) {
-                if (inSheet) {
-                    SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
-                } else {
-                    AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = onBack)
-                }
+                SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
 
                 Content(
                     previewView = previewView,
@@ -297,7 +272,7 @@ private fun Content(
                     .padding(16.dp)
                     .clip(CircleShape)
                     .background(Colors.White64)
-                    .size(48.dp)
+                    .size(CameraOverlayButtonSize)
                     .align(Alignment.TopStart)
             ) {
                 Icon(
@@ -313,7 +288,7 @@ private fun Content(
                     .padding(16.dp)
                     .clip(CircleShape)
                     .background(Colors.White64)
-                    .size(48.dp)
+                    .size(CameraOverlayButtonSize)
                     .align(Alignment.TopEnd)
             ) {
                 Icon(

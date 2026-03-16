@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.sheets.SendRoute
@@ -46,6 +46,7 @@ sealed interface Sheet {
     data object ForceTransfer : Sheet
     data class Gift(val code: String, val amount: ULong) : Sheet
     data object ConnectionClosed : Sheet
+    data object QrScanner : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet
 }
@@ -136,11 +137,7 @@ private fun Scrim(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Colors.Black.copy(alpha = scrimAlpha))
-                .clickable(
-                    interactionSource = null,
-                    indication = null,
-                    onClick = onClick,
-                )
+                .clickableAlpha(pressedAlpha = 1f, onClick = onClick)
         )
     }
 }

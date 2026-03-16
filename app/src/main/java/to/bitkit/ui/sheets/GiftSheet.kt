@@ -14,6 +14,7 @@ import androidx.navigation.compose.rememberNavController
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
@@ -46,7 +47,7 @@ fun GiftSheet(
         viewModel.navigationEvent.collect { route ->
             when (route) {
                 is GiftRoute.Success -> appViewModel.hideSheet()
-                else -> navController.navigate(route) {
+                else -> navController.navigateTo(route) {
                     popUpTo(GiftRoute.Loading) { inclusive = false }
                 }
             }

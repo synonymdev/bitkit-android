@@ -17,6 +17,7 @@ import kotlinx.serialization.Serializable
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.settings.backups.BackupContract
 import to.bitkit.ui.settings.backups.BackupIntroScreen
 import to.bitkit.ui.settings.backups.BackupNavSheetViewModel
@@ -54,22 +55,25 @@ fun BackupSheet(
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
             when (effect) {
-                BackupContract.SideEffect.NavigateToShowPassphrase -> navController.navigate(BackupRoute.ShowPassphrase)
-                BackupContract.SideEffect.NavigateToConfirmMnemonic -> navController.navigate(
+                BackupContract.SideEffect.NavigateToShowPassphrase -> navController.navigateTo(
+                    BackupRoute.ShowPassphrase
+                )
+
+                BackupContract.SideEffect.NavigateToConfirmMnemonic -> navController.navigateTo(
                     BackupRoute.ConfirmMnemonic
                 )
 
-                BackupContract.SideEffect.NavigateToConfirmPassphrase -> navController.navigate(
+                BackupContract.SideEffect.NavigateToConfirmPassphrase -> navController.navigateTo(
                     BackupRoute.ConfirmPassphrase
                 )
 
-                BackupContract.SideEffect.NavigateToWarning -> navController.navigate(BackupRoute.Warning)
-                BackupContract.SideEffect.NavigateToSuccess -> navController.navigate(BackupRoute.Success)
-                BackupContract.SideEffect.NavigateToMultipleDevices -> navController.navigate(
+                BackupContract.SideEffect.NavigateToWarning -> navController.navigateTo(BackupRoute.Warning)
+                BackupContract.SideEffect.NavigateToSuccess -> navController.navigateTo(BackupRoute.Success)
+                BackupContract.SideEffect.NavigateToMultipleDevices -> navController.navigateTo(
                     BackupRoute.MultipleDevices
                 )
 
-                BackupContract.SideEffect.NavigateToMetadata -> navController.navigate(BackupRoute.Metadata)
+                BackupContract.SideEffect.NavigateToMetadata -> navController.navigateTo(BackupRoute.Metadata)
                 BackupContract.SideEffect.DismissSheet -> currentOnDismiss()
             }
         }
@@ -89,7 +93,7 @@ fun BackupSheet(
                 BackupIntroScreen(
                     hasFunds = LocalBalances.current.totalSats > 0u,
                     onClose = currentOnDismiss,
-                    onConfirm = { navController.navigate(BackupRoute.ShowMnemonic) },
+                    onConfirm = { navController.navigateTo(BackupRoute.ShowMnemonic) },
                 )
             }
             composableWithDefaultTransitions<BackupRoute.ShowMnemonic> {

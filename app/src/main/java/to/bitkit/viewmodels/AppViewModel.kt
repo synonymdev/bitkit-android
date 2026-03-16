@@ -10,8 +10,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavOptions
-import androidx.navigation.navOptions
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.FeeRates
@@ -88,6 +86,7 @@ import to.bitkit.models.FeeRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -135,6 +134,8 @@ import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
@@ -189,6 +190,11 @@ class AppViewModel @Inject constructor(
 
     private val _quickPayData = MutableStateFlow<QuickPayData?>(null)
     val quickPayData = _quickPayData.asStateFlow()
+
+    private var activeScanJob: Job? = null
+
+    @Volatile
+    private var activeScanInput: String? = null
 
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
@@ -957,9 +963,17 @@ class AppViewModel @Inject constructor(
                     }
                     val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                     if (!canSend) {
+                        val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
+                        if (nodeState is NodeLifecycleState.Stopped) {
+                            Logger.debug(
+                                "Node stopped, optimistically including LN invoice in unified QR",
+                                context = TAG,
+                            )
+                            return@takeIf true
+                        }
                         Logger.debug(
                             "Cannot pay unified invoice using LN, defaulting to onchain-only",
-                            context = TAG
+                            context = TAG,
                         )
                     }
                     return@takeIf canSend
@@ -985,10 +999,30 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onAddressContinue(data: String) {
-        viewModelScope.launch {
-            handleScan(data)
+    private fun launchScan(source: ScanSource, data: String, startDelay: Duration = Duration.ZERO) {
+        val normalized = data.removeLightningSchemes()
+        val scanId = if (data.length > 24) "${data.take(11)}…${data.takeLast(11)}" else data
+
+        if (normalized == activeScanInput && activeScanJob?.isActive == true) {
+            Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
+            return
         }
+
+        activeScanJob?.let {
+            Logger.info("Cancelling prior scan for new '${source.label}': '$scanId'", context = TAG)
+            it.cancel()
+        }
+
+        activeScanInput = normalized
+        Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
+        activeScanJob = viewModelScope.launch {
+            if (startDelay > Duration.ZERO) delay(startDelay)
+            handleScan(data)
+        }.also { it.invokeOnCompletion { if (activeScanInput == normalized) activeScanInput = null } }
+    }
+
+    private fun onAddressContinue(data: String) {
+        launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data)
     }
 
     private suspend fun onAmountChange(amount: ULong) {
@@ -1136,20 +1170,15 @@ class AppViewModel @Inject constructor(
             )
             return
         }
-        viewModelScope.launch {
-            handleScan(data)
-        }
+        launchScan(source = ScanSource.PASTE, data = data)
     }
 
     private fun onScanClick() {
         setSendEffect(SendEffect.NavigateToScan)
     }
 
-    fun onScanResult(data: String, delayMs: Long = 0) {
-        viewModelScope.launch {
-            delay(delayMs)
-            handleScan(data)
-        }
+    fun onScanResult(data: String, startDelay: Duration = Duration.ZERO) {
+        launchScan(source = ScanSource.SCAN_RESULT, data = data, startDelay = startDelay)
     }
 
     private suspend fun handleScan(result: String) = withContext(bgDispatcher) {
@@ -1647,7 +1676,7 @@ class AppViewModel @Inject constructor(
 
     @Suppress("LongMethod")
     private suspend fun proceedWithPayment() {
-        delay(SCREEN_TRANSITION_DELAY_MS) // wait for screen transitions when applicable
+        delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
         val amount = _sendUiState.value.amount
 
@@ -2097,17 +2126,44 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Sheets
+    private var scanResultHandler: ((String) -> Unit)? = null
+
+    fun showScannerSheet(onResult: ((String) -> Unit)? = null) {
+        scanResultHandler = onResult
+        showSheet(Sheet.QrScanner)
+    }
+
+    fun onScannerSheetResult(data: String) {
+        val handler = scanResultHandler
+        scanResultHandler = null
+        hideSheet()
+        if (handler != null) {
+            viewModelScope.launch {
+                delay(SCREEN_TRANSITION_DELAY)
+                handler(data)
+            }
+        } else {
+            launchScan(source = ScanSource.SCANNER_SHEET, data = data, startDelay = SCREEN_TRANSITION_DELAY)
+        }
+    }
+
+    fun hideScannerSheet() {
+        scanResultHandler = null
+        hideSheet()
+    }
+
     fun showSheet(sheetType: Sheet) {
         viewModelScope.launch {
             _currentSheet.value?.let {
                 _currentSheet.update { null }
-                delay(SCREEN_TRANSITION_DELAY_MS)
+                delay(SCREEN_TRANSITION_DELAY)
             }
             _currentSheet.update { sheetType }
         }
     }
 
     fun hideSheet() {
+        scanResultHandler = null
         when {
             currentSheet.value is Sheet.TimedSheet -> {
                 // Only dismiss if manager still has a sheet (user initiated)
@@ -2300,13 +2356,11 @@ class AppViewModel @Inject constructor(
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
         if (uri.toString().contains("recovery-mode")) {
             lightningRepo.setRecoveryMode(enabled = true)
-            delay(SCREEN_TRANSITION_DELAY_MS)
+            delay(SCREEN_TRANSITION_DELAY)
             mainScreenEffect(
                 MainScreenEffect.Navigate(
                     route = Routes.RecoveryMode,
-                    navOptions = navOptions {
-                        popUpTo(0) { inclusive = true }
-                    }
+                    clearStack = true,
                 )
             )
             return@launch
@@ -2314,19 +2368,12 @@ class AppViewModel @Inject constructor(
 
         if (!walletRepo.walletExists()) return@launch
 
-        val data = uri.toString()
-        delay(SCREEN_TRANSITION_DELAY_MS)
-        handleScan(data)
+        launchScan(source = ScanSource.DEEPLINK, data = uri.toString(), startDelay = SCREEN_TRANSITION_DELAY)
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
-    private fun String.removeLightningSchemes(): String {
-        return this
-            .replace(Regex("^lightning:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurl:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurlw:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurlc:", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^lnurlp:", RegexOption.IGNORE_CASE), "")
+    private fun String.removeLightningSchemes(): String = LIGHTNING_SCHEME_PATTERNS.fold(this) { acc, regex ->
+        acc.replace(regex, "")
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
@@ -2336,7 +2383,7 @@ class AppViewModel @Inject constructor(
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
     private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
-        delay(SCREEN_TRANSITION_DELAY_MS)
+        delay(SCREEN_TRANSITION_DELAY)
 
         runCatching {
             val androidReleaseInfo = appUpdaterService.getReleaseInfo().platforms.android
@@ -2348,9 +2395,7 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(
                     MainScreenEffect.Navigate(
                         route = Routes.CriticalUpdate,
-                        navOptions = navOptions {
-                            popUpTo(0) { inclusive = true }
-                        }
+                        clearStack = true,
                     )
                 )
             }
@@ -2359,13 +2404,23 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private enum class ScanSource(val label: String) {
+        PASTE("paste"),
+        SCAN_RESULT("scan result"),
+        SCANNER_SHEET("scanner sheet"),
+        ADDRESS_CONTINUE("address continue"),
+        DEEPLINK("deeplink"),
+    }
+
     companion object {
         private const val TAG = "AppViewModel"
+        private val LIGHTNING_SCHEME_PATTERNS = listOf("lightning", "lnurl", "lnurlw", "lnurlc", "lnurlp")
+            .map { Regex("^$it:", RegexOption.IGNORE_CASE) }
         private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
         private const val TEN_USD = 10
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
-        private const val SCREEN_TRANSITION_DELAY_MS = 300L
+        private val SCREEN_TRANSITION_DELAY = TRANSITION_SCREEN_MS.milliseconds
         private const val MIGRATION_LOADING_TIMEOUT_MS = 120_000L
         private const val POST_RESTORE_PRUNE_DELAY_MS = 30_000L
         private const val MIGRATION_AUTH_RESET_DELAY_MS = 500L
@@ -2437,7 +2492,7 @@ sealed class SendEffect {
 sealed class MainScreenEffect {
     data class Navigate(
         val route: Routes,
-        val navOptions: NavOptions? = null,
+        val clearStack: Boolean = false,
     ) : MainScreenEffect()
 
     data object WipeWallet : MainScreenEffect()

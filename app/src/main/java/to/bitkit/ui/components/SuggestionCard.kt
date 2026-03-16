@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.Suggestion
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 
@@ -127,7 +128,7 @@ fun SuggestionCard(
 
                 if (onClose != null) {
                     IconButton(
-                        onClick = onClose,
+                        onClick = rememberDebouncedClick(onClick = onClose),
                         modifier = Modifier
                             .size(16.dp)
                             .testTag("SuggestionDismiss")

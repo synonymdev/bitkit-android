@@ -237,17 +237,17 @@ private fun OnboardingNav(
         composable<StartupRoutes.Terms> {
             TermsOfUseScreen(
                 onNavigateToIntro = {
-                    startupNavController.navigate(StartupRoutes.Intro)
+                    startupNavController.navigateTo(StartupRoutes.Intro)
                 }
             )
         }
         composableWithDefaultTransitions<StartupRoutes.Intro> {
             IntroScreen(
                 onStartClick = {
-                    startupNavController.navigate(StartupRoutes.Slides())
+                    startupNavController.navigateTo(StartupRoutes.Slides())
                 },
                 onSkipClick = {
-                    startupNavController.navigate(StartupRoutes.Slides(StartupRoutes.LAST_SLIDE_INDEX))
+                    startupNavController.navigateTo(StartupRoutes.Slides(StartupRoutes.LAST_SLIDE_INDEX))
                 },
             )
         }
@@ -257,7 +257,7 @@ private fun OnboardingNav(
             OnboardingSlidesScreen(
                 currentTab = route.tab,
                 isGeoBlocked = isGeoBlocked,
-                onAdvancedSetupClick = { startupNavController.navigate(StartupRoutes.Advanced) },
+                onAdvancedSetupClick = { startupNavController.navigateTo(StartupRoutes.Advanced) },
                 onCreateClick = {
                     scope.launch {
                         runCatching {
@@ -270,7 +270,7 @@ private fun OnboardingNav(
                     }
                 },
                 onRestoreClick = {
-                    startupNavController.navigate(
+                    startupNavController.navigateTo(
                         StartupRoutes.WarningMultipleDevices
                     )
                 },
@@ -282,7 +282,7 @@ private fun OnboardingNav(
                     startupNavController.popBackStack()
                 },
                 onConfirmClick = {
-                    startupNavController.navigate(StartupRoutes.Restore)
+                    startupNavController.navigateTo(StartupRoutes.Restore)
                 }
             )
         }

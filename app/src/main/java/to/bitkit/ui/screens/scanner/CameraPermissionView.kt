@@ -5,14 +5,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -32,7 +30,6 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -62,7 +59,6 @@ fun CameraPermissionView(
 @Composable
 fun DeniedContent(
     shouldShowRationale: Boolean,
-    inSheet: Boolean = false,
     onClickOpenSettings: () -> Unit = {},
     onClickRetry: () -> Unit = {},
     onClickPaste: () -> Unit = {},
@@ -70,14 +66,10 @@ fun DeniedContent(
 ) {
     Column(
         modifier = Modifier
-            .then(if (inSheet) Modifier.gradientBackground() else Modifier.background(Colors.Black))
-            .then(if (inSheet) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
+            .gradientBackground()
+            .navigationBarsPadding()
     ) {
-        if (!inSheet) {
-            AppTopBar(titleText = null, onBack)
-        } else {
-            SheetTopBar(titleText = null, onBack = onBack)
-        }
+        SheetTopBar(titleText = null, onBack = onBack)
 
         Column(
             verticalArrangement = Arrangement.Center,
@@ -163,16 +155,5 @@ fun PreviewRequired() {
 fun PreviewDenied() {
     AppThemeSurface {
         DeniedContent(shouldShowRationale = true)
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable()
-fun PreviewInSheet() {
-    AppThemeSurface {
-        DeniedContent(
-            shouldShowRationale = true,
-            inSheet = true,
-        )
     }
 }

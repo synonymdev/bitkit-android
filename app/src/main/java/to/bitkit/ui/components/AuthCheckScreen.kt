@@ -4,9 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import androidx.navigation.navOptions
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.settingsViewModel
 
 @Composable
@@ -44,10 +44,9 @@ fun AuthCheckScreen(
                 }
 
                 AuthCheckAction.NAV_TO_RESET -> {
-                    navController.navigate(
-                        route = Routes.ResetAndRestoreSettings,
-                        navOptions = navOptions { popUpTo(Routes.BackupSettings) }
-                    )
+                    navController.navigateTo(Routes.ResetAndRestoreSettings) {
+                        popUpTo(Routes.BackupSettings)
+                    }
                 }
             }
         },
