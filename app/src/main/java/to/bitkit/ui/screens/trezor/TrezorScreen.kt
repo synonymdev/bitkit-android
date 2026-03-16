@@ -122,7 +122,7 @@ private fun TrezorScreenContent(
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
-        TrezorContent(
+        Content(
             trezorState = trezorState,
             uiState = uiState,
             onInitialize = viewModel::initialize,
@@ -158,7 +158,7 @@ private fun TrezorScreenContent(
 
 @Suppress("LongParameterList")
 @Composable
-private fun TrezorContent(
+private fun Content(
     trezorState: TrezorState,
     uiState: TrezorUiState,
     onInitialize: () -> Unit = {},
@@ -620,7 +620,7 @@ private fun ActionButtonsRow(
 @Composable
 private fun PreviewNotInitialized() {
     AppThemeSurface {
-        TrezorContent(
+        Content(
             trezorState = TrezorState(),
             uiState = TrezorUiState(),
         )
@@ -631,7 +631,7 @@ private fun PreviewNotInitialized() {
 @Composable
 private fun PreviewInitialized() {
     AppThemeSurface {
-        TrezorContent(
+        Content(
             trezorState = TrezorState(isInitialized = true),
             uiState = TrezorUiState(),
         )
@@ -642,7 +642,7 @@ private fun PreviewInitialized() {
 @Composable
 private fun PreviewWithDevices() {
     AppThemeSurface {
-        TrezorContent(
+        Content(
             trezorState = TrezorState(
                 isInitialized = true,
                 knownDevices = listOf(TrezorPreviewData.sampleKnownDevice),
@@ -658,7 +658,7 @@ private fun PreviewWithDevices() {
 @Composable
 private fun PreviewConnectedWithData() {
     AppThemeSurface {
-        TrezorContent(
+        Content(
             trezorState = TrezorPreviewData.connectedStateWithResults,
             uiState = TrezorPreviewData.uiStateWithSignature,
         )
