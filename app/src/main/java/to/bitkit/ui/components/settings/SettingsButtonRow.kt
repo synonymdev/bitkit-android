@@ -53,7 +53,7 @@ fun SettingsButtonRow(
     val alphaModifier = Modifier.then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
     Column(
         modifier = modifier
-            .clickableAlpha(onClick = if (enabled) onClick else null)
+            .clickableAlpha(enabled = enabled, onClick = onClick)
     ) {
         Column(modifier = alphaModifier) {
             val rowHeight = when {

@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.transfer
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +30,7 @@ import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -85,19 +85,16 @@ fun FundingScreen(
                         onClick = onTransfer,
                         modifier = Modifier.testTag("FundTransfer")
                     )
-                    if (balances.channelFundableBalance == 0uL) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clickable(
-                                    enabled = balances.channelFundableBalance == 0uL,
-                                    interactionSource = null,
-                                    indication = null,
-                                    onClick = { showNoFundsAlert = true }
-                                )
-                                .testTag("FundTransfer")
-                        )
-                    }
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickableAlpha(
+                                pressedAlpha = 1f,
+                                enabled = balances.channelFundableBalance == 0uL,
+                                onClick = { showNoFundsAlert = true },
+                            )
+                            .testTag("FundTransfer")
+                    )
                 }
                 RectangleButton(
                     label = stringResource(R.string.lightning__funding__button2),

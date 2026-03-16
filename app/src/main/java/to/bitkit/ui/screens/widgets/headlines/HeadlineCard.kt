@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.widgets.headlines
 
 import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +33,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -54,7 +54,7 @@ fun HeadlineCard(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
-            .clickable {
+            .clickableAlpha {
                 val intent = Intent(Intent.ACTION_VIEW, link.toUri())
                 context.startActivity(intent)
             }

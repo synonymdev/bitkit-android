@@ -70,6 +70,7 @@ import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -117,7 +118,7 @@ fun ChannelDetailScreen(
         },
         onSupport = { order, channel -> contactSupport(order, channel, uiState.nodeId, context) },
         onCloseConnection = { channelDetailId ->
-            navController.navigate(Routes.CloseConnection(channelId = channelDetailId))
+            navController.navigateTo(Routes.CloseConnection(channelId = channelDetailId))
         },
     )
 }
