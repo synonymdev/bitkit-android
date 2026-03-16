@@ -81,8 +81,8 @@ private const val TAG = "QrScanningScreen"
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
-    onBack: () -> Unit,
     onScanSuccess: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val app = appViewModel ?: return
 
