@@ -27,8 +27,8 @@ private fun Content(
             .sheetHeight()
     ) {
         QrScanningScreen(
-            onBack = onBack,
             onScanSuccess = onScanSuccess,
+            onBack = onBack,
         )
     }
 }
