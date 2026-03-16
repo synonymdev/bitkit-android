@@ -29,6 +29,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.shared.modifiers.alphaFeedback
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
@@ -45,7 +47,7 @@ fun RectangleButton(
     onClick: () -> Unit = {},
 ) {
     Button(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         colors = ButtonDefaults.buttonColors(
             containerColor = Colors.Gray6,
         ),
@@ -54,6 +56,7 @@ fun RectangleButton(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
         modifier = modifier
             .alpha(if (enabled) 1f else 0.5f)
+            .alphaFeedback(enabled = enabled)
             .height(80.dp)
             .fillMaxWidth()
     ) {

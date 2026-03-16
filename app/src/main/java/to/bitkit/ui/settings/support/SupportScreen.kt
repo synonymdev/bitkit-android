@@ -23,6 +23,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.settings.Links
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -37,12 +38,12 @@ fun SupportScreen(
 
     Content(
         onBack = { navController.popBackStack() },
-        onClickReportIssue = { navController.navigate(Routes.ReportIssue) },
+        onClickReportIssue = { navController.navigateTo(Routes.ReportIssue) },
         onClickHelpCenter = {
             val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_HELP_CENTER.toUri())
             context.startActivity(intent)
         },
-        onClickAppStatus = { navController.navigate(Routes.AppStatus) },
+        onClickAppStatus = { navController.navigateTo(Routes.AppStatus) },
     )
 }
 

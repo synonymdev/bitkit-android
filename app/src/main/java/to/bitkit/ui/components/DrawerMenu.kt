@@ -5,8 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +42,7 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.Routes
-import to.bitkit.ui.navigateIfNotCurrent
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -53,6 +50,12 @@ import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
+
+private inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
+    if (currentBackStackEntry?.destination?.hasRoute<T>() != true) {
+        navigateTo(route)
+    }
+}
 
 private const val Z_INDEX_SCRIM = 10f
 private const val Z_INDEX_MENU = 11f
@@ -263,11 +266,7 @@ private fun Scrim(
             modifier = Modifier
                 .fillMaxSize()
                 .background(bgScrim)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick,
-                )
+                .clickableAlpha(pressedAlpha = 1f, onClick = onClick)
         )
     }
 }
@@ -281,13 +280,7 @@ private fun DrawerItem(
 ) {
     Column(
         modifier = modifier
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable { onClick() }
-                } else {
-                    Modifier
-                }
-            )
+            .clickableAlpha(onClick = onClick)
             .padding(horizontal = 16.dp)
     ) {
         VerticalSpacer(16.dp)

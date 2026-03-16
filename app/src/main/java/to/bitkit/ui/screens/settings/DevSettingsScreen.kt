@@ -21,6 +21,7 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -49,14 +50,14 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SettingsButtonRow("Fee Settings") { navController.navigate(Routes.FeeSettings) }
-            SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
-            SettingsButtonRow("LDK") { navController.navigate(Routes.LdkDebug) }
-            SettingsButtonRow("VSS") { navController.navigate(Routes.VssDebug) }
-            SettingsButtonRow("Probing Tool") { navController.navigate(Routes.ProbingTool) }
+            SettingsButtonRow("Fee Settings") { navController.navigateTo(Routes.FeeSettings) }
+            SettingsButtonRow("Channel Orders") { navController.navigateTo(Routes.ChannelOrdersSettings) }
+            SettingsButtonRow("LDK") { navController.navigateTo(Routes.LdkDebug) }
+            SettingsButtonRow("VSS") { navController.navigateTo(Routes.VssDebug) }
+            SettingsButtonRow("Probing Tool") { navController.navigateTo(Routes.ProbingTool) }
 
             SectionHeader("LOGS")
-            SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
+            SettingsButtonRow("Logs") { navController.navigateTo(Routes.Logs) }
             SettingsTextButtonRow(
                 title = "Export Logs",
                 onClick = {
@@ -71,7 +72,7 @@ fun DevSettingsScreen(
             if (Env.network == Network.REGTEST) {
                 SectionHeader("REGTEST")
 
-                SettingsButtonRow("Blocktank Regtest") { navController.navigate(Routes.RegtestSettings) }
+                SettingsButtonRow("Blocktank Regtest") { navController.navigateTo(Routes.RegtestSettings) }
             }
 
             SectionHeader("APP CACHE")

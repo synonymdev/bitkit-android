@@ -194,6 +194,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS use `remember` for expensive Compose computations
 - ALWAYS add modifiers to the last place in the argument list when calling composable functions
 - NEVER add parameters with default values BEFORE the `modifier` parameter in composable functions - modifier must be the FIRST optional parameter
+- ALWAYS use `navController.navigateTo(route)` for simple navigation; NEVER use raw `navController.navigate(route)` — `navigateTo` prevents duplicate destinations
 - ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
 - ALWAYS create data classes for state AFTER viewModel class in same file
