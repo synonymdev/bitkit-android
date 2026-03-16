@@ -591,16 +591,15 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun connectWithThpRetry(deviceId: String): TrezorFeatures {
         TrezorDebugLog.log("THPRetry", "First connect attempt for: $deviceId")
         logCredentialFileState(deviceId, "BEFORE 1st attempt")
-        return try {
-            val result = trezorService.connect(deviceId)
+        return runCatching {
+            trezorService.connect(deviceId)
+        }.onSuccess {
             logCredentialFileState(deviceId, "AFTER 1st attempt (success)")
             TrezorDebugLog.log("THPRetry", "First attempt succeeded")
-            result
-        } catch (e: Exception) {
+        }.getOrElse { e ->
             logCredentialFileState(deviceId, "AFTER 1st attempt (failed)")
             TrezorDebugLog.log("THPRetry", "First attempt failed: ${e.message}")
             if (!isRetryableError(e)) {
@@ -626,7 +625,7 @@ class TrezorRepo @Inject constructor(
         TrezorDebugLog.log("CRED", "$label: file=$sanitizedId.json exists=$exists size=$size")
     }
 
-    private fun isRetryableError(e: Exception): Boolean {
+    private fun isRetryableError(e: Throwable): Boolean {
         val msg = e.message?.lowercase() ?: return false
         return "thp" in msg || "session" in msg || "timeout" in msg || "disconnect" in msg
     }
