@@ -607,7 +607,7 @@ class TrezorRepo @Inject constructor(
                 throw e
             }
             TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
-            Logger.warn("Connection failed for '$deviceId', retrying", e, context = TAG)
+            Logger.warn("Connection failed for $deviceId, retrying", e, context = TAG)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
             val result = trezorService.connect(deviceId)
             logCredentialFileState(deviceId, "AFTER 2nd attempt (success)")
