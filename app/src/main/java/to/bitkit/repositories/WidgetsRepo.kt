@@ -7,17 +7,24 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.dto.ArticleDTO
+import to.bitkit.data.dto.BlockDTO
+import to.bitkit.data.dto.WeatherDTO
+import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.widgets.BlocksService
 import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
@@ -53,14 +60,30 @@ class WidgetsRepo @Inject constructor(
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val widgetJobs = ConcurrentHashMap<WidgetType, Job>()
 
-    val widgetsDataFlow = widgetsStore.data
+    val widgetsDataFlow: StateFlow<WidgetsData> = widgetsStore.data
+        .stateIn(repoScope, SharingStarted.Eagerly, WidgetsData())
+
     val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
 
-    val articlesFlow = widgetsStore.articlesFlow
-    val factsFlow = widgetsStore.factsFlow
-    val blocksFlow = widgetsStore.blocksFlow
-    val weatherFlow = widgetsStore.weatherFlow
-    val priceFlow = widgetsStore.priceFlow
+    val articlesFlow: StateFlow<List<ArticleDTO>> = widgetsDataFlow
+        .map { it.articles }
+        .stateIn(repoScope, SharingStarted.Eagerly, emptyList())
+
+    val factsFlow: StateFlow<List<String>> = widgetsDataFlow
+        .map { it.facts }
+        .stateIn(repoScope, SharingStarted.Eagerly, emptyList())
+
+    val blocksFlow: StateFlow<BlockDTO?> = widgetsDataFlow
+        .map { it.block }
+        .stateIn(repoScope, SharingStarted.Eagerly, null)
+
+    val weatherFlow: StateFlow<WeatherDTO?> = widgetsDataFlow
+        .map { it.weather }
+        .stateIn(repoScope, SharingStarted.Eagerly, null)
+
+    val priceFlow: StateFlow<PriceDTO?> = widgetsDataFlow
+        .map { it.price }
+        .stateIn(repoScope, SharingStarted.Eagerly, null)
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }

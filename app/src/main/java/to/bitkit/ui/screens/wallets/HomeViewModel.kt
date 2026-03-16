@@ -68,15 +68,13 @@ class HomeViewModel @Inject constructor(
     private fun setupStateObservation() {
         viewModelScope.launch {
             combine(
-                createSuggestionsFlow(),
                 settingsStore.data,
                 widgetsRepo.widgetsDataFlow,
                 _currentArticle,
                 _currentFact,
-            ) { suggestions, settings, widgetsData, currentArticle, currentFact ->
+            ) { settings, widgetsData, currentArticle, currentFact ->
                 _uiState.update {
                     it.copy(
-                        suggestions = suggestions,
                         showWidgets = settings.showWidgets,
                         showWidgetTitles = settings.showWidgetTitles,
                         widgetsWithPosition = if (it.isEditingWidgets &&
@@ -101,6 +99,12 @@ class HomeViewModel @Inject constructor(
                     )
                 }
             }.collect()
+        }
+
+        viewModelScope.launch {
+            createSuggestionsFlow().collect { suggestions ->
+                _uiState.update { it.copy(suggestions = suggestions) }
+            }
         }
 
         @OptIn(ExperimentalCoroutinesApi::class)
