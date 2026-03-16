@@ -324,10 +324,7 @@
     <string name="other__buy_button">Escolher Corretora</string>
     <string name="other__buy_header">Compre\n&lt;accent&gt;Bitcoin&lt;/accent&gt;</string>
     <string name="other__buy_text">Não possui Bitcoin ou deseja comprar mais?</string>
-    <string name="other__camera_ask_msg">Bitkit precisa de permissão para usar a câmera</string>
-    <string name="other__camera_ask_title">Permissão para usar a câmera</string>
     <string name="other__camera_init_error">Falha ao inicializar câmera: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Parece que a Bitkit não tem permissão para acessar sua câmera.&lt;/bold&gt;\n\n\nPara utilizar este recurso no futuro, você precisará ativar as permissões da câmera para este aplicativo nas configurações do seu telefone.</string>
     <string name="other__camera_permission_button">Ativar câmera</string>
     <string name="other__camera_permission_description">Permita acesso à câmera para escanear invoices bitcoin e pagar mais rapidamente.</string>
     <string name="other__camera_permission_title">ESCANEAR\n&lt;accent&gt;QR CODE&lt;/accent&gt;</string>
@@ -390,7 +387,6 @@
     <string name="other__pay_insufficient_savings_description">Você precisa de mais bitcoin para pagar este invoice</string>
     <string name="other__pay_insufficient_spending">Saldo de Gastos Insuficiente</string>
     <string name="other__pay_insufficient_spending_amount_description">Você precisa de mais ₿ {amount} para pagar este invoice</string>
-    <string name="other__phone_settings">Abrir as configurações do telefone</string>
     <string name="other__qr_error_header">Incapaz de Ler o QR</string>
     <string name="other__qr_error_network_header">Rede Incorreta</string>
     <string name="other__qr_error_network_text">A Bitkit está atualmente configurada para {selectedNetwork} mas os dados são para {dataNetwork}.</string>

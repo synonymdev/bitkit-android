@@ -343,10 +343,7 @@
     <string name="other__update_critical_title">Aktualizuj\n&lt;accent&gt;Bitkit teraz&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Pojawiła się krytyczna aktualizacja dla Bitkit. Proszę dokonać aktualizacji, aby kontynuować korzystanie z aplikacji.</string>
     <string name="other__update_critical_button">Aktualizuj Bitkit</string>
-    <string name="other__camera_ask_title">Zezwolenie na korzystanie z kamery</string>
-    <string name="other__camera_ask_msg">Bitkit potrzebuje pozwolenia na używanie Twojej kamery</string>
     <string name="other__camera_init_error">Nie udało się zainicjować kamery: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Wygląda na to, że Bitkit nie ma uprawnień dostępu do kamery.&lt;/bold&gt;\n\nAby korzystać z tej funkcji w przyszłości, należy włączyć uprawnienia kamery dla tej aplikacji w ustawieniach telefonu.</string>
     <string name="other__camera_permission_button">Włącz kamerę</string>
     <string name="other__camera_permission_description">Zezwól na dostęp do kamery, aby skanować faktury Bitcoin i płacić szybciej.</string>
     <string name="other__camera_permission_title">SKANUJ\n&lt;accent&gt;KOD QR&lt;/accent&gt;</string>
@@ -388,7 +385,6 @@
     <string name="other__lnurl_withdr_error_minmax">Nieprawidłowe parametry wypłaty LNURL, wartości min/max nie zostały poprawnie ustawione.</string>
     <string name="other__lnurl_withdr_success_title">Złożono żądanie wypłaty</string>
     <string name="other__lnurl_withdr_success_msg">Wypłata została pomyślnie zlecona. Oczekiwanie na płatność.</string>
-    <string name="other__phone_settings">Otwórz ustawienia telefonu</string>
     <string name="other__logs_export_error">Nie udało się utworzyć pliku zip z logami</string>
     <string name="other__node_error_starting">Błąd uruchamiania: %1$s</string>
     <string name="other__node_initializing">Konfigurowanie portfela…</string>
