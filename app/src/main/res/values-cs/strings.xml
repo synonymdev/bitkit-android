@@ -324,10 +324,7 @@
     <string name="other__buy_button">Zvolte si burzu</string>
     <string name="other__buy_header">Kupte nějaké\n&lt;accent&gt;bitcoiny&lt;/accent&gt;</string>
     <string name="other__buy_text">Nemáte žádné bitcoiny nebo jich potřebujete více?</string>
-    <string name="other__camera_ask_msg">Bitkit potřebuje povolení k použití vaší kamery</string>
-    <string name="other__camera_ask_title">Povolení používat kameru</string>
     <string name="other__camera_init_error">Nepodařilo se inicializovat fotoaparát: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Zdá se, že Bitkit nemá oprávnění k přístupu k vašemu fotoaparátu.&lt;/bold&gt;\n\nChcete-li tuto funkci v budoucnu využívat, budete muset v nastavení telefonu povolit oprávnění k fotoaparátu pro tuto aplikaci.</string>
     <string name="other__camera_permission_button">Povolit fotoaparát</string>
     <string name="other__camera_permission_description">Povolte přístup k fotoaparátu pro skenování bitcoinových faktur a rychlejší platby.</string>
     <string name="other__camera_permission_title">SKENOVAT\n<accent>QR KÓD</accent></string>
@@ -390,7 +387,6 @@
     <string name="other__pay_insufficient_savings_description">K zaplacení této bitcoinové faktury je potřeba více ₿.</string>
     <string name="other__pay_insufficient_spending">Nedostatečný disponibilní zůstatek</string>
     <string name="other__pay_insufficient_spending_amount_description">Potřeba ₿ {amount} více k zaplacení této lightningové faktury.</string>
-    <string name="other__phone_settings">Otevřít nastavení telefonu</string>
     <string name="other__qr_error_header">Nelze přečíst QR</string>
     <string name="other__qr_error_network_header">Nesprávná síť</string>
     <string name="other__qr_error_network_text">Bitkit je aktuálně nastaven na {selectedNetwork}, ale data jsou pro {dataNetwork}.</string>
