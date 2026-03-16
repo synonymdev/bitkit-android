@@ -5,6 +5,7 @@ import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 import to.bitkit.BuildConfig.VERSION_NAME
 import to.bitkit.ext.ensureDir
 import to.bitkit.ext.of
@@ -154,6 +155,17 @@ internal object Env {
             Network.BITCOIN -> "https://blocktank.synonym.to/backups-ldk"
             else -> "https://bitkit.stag0.blocktank.to/backups-ldk"
         }
+
+    fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {
+        val isE2eLocal = isE2eTest && e2eBackend == "local"
+        return when (network) {
+            BitkitCoreNetwork.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
+            BitkitCoreNetwork.TESTNET, BitkitCoreNetwork.TESTNET4, BitkitCoreNetwork.SIGNET ->
+                ElectrumServers.TESTNET
+            BitkitCoreNetwork.REGTEST ->
+                if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+        }
+    }
 
     // endregion
 

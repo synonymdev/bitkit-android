@@ -532,19 +532,14 @@ class TrezorRepo @Inject constructor(
         else -> network
     }
 
-    private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = when (network) {
-        BitkitCoreNetwork.BITCOIN -> "ssl://bitkit.to:9999"
-        BitkitCoreNetwork.TESTNET -> "ssl://electrum.blockstream.info:60002"
-        BitkitCoreNetwork.TESTNET4 -> "ssl://electrum.blockstream.info:60002"
-        BitkitCoreNetwork.REGTEST -> "ssl://electrs.bitkit.stag0.blocktank.to:9999"
-        BitkitCoreNetwork.SIGNET -> "ssl://electrum.blockstream.info:60002"
-    }
+    private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String =
+        Env.electrumUrlForNetwork(network)
 
     private fun electrumUrlForNetwork(network: TrezorCoinType): String = when (network) {
-        TrezorCoinType.BITCOIN -> "ssl://bitkit.to:9999"
-        TrezorCoinType.TESTNET -> "ssl://electrum.blockstream.info:60002"
-        TrezorCoinType.REGTEST -> "ssl://electrs.bitkit.stag0.blocktank.to:9999"
-        TrezorCoinType.SIGNET -> "ssl://electrum.blockstream.info:60002"
+        TrezorCoinType.BITCOIN -> Env.electrumUrlForNetwork(BitkitCoreNetwork.BITCOIN)
+        TrezorCoinType.TESTNET -> Env.electrumUrlForNetwork(BitkitCoreNetwork.TESTNET)
+        TrezorCoinType.REGTEST -> Env.electrumUrlForNetwork(BitkitCoreNetwork.REGTEST)
+        TrezorCoinType.SIGNET -> Env.electrumUrlForNetwork(BitkitCoreNetwork.SIGNET)
     }
 
     private suspend fun ensureConnected() {
