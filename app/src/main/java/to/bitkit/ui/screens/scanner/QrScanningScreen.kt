@@ -51,7 +51,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
-import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -61,7 +60,6 @@ import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
-import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
@@ -180,27 +178,22 @@ fun QrScanningScreen(
         }
     }
 
-    CameraPermissionView(
-        permissionState = cameraPermissionState,
-        deniedContent = {
-            DeniedContent(
-                shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
-                onClickOpenSettings = {
-                    context.startActivityAppSettings()
-                },
-                onClickRetry = cameraPermissionState::launchPermissionRequest,
-                onClickPaste = handlePaste(context, app, setScanResult),
-                onBack = onBack,
-            )
-        },
-        grantedContent = {
-            Column(
-                modifier = Modifier
-                    .gradientBackground()
-                    .navigationBarsPadding()
-            ) {
-                SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
+    Column(
+        modifier = Modifier
+            .gradientBackground()
+            .navigationBarsPadding()
+    ) {
+        SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
 
+        CameraPermissionView(
+            permissionState = cameraPermissionState,
+            deniedContent = {
+                DeniedContent(
+                    onClickRetry = cameraPermissionState::launchPermissionRequest,
+                    onClickPaste = handlePaste(context, app, setScanResult),
+                )
+            },
+            grantedContent = {
                 Content(
                     previewView = previewView,
                     onClickFlashlight = {
@@ -218,8 +211,8 @@ fun QrScanningScreen(
                     onSubmitDebug = setScanResult,
                 )
             }
-        }
-    )
+        )
+    }
 }
 
 @Composable
