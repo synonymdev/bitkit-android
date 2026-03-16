@@ -1638,24 +1638,6 @@ sealed interface Routes {
     data object Trezor : Routes
 
     @Serializable
-    data object SweepNav : Routes
-
-    @Serializable
-    data object Sweep : Routes
-
-    @Serializable
-    data object SweepConfirm : Routes
-
-    @Serializable
-    data object SweepFeeRate : Routes
-
-    @Serializable
-    data object SweepFeeCustom : Routes
-
-    @Serializable
-    data class SweepSuccess(val amountSats: Long) : Routes
-
-    @Serializable
     data object AboutSettings : Routes
 
     @Serializable
