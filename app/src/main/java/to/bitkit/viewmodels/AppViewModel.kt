@@ -88,6 +88,7 @@ import to.bitkit.models.FeeRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -957,9 +958,17 @@ class AppViewModel @Inject constructor(
                     }
                     val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                     if (!canSend) {
+                        val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
+                        if (nodeState is NodeLifecycleState.Stopped) {
+                            Logger.debug(
+                                "Node stopped, optimistically including LN invoice in unified QR",
+                                context = TAG,
+                            )
+                            return@takeIf true
+                        }
                         Logger.debug(
                             "Cannot pay unified invoice using LN, defaulting to onchain-only",
-                            context = TAG
+                            context = TAG,
                         )
                     }
                     return@takeIf canSend
@@ -2109,9 +2118,12 @@ class AppViewModel @Inject constructor(
         scanResultHandler = null
         hideSheet()
         if (handler != null) {
-            handler(data)
+            viewModelScope.launch {
+                delay(SCREEN_TRANSITION_DELAY_MS)
+                handler(data)
+            }
         } else {
-            onScanResult(data)
+            onScanResult(data, delayMs = SCREEN_TRANSITION_DELAY_MS)
         }
     }
 
