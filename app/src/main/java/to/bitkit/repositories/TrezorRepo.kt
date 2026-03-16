@@ -32,8 +32,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import to.bitkit.data.TrezorStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.models.toCoreNetwork
@@ -53,20 +52,14 @@ class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trezorService: TrezorService,
     private val trezorTransport: TrezorTransport,
+    private val trezorStore: TrezorStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
         private const val TAG = "TrezorRepo"
-        private const val KEY_KNOWN_DEVICES = "known_devices"
         private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
         private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
     }
-
-    private val prefs by lazy {
-        context.getSharedPreferences("trezor_device", Context.MODE_PRIVATE)
-    }
-
-    private val json = Json { ignoreUnknownKeys = true }
 
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
@@ -495,7 +488,7 @@ class TrezorRepo @Inject constructor(
         }.launchIn(scope)
     }
 
-    private fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
+    private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
         val existing = _state.value.knownDevices
         val known = KnownDevice(
             id = deviceInfo.id,
@@ -514,16 +507,15 @@ class TrezorRepo @Inject constructor(
         _state.update { it.copy(knownDevices = updated) }
     }
 
-    private fun loadKnownDevices(): List<KnownDevice> = runCatching {
-        val str = prefs.getString(KEY_KNOWN_DEVICES, null) ?: return emptyList()
-        json.decodeFromString<List<KnownDevice>>(str)
+    private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
+        trezorStore.loadKnownDevices()
     }.onFailure {
         Logger.error("Failed to load known devices", it, context = TAG)
     }.getOrDefault(emptyList())
 
-    private fun saveKnownDevices(devices: List<KnownDevice>) {
+    private suspend fun saveKnownDevices(devices: List<KnownDevice>) {
         runCatching {
-            prefs.edit().putString(KEY_KNOWN_DEVICES, json.encodeToString(devices)).apply()
+            trezorStore.saveKnownDevices(devices)
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
