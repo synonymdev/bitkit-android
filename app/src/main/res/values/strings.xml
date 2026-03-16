@@ -331,10 +331,7 @@
     <string name="other__buy_button">Choose Exchange</string>
     <string name="other__buy_header">Buy some\n&lt;accent&gt;Bitcoin&lt;/accent&gt;</string>
     <string name="other__buy_text">Don’t have any Bitcoin or need more?</string>
-    <string name="other__camera_ask_msg">Bitkit needs permission to use your camera</string>
-    <string name="other__camera_ask_title">Permission to use camera</string>
     <string name="other__camera_init_error">Failed to initialize camera: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;It appears Bitkit does not have permission to access your camera.&lt;/bold&gt;\n\nTo utilize this feature in the future you will need to enable camera permissions for this app from your phone\'s settings.</string>
     <string name="other__camera_permission_button">Enable camera</string>
     <string name="other__camera_permission_description">Allow camera access to scan bitcoin invoices and pay more quickly.</string>
     <string name="other__camera_permission_title">SCAN\n&lt;accent&gt;QR CODE&lt;/accent&gt;</string>
@@ -397,7 +394,6 @@
     <string name="other__pay_insufficient_savings_description">More ₿ needed to pay this Bitcoin invoice.</string>
     <string name="other__pay_insufficient_spending">Insufficient Spending Balance</string>
     <string name="other__pay_insufficient_spending_amount_description">₿ {amount} more needed to pay this Lightning invoice.</string>
-    <string name="other__phone_settings">Open Phone Settings</string>
     <string name="other__qr_error_header">Unable To Read QR</string>
     <string name="other__qr_error_network_header">Incorrect Network</string>
     <string name="other__qr_error_network_text">Bitkit is currently set to {selectedNetwork} but data is for {dataNetwork}.</string>

@@ -337,10 +337,7 @@
     <string name="other__buy_button">Выбрать Биржу</string>
     <string name="other__buy_header">Купите немного\n&lt;accent&gt;Биткойнов&lt;/accent&gt;</string>
     <string name="other__buy_text">У вас нет биткойнов или нужно больше?</string>
-    <string name="other__camera_ask_msg">Bitkit требуется разрешение на использование вашей камеры</string>
-    <string name="other__camera_ask_title">Разрешение на Использование Камеры</string>
     <string name="other__camera_init_error">Не удалось инициализировать камеру: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Похоже, что Bitkit не имеет разрешения на доступ к вашей камере.&lt;/bold&gt;\n\nЧтобы использовать эту функцию в будущем, вам нужно будет включить разрешение для камеры для этого приложения в настройках вашего телефона.</string>
     <string name="other__camera_permission_button">Включить камеру</string>
     <string name="other__camera_permission_description">Разрешите доступ к камере для сканирования биткоин-счетов и более быстрой оплаты.</string>
     <string name="other__camera_permission_title">СКАНИРОВАТЬ
@@ -404,7 +401,6 @@
     <string name="other__pay_insufficient_savings_description">Для оплаты этого биткойн-счёта нужно больше ₿.</string>
     <string name="other__pay_insufficient_spending">Недостаточно Средств на Балансе Расходов</string>
     <string name="other__pay_insufficient_spending_amount_description">Для оплаты этого Лайтнинг-счёта нужно ещё ₿ {amount}.</string>
-    <string name="other__phone_settings">Открыть Настройки Телефона</string>
     <string name="other__qr_error_header">Не удалось прочитать QR-код</string>
     <string name="other__qr_error_network_header">Неправильная Сеть</string>
     <string name="other__qr_error_network_text">В настройках Bitkit в данный момент выбрана {selectedNetwork}, а данные предназначены для {dataNetwork}.</string>
