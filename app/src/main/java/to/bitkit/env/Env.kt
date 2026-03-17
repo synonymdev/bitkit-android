@@ -150,11 +150,13 @@ internal object Env {
     const val BITREFILL_REF = "AL6dyZYt"
 
     val pubkyCapabilities: String
-        get() = when (network) {
-            Network.BITCOIN ->
-                "/pub/paykit.app/v0/:rw,/pub/pubky.app/profile.json:rw,/pub/pubky.app/follows/:rw"
-            else ->
-                "/pub/staging.paykit.app/v0/:rw,/pub/staging.pubky.app/profile.json:rw,/pub/pubky.app/follows/:rw"
+        get() {
+            val prefix = when (network) {
+                Network.BITCOIN -> ""
+                else -> "staging."
+            }
+            return "/pub/${prefix}paykit.app/v0/:rw," +
+                "/pub/${prefix}pubky.app/profile.json:rw,/pub/${prefix}pubky.app/follows/:rw"
         }
 
     val rnBackupServerHost: String

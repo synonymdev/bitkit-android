@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.profile
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,10 +14,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,9 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -40,14 +35,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.Headline
+import to.bitkit.ui.components.LinkRow
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
@@ -187,11 +184,11 @@ private fun ProfileBody(
         VerticalSpacer(24.dp)
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ActionButton(iconRes = R.drawable.ic_copy, onClick = onClickCopy)
-            ActionButton(iconRes = R.drawable.ic_share, onClick = onClickShare)
+            ActionButton(onClick = onClickCopy, iconRes = R.drawable.ic_copy)
+            ActionButton(onClick = onClickShare, iconRes = R.drawable.ic_share)
             ActionButton(
-                imageVector = Icons.AutoMirrored.Filled.Logout,
                 onClick = onClickSignOut,
+                imageVector = Icons.AutoMirrored.Filled.Logout,
                 enabled = !isSigningOut,
             )
         }
@@ -229,56 +226,7 @@ private fun ProfileBody(
 
         VerticalSpacer(32.dp)
 
-        profile.links.forEach { ProfileLinkRow(label = it.label, value = it.url) }
-    }
-}
-
-@Composable
-private fun ActionButton(
-    iconRes: Int? = null,
-    imageVector: ImageVector? = null,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-) {
-    IconButton(
-        onClick = rememberDebouncedClick(onClick = onClick),
-        enabled = enabled,
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(
-                Brush.verticalGradient(listOf(Colors.Gray5, Colors.Gray6)),
-                CircleShape,
-            )
-            .border(1.dp, Colors.White10, CircleShape)
-    ) {
-        val tint = if (enabled) Colors.White else Colors.White32
-        when {
-            iconRes != null -> Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(24.dp)
-            )
-            imageVector != null -> Icon(
-                imageVector = imageVector,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProfileLinkRow(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        VerticalSpacer(16.dp)
-        Text13Up(text = label, color = Colors.White64)
-        VerticalSpacer(8.dp)
-        BodySSB(text = value)
-        VerticalSpacer(16.dp)
-        HorizontalDivider()
+        profile.links.forEach { LinkRow(label = it.label, value = it.url) }
     }
 }
 
@@ -288,7 +236,7 @@ private fun LoadingState() {
         contentAlignment = Alignment.Center,
         modifier = Modifier.fillMaxSize()
     ) {
-        CircularProgressIndicator(color = Colors.White32)
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
     }
 }
 

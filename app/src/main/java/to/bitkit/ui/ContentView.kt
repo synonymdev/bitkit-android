@@ -922,6 +922,7 @@ private fun NavGraphBuilder.contacts(
         ContactsScreen(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
+            onClickMyProfile = { navController.navigateTo(Routes.Profile) },
             onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
         )
     }

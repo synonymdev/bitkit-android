@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.contacts
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,16 +12,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -33,17 +29,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.Headline
+import to.bitkit.ui.components.LinkRow
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -149,8 +146,8 @@ private fun ContactBody(
         VerticalSpacer(24.dp)
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ActionButton(iconRes = R.drawable.ic_copy, onClick = onClickCopy)
-            ActionButton(iconRes = R.drawable.ic_share, onClick = onClickShare)
+            ActionButton(onClick = onClickCopy, iconRes = R.drawable.ic_copy)
+            ActionButton(onClick = onClickShare, iconRes = R.drawable.ic_share)
         }
 
         VerticalSpacer(32.dp)
@@ -160,49 +157,12 @@ private fun ContactBody(
 }
 
 @Composable
-private fun ActionButton(
-    iconRes: Int,
-    onClick: () -> Unit,
-) {
-    IconButton(
-        onClick = rememberDebouncedClick(onClick = onClick),
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(
-                Brush.verticalGradient(listOf(Colors.Gray5, Colors.Gray6)),
-                CircleShape,
-            )
-            .border(1.dp, Colors.White10, CircleShape)
-    ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            tint = Colors.White,
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}
-
-@Composable
-private fun LinkRow(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        VerticalSpacer(16.dp)
-        Text13Up(text = label, color = Colors.White64)
-        VerticalSpacer(8.dp)
-        BodySSB(text = value)
-        VerticalSpacer(16.dp)
-        HorizontalDivider()
-    }
-}
-
-@Composable
 private fun LoadingState() {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier.fillMaxSize()
     ) {
-        CircularProgressIndicator(color = Colors.White32)
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
     }
 }
 

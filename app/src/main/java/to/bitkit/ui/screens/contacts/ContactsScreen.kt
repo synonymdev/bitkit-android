@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +28,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.Text13Up
@@ -44,6 +44,7 @@ import to.bitkit.ui.theme.Colors
 fun ContactsScreen(
     viewModel: ContactsViewModel,
     onBackClick: () -> Unit,
+    onClickMyProfile: () -> Unit,
     onClickContact: (String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -53,6 +54,7 @@ fun ContactsScreen(
     Content(
         uiState = uiState,
         onBackClick = onBackClick,
+        onClickMyProfile = onClickMyProfile,
         onClickContact = onClickContact,
         onSearchTextChange = { viewModel.onSearchTextChange(it) },
     )
@@ -62,6 +64,7 @@ fun ContactsScreen(
 private fun Content(
     uiState: ContactsUiState,
     onBackClick: () -> Unit,
+    onClickMyProfile: () -> Unit,
     onClickContact: (String) -> Unit,
     onSearchTextChange: (String) -> Unit,
 ) {
@@ -87,6 +90,7 @@ private fun Content(
                 groupedContacts = uiState.groupedContacts,
                 myProfile = uiState.myProfile,
                 showMyProfile = uiState.searchText.isBlank(),
+                onClickMyProfile = onClickMyProfile,
                 onClickContact = onClickContact,
             )
         }
@@ -98,6 +102,7 @@ private fun ContactsList(
     groupedContacts: Map<Char, List<PubkyProfile>>,
     myProfile: PubkyProfile?,
     showMyProfile: Boolean,
+    onClickMyProfile: () -> Unit,
     onClickContact: (String) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -110,7 +115,7 @@ private fun ContactsList(
                 )
                 ContactRow(
                     profile = myProfile,
-                    onClick = { onClickContact(myProfile.publicKey) },
+                    onClick = onClickMyProfile,
                 )
                 HorizontalDivider()
             }
@@ -191,7 +196,7 @@ private fun LoadingState() {
         contentAlignment = Alignment.Center,
         modifier = Modifier.fillMaxSize()
     ) {
-        CircularProgressIndicator(color = Colors.White32)
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
     }
 }
 
@@ -224,6 +229,7 @@ private fun Preview() {
                 myProfile = PubkyProfile("pk0", "Satoshi Nakamoto", "", null, emptyList(), null),
             ),
             onBackClick = {},
+            onClickMyProfile = {},
             onClickContact = {},
             onSearchTextChange = {},
         )
