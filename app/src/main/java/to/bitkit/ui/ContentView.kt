@@ -264,6 +264,7 @@ fun ContentView(
                 } else {
                     navController.navigateTo(it.route)
                 }
+
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
                     if (!isOnHome) {
@@ -800,7 +801,7 @@ private fun NavGraphBuilder.home(
         SavingsWalletScreen(
             isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities.orEmpty(),
-            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
             onTransferToSpendingClick = {
@@ -822,7 +823,7 @@ private fun NavGraphBuilder.home(
         SpendingWalletScreen(
             channels = lightningState.channels,
             lightningActivities = lightningActivities.orEmpty(),
-            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
             onTransferToSavingsClick = {
@@ -1496,7 +1497,10 @@ fun NavController.navigateToHome() {
     }
 }
 
-fun NavController.navigateToAllActivity() = navigateTo(Routes.AllActivity)
+fun NavController.navigateToAllActivity(onClearFilters: () -> Unit) {
+    onClearFilters()
+    navigateTo(Routes.AllActivity)
+}
 
 /**
  * Navigates to [route] with [launchSingleTop] always enabled to prevent

@@ -297,7 +297,7 @@ fun HomeScreen(
         onDismissWidgetsOnboardingHint = homeViewModel::dismissWidgetsOnboardingHint,
         onNavigateToAppStatus = { rootNavController.navigate(Routes.AppStatus) },
         onNavigateToSettingUp = { rootNavController.navigate(Routes.SettingUp) },
-        onNavigateToAllActivity = { rootNavController.navigateToAllActivity() },
+        onNavigateToAllActivity = { rootNavController.navigateToAllActivity(activityListViewModel::clearFilters) },
         onNavigateToActivityItem = { rootNavController.navigateToActivityItem(it) },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },

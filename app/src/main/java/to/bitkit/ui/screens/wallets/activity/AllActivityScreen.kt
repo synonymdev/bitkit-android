@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -50,10 +49,6 @@ fun AllActivityScreen(
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val tabs = ActivityTab.entries
     val currentTabIndex = tabs.indexOf(selectedTab)
-
-    DisposableEffect(Unit) {
-        onDispose { viewModel.clearFilters() }
-    }
 
     AllActivityScreenContent(
         filteredActivities = filteredActivities,
