@@ -352,10 +352,7 @@
     <string name="other__update_critical_title">Aktualisiere\n&lt;accent&gt;Bitkit jetzt&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Es gibt ein kritisches Update für Bitkit. Du musst aktualisieren, um Bitkit weiterhin zu verwenden.</string>
     <string name="other__update_critical_button">Bitkit aktualisieren</string>
-    <string name="other__camera_ask_title">Erlaubnis für Kamera</string>
-    <string name="other__camera_ask_msg">Bitkit benötigt die Erlaubnis, deine Kamera zu verwenden</string>
     <string name="other__camera_init_error">Kamera konnte nicht initialisiert werden: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Anscheinend hat Bitkit keine Erlaubnis, auf deine Kamera zuzugreifen.&lt;/bold&gt;\n\nUm diese Funktion in Zukunft nutzen zu können, musst du die Kameraberechtigungen für diese App in den Einstellungen deines Telefons aktivieren.</string>
     <string name="other__camera_permission_button">Kamera aktivieren</string>
     <string name="other__camera_permission_description">Erlaube Kamerazugriff, um Bitcoin-Rechnungen zu scannen und schneller zu bezahlen.</string>
     <string name="other__camera_permission_title">QR-CODE\n&lt;accent&gt;SCANNEN&lt;/accent&gt;</string>
@@ -396,7 +393,6 @@
     <string name="other__lnurl_withdr_error_minmax">Falsche LNURL-Abhebungsparameter, Min/Max nicht korrekt eingestellt.</string>
     <string name="other__lnurl_withdr_success_title">Abhebung angefordert</string>
     <string name="other__lnurl_withdr_success_msg">Ihre Abhebung wurde erfolgreich beantragt. Ich warte auf die Zahlung.</string>
-    <string name="other__phone_settings">Telefoneinstellungen öffnen</string>
     <string name="other__logs_export_error">Fehler beim Erstellen der Log-Zip-Datei</string>
     <string name="other__node_error_starting">Fehler beim Starten: %1$s</string>
     <string name="other__node_initializing">Wallet wird eingerichtet...</string>

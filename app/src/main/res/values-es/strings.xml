@@ -340,9 +340,6 @@
     <string name="other__update_critical_title">Actualice\n&lt;accent&gt;Bitkit ahora&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Hay una actualización crítica de Bitkit. Debes actualizar para continuar usando Bitkit.</string>
     <string name="other__update_critical_button">Actualizar Bitkit</string>
-    <string name="other__camera_ask_title">Permiso para utilizar la cámara</string>
-    <string name="other__camera_ask_msg">Bitkit necesita permiso para utilizar su cámara</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Parece que Bitkit no tiene permiso para acceder a su cámara.&lt;/bold&gt;\n\nPara utilizar esta función en el futuro, necesitará activar los permisos para usar la cámara desde esta aplicación en los ajustes de su teléfono.</string>
     <string name="other__clipboard_redirect_title">Datos en el Portapapeles Detectados</string>
     <string name="other__clipboard_redirect_msg">¿Quiere ser redirigido a la pantalla relevante?</string>
     <string name="other__pay_insufficient_savings">Ahorros Insuficientes</string>
@@ -361,7 +358,6 @@
     <string name="other__lnurl_channel_port">Puerto</string>
     <string name="other__lnurl_channel_success_msg_no_peer">Canal solicitado con éxito.</string>
     <string name="other__lnurl_withdr_success_title">Retirada solicitada</string>
-    <string name="other__phone_settings">Abrir Ajustes del Teléfono</string>
     <string name="other__camera_init_error">Error al inicializar la cámara: {message}</string>
     <string name="other__camera_permission_button">Activar cámara</string>
     <string name="other__camera_permission_description">Permite el acceso a la cámara para escanear facturas bitcoin y pagar más rápido.</string>
