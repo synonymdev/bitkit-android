@@ -23,28 +23,26 @@ fun ActivityListSimple(
     items: List<Activity>?,
     onAllActivityClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
-    onEmptyActivityRowClick: () -> Unit,
 ) {
+    if (items.isNullOrEmpty()) return
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
     ) {
-        if (items != null && items.isNotEmpty()) {
-            items.forEachIndexed { index, item ->
-                ActivityRow(item, onActivityItemClick, testTag = "ActivityShort-$index")
+        items.forEachIndexed { index, item ->
+            ActivityRow(item, onActivityItemClick, testTag = "ActivityShort-$index")
+            if (index < items.lastIndex) {
                 VerticalSpacer(16.dp)
             }
-            TertiaryButton(
-                text = stringResource(R.string.wallet__activity_show_all),
-                onClick = onAllActivityClick,
-                modifier = Modifier
-                    .wrapContentWidth()
-                    .padding(top = 8.dp)
-                    .testTag("ActivityShowAll")
-            )
-        } else {
-            EmptyActivityRow(onClick = onEmptyActivityRowClick)
         }
+        TertiaryButton(
+            text = stringResource(R.string.wallet__activity_show_all),
+            onClick = onAllActivityClick,
+            modifier = Modifier
+                .wrapContentWidth()
+                .padding(top = 16.dp)
+                .testTag("ActivityShowAll")
+        )
     }
 }
 
@@ -56,20 +54,6 @@ private fun Preview() {
             items = previewActivityItems,
             onAllActivityClick = {},
             onActivityItemClick = {},
-            onEmptyActivityRowClick = {},
-        )
-    }
-}
-
-@Preview
-@Composable
-private fun PreviewEmpty() {
-    AppThemeSurface {
-        ActivityListSimple(
-            items = emptyList(),
-            onAllActivityClick = {},
-            onActivityItemClick = {},
-            onEmptyActivityRowClick = {},
         )
     }
 }

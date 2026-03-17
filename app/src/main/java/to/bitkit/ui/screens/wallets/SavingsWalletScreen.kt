@@ -39,6 +39,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.utils.previewOnchainActivityItems
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -69,6 +70,7 @@ fun SavingsWalletScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Colors.Black)
+            .blockPointerInputPassthrough()
     ) {
         Image(
             painter = painterResource(id = R.drawable.piggybank),

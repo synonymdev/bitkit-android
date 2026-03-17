@@ -792,7 +792,7 @@
     <string name="wallet__activity_removed">Odebráno z Mempoolu</string>
     <string name="wallet__activity_sent">Posláno</string>
     <string name="wallet__activity_sent_self">Posláno sobě</string>
-    <string name="wallet__activity_show_all">Zobrazit veškerou aktivitu</string>
+    <string name="wallet__activity_show_all">Zobrazit vše</string>
     <string name="wallet__activity_status">Status</string>
     <string name="wallet__activity_successful">Úspěch</string>
     <string name="wallet__activity_tabs__all">Vše</string>

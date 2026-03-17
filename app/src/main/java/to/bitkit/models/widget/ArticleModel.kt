@@ -1,5 +1,6 @@
 package to.bitkit.models.widget
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.ext.toRelativeTimeString
@@ -12,6 +13,7 @@ import kotlin.time.ExperimentalTime
 
 private const val TAG = "ArticleModel"
 
+@Immutable
 @Serializable
 data class ArticleModel(
     val title: String,

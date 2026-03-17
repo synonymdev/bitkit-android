@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +31,7 @@ import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.ext.spaceToNewline
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Headline
@@ -128,10 +128,8 @@ fun PricePreviewContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__price__name)),
-                    modifier = Modifier
-                        .width(180.dp)
-                        .testTag("widget_title")
+                    text = AnnotatedString(stringResource(R.string.widgets__price__name).spaceToNewline()),
+                    modifier = Modifier.testTag("widget_title"),
                 )
                 Icon(
                     painter = painterResource(R.drawable.widget_chart_line),

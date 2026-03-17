@@ -68,14 +68,22 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         if (command.event.details.amountSats <= 0) return false
 
         delay(DELAY_FOR_ACTIVITY_SYNC_MS)
-        val shouldShowSheet = activityRepo.shouldShowReceivedSheet(
+        val shouldShowSheet = retryShouldShowReceivedSheet(
             command.event.txid,
-            command.event.details.amountSats.toULong()
+            command.event.details.amountSats.toULong(),
         )
         if (shouldShowSheet) {
             activityRepo.markOnchainActivityAsSeen(command.event.txid)
         }
         return shouldShowSheet
+    }
+
+    private suspend fun retryShouldShowReceivedSheet(txid: String, amountSats: ULong): Boolean {
+        repeat(MAX_RETRIES) {
+            if (activityRepo.shouldShowReceivedSheet(txid, amountSats)) return true
+            delay(RETRY_DELAY_MS)
+        }
+        return activityRepo.shouldShowReceivedSheet(txid, amountSats)
     }
 
     private fun buildSheetDetails(command: NotifyPaymentReceived.Command) = NewTransactionSheetDetails(
@@ -128,5 +136,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
          * the transaction before checking for RBF replacement or channel closure.
          */
         private const val DELAY_FOR_ACTIVITY_SYNC_MS = 500L
+        private const val RETRY_DELAY_MS = 300L
+        private const val MAX_RETRIES = 3
     }
 }

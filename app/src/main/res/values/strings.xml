@@ -812,7 +812,7 @@
     <string name="wallet__activity_removed">Removed from Mempool</string>
     <string name="wallet__activity_sent">Sent</string>
     <string name="wallet__activity_sent_self">Sent to myself</string>
-    <string name="wallet__activity_show_all">Show All Activity</string>
+    <string name="wallet__activity_show_all">Show All</string>
     <string name="wallet__activity_status">Status</string>
     <string name="wallet__activity_successful">Successful</string>
     <string name="wallet__activity_tabs__all">All</string>
@@ -993,14 +993,18 @@
     <string name="widgets__calculator__name">Bitcoin Calculator</string>
     <string name="widgets__delete__description">Are you sure you want to delete ‘{name}‘ from your widgets?</string>
     <string name="widgets__delete__title">Delete Widget?</string>
+    <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__facts__description">Discover fun facts about Bitcoin, every time you open your wallet.</string>
     <string name="widgets__facts__name">Bitcoin Facts</string>
     <string name="widgets__news__description">Read the latest &amp; greatest Bitcoin headlines from various news sites.</string>
     <string name="widgets__news__name">Bitcoin Headlines</string>
     <string name="widgets__onboarding__description">Enjoy decentralized feeds from your favorite web services, by adding fun and useful widgets to your Bitkit wallet.</string>
     <string name="widgets__onboarding__title">Hello,\n&lt;accent&gt;Widgets&lt;/accent&gt;</string>
+    <string name="widgets__onboarding_swipe">Swipe to find\n&lt;accent&gt;your widgets&lt;/accent&gt;</string>
     <string name="widgets__price__description">Check the latest Bitcoin exchange rates for a variety of fiat currencies.</string>
     <string name="widgets__price__name">Bitcoin Price</string>
+    <string name="widgets__suggestions__description">Discover everything Bitkit has to offer.</string>
+    <string name="widgets__suggestions__name">Bitkit Suggestions</string>
     <string name="widgets__weather__condition__average__description">The next block rate is close to the monthly averages.</string>
     <string name="widgets__weather__condition__average__title">Average Conditions</string>
     <string name="widgets__weather__condition__good__description">All clear. Now would be a good time to transact on the blockchain.</string>

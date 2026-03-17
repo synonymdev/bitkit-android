@@ -809,7 +809,7 @@
     <string name="wallet__activity_removed">Удалено из мемпула</string>
     <string name="wallet__activity_sent">Отправлено</string>
     <string name="wallet__activity_sent_self">Отправлено себе</string>
-    <string name="wallet__activity_show_all">Показать Все</string>
+    <string name="wallet__activity_show_all">Показать все</string>
     <string name="wallet__activity_status">Статус</string>
     <string name="wallet__activity_successful">Успешно</string>
     <string name="wallet__activity_tabs__all">Все</string>
