@@ -44,8 +44,10 @@ class ContactsViewModel @Inject constructor(
                     it.publicKey.contains(search, ignoreCase = true)
             }
         }
-        val grouped = filtered.groupBy { it.name.firstOrNull()?.uppercaseChar() ?: '#' }
-            .toSortedMap()
+        val grouped = filtered.groupBy {
+            val firstChar = it.name.firstOrNull()?.uppercaseChar()
+            if (firstChar?.isLetter() == true) firstChar else '#'
+        }.toSortedMap()
         ContactsUiState(
             groupedContacts = grouped,
             myProfile = myProfileValue,

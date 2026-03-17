@@ -31,8 +31,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.SavedStateHandle
-import kotlinx.coroutines.flow.filterNotNull
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
@@ -50,7 +48,6 @@ import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -59,7 +56,6 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun ExternalConnectionScreen(
     route: Routes.ExternalConnection,
-    savedStateHandle: SavedStateHandle,
     viewModel: ExternalNodeViewModel,
     onNodeConnected: () -> Unit,
     onScanClick: () -> Unit,
@@ -73,16 +69,6 @@ fun ExternalConnectionScreen(
         if (route.scannedNodeUri != null) {
             viewModel.parseNodeUri(route.scannedNodeUri)
         }
-    }
-
-    // Handle result from scanner opened from this screen
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow<String?>(SCAN_RESULT_KEY, null)
-            .filterNotNull()
-            .collect { scannedData ->
-                viewModel.parseNodeUri(scannedData)
-                savedStateHandle.remove<String>(SCAN_RESULT_KEY)
-            }
     }
 
     LaunchedEffect(viewModel, onNodeConnected) {

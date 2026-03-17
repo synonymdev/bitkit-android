@@ -6,20 +6,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -27,17 +24,14 @@ import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.PermissionStatus
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withBold
+import to.bitkit.ui.theme.Shapes
+import to.bitkit.ui.utils.withAccent
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -61,118 +55,71 @@ fun CameraPermissionView(
 
 @Composable
 fun DeniedContent(
-    shouldShowRationale: Boolean,
-    inSheet: Boolean = false,
-    onClickOpenSettings: () -> Unit = {},
     onClickRetry: () -> Unit = {},
     onClickPaste: () -> Unit = {},
-    onBack: () -> Unit = {},
 ) {
     Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .then(if (inSheet) Modifier.gradientBackground() else Modifier.background(Colors.Black))
-            .then(if (inSheet) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
+            .fillMaxSize()
+            .padding(16.dp)
+            .clip(Shapes.medium)
+            .background(Colors.Black)
     ) {
-        if (!inSheet) {
-            AppTopBar(titleText = null, onBack)
-        } else {
-            SheetTopBar(titleText = null, onBack = onBack)
-        }
+        FillHeight()
 
         Column(
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxSize()
+                .fillMaxWidth()
+                .padding(32.dp)
         ) {
-            VerticalSpacer(16.dp)
-            Title(
-                text = stringResource(R.string.other__camera_ask_title),
-                textAlign = TextAlign.Center,
+            Display(
+                stringResource(R.string.other__camera_permission_title)
+                    .withAccent(accentColor = Colors.Brand),
+                color = Colors.White,
             )
+
             VerticalSpacer(8.dp)
+
             BodyM(
-                text = stringResource(R.string.other__camera_ask_msg),
-                textAlign = TextAlign.Center,
+                stringResource(R.string.other__camera_permission_description),
                 color = Colors.White64,
+                modifier = Modifier.fillMaxWidth(),
             )
-            FillHeight()
 
-            Icon(
-                painterResource(R.drawable.ic_exclamation),
-                contentDescription = null,
-                modifier = Modifier.size(60.dp),
-            )
-            VerticalSpacer(32.dp)
-            BodyM(
-                text = stringResource(R.string.other__camera_no_text).withBold(),
-                textAlign = TextAlign.Center,
-            )
-            VerticalSpacer(32.dp)
-
-            if (shouldShowRationale) {
-                SecondaryButton(
-                    text = stringResource(R.string.common__retry),
-                    onClick = onClickRetry,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_clockwise),
-                            contentDescription = stringResource(R.string.common__retry),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    fullWidth = false,
-                )
-            } else {
-                SecondaryButton(
-                    text = stringResource(R.string.other__qr_paste),
-                    onClick = onClickPaste,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_clipboard_text_simple),
-                            contentDescription = stringResource(R.string.other__qr_paste),
-                        )
-                    },
-                    fullWidth = false,
-                )
-            }
-
-            FillHeight()
             VerticalSpacer(32.dp)
 
             PrimaryButton(
-                text = stringResource(R.string.other__phone_settings),
-                onClick = onClickOpenSettings,
+                text = stringResource(R.string.other__camera_permission_button),
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_camera),
+                        contentDescription = null,
+                    )
+                },
+                onClick = onClickRetry,
             )
-            VerticalSpacer(16.dp)
         }
-    }
-}
 
-@Preview(showSystemUi = true)
-@Composable()
-fun PreviewRequired() {
-    AppThemeSurface {
-        DeniedContent(shouldShowRationale = false)
-    }
-}
+        FillHeight()
 
-@Preview(showSystemUi = true)
-@Composable()
-fun PreviewDenied() {
-    AppThemeSurface {
-        DeniedContent(shouldShowRationale = true)
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable()
-fun PreviewInSheet() {
-    AppThemeSurface {
-        DeniedContent(
-            shouldShowRationale = true,
-            inSheet = true,
+        PrimaryButton(
+            text = stringResource(R.string.other__qr_paste),
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_clipboard_text_simple),
+                    contentDescription = null,
+                )
+            },
+            onClick = onClickPaste,
         )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewDeniedContent() {
+    AppThemeSurface {
+        DeniedContent()
     }
 }

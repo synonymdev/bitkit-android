@@ -324,10 +324,7 @@
     <string name="other__buy_button">Scegli Exchange</string>
     <string name="other__buy_header">Compra un po\' di\n&lt;accent&gt;Bitcoin&lt;/accent&gt;</string>
     <string name="other__buy_text">Non hai Bitcoin o ne vuoi ancora di più?</string>
-    <string name="other__camera_ask_msg">Bitkit ha bisogno del permesso per utilizzare la tua fotocamera</string>
-    <string name="other__camera_ask_title">Permesso di usare la fotocamera</string>
     <string name="other__camera_init_error">Inizializzazione fotocamera non riuscita: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Sembra che Bitkit non abbia l\'autorizzazione per accedere alla tua fotocamera.&lt;/bold&gt;\n\nPer utilizzare questa funzione in futuro dovrai abilitare le autorizzazioni della fotocamera per questa app dalle impostazioni del tuo telefono.</string>
     <string name="other__camera_permission_button">Abilita fotocamera</string>
     <string name="other__camera_permission_description">Consenti l\'accesso alla fotocamera per scansionare fatture bitcoin e pagare più velocemente.</string>
     <string name="other__camera_permission_title">SCANSIONA\n&lt;accent&gt;QR CODE&lt;/accent&gt;</string>
@@ -390,7 +387,6 @@
     <string name="other__pay_insufficient_savings_description">Sono necessari più ₿ per pagare questa fattura Bitcoin.</string>
     <string name="other__pay_insufficient_spending">Conto di spesa insufficiente</string>
     <string name="other__pay_insufficient_spending_amount_description">Servono altri ₿ {amount} per pagare questa fattura Lightning.</string>
-    <string name="other__phone_settings">Apri le Impostazioni del telefono</string>
     <string name="other__qr_error_header">Impossibile leggere il QR</string>
     <string name="other__qr_error_network_header">Rete Non Corretta</string>
     <string name="other__qr_error_network_text">Bitkit è attualmente impostato su {selectedNetwork} ma i dati sono per la {dataNetwork}.</string>

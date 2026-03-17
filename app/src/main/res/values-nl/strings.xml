@@ -324,10 +324,7 @@
     <string name="other__buy_button">Kies exchange</string>
     <string name="other__buy_header">Koop wat\n&lt;accent&gt;Bitcoin&lt;/accent&gt;</string>
     <string name="other__buy_text">Heb je geen Bitcoin of heb je meer nodig?</string>
-    <string name="other__camera_ask_msg">Bitkit heeft toestemming nodig om je camera te gebruiken</string>
-    <string name="other__camera_ask_title">Toestemming voor cameragebruik</string>
     <string name="other__camera_init_error">Camera initialiseren mislukt: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Het lijkt erop dat Bitkit geen toegang heeft tot je camera.&lt;/bold&gt;\n\nOm deze functie in de toekomst te gebruiken, moet je cameratoegang inschakelen voor deze app in je telefooninstellingen.</string>
     <string name="other__camera_permission_button">Camera inschakelen</string>
     <string name="other__camera_permission_description">Sta cameratoegang toe om bitcoin-facturen te scannen en sneller te betalen.</string>
     <string name="other__camera_permission_title">SCAN\n&lt;accent&gt;QR-CODE&lt;/accent&gt;</string>
@@ -390,7 +387,6 @@
     <string name="other__pay_insufficient_savings_description">Meer ₿ nodig om deze Bitcoin-factuur te betalen.</string>
     <string name="other__pay_insufficient_spending">Onvoldoende bestedingssaldo</string>
     <string name="other__pay_insufficient_spending_amount_description">₿ {amount} meer nodig om deze Lightning-factuur te betalen.</string>
-    <string name="other__phone_settings">Telefooninstellingen openen</string>
     <string name="other__qr_error_header">Kan QR niet lezen</string>
     <string name="other__qr_error_network_header">Verkeerd netwerk</string>
     <string name="other__qr_error_network_text">Bitkit staat momenteel ingesteld op {selectedNetwork} maar de gegevens zijn voor {dataNetwork}.</string>

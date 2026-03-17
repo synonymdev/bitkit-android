@@ -324,10 +324,7 @@
     <string name="other__buy_button">Επιλογή ανταλλακτηρίου</string>
     <string name="other__buy_header">Αγόρασε\n&lt;accent&gt;Bitcoin&lt;/accent&gt;</string>
     <string name="other__buy_text">Δεν έχεις Bitcoin ή χρειάζεσαι περισσότερα;</string>
-    <string name="other__camera_ask_msg">Το Bitkit χρειάζεται άδεια για να χρησιμοποιήσει την κάμερά σου</string>
-    <string name="other__camera_ask_title">Άδεια χρήσης κάμερας</string>
     <string name="other__camera_init_error">Αποτυχία αρχικοποίησης κάμερας: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Φαίνεται ότι το Bitkit δεν έχει άδεια πρόσβασης στην κάμερά σου.&lt;/bold&gt;\n\nΓια να χρησιμοποιήσεις αυτή τη λειτουργία στο μέλλον, θα πρέπει να ενεργοποιήσεις τα δικαιώματα κάμερας για αυτή την εφαρμογή από τις ρυθμίσεις του τηλεφώνου σου.</string>
     <string name="other__camera_permission_button">Ενεργοποίηση κάμερας</string>
     <string name="other__camera_permission_description">Επίτρεψε την πρόσβαση στην κάμερα για να σαρώσεις τιμολόγια bitcoin και να πληρώσεις πιο γρήγορα.</string>
     <string name="other__camera_permission_title">ΣΑΡΩΣΗ\n&lt;accent&gt;QR CODE&lt;/accent&gt;</string>
@@ -390,7 +387,6 @@
     <string name="other__pay_insufficient_savings_description">Χρειάζονται περισσότερα ₿ για να πληρώσεις αυτό το τιμολόγιο Bitcoin.</string>
     <string name="other__pay_insufficient_spending">Ανεπαρκές υπόλοιπο δαπανών</string>
     <string name="other__pay_insufficient_spending_amount_description">Χρειάζονται ₿ {amount} ακόμα για να πληρώσεις αυτό το τιμολόγιο Lightning.</string>
-    <string name="other__phone_settings">Άνοιγμα ρυθμίσεων τηλεφώνου</string>
     <string name="other__qr_error_header">Αδυναμία ανάγνωσης QR</string>
     <string name="other__qr_error_network_header">Λανθασμένο δίκτυο</string>
     <string name="other__qr_error_network_text">Το Bitkit είναι ρυθμισμένο για {selectedNetwork} αλλά τα δεδομένα είναι για {dataNetwork}.</string>

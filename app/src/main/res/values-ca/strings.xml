@@ -324,10 +324,7 @@
     <string name="other__buy_button">Tria un intercanvi</string>
     <string name="other__buy_header">Compra\n&lt;accent&gt;Bitcoin&lt;/accent&gt;</string>
     <string name="other__buy_text">No tens Bitcoin o en necessites més?</string>
-    <string name="other__camera_ask_msg">Bitkit necessita permís per utilitzar la càmera.</string>
-    <string name="other__camera_ask_title">Permís per utilitzar la càmera</string>
     <string name="other__camera_init_error">Error en inicialitzar la càmera: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Sembla que Bitkit no té permís per accedir a la càmera.&lt;/bold&gt;\n\nPer utilitzar aquesta funció en el futur, hauràs d\'habilitar els permisos de càmera per a aquesta aplicació des de la configuració del telèfon.</string>
     <string name="other__camera_permission_button">Habilitar càmera</string>
     <string name="other__camera_permission_description">Permet l\'accés a la càmera per escanejar factures de bitcoin i pagar més ràpidament.</string>
     <string name="other__camera_permission_title">ESCANEJAR\n&lt;accent&gt;CODI QR&lt;/accent&gt;</string>
@@ -390,7 +387,6 @@
     <string name="other__pay_insufficient_savings_description">Es necessiten més ₿ per pagar aquesta factura de Bitcoin.</string>
     <string name="other__pay_insufficient_spending">Saldo de despesa insuficient</string>
     <string name="other__pay_insufficient_spending_amount_description">₿ {amount} més necessaris per pagar aquesta factura Lightning.</string>
-    <string name="other__phone_settings">Obre la configuració del telèfon</string>
     <string name="other__qr_error_header">No es pot llegir el codi QR</string>
     <string name="other__qr_error_network_header">Xarxa incorrecta</string>
     <string name="other__qr_error_network_text">Bitkit està configurat per a {selectedNetwork} però les dades són per a {dataNetwork}.</string>
