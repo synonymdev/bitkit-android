@@ -481,7 +481,6 @@ fun ContentView(
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive) },
                             onScanClick = { appViewModel.showScannerSheet() },
-                            modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     }
                 }

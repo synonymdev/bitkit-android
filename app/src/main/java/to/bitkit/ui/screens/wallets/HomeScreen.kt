@@ -134,7 +134,6 @@ import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
-import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -144,7 +143,6 @@ import to.bitkit.viewmodels.WalletViewModel
 private const val SMALL_SCREEN_HEIGHT_DP = 700
 private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
 private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
-private const val GRADIENT_HEIGHT = 134
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
 @Suppress("CyclomaticComplexMethod")
@@ -396,7 +394,6 @@ private fun Content(
                 )
 
                 1 -> WidgetsPage(
-                    hazeState = hazeState,
                     homeUiState = homeUiState,
                     onRemoveSuggestion = onRemoveSuggestion,
                     onClickSuggestion = onClickSuggestion,
@@ -557,7 +554,6 @@ private fun BalancesSection(
 @Suppress("MagicNumber")
 @Composable
 private fun WidgetsPage(
-    hazeState: HazeState,
     homeUiState: HomeUiState,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
@@ -566,8 +562,6 @@ private fun WidgetsPage(
     onClickDeleteWidget: (WidgetType) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
 ) {
-    val isKeyboardVisible by keyboardAsState()
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -612,21 +606,6 @@ private fun WidgetsPage(
             )
 
             VerticalSpacer(150.dp)
-        }
-        if (!isKeyboardVisible) {
-            val bottomGradient = Brush.verticalGradient(
-                colors = listOf(Color.Transparent, Colors.Black),
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(GRADIENT_HEIGHT.dp)
-                    .hazeEffect(state = hazeState) {
-                        mask = bottomGradient
-                    }
-                    .background(bottomGradient)
-            )
         }
     }
 }
