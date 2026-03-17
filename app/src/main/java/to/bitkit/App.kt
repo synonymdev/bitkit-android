@@ -7,6 +7,8 @@ import android.app.Application.ActivityLifecycleCallbacks
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.env.Env
 import javax.inject.Inject
@@ -16,6 +18,9 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var imageLoader: ImageLoader
+
     override val workManagerConfiguration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -23,6 +28,7 @@ internal open class App : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         Env.initAppStoragePath(filesDir.absolutePath)
     }

@@ -94,35 +94,34 @@ ContactsIntroScreen → (if authenticated) ContactsScreen → ContactDetailScree
 
 ## PubkyImage Component
 
-Composable for loading and displaying images from `pubky://` URIs, backed by `PubkyImageViewModel`.
+Composable for loading and displaying images from `pubky://` URIs, backed by Coil 3.
 
 ### Architecture
 
-- `PubkyImageViewModel` manages image state as a `Map<String, PubkyImageState>` keyed by URI
-- The composable calls `viewModel.loadImage(uri)` via `LaunchedEffect`
-- Image fetching is delegated to `PubkyRepo.fetchImage()` which handles cache lookup and network fetching
-- Business logic follows `UI -> ViewModel -> Repository -> RUST` flow
+- `PubkyImage` is a stateless composable wrapping Coil's `AsyncImage`
+- `PubkyImageFetcher` is a Coil `Fetcher` that handles `pubky://` URIs via `PubkyService.fetchFile()`
+- `ImageModule` provides a singleton `ImageLoader` with `PubkyImageFetcher.Factory`, memory cache, and disk cache
 
-### Caching Strategy (`PubkyImageCache`)
+### Caching Strategy (Coil)
 
-Two-tier cache:
+Coil manages a two-tier cache automatically:
 
-1. **Memory** — `ConcurrentHashMap<String, Bitmap>` for instant access
-2. **Disk** — files in `cacheDir/pubky-images/`, keyed by SHA-256 hash of the URI
+1. **Memory** — Coil's `MemoryCache` (15% of app memory)
+2. **Disk** — Coil's `DiskCache` in `cacheDir/pubky-images/`
 
 ### Loading Flow
 
-1. Check memory cache → return if hit
-2. Check disk cache → decode, populate memory, return if hit
-3. Fetch via `PubkyRepo.fetchImage(uri)` which delegates to `PubkyService.fetchFile()`
+1. Coil checks memory cache → return if hit
+2. Coil checks disk cache → return if hit
+3. `PubkyImageFetcher.fetch()` calls `PubkyService.fetchFile(uri)`
 4. If response is a JSON file descriptor with a `src` field, follow the indirection and fetch the blob
-5. Decode and store via `PubkyImageCache.decodeAndStore()`
+5. Coil decodes and caches the result
 
-### Display States (`PubkyImageState`)
+### Display States
 
 - **Loading** — `CircularProgressIndicator`
-- **Loaded** — circular-clipped `Image`
-- **Failed** — fallback user icon on gray background
+- **Loaded** — circular-clipped image (handled by Coil's success state)
+- **Error** — fallback user icon on gray background
 
 ## Domain Model (`PubkyProfile`)
 
@@ -144,7 +143,8 @@ Two-tier cache:
 |---|---|
 | `services/PubkyService.kt` | FFI wrapper |
 | `repositories/PubkyRepo.kt` | Auth state and session management |
-| `data/PubkyImageCache.kt` | Two-tier image cache |
+| `data/PubkyImageFetcher.kt` | Coil fetcher for pubky:// URIs |
+| `di/ImageModule.kt` | Hilt module providing ImageLoader |
 | `data/PubkyStore.kt` | DataStore for cached profile metadata |
 | `models/PubkyProfile.kt` | Domain model |
 | `ui/components/PubkyImage.kt` | Image composable |
