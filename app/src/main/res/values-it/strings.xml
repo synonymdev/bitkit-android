@@ -792,7 +792,7 @@
     <string name="wallet__activity_removed">Rimossa dalla Mempool</string>
     <string name="wallet__activity_sent">Inviato</string>
     <string name="wallet__activity_sent_self">Inviato a me stesso</string>
-    <string name="wallet__activity_show_all">Visualizza tutte le attività</string>
+    <string name="wallet__activity_show_all">Mostra tutto</string>
     <string name="wallet__activity_status">Stato</string>
     <string name="wallet__activity_successful">Successo</string>
     <string name="wallet__activity_tabs__all">Tutti</string>

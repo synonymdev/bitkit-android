@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,12 +32,13 @@ fun DragAndDropWidget(
     title: String,
     onClickDelete: () -> Unit,
     onClickSettings: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    dragModifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(Colors.Gray6)
     ) {
         Row(
             modifier = Modifier
@@ -49,6 +51,7 @@ fun DragAndDropWidget(
                 contentDescription = null,
                 modifier = Modifier
                     .size(32.dp)
+                    .clip(RoundedCornerShape(6.dp))
                     .testTag("${title}_drag_and_drop_icon"),
                 tint = Color.Unspecified
             )
@@ -84,8 +87,8 @@ fun DragAndDropWidget(
             }
 
             IconButton(
-                onClick = onClickDelete,
-                modifier = Modifier.testTag("${title}_WidgetActionDrag")
+                onClick = {},
+                modifier = dragModifier.testTag("${title}_WidgetActionDrag")
             ) {
                 Icon(
                     modifier = Modifier.size(24.dp),

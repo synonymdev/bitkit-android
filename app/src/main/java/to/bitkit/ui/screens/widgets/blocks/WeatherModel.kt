@@ -1,10 +1,12 @@
 package to.bitkit.ui.screens.widgets.blocks
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Immutable
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.WeatherDTO
 
+@Immutable
 data class WeatherModel(
     @StringRes val title: Int,
     @StringRes val description: Int,

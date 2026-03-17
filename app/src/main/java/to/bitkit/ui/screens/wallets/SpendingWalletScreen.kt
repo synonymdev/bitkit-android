@@ -41,6 +41,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.utils.previewLightningActivityItems
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -71,6 +72,7 @@ fun SpendingWalletScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Colors.Black)
+            .blockPointerInputPassthrough()
     ) {
         Image(
             painter = painterResource(id = R.drawable.coin_stack_x_2),

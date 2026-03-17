@@ -25,7 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.BodySB
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -86,15 +86,16 @@ fun BlockCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("block_card_block_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BodySB(
+                    BodySSB(
                         text = "Block",
                         color = Colors.White64,
                         modifier = Modifier.testTag("block_card_block_label")
                     )
 
-                    BodySB(
+                    BodyMSB(
                         text = block,
                         color = Colors.White,
                         modifier = Modifier.testTag("block_card_block_text")
@@ -107,15 +108,16 @@ fun BlockCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("block_card_time_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BodySB(
+                    BodySSB(
                         text = "Time",
                         color = Colors.White64,
                         modifier = Modifier.testTag("block_card_time_label")
                     )
 
-                    BodySB(
+                    BodyMSB(
                         text = time,
                         color = Colors.White,
                         modifier = Modifier.testTag("block_card_time_text")
@@ -128,15 +130,16 @@ fun BlockCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("block_card_date_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BodySB(
+                    BodySSB(
                         text = "Date",
                         color = Colors.White64,
                         modifier = Modifier.testTag("block_card_date_label")
                     )
 
-                    BodySB(
+                    BodyMSB(
                         text = date,
                         color = Colors.White,
                         modifier = Modifier.testTag("block_card_date_text")
@@ -149,15 +152,16 @@ fun BlockCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("block_card_transactions_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BodySB(
+                    BodySSB(
                         text = "Transactions",
                         color = Colors.White64,
                         modifier = Modifier.testTag("block_card_transactions_label")
                     )
 
-                    BodySB(
+                    BodyMSB(
                         text = transactions,
                         color = Colors.White,
                         modifier = Modifier.testTag("block_card_transactions_text")
@@ -170,15 +174,16 @@ fun BlockCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("block_card_size_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BodySB(
+                    BodySSB(
                         text = "Size",
                         color = Colors.White64,
                         modifier = Modifier.testTag("block_card_size_label")
                     )
 
-                    BodySB(
+                    BodyMSB(
                         text = size,
                         color = Colors.White,
                         modifier = Modifier.testTag("block_card_size_text")
@@ -194,7 +199,7 @@ fun BlockCard(
                         .testTag("block_card_source_row"),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    BodySB(
+                    CaptionB(
                         text = stringResource(R.string.widgets__widget__source),
                         color = Colors.White64,
                         modifier = Modifier.testTag("block_card_source_label")

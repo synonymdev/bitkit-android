@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -202,18 +203,16 @@ fun LargeRow(
         modifier = modifier,
     ) {
         if (!hideBalance && prefix != null) {
-            Display(
+            SecondaryDisplay(
                 text = prefix,
-                color = Colors.White64,
                 modifier = Modifier
                     .padding(end = 8.dp)
                     .testTag("MoneySign")
             )
         }
         if (showSymbol && !isSymbolSuffix) {
-            Display(
+            SecondaryDisplay(
                 text = symbol,
-                color = Colors.White64,
                 modifier = Modifier
                     .padding(end = 8.dp)
                     .testTag("MoneyFiatSymbol")
@@ -230,15 +229,24 @@ fun LargeRow(
             )
         }
         if (showSymbol && isSymbolSuffix) {
-            Display(
+            SecondaryDisplay(
                 text = symbol,
-                color = Colors.White64,
                 modifier = Modifier
                     .padding(start = 8.dp)
                     .testTag("MoneyFiatSymbol")
             )
         }
     }
+}
+
+@Composable
+private fun SecondaryDisplay(text: String, modifier: Modifier = Modifier) {
+    Display(
+        text = text,
+        fontWeight = FontWeight.ExtraBold,
+        color = Colors.White64,
+        modifier = modifier,
+    )
 }
 
 @Composable

@@ -444,6 +444,7 @@ class WalletViewModel @Inject constructor(
 
     fun refreshReceiveState() = viewModelScope.launch {
         launch { blocktankRepo.refreshInfo() }
+        lightningRepo.syncState()
         lightningRepo.updateGeoBlockState()
         walletRepo.refreshBip21()
     }

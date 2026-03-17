@@ -5,16 +5,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.entities.TransferEntity
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
@@ -24,6 +29,7 @@ import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -31,6 +37,7 @@ import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -38,7 +45,12 @@ class HomeViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: TransferRepo,
+    private val activityRepo: ActivityRepo,
 ) : ViewModel() {
+
+    companion object {
+        private const val MAX_SUGGESTIONS = 4
+    }
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -52,47 +64,72 @@ class HomeViewModel @Inject constructor(
         setupFactRotation()
     }
 
+    @Suppress("LongMethod")
     private fun setupStateObservation() {
         viewModelScope.launch {
             combine(
-                createSuggestionsFlow(),
                 settingsStore.data,
                 widgetsRepo.widgetsDataFlow,
                 _currentArticle,
                 _currentFact,
-            ) { suggestions, settings, widgetsData, currentArticle, currentFact ->
-                _uiState.value.copy(
-                    suggestions = suggestions,
-                    showWidgets = settings.showWidgets,
-                    showWidgetTitles = settings.showWidgetTitles,
-                    widgetsWithPosition = widgetsData.widgets,
-                    headlinePreferences = widgetsData.headlinePreferences,
-                    factsPreferences = widgetsData.factsPreferences,
-                    blocksPreferences = widgetsData.blocksPreferences,
-                    weatherPreferences = widgetsData.weatherPreferences,
-                    pricePreferences = widgetsData.pricePreferences,
-                    currentArticle = currentArticle,
-                    currentFact = currentFact,
-                    currentBlock = widgetsData.block?.toBlockModel(),
-                    currentWeather = widgetsData.weather?.toWeatherModel(),
-                    currentPrice = widgetsData.price,
-                )
-            }.collect { newState ->
-                _uiState.update { newState }
+            ) { settings, widgetsData, currentArticle, currentFact ->
+                _uiState.update {
+                    it.copy(
+                        showWidgets = settings.showWidgets,
+                        showWidgetTitles = settings.showWidgetTitles,
+                        widgetsWithPosition = if (it.isEditingWidgets &&
+                            it.widgetsWithPosition.size == widgetsData.widgets.size
+                        ) {
+                            it.widgetsWithPosition
+                        } else {
+                            widgetsData.widgets
+                        },
+                        headlinePreferences = widgetsData.headlinePreferences,
+                        factsPreferences = widgetsData.factsPreferences,
+                        blocksPreferences = widgetsData.blocksPreferences,
+                        weatherPreferences = widgetsData.weatherPreferences,
+                        pricePreferences = widgetsData.pricePreferences,
+                        currentArticle = currentArticle,
+                        currentFact = currentFact,
+                        currentBlock = widgetsData.block?.toBlockModel(),
+                        currentWeather = widgetsData.weather?.toWeatherModel(),
+                        currentPrice = widgetsData.price,
+                        showWidgetsOnboardingHint = settings.showWidgets &&
+                            !settings.widgetsOnboardingHintDismissed,
+                    )
+                }
+            }.collect()
+        }
+
+        viewModelScope.launch {
+            createSuggestionsFlow().collect { suggestions ->
+                _uiState.update { it.copy(suggestions = suggestions) }
             }
+        }
+
+        @OptIn(ExperimentalCoroutinesApi::class)
+        val hasActivityFlow = activityRepo.activitiesChanged.mapLatest {
+            activityRepo.getActivities(limit = 1u).getOrNull()?.isNotEmpty() == true
         }
 
         viewModelScope.launch {
             combine(
                 settingsStore.data,
-                walletRepo.balanceState
-            ) { settings, balanceState ->
-                _uiState.value.copy(
-                    showEmptyState = settings.showEmptyBalanceView && balanceState.totalSats == 0uL
-                )
-            }.collect { newState ->
-                _uiState.update { newState }
-            }
+                walletRepo.balanceState,
+                transferRepo.activeTransfers,
+                hasActivityFlow,
+            ) { settings, balanceState, activeTransfers, hasActivity ->
+                _uiState.update {
+                    it.copy(
+                        showEmptyState = settings.showEmptyBalanceView &&
+                            !hasActivity &&
+                            balanceState.totalSats == 0uL &&
+                            balanceState.balanceInTransferToSpending == 0uL &&
+                            balanceState.balanceInTransferToSavings == 0uL &&
+                            activeTransfers.isEmpty()
+                    )
+                }
+            }.collect()
         }
         viewModelScope.launch { createBannersFlow() }
     }
@@ -108,7 +145,7 @@ class HomeViewModel @Inject constructor(
                 if (showWidgets && articlesList.isNotEmpty()) {
                     startArticleRotation(articlesList)
                 } else {
-                    _currentArticle.value = null
+                    _currentArticle.update { null }
                 }
             }
         }
@@ -125,7 +162,7 @@ class HomeViewModel @Inject constructor(
                 if (showWidgets && factList.isNotEmpty()) {
                     startFactsRotation(factList = factList)
                 } else {
-                    _currentFact.value = null
+                    _currentFact.update { null }
                 }
             }
         }
@@ -133,18 +170,28 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun startArticleRotation(articlesList: List<ArticleModel>) {
         while (_uiState.value.showWidgets && articlesList.isNotEmpty()) {
-            _currentArticle.value = articlesList.randomOrNull()
+            _currentArticle.update { articlesList.randomOrNull() }
             delay(30.seconds)
         }
-        _currentArticle.value = null
+        _currentArticle.update { null }
     }
 
     private suspend fun startFactsRotation(factList: List<String>) {
         while (_uiState.value.showWidgets && factList.isNotEmpty()) {
-            _currentFact.value = factList.randomOrNull()
+            _currentFact.update { factList.randomOrNull() }
             delay(20.seconds)
         }
-        _currentFact.value = null
+        _currentFact.update { null }
+    }
+
+    fun onPageChanged(page: Int) {
+        _uiState.update { it.copy(currentPage = page) }
+    }
+
+    fun dismissWidgetsOnboardingHint() {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(widgetsOnboardingHintDismissed = true) }
+        }
     }
 
     fun dismissEmptyState() {
@@ -195,20 +242,22 @@ class HomeViewModel @Inject constructor(
     fun deleteWidget(widgetType: WidgetType) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(widgetType)
-            dismissAlertDeleteWidget()
+            _uiState.update {
+                it.copy(
+                    widgetsWithPosition = it.widgetsWithPosition
+                        .filterNot { widget -> widget.type == widgetType },
+                    deleteWidgetAlert = null,
+                )
+            }
         }
     }
 
     fun displayAlertDeleteWidget(widgetType: WidgetType) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(deleteWidgetAlert = widgetType) }
-        }
+        _uiState.update { it.copy(deleteWidgetAlert = widgetType) }
     }
 
     fun dismissAlertDeleteWidget() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(deleteWidgetAlert = null) }
-        }
+        _uiState.update { it.copy(deleteWidgetAlert = null) }
     }
 
     private fun enableEditMode() {
@@ -250,50 +299,51 @@ class HomeViewModel @Inject constructor(
         transferRepo.activeTransfers,
     ) { balanceState, settings, transfers ->
         val baseSuggestions = when {
-            balanceState.totalLightningSats > 0uL -> { // With Lightning
-                listOfNotNull(
-                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.BUY,
-                    Suggestion.SUPPORT,
-                    Suggestion.INVITE,
-                    Suggestion.QUICK_PAY,
-                    Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
-                    Suggestion.SHOP,
-                    Suggestion.PROFILE,
-                )
-            }
-
-            balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
-                listOfNotNull(
-                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-                    Suggestion.LIGHTNING.takeIf {
-                        transfers.all { it.type != TransferType.TO_SPENDING }
-                    },
-                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.BUY,
-                    Suggestion.SUPPORT,
-                    Suggestion.INVITE,
-                    Suggestion.SHOP,
-                    Suggestion.PROFILE,
-                )
-            }
-
-            else -> { // Empty wallet
-                listOfNotNull(
-                    Suggestion.BUY,
-                    Suggestion.LIGHTNING.takeIf {
-                        transfers.all { it.type != TransferType.TO_SPENDING }
-                    },
-                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-                    Suggestion.SUPPORT,
-                    Suggestion.INVITE,
-                    Suggestion.PROFILE,
-                )
-            }
+            balanceState.totalLightningSats > 0uL -> spendingSuggestions(settings)
+            balanceState.totalOnchainSats > 0uL -> savingsOnlySuggestions(settings, transfers)
+            else -> emptyWalletSuggestions(settings, transfers)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
-        baseSuggestions.filterNot { it in dismissedList }
+        baseSuggestions.filterNot { it in dismissedList }.take(MAX_SUGGESTIONS)
     }
+
+    private fun spendingSuggestions(settings: SettingsData) = listOfNotNull(
+        Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
+        Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
+        Suggestion.SHOP,
+        Suggestion.PROFILE,
+        Suggestion.SUPPORT,
+        Suggestion.INVITE,
+        Suggestion.BUY,
+    )
+
+    private fun savingsOnlySuggestions(
+        settings: SettingsData,
+        transfers: List<TransferEntity>,
+    ) = listOfNotNull(
+        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
+        Suggestion.LIGHTNING.takeIf {
+            transfers.all { it.type != TransferType.TO_SPENDING }
+        },
+        Suggestion.SUPPORT,
+        Suggestion.PROFILE,
+        Suggestion.INVITE,
+        Suggestion.BUY,
+    )
+
+    private fun emptyWalletSuggestions(
+        settings: SettingsData,
+        transfers: List<TransferEntity>,
+    ) = listOfNotNull(
+        Suggestion.BUY,
+        Suggestion.LIGHTNING.takeIf {
+            transfers.all { it.type != TransferType.TO_SPENDING }
+        },
+        Suggestion.SUPPORT,
+        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
+        Suggestion.PROFILE,
+        Suggestion.INVITE,
+    )
 }

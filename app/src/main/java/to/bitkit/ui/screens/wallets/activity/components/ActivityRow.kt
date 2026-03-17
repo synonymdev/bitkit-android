@@ -111,7 +111,7 @@ fun ActivityRow(
         ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild)
         Spacer(modifier = Modifier.width(16.dp))
         Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.weight(1f)
         ) {
             TransactionStatusText(

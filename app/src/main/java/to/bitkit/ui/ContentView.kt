@@ -117,6 +117,8 @@ import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
 import to.bitkit.ui.screens.widgets.price.PriceEditScreen
 import to.bitkit.ui.screens.widgets.price.PricePreviewScreen
 import to.bitkit.ui.screens.widgets.price.PriceViewModel
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewScreen
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsViewModel
 import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
@@ -262,6 +264,7 @@ fun ContentView(
                 } else {
                     navController.navigateTo(it.route)
                 }
+
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
                     if (!isOnHome) {
@@ -478,7 +481,6 @@ fun ContentView(
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive) },
                             onScanClick = { appViewModel.showScannerSheet() },
-                            modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     }
                 }
@@ -798,7 +800,7 @@ private fun NavGraphBuilder.home(
         SavingsWalletScreen(
             isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities.orEmpty(),
-            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
             onTransferToSpendingClick = {
@@ -820,7 +822,7 @@ private fun NavGraphBuilder.home(
         SpendingWalletScreen(
             channels = lightningState.channels,
             lightningActivities = lightningActivities.orEmpty(),
-            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
             onTransferToSavingsClick = {
@@ -842,10 +844,7 @@ private fun NavGraphBuilder.allActivity(
     composableWithDefaultTransitions<Routes.AllActivity> {
         AllActivityScreen(
             viewModel = activityListViewModel,
-            onBack = {
-                activityListViewModel.clearFilters()
-                navController.navigateToHome()
-            },
+            onBack = { navController.popBackStack() },
             onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
         )
     }
@@ -1325,6 +1324,7 @@ private fun NavGraphBuilder.widgets(
         )
     }
     composableWithDefaultTransitions<Routes.AddWidget> {
+        val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         AddWidgetsScreen(
             onWidgetSelected = { widgetType ->
                 when (widgetType) {
@@ -1334,10 +1334,21 @@ private fun NavGraphBuilder.widgets(
                     WidgetType.NEWS -> navController.navigateTo(Routes.HeadlinesPreview)
                     WidgetType.PRICE -> navController.navigateTo(Routes.PricePreview)
                     WidgetType.WEATHER -> navController.navigateTo(Routes.WeatherPreview)
+                    WidgetType.SUGGESTIONS -> navController.navigateTo(Routes.SuggestionsPreview)
                 }
             },
             fiatSymbol = LocalCurrencies.current.currencySymbol,
-            onBackCLick = { navController.popBackStack() }
+            onBackClick = { navController.popBackStack() },
+            showWidgets = showWidgets,
+            onEnableInSettingsClick = { navController.navigate(Routes.WidgetsSettings) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.SuggestionsPreview> {
+        val viewModel = hiltViewModel<SuggestionsViewModel>()
+        SuggestionsPreviewScreen(
+            suggestionsViewModel = viewModel,
+            onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.CalculatorPreview> {
@@ -1485,7 +1496,10 @@ fun NavController.navigateToHome() {
     }
 }
 
-fun NavController.navigateToAllActivity() = navigateTo(Routes.AllActivity)
+fun NavController.navigateToAllActivity(onClearFilters: () -> Unit) {
+    onClearFilters()
+    navigateTo(Routes.AllActivity)
+}
 
 /**
  * Navigates to [route] with [launchSingleTop] always enabled to prevent
@@ -1838,6 +1852,9 @@ sealed interface Routes {
 
     @Serializable
     data object AddWidget : Routes
+
+    @Serializable
+    data object SuggestionsPreview : Routes
 
     @Serializable
     data object Headlines : Routes
