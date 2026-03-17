@@ -1146,18 +1146,26 @@ class AppViewModel @Inject constructor(
         if (amount == 0uL) return false
 
         return when (payMethod) {
-            SendMethod.LIGHTNING -> when (val lnurl = _sendUiState.value.lnurl) {
-                null -> lightningRepo.canSend(amount)
-                is LnurlParams.LnurlWithdraw -> amount < lnurl.data.maxWithdrawableSat()
-                is LnurlParams.LnurlPay -> {
-                    val maxSat = lnurl.data.maxSendableSat()
-
-                    amount <= maxSat && lightningRepo.canSend(amount)
+            SendMethod.LIGHTNING -> {
+                val maxSendable = maxSendableLightningSats()
+                when (val lnurl = _sendUiState.value.lnurl) {
+                    null -> amount <= maxSendable && lightningRepo.canSend(amount)
+                    is LnurlParams.LnurlWithdraw -> amount < lnurl.data.maxWithdrawableSat()
+                    is LnurlParams.LnurlPay -> {
+                        val maxSat = lnurl.data.maxSendableSat()
+                        amount <= maxSat && amount <= maxSendable && lightningRepo.canSend(amount)
+                    }
                 }
             }
 
             SendMethod.ONCHAIN -> amount > Defaults.dustLimit.toULong()
         }
+    }
+
+    private fun maxSendableLightningSats(): ULong {
+        val max = walletRepo.balanceState.value.maxSendLightningSats
+        val fee = _sendUiState.value.estimatedRoutingFee
+        return max.safe() - fee.safe()
     }
 
     private fun onPasteClick() {
