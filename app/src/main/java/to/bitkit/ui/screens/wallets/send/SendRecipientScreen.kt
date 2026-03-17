@@ -69,6 +69,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.scanner.CameraOverlayButtonSize
 import to.bitkit.ui.screens.scanner.QrCodeAnalyzer
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -372,7 +373,7 @@ private fun CameraPreviewWithControls(
                 .padding(16.dp)
                 .clip(CircleShape)
                 .background(Colors.White64)
-                .size(48.dp)
+                .size(CameraOverlayButtonSize)
                 .align(Alignment.TopStart)
         ) {
             Icon(
@@ -397,7 +398,7 @@ private fun CameraPreviewWithControls(
                 .padding(16.dp)
                 .clip(CircleShape)
                 .background(Colors.White64)
-                .size(48.dp)
+                .size(CameraOverlayButtonSize)
                 .align(Alignment.TopEnd)
         ) {
             Icon(

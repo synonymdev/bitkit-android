@@ -344,9 +344,6 @@
     <string name="other__update_critical_title">Mettre à jour\n&lt;accent&gt;Bitkit maintenant&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Il y a une mise à jour critique pour Bitkit. Vous devez la mettre à jour pour continuer à utiliser Bitkit.</string>
     <string name="other__update_critical_button">Mise à jour de Bitkit</string>
-    <string name="other__camera_ask_title">Autorisation d\'utiliser l\'appareil photo</string>
-    <string name="other__camera_ask_msg">Bitkit a besoin d\'une autorisation pour utiliser votre appareil photo</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Il semble que Bitkit n\'ait pas l\'autorisation d\'accéder à votre appareil photo.&lt;/bold&gt;\n\nPour utiliser cette fonction à l\'avenir, vous devrez activer les autorisations de caméra pour cette application dans les paramètres de votre téléphone.</string>
     <string name="other__camera_init_error">Échec de l\'initialisation de la caméra : {message}</string>
     <string name="other__camera_permission_button">Activer la caméra</string>
     <string name="other__camera_permission_description">Autorisez l\'accès à la caméra pour scanner les factures bitcoin et payer plus rapidement.</string>
@@ -396,7 +393,6 @@
     <string name="other__node_starting">Démarrage</string>
     <string name="other__node_stopped">Arrêté</string>
     <string name="other__node_stopping">Arrêt en cours</string>
-    <string name="other__phone_settings">Ouvrez les paramètres du téléphone</string>
     <string name="other__update_nav_title">Mise à jour disponible</string>
     <string name="other__update_title">Mettre à jour\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
     <string name="other__update_text">Veuillez mettre à jour Bitkit à la dernière version pour bénéficier des nouvelles fonctionnalités et des corrections de bugs !</string>

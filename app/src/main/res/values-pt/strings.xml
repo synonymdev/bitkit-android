@@ -343,9 +343,6 @@
     <string name="other__update_critical_title">Atualize\n&lt;accent&gt;agora&lt;/accent&gt;</string>
     <string name="other__update_critical_text">Há uma atualização disponível para a Bitkit. Atualize para continuar usando o app.</string>
     <string name="other__update_critical_button">Atualize a Bitkit</string>
-    <string name="other__camera_ask_title">Permissão para usar a câmera</string>
-    <string name="other__camera_ask_msg">Bitkit precisa de permissão para usar a câmera</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Parece que a Bitkit não tem permissão para acessar sua câmera.&lt;/bold&gt;\n\n\nPara utilizar este recurso no futuro, você precisará ativar as permissões da câmera para este aplicativo nas configurações do seu telefone.</string>
     <string name="other__clipboard_redirect_title">Dados na Aréa de Transferência Detectados</string>
     <string name="other__clipboard_redirect_msg">Deseja ser redirecionado para a tela relevante?</string>
     <string name="other__pay_insufficient_savings">Saldo de Poupança Insuficiente</string>
@@ -379,7 +376,6 @@
     <string name="other__lnurl_withdr_error_minmax">Parâmetros de saque LNURL incorretos, mínimo/máximo não configurados corretamente.</string>
     <string name="other__lnurl_withdr_success_title">Saque solicitado</string>
     <string name="other__lnurl_withdr_success_msg">Seu saque foi solicitado com sucesso. Aguardando pagamento.</string>
-    <string name="other__phone_settings">Abrir as configurações do telefone</string>
     <string name="other__camera_init_error">Falha ao inicializar câmera: {message}</string>
     <string name="other__camera_permission_button">Ativar câmera</string>
     <string name="other__camera_permission_description">Permita o acesso à câmera para escanear invoices de bitcoin e pagar mais rapidamente.</string>
