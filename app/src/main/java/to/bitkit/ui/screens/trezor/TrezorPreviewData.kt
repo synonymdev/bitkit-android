@@ -5,15 +5,12 @@ import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.ComposeAccount
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
-import com.synonym.bitkitcore.TrezorPrecomposedInput
-import com.synonym.bitkitcore.TrezorPrecomposedOutput
-import com.synonym.bitkitcore.TrezorPrecomposedResult
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
-import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.repositories.KnownDevice
@@ -166,34 +163,11 @@ internal object TrezorPreviewData {
         blockHeight = 850_000u,
     )
 
-    private val samplePrecomposedInput = TrezorPrecomposedInput(
-        txid = SAMPLE_TXID,
-        vout = 0u,
-        amount = "50000",
-        address = SAMPLE_ADDRESS,
-        path = "m/84'/0'/0'/0/0",
-        scriptType = TrezorScriptType.SPEND_WITNESS,
-    )
-
-    val samplePrecomposedResult = TrezorPrecomposedResult.Final(
-        totalSpent = "51000",
-        fee = "1000",
-        feePerByte = "5.0",
-        bytes = 200u,
-        inputs = listOf(samplePrecomposedInput),
-        outputs = listOf(
-            TrezorPrecomposedOutput.Payment(
-                address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-                amount = "45000",
-            ),
-            TrezorPrecomposedOutput.Change(
-                address = "bc1q9h5yjqka5pv0arpmc2c2fqhx6l2eme72sxlfkn",
-                path = "m/84'/0'/0'/1/0",
-                amount = "4000",
-                scriptType = TrezorScriptType.SPEND_WITNESS,
-            ),
-        ),
-        outputsPermutation = listOf(0u, 1u),
+    val sampleComposeResult = ComposeResult.Success(
+        psbt = "cHNidC8BAH0CAAAA...",
+        fee = 1000uL,
+        feeRate = 5.0f,
+        totalSpent = 51000uL,
     )
 
     val sampleSignedTx = TrezorSignedTx(
@@ -240,7 +214,7 @@ internal object TrezorPreviewData {
         sendAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
         sendAmountSats = "45000",
         sendFeeRate = "5",
-        precomposedResult = samplePrecomposedResult,
+        composeResult = sampleComposeResult,
     )
 
     val uiStateSigned = TrezorUiState(

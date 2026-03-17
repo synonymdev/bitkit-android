@@ -3,19 +3,12 @@ package to.bitkit.ui.screens.trezor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.CoinSelection
+import com.synonym.bitkitcore.ComposeOutput
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
-import com.synonym.bitkitcore.TrezorCoinType
-import com.synonym.bitkitcore.TrezorFeeLevel
-import com.synonym.bitkitcore.TrezorPrecomposeOutput
-import com.synonym.bitkitcore.TrezorPrecomposeParams
-import com.synonym.bitkitcore.TrezorPrecomposedOutput
-import com.synonym.bitkitcore.TrezorPrecomposedResult
 import com.synonym.bitkitcore.TrezorScriptType
-import com.synonym.bitkitcore.TrezorSignTxParams
 import com.synonym.bitkitcore.TrezorSignedTx
-import com.synonym.bitkitcore.TrezorSortingStrategy
-import com.synonym.bitkitcore.TrezorTxInput
-import com.synonym.bitkitcore.TrezorTxOutput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -233,10 +226,10 @@ class TrezorViewModel @Inject constructor(
                     isSendMax = false,
                     isComposing = false,
                     isSigning = false,
-                    precomposedResult = null,
+                    composeResult = null,
                     signedTxResult = null,
                     sendStep = SendStep.FORM,
-                    sortingStrategy = TrezorSortingStrategy.BIP69,
+                    coinSelection = CoinSelection.BRANCH_AND_BOUND,
                     isBroadcasting = false,
                     broadcastTxid = null,
                 )
@@ -351,8 +344,8 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(isSendMax = !it.isSendMax) }
     }
 
-    fun setSortingStrategy(strategy: TrezorSortingStrategy) {
-        _uiState.update { it.copy(sortingStrategy = strategy) }
+    fun setCoinSelection(selection: CoinSelection) {
+        _uiState.update { it.copy(coinSelection = selection) }
     }
 
     fun broadcastSignedTx() {
@@ -383,10 +376,10 @@ class TrezorViewModel @Inject constructor(
                 isSendMax = false,
                 isComposing = false,
                 isSigning = false,
-                precomposedResult = null,
+                composeResult = null,
                 signedTxResult = null,
                 sendStep = SendStep.FORM,
-                sortingStrategy = TrezorSortingStrategy.BIP69,
+                coinSelection = CoinSelection.BRANCH_AND_BOUND,
                 isBroadcasting = false,
                 broadcastTxid = null,
             )
@@ -397,7 +390,7 @@ class TrezorViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 sendStep = SendStep.FORM,
-                precomposedResult = null,
+                composeResult = null,
                 signedTxResult = null,
             )
         }
@@ -411,33 +404,35 @@ class TrezorViewModel @Inject constructor(
 
             _uiState.update { it.copy(isComposing = true) }
 
-            val coin = state.selectedNetwork.toTrezorCoinType()
+            val feeRate = state.sendFeeRate.toFloatOrNull() ?: return@launch
             TrezorDebugLog.log("COMPOSE", "=== composeTx START ===")
             TrezorDebugLog.log("COMPOSE", "address=${state.sendAddress}")
             TrezorDebugLog.log("COMPOSE", "amount=${state.sendAmountSats}, sendMax=${state.isSendMax}")
-            TrezorDebugLog.log("COMPOSE", "feeRate=${state.sendFeeRate} sat/vB, coin=$coin")
-            TrezorDebugLog.log("COMPOSE", "account.path=${accountInfo.account.path}")
-            TrezorDebugLog.log("COMPOSE", "utxos=${accountInfo.account.utxo.size}, balance=${accountInfo.balance}")
+            TrezorDebugLog.log("COMPOSE", "feeRate=$feeRate sat/vB, network=${state.selectedNetwork}")
+            TrezorDebugLog.log("COMPOSE", "coinSelection=${state.coinSelection}")
+            TrezorDebugLog.log("COMPOSE", "balance=${accountInfo.balance}")
 
             val output = if (state.isSendMax) {
-                TrezorPrecomposeOutput.SendMax(address = state.sendAddress)
+                ComposeOutput.SendMax(address = state.sendAddress)
             } else {
-                TrezorPrecomposeOutput.Payment(address = state.sendAddress, amount = state.sendAmountSats)
+                val amountSats = state.sendAmountSats.toULongOrNull()
+                if (amountSats == null) {
+                    _uiState.update { it.copy(isComposing = false) }
+                    ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter a valid amount")
+                    return@launch
+                }
+                ComposeOutput.Payment(address = state.sendAddress, amountSats = amountSats)
             }
 
-            val params = TrezorPrecomposeParams(
+            trezorRepo.composeTransaction(
+                extendedKey = state.lookupInput.trim(),
                 outputs = listOf(output),
-                coin = coin,
-                account = accountInfo.account,
-                feeLevels = listOf(
-                    TrezorFeeLevel(feePerUnit = state.sendFeeRate, baseFee = null, floorBaseFee = null)
-                ),
-                sequence = null,
-                sortingStrategy = state.sortingStrategy,
+                feeRates = listOf(feeRate),
+                network = state.selectedNetwork,
+                accountType = accountInfo.accountType,
+                coinSelection = state.coinSelection,
             )
-
-            trezorRepo.precomposeTransaction(params)
-                .onSuccess { handlePrecomposeResults(it) }
+                .onSuccess { handleComposeResults(it) }
                 .onFailure {
                     TrezorDebugLog.log("COMPOSE", "FAILED: ${it.message}")
                     _uiState.update { it.copy(isComposing = false) }
@@ -455,61 +450,35 @@ class TrezorViewModel @Inject constructor(
             ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter an amount")
             return false
         }
-        val feeRate = state.sendFeeRate.toLongOrNull()
-        if (feeRate == null || feeRate <= 0) {
+        val feeRate = state.sendFeeRate.toFloatOrNull()
+        if (feeRate == null || feeRate <= 0f) {
             ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter a valid fee rate")
             return false
         }
         return true
     }
 
-    private suspend fun handlePrecomposeResults(results: List<TrezorPrecomposedResult>) {
+    private suspend fun handleComposeResults(results: List<ComposeResult>) {
         TrezorDebugLog.log("COMPOSE", "Got ${results.size} result(s)")
         results.forEachIndexed { i, r ->
             when (r) {
-                is TrezorPrecomposedResult.Final -> TrezorDebugLog.log(
+                is ComposeResult.Success -> TrezorDebugLog.log(
                     "COMPOSE",
-                    "[$i] Final: fee=${r.fee}, totalSpent=${r.totalSpent}, " +
-                        "feePerByte=${r.feePerByte}, bytes=${r.bytes}, " +
-                        "inputs=${r.inputs.size}, outputs=${r.outputs.size}"
+                    "[$i] Success: fee=${r.fee}, totalSpent=${r.totalSpent}, " +
+                        "feeRate=${r.feeRate}"
                 )
-                is TrezorPrecomposedResult.NonFinal -> TrezorDebugLog.log(
-                    "COMPOSE",
-                    "[$i] NonFinal: max=${r.max}, fee=${r.fee}"
-                )
-                is TrezorPrecomposedResult.Error -> TrezorDebugLog.log(
+                is ComposeResult.Error -> TrezorDebugLog.log(
                     "COMPOSE",
                     "[$i] Error: ${r.error}"
                 )
             }
         }
-        val finalResult = results.filterIsInstance<TrezorPrecomposedResult.Final>().firstOrNull()
-        val errorResult = results.filterIsInstance<TrezorPrecomposedResult.Error>().firstOrNull()
-        if (finalResult != null) {
-            finalResult.inputs.forEach {
-                TrezorDebugLog.log(
-                    "COMPOSE",
-                    "  input: txid=${it.txid}, vout=${it.vout}, " +
-                        "amount=${it.amount}, path=${it.path}, scriptType=${it.scriptType}"
-                )
-            }
-            finalResult.outputs.forEach {
-                when (it) {
-                    is TrezorPrecomposedOutput.Payment ->
-                        TrezorDebugLog.log("COMPOSE", "  output(payment): addr=${it.address}, amount=${it.amount}")
-                    is TrezorPrecomposedOutput.Change ->
-                        TrezorDebugLog.log(
-                            "COMPOSE",
-                            "  output(change): addr=${it.address}, " +
-                                "amount=${it.amount}, path=${it.path}"
-                        )
-                    is TrezorPrecomposedOutput.OpReturn ->
-                        TrezorDebugLog.log("COMPOSE", "  output(opreturn): ${it.dataHex}")
-                }
-            }
+        val successResult = results.filterIsInstance<ComposeResult.Success>().firstOrNull()
+        val errorResult = results.filterIsInstance<ComposeResult.Error>().firstOrNull()
+        if (successResult != null) {
             TrezorDebugLog.log("COMPOSE", "=== composeTx SUCCESS ===")
             _uiState.update {
-                it.copy(isComposing = false, precomposedResult = finalResult, sendStep = SendStep.REVIEW)
+                it.copy(isComposing = false, composeResult = successResult, sendStep = SendStep.REVIEW)
             }
             ToastEventBus.send(type = Toast.ToastType.INFO, title = "Transaction composed")
         } else if (errorResult != null) {
@@ -526,80 +495,39 @@ class TrezorViewModel @Inject constructor(
     fun signComposedTx() {
         viewModelScope.launch(bgDispatcher) {
             val state = _uiState.value
-            val result = state.precomposedResult ?: return@launch
+            val result = state.composeResult ?: return@launch
 
             TrezorDebugLog.log("SIGN", "=== signComposedTx START ===")
-            TrezorDebugLog.log("SIGN", "inputs=${result.inputs.size}, outputs=${result.outputs.size}")
             TrezorDebugLog.log("SIGN", "network=${state.selectedNetwork}")
-            result.inputs.forEach {
-                TrezorDebugLog.log(
-                    "SIGN",
-                    "  input: txid=${it.txid}, vout=${it.vout}, " +
-                        "amount=${it.amount}, scriptType=${it.scriptType}, path=${it.path}"
-                )
-            }
+            TrezorDebugLog.log("SIGN", "psbt length=${result.psbt.length}")
 
             _uiState.update { it.copy(isSigning = true) }
 
-            TrezorDebugLog.log("SIGN", "Converting precomposed to sign params...")
-            trezorRepo.convertToSignParams(
-                inputs = result.inputs,
-                outputs = result.outputs,
-                coin = state.selectedNetwork.toTrezorCoinType(),
-            ).onSuccess { logAndSign(it) }
+            trezorRepo.signTxFromPsbt(
+                psbtBase64 = result.psbt,
+                network = state.selectedNetwork.toTrezorCoinType(),
+            )
+                .onSuccess { signedTx ->
+                    TrezorDebugLog.log("SIGN", "=== signComposedTx SUCCESS ===")
+                    TrezorDebugLog.log(
+                        "SIGN",
+                        "signatures=${signedTx.signatures.size}, " +
+                            "txid=${signedTx.txid}, rawTxLen=${signedTx.serializedTx.length}"
+                    )
+                    _uiState.update {
+                        it.copy(isSigning = false, signedTxResult = signedTx, sendStep = SendStep.SIGNED)
+                    }
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = "Transaction signed (${signedTx.signatures.size} inputs)"
+                    )
+                }
                 .onFailure {
-                    TrezorDebugLog.log("SIGN", "convertToSignParams FAILED: ${it.message}")
+                    TrezorDebugLog.log("SIGN", "signTxFromPsbt FAILED: ${it.message}")
                     _uiState.update { s -> s.copy(isSigning = false) }
                     ToastEventBus.send(it)
                 }
         }
-    }
-
-    private suspend fun logAndSign(signParams: TrezorSignTxParams) {
-        val network = _uiState.value.selectedNetwork.toTrezorCoinType()
-        val txids = signParams.inputs.map { it.prevHash }.distinct()
-        TrezorDebugLog.log(
-            "SIGN",
-            "Sign params: inputs=${signParams.inputs.size}, " +
-                "outputs=${signParams.outputs.size}, coin=${signParams.coin}"
-        )
-        TrezorDebugLog.log("SIGN", "Fetching ${txids.size} prev tx(s) from Electrum...")
-        trezorRepo.fetchPrevTxs(txids = txids, network = network)
-            .onSuccess { prevTxs ->
-                TrezorDebugLog.log("SIGN", "Fetched ${prevTxs.size} prev tx(s)")
-                val completeParams = signParams.copy(prevTxs = prevTxs)
-                TrezorDebugLog.log("SIGN", "Calling trezor signTx...")
-                executeSign(completeParams)
-            }
-            .onFailure {
-                TrezorDebugLog.log("SIGN", "fetchPrevTxs FAILED: ${it.message}")
-                _uiState.update { s -> s.copy(isSigning = false) }
-                ToastEventBus.send(it)
-            }
-    }
-
-    private suspend fun executeSign(params: TrezorSignTxParams) {
-        trezorRepo.signTxWithParams(params)
-            .onSuccess { signedTx ->
-                TrezorDebugLog.log("SIGN", "=== signComposedTx SUCCESS ===")
-                TrezorDebugLog.log(
-                    "SIGN",
-                    "signatures=${signedTx.signatures.size}, " +
-                        "txid=${signedTx.txid}, rawTxLen=${signedTx.serializedTx.length}"
-                )
-                _uiState.update {
-                    it.copy(isSigning = false, signedTxResult = signedTx, sendStep = SendStep.SIGNED)
-                }
-                ToastEventBus.send(
-                    type = Toast.ToastType.SUCCESS,
-                    title = "Transaction signed (${signedTx.signatures.size} inputs)"
-                )
-            }
-            .onFailure {
-                TrezorDebugLog.log("SIGN", "signTx FAILED: ${it.message}")
-                _uiState.update { s -> s.copy(isSigning = false) }
-                ToastEventBus.send(it)
-            }
     }
 
     fun clearError() {
@@ -618,28 +546,6 @@ class TrezorViewModel @Inject constructor(
      */
     fun cancelPairingCode() {
         trezorRepo.cancelPairingCode()
-    }
-
-    /**
-     * Sign a Bitcoin transaction.
-     */
-    fun signTx(
-        inputs: List<TrezorTxInput>,
-        outputs: List<TrezorTxOutput>,
-        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
-        lockTime: UInt? = null,
-        version: UInt? = null,
-    ) {
-        viewModelScope.launch(bgDispatcher) {
-            trezorRepo.signTx(inputs, outputs, coin, lockTime, version)
-                .onSuccess { signedTx ->
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = "Transaction signed (${signedTx.signatures.size} inputs)"
-                    )
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
     }
 
     /**
@@ -678,10 +584,10 @@ data class TrezorUiState(
     val isSendMax: Boolean = false,
     val isComposing: Boolean = false,
     val isSigning: Boolean = false,
-    val precomposedResult: TrezorPrecomposedResult.Final? = null,
+    val composeResult: ComposeResult.Success? = null,
     val signedTxResult: TrezorSignedTx? = null,
     val sendStep: SendStep = SendStep.FORM,
-    val sortingStrategy: TrezorSortingStrategy = TrezorSortingStrategy.BIP69,
+    val coinSelection: CoinSelection = CoinSelection.BRANCH_AND_BOUND,
     val isBroadcasting: Boolean = false,
     val broadcastTxid: String? = null,
 )

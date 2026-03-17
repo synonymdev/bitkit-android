@@ -16,10 +16,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.synonym.bitkitcore.TrezorPrecomposedOutput
-import com.synonym.bitkitcore.TrezorPrecomposedResult
+import com.synonym.bitkitcore.CoinSelection
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.TrezorSignedTx
-import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
@@ -54,7 +53,7 @@ internal fun SendTransactionSection(
     onAmountChange: (String) -> Unit,
     onFeeRateChange: (String) -> Unit,
     onToggleSendMax: () -> Unit,
-    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit,
+    onCoinSelectionChange: (CoinSelection) -> Unit,
     onCompose: () -> Unit,
     onSign: () -> Unit,
     onBroadcast: () -> Unit,
@@ -76,10 +75,10 @@ internal fun SendTransactionSection(
                 onAmountChange = onAmountChange,
                 onFeeRateChange = onFeeRateChange,
                 onToggleSendMax = onToggleSendMax,
-                onSortingStrategyChange = onSortingStrategyChange,
+                onCoinSelectionChange = onCoinSelectionChange,
                 onCompose = onCompose,
             )
-            SendStep.REVIEW -> uiState.precomposedResult?.let { result ->
+            SendStep.REVIEW -> uiState.composeResult?.let { result ->
                 ReviewSection(
                     result = result,
                     isDeviceConnected = isDeviceConnected,
@@ -108,7 +107,7 @@ private fun ComposeForm(
     onAmountChange: (String) -> Unit,
     onFeeRateChange: (String) -> Unit,
     onToggleSendMax: () -> Unit,
-    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit,
+    onCoinSelectionChange: (CoinSelection) -> Unit,
     onCompose: () -> Unit,
 ) {
     Column {
@@ -165,9 +164,9 @@ private fun ComposeForm(
             color = Colors.White64,
         )
         VerticalSpacer(4.dp)
-        SortingStrategyRow(
-            selected = uiState.sortingStrategy,
-            onChange = onSortingStrategyChange,
+        CoinSelectionRow(
+            selected = uiState.coinSelection,
+            onChange = onCoinSelectionChange,
         )
 
         VerticalSpacer(16.dp)
@@ -185,21 +184,21 @@ private fun ComposeForm(
 }
 
 @Composable
-private fun SortingStrategyRow(
-    selected: TrezorSortingStrategy,
-    onChange: (TrezorSortingStrategy) -> Unit,
+private fun CoinSelectionRow(
+    selected: CoinSelection,
+    onChange: (CoinSelection) -> Unit,
 ) {
     val labels = mapOf(
-        TrezorSortingStrategy.BIP69 to "BIP69",
-        TrezorSortingStrategy.RANDOM to "Random",
-        TrezorSortingStrategy.NONE to "None",
+        CoinSelection.BRANCH_AND_BOUND to "Branch & Bound",
+        CoinSelection.LARGEST_FIRST to "Largest First",
+        CoinSelection.OLDEST_FIRST to "Oldest First",
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TrezorSortingStrategy.entries.forEach { strategy ->
+        CoinSelection.entries.forEach { selection ->
             TagButton(
-                text = labels[strategy] ?: strategy.name,
-                onClick = { onChange(strategy) },
-                isSelected = strategy == selected,
+                text = labels[selection] ?: selection.name,
+                onClick = { onChange(selection) },
+                isSelected = selection == selected,
             )
         }
     }
@@ -207,52 +206,47 @@ private fun SortingStrategyRow(
 
 @Composable
 private fun ReviewSection(
-    result: TrezorPrecomposedResult.Final,
+    result: ComposeResult.Success,
     isDeviceConnected: Boolean,
     isSigning: Boolean,
     onSign: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val onCopyPsbt = copyToClipboard(text = result.psbt, label = "PSBT")
+
     Column {
         ResultCard {
             InfoRow("Total Spent", "${result.totalSpent} sats")
             InfoRow("Fee", "${result.fee} sats")
-            InfoRow("Fee Rate", "${result.feePerByte} sat/vB")
-            InfoRow("Size", "${result.bytes} bytes")
-            InfoRow("Inputs", "${result.inputs.size}")
-            InfoRow("Outputs", "${result.outputs.size}")
+            InfoRow("Fee Rate", "${result.feeRate} sat/vB")
         }
 
-        if (result.inputs.isNotEmpty()) {
-            VerticalSpacer(8.dp)
-            Caption13Up(
-                text = "Inputs (${result.inputs.size})",
-                color = Colors.White64,
-            )
-            VerticalSpacer(4.dp)
-            result.inputs.forEach { input ->
-                ResultCard {
-                    Caption(
-                        text = "${input.txid.take(8)}...${input.txid.takeLast(8)}:${input.vout}",
-                        color = Colors.Brand,
-                    )
-                    InfoRow("Amount", "${input.amount} sats")
-                    InfoRow("Path", input.path)
-                }
-                VerticalSpacer(4.dp)
-            }
-        }
+        VerticalSpacer(8.dp)
+        Caption13Up(
+            text = "PSBT",
+            color = Colors.White64,
+        )
+        VerticalSpacer(4.dp)
 
-        if (result.outputs.isNotEmpty()) {
-            VerticalSpacer(8.dp)
-            Caption13Up(
-                text = "Outputs (${result.outputs.size})",
-                color = Colors.White64,
-            )
-            VerticalSpacer(4.dp)
-            result.outputs.forEach { output ->
-                OutputCard(output)
-                VerticalSpacer(4.dp)
+        ResultCard {
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Caption(
+                    text = result.psbt,
+                    color = Colors.White,
+                    modifier = Modifier.weight(1f),
+                )
+                HorizontalSpacer(8.dp)
+                Icon(
+                    painter = painterResource(R.drawable.ic_copy),
+                    contentDescription = "Copy PSBT",
+                    tint = Colors.Brand,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickableAlpha(onClick = onCopyPsbt),
+                )
             }
         }
 
@@ -280,35 +274,6 @@ private fun ReviewSection(
         if (!isDeviceConnected) {
             VerticalSpacer(4.dp)
             Caption(text = "Connect a Trezor device to sign")
-        }
-    }
-}
-
-@Composable
-private fun OutputCard(output: TrezorPrecomposedOutput) {
-    ResultCard {
-        when (output) {
-            is TrezorPrecomposedOutput.Payment -> {
-                InfoRow("Type", "Payment")
-                Caption(
-                    text = output.address,
-                    color = Colors.Brand,
-                )
-                InfoRow("Amount", "${output.amount} sats")
-            }
-            is TrezorPrecomposedOutput.Change -> {
-                InfoRow("Type", "Change")
-                Caption(
-                    text = output.address,
-                    color = Colors.White64,
-                )
-                InfoRow("Amount", "${output.amount} sats")
-                InfoRow("Path", output.path)
-            }
-            is TrezorPrecomposedOutput.OpReturn -> {
-                InfoRow("Type", "OP_RETURN")
-                InfoRow("Data", output.dataHex)
-            }
         }
     }
 }
@@ -424,7 +389,7 @@ private fun PreviewSendForm() {
             onAmountChange = {},
             onFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},
@@ -449,7 +414,7 @@ private fun PreviewSendFormFilled() {
             onAmountChange = {},
             onFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},
@@ -470,7 +435,7 @@ private fun PreviewSendReview() {
             onAmountChange = {},
             onFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},
@@ -491,7 +456,7 @@ private fun PreviewSendSigned() {
             onAmountChange = {},
             onFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},
@@ -512,7 +477,7 @@ private fun PreviewSendBroadcast() {
             onAmountChange = {},
             onFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},

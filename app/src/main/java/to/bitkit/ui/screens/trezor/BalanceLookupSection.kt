@@ -20,8 +20,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountUtxo
+import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.SingleAddressInfoResult
-import com.synonym.bitkitcore.TrezorSortingStrategy
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
@@ -45,7 +45,7 @@ internal fun BalanceLookupSection(
     onSendAmountChange: (String) -> Unit,
     onSendFeeRateChange: (String) -> Unit,
     onToggleSendMax: () -> Unit,
-    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit,
+    onCoinSelectionChange: (CoinSelection) -> Unit,
     onCompose: () -> Unit,
     onSign: () -> Unit,
     onBroadcast: () -> Unit,
@@ -94,7 +94,7 @@ internal fun BalanceLookupSection(
                     onSendAmountChange = onSendAmountChange,
                     onSendFeeRateChange = onSendFeeRateChange,
                     onToggleSendMax = onToggleSendMax,
-                    onSortingStrategyChange = onSortingStrategyChange,
+                    onCoinSelectionChange = onCoinSelectionChange,
                     onCompose = onCompose,
                     onSign = onSign,
                     onBroadcast = onBroadcast,
@@ -120,7 +120,7 @@ private fun AccountInfoResultView(
     onSendAmountChange: (String) -> Unit,
     onSendFeeRateChange: (String) -> Unit,
     onToggleSendMax: () -> Unit,
-    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit,
+    onCoinSelectionChange: (CoinSelection) -> Unit,
     onCompose: () -> Unit,
     onSign: () -> Unit,
     onBroadcast: () -> Unit,
@@ -158,7 +158,7 @@ private fun AccountInfoResultView(
                 onAmountChange = onSendAmountChange,
                 onFeeRateChange = onSendFeeRateChange,
                 onToggleSendMax = onToggleSendMax,
-                onSortingStrategyChange = onSortingStrategyChange,
+                onCoinSelectionChange = onCoinSelectionChange,
                 onCompose = onCompose,
                 onSign = onSign,
                 onBroadcast = onBroadcast,
@@ -270,7 +270,7 @@ private fun PreviewBalanceLookupEmpty() {
             onSendAmountChange = {},
             onSendFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},
@@ -293,7 +293,7 @@ private fun PreviewBalanceLookupWithAccountInfo() {
             onSendAmountChange = {},
             onSendFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},
@@ -316,7 +316,7 @@ private fun PreviewBalanceLookupWithAddressInfo() {
             onSendAmountChange = {},
             onSendFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},
@@ -339,7 +339,7 @@ private fun PreviewBalanceLookupLoading() {
             onSendAmountChange = {},
             onSendFeeRateChange = {},
             onToggleSendMax = {},
-            onSortingStrategyChange = {},
+            onCoinSelectionChange = {},
             onCompose = {},
             onSign = {},
             onBroadcast = {},

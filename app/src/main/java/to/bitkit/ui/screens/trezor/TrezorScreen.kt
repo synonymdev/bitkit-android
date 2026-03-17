@@ -44,7 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.synonym.bitkitcore.TrezorSortingStrategy
+import com.synonym.bitkitcore.CoinSelection
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
@@ -145,7 +145,7 @@ private fun TrezorScreenContent(
             onSendAmountChange = viewModel::setSendAmount,
             onSendFeeRateChange = viewModel::setSendFeeRate,
             onToggleSendMax = viewModel::toggleSendMax,
-            onSortingStrategyChange = viewModel::setSortingStrategy,
+            onCoinSelectionChange = viewModel::setCoinSelection,
             onCompose = viewModel::composeTx,
             onSign = viewModel::signComposedTx,
             onBroadcast = viewModel::broadcastSignedTx,
@@ -181,7 +181,7 @@ private fun Content(
     onSendAmountChange: (String) -> Unit = {},
     onSendFeeRateChange: (String) -> Unit = {},
     onToggleSendMax: () -> Unit = {},
-    onSortingStrategyChange: (TrezorSortingStrategy) -> Unit = {},
+    onCoinSelectionChange: (CoinSelection) -> Unit = {},
     onCompose: () -> Unit = {},
     onSign: () -> Unit = {},
     onBroadcast: () -> Unit = {},
@@ -383,7 +383,7 @@ private fun Content(
                     onSendAmountChange = onSendAmountChange,
                     onSendFeeRateChange = onSendFeeRateChange,
                     onToggleSendMax = onToggleSendMax,
-                    onSortingStrategyChange = onSortingStrategyChange,
+                    onCoinSelectionChange = onCoinSelectionChange,
                     onCompose = onCompose,
                     onSign = onSign,
                     onBroadcast = onBroadcast,

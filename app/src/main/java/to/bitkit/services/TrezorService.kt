@@ -2,6 +2,8 @@ package to.bitkit.services
 
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.ComposeParams
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
@@ -9,40 +11,31 @@ import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorGetAddressParams
 import com.synonym.bitkitcore.TrezorGetPublicKeyParams
-import com.synonym.bitkitcore.TrezorPrecomposeParams
-import com.synonym.bitkitcore.TrezorPrecomposedInput
-import com.synonym.bitkitcore.TrezorPrecomposedOutput
-import com.synonym.bitkitcore.TrezorPrecomposedResult
-import com.synonym.bitkitcore.TrezorPrevTx
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignMessageParams
-import com.synonym.bitkitcore.TrezorSignTxParams
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
-import com.synonym.bitkitcore.TrezorTxInput
-import com.synonym.bitkitcore.TrezorTxOutput
 import com.synonym.bitkitcore.TrezorVerifyMessageParams
 import com.synonym.bitkitcore.onchainBroadcastRawTx
+import com.synonym.bitkitcore.onchainComposeTransaction
 import com.synonym.bitkitcore.onchainGetAccountInfo
 import com.synonym.bitkitcore.onchainGetAddressInfo
 import com.synonym.bitkitcore.trezorClearCredentials
 import com.synonym.bitkitcore.trezorConnect
 import com.synonym.bitkitcore.trezorDisconnect
-import com.synonym.bitkitcore.trezorFetchPrevTxs
 import com.synonym.bitkitcore.trezorGetAddress
 import com.synonym.bitkitcore.trezorGetConnectedDevice
+import com.synonym.bitkitcore.trezorGetDeviceFingerprint
 import com.synonym.bitkitcore.trezorGetPublicKey
 import com.synonym.bitkitcore.trezorInitialize
 import com.synonym.bitkitcore.trezorIsConnected
 import com.synonym.bitkitcore.trezorIsInitialized
 import com.synonym.bitkitcore.trezorListDevices
-import com.synonym.bitkitcore.trezorPrecomposeTransaction
-import com.synonym.bitkitcore.trezorPrecomposedToSignParams
 import com.synonym.bitkitcore.trezorScan
 import com.synonym.bitkitcore.trezorSetTransportCallback
 import com.synonym.bitkitcore.trezorSignMessage
-import com.synonym.bitkitcore.trezorSignTx
+import com.synonym.bitkitcore.trezorSignTxFromPsbt
 import com.synonym.bitkitcore.trezorVerifyMessage
 import to.bitkit.async.ServiceQueue
 import javax.inject.Inject
@@ -185,64 +178,27 @@ class TrezorService @Inject constructor(
         }
     }
 
-    suspend fun signTx(
-        inputs: List<TrezorTxInput>,
-        outputs: List<TrezorTxOutput>,
-        coin: TrezorCoinType? = TrezorCoinType.BITCOIN,
-        lockTime: UInt? = null,
-        version: UInt? = null,
-    ): TrezorSignedTx {
-        return ServiceQueue.CORE.background {
-            trezorSignTx(
-                params = TrezorSignTxParams(
-                    inputs = inputs,
-                    outputs = outputs,
-                    coin = coin,
-                    lockTime = lockTime,
-                    version = version,
-                    prevTxs = emptyList(),
-                )
-            )
-        }
-    }
-
     suspend fun clearCredentials(deviceId: String) {
         ServiceQueue.CORE.background {
             trezorClearCredentials(deviceId = deviceId)
         }
     }
 
-    suspend fun precomposeTransaction(
-        params: TrezorPrecomposeParams,
-    ): List<TrezorPrecomposedResult> {
+    suspend fun composeTransaction(params: ComposeParams): List<ComposeResult> {
         return ServiceQueue.CORE.background {
-            trezorPrecomposeTransaction(params = params)
+            onchainComposeTransaction(params = params)
         }
     }
 
-    suspend fun precomposedToSignParams(
-        inputs: List<TrezorPrecomposedInput>,
-        outputs: List<TrezorPrecomposedOutput>,
-        coin: TrezorCoinType?,
-    ): TrezorSignTxParams {
+    suspend fun signTxFromPsbt(psbtBase64: String, network: TrezorCoinType?): TrezorSignedTx {
         return ServiceQueue.CORE.background {
-            trezorPrecomposedToSignParams(
-                inputs = inputs,
-                outputs = outputs,
-                coin = coin,
-            )
+            trezorSignTxFromPsbt(psbtBase64, network)
         }
     }
 
-    suspend fun signTxWithParams(params: TrezorSignTxParams): TrezorSignedTx {
+    suspend fun getDeviceFingerprint(): String {
         return ServiceQueue.CORE.background {
-            trezorSignTx(params = params)
-        }
-    }
-
-    suspend fun fetchPrevTxs(txids: List<String>, electrumUrl: String): List<TrezorPrevTx> {
-        return ServiceQueue.CORE.background {
-            trezorFetchPrevTxs(txids = txids, electrumUrl = electrumUrl)
+            trezorGetDeviceFingerprint()
         }
     }
 

@@ -4,24 +4,21 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.CoinSelection
+import com.synonym.bitkitcore.ComposeOutput
+import com.synonym.bitkitcore.ComposeParams
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
-import com.synonym.bitkitcore.TrezorPrecomposeParams
-import com.synonym.bitkitcore.TrezorPrecomposedInput
-import com.synonym.bitkitcore.TrezorPrecomposedOutput
-import com.synonym.bitkitcore.TrezorPrecomposedResult
-import com.synonym.bitkitcore.TrezorPrevTx
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorScriptType
-import com.synonym.bitkitcore.TrezorSignTxParams
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
-import com.synonym.bitkitcore.TrezorTxInput
-import com.synonym.bitkitcore.TrezorTxOutput
+import com.synonym.bitkitcore.WalletParams
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -214,7 +211,7 @@ class TrezorRepo @Inject constructor(
             trezorService.getAccountInfo(
                 extendedKey = extendedKey,
                 electrumUrl = electrumUrlForNetwork(network),
-                network = keyFormatNetwork(network),
+                network = network,
                 scriptType = scriptType,
             )
         }.onFailure { e ->
@@ -231,7 +228,7 @@ class TrezorRepo @Inject constructor(
             trezorService.getAddressInfo(
                 address = address,
                 electrumUrl = electrumUrlForNetwork(network),
-                network = keyFormatNetwork(network),
+                network = network,
             )
         }.onFailure { e ->
             Logger.error("Trezor getAddressInfo failed", e, context = TAG)
@@ -239,45 +236,47 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun precomposeTransaction(
-        params: TrezorPrecomposeParams,
-    ): Result<List<TrezorPrecomposedResult>> = withContext(ioDispatcher) {
+    @Suppress("LongParameterList")
+    suspend fun composeTransaction(
+        extendedKey: String,
+        outputs: List<ComposeOutput>,
+        feeRates: List<Float>,
+        network: BitkitCoreNetwork,
+        accountType: AccountType?,
+        coinSelection: CoinSelection,
+    ): Result<List<ComposeResult>> = withContext(ioDispatcher) {
         runCatching {
-            trezorService.precomposeTransaction(params = params)
-        }.onFailure {
-            Logger.error("Trezor precomposeTransaction failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
-        }
-    }
-
-    suspend fun convertToSignParams(
-        inputs: List<TrezorPrecomposedInput>,
-        outputs: List<TrezorPrecomposedOutput>,
-        coin: TrezorCoinType?,
-    ): Result<TrezorSignTxParams> = withContext(ioDispatcher) {
-        runCatching {
-            trezorService.precomposedToSignParams(
-                inputs = inputs,
+            val fingerprint = trezorService.getDeviceFingerprint()
+            val params = ComposeParams(
+                wallet = WalletParams(
+                    extendedKey = extendedKey,
+                    electrumUrl = electrumUrlForNetwork(network),
+                    fingerprint = fingerprint,
+                    network = network,
+                    accountType = accountType,
+                ),
                 outputs = outputs,
-                coin = coin,
+                feeRates = feeRates,
+                coinSelection = coinSelection,
             )
+            trezorService.composeTransaction(params)
         }.onFailure {
-            Logger.error("Trezor convertToSignParams failed", it, context = TAG)
+            Logger.error("Trezor composeTransaction failed", it, context = TAG)
             _state.update { s -> s.copy(error = it.message) }
         }
     }
 
-    suspend fun fetchPrevTxs(
-        txids: List<String>,
-        network: TrezorCoinType,
-    ): Result<List<TrezorPrevTx>> = withContext(ioDispatcher) {
+    suspend fun signTxFromPsbt(
+        psbtBase64: String,
+        network: TrezorCoinType?,
+    ): Result<TrezorSignedTx> = withContext(ioDispatcher) {
         runCatching {
-            trezorService.fetchPrevTxs(
-                txids = txids,
-                electrumUrl = electrumUrlForNetwork(network),
-            )
+            ensureConnected()
+            val response = trezorService.signTxFromPsbt(psbtBase64, network)
+            _state.update { it.copy(error = null) }
+            response
         }.onFailure {
-            Logger.error("Trezor fetchPrevTxs failed", it, context = TAG)
+            Logger.error("Trezor signTxFromPsbt failed", it, context = TAG)
             _state.update { s -> s.copy(error = it.message) }
         }
     }
@@ -293,18 +292,6 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
-        }
-    }
-
-    suspend fun signTxWithParams(params: TrezorSignTxParams): Result<TrezorSignedTx> = withContext(ioDispatcher) {
-        runCatching {
-            ensureConnected()
-            val response = trezorService.signTxWithParams(params)
-            _state.update { it.copy(error = null) }
-            response
-        }.onFailure {
-            Logger.error("Trezor signTxWithParams failed", it, context = TAG)
             _state.update { s -> s.copy(error = it.message) }
         }
     }
@@ -519,13 +506,13 @@ class TrezorRepo @Inject constructor(
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
-    private fun keyFormatNetwork(network: BitkitCoreNetwork): BitkitCoreNetwork = when (network) {
-        BitkitCoreNetwork.REGTEST -> BitkitCoreNetwork.TESTNET
-        else -> network
+    private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = when (network) {
+        BitkitCoreNetwork.BITCOIN -> "ssl://bitkit.to:9999"
+        BitkitCoreNetwork.TESTNET -> "ssl://electrum.blockstream.info:60002"
+        BitkitCoreNetwork.TESTNET4 -> "ssl://electrum.blockstream.info:60002"
+        BitkitCoreNetwork.REGTEST -> "ssl://electrs.bitkit.stag0.blocktank.to:9999"
+        BitkitCoreNetwork.SIGNET -> "ssl://electrum.blockstream.info:60002"
     }
-
-    private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String =
-        Env.electrumUrlForNetwork(network)
 
     private fun electrumUrlForNetwork(network: TrezorCoinType): String = when (network) {
         TrezorCoinType.BITCOIN -> Env.electrumUrlForNetwork(BitkitCoreNetwork.BITCOIN)
@@ -547,30 +534,6 @@ class TrezorRepo @Inject constructor(
             ?: error("Device not found during reconnect")
         val features = connectWithThpRetry(device.id)
         _state.update { it.copy(connectedDevice = features, connectedDeviceId = deviceId) }
-    }
-
-    suspend fun signTx(
-        inputs: List<TrezorTxInput>,
-        outputs: List<TrezorTxOutput>,
-        coin: TrezorCoinType = TrezorCoinType.BITCOIN,
-        lockTime: UInt? = null,
-        version: UInt? = null,
-    ): Result<TrezorSignedTx> = withContext(ioDispatcher) {
-        runCatching {
-            ensureConnected()
-            val response = trezorService.signTx(
-                inputs = inputs,
-                outputs = outputs,
-                coin = coin,
-                lockTime = lockTime,
-                version = version,
-            )
-            _state.update { it.copy(error = null) }
-            response
-        }.onFailure { e ->
-            Logger.error("Trezor signTx failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
-        }
     }
 
     suspend fun clearCredentials(deviceId: String): Result<Unit> = withContext(ioDispatcher) {

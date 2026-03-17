@@ -2,11 +2,13 @@ package to.bitkit.ui.screens.trezor
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.repositories.TrezorRepo
 import to.bitkit.repositories.TrezorState
@@ -20,255 +22,261 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrezorViewModelTest : BaseUnitTest() {
 
-    private val trezorRepo = mock<TrezorRepo>()
+    private val trezorRepo: TrezorRepo = mock()
+    private val trezorStateFlow = MutableStateFlow(TrezorState())
+    private val needsPairingCodeFlow = MutableStateFlow(false)
 
-    private lateinit var viewModel: TrezorViewModel
+    private lateinit var sut: TrezorViewModel
 
     @Before
-    fun setup() = runBlocking {
-        val stateFlow = MutableStateFlow(TrezorState())
-        whenever(trezorRepo.state).thenReturn(stateFlow.asStateFlow())
-        whenever(trezorRepo.needsPairingCode).thenReturn(MutableStateFlow(false).asStateFlow())
-
-        viewModel = TrezorViewModel(
-            bgDispatcher = testDispatcher,
-            trezorRepo = trezorRepo,
-        )
+    fun setUp() {
+        whenever(trezorRepo.state).thenReturn(trezorStateFlow)
+        whenever(trezorRepo.needsPairingCode).thenReturn(needsPairingCodeFlow)
+        whenever(trezorRepo.observeExternalDisconnects(any())).then { }
+        sut = createViewModel()
     }
 
-    // region Initial State
+    // region Pure state setters
 
     @Test
-    fun `initial uiState should have default derivation path`() {
-        val state = viewModel.uiState.value
+    fun `setDerivationPath should update uiState derivationPath`() {
+        val path = "m/49'/0'/0'/0/0"
+        sut.setDerivationPath(path)
 
-        assertTrue(state.derivationPath.startsWith("m/84'/"))
-        assertTrue(state.derivationPath.endsWith("/0/0"))
+        assertEquals(path, sut.uiState.value.derivationPath)
     }
 
     @Test
-    fun `initial uiState should have addressIndex 0`() {
-        val state = viewModel.uiState.value
+    fun `setSelectedNetwork to BITCOIN should use coinType 0 in path`() {
+        sut.setSelectedNetwork(BitkitCoreNetwork.BITCOIN)
 
+        val state = sut.uiState.value
+        assertEquals(BitkitCoreNetwork.BITCOIN, state.selectedNetwork)
+        assertEquals("m/84'/0'/0'/0/0", state.derivationPath)
         assertEquals(0, state.addressIndex)
     }
 
     @Test
-    fun `initial uiState should not be in any loading state`() {
-        val state = viewModel.uiState.value
+    fun `setSelectedNetwork to TESTNET should use coinType 1 in path`() {
+        sut.setSelectedNetwork(BitkitCoreNetwork.TESTNET)
 
-        assertFalse(state.isGettingAddress)
-        assertFalse(state.isGettingPublicKey)
-        assertFalse(state.isSigningMessage)
-        assertFalse(state.isVerifyingMessage)
-        assertFalse(state.isLookingUp)
-        assertFalse(state.isComposing)
-        assertFalse(state.isSigning)
-        assertFalse(state.isBroadcasting)
-    }
-
-    @Test
-    fun `initial uiState should have empty lookup input`() {
-        val state = viewModel.uiState.value
-
-        assertEquals("", state.lookupInput)
-    }
-
-    @Test
-    fun `initial uiState should have no results`() {
-        val state = viewModel.uiState.value
-
-        assertNull(state.accountInfoResult)
-        assertNull(state.addressInfoResult)
-        assertNull(state.lastSignature)
-        assertNull(state.lastSigningAddress)
-        assertNull(state.precomposedResult)
-        assertNull(state.signedTxResult)
-        assertNull(state.broadcastTxid)
-    }
-
-    @Test
-    fun `initial uiState should have FORM send step`() {
-        val state = viewModel.uiState.value
-
-        assertEquals(SendStep.FORM, state.sendStep)
-    }
-
-    // endregion
-
-    // region Network Selection
-
-    @Test
-    fun `setSelectedNetwork to BITCOIN should update coin type to 0`() {
-        viewModel.setSelectedNetwork(BitkitCoreNetwork.BITCOIN)
-
-        val state = viewModel.uiState.value
-        assertEquals(BitkitCoreNetwork.BITCOIN, state.selectedNetwork)
-        assertEquals("m/84'/0'/0'/0/0", state.derivationPath)
-    }
-
-    @Test
-    fun `setSelectedNetwork to TESTNET should update coin type to 1`() {
-        viewModel.setSelectedNetwork(BitkitCoreNetwork.TESTNET)
-
-        val state = viewModel.uiState.value
+        val state = sut.uiState.value
         assertEquals(BitkitCoreNetwork.TESTNET, state.selectedNetwork)
         assertEquals("m/84'/1'/0'/0/0", state.derivationPath)
+        assertEquals(0, state.addressIndex)
     }
-
-    @Test
-    fun `setSelectedNetwork to REGTEST should update coin type to 1`() {
-        viewModel.setSelectedNetwork(BitkitCoreNetwork.REGTEST)
-
-        val state = viewModel.uiState.value
-        assertEquals(BitkitCoreNetwork.REGTEST, state.selectedNetwork)
-        assertEquals("m/84'/1'/0'/0/0", state.derivationPath)
-    }
-
-    @Test
-    fun `setSelectedNetwork should reset addressIndex to 0`() {
-        viewModel.incrementAddressIndex()
-        viewModel.incrementAddressIndex()
-        assertEquals(2, viewModel.uiState.value.addressIndex)
-
-        viewModel.setSelectedNetwork(BitkitCoreNetwork.TESTNET)
-
-        assertEquals(0, viewModel.uiState.value.addressIndex)
-    }
-
-    // endregion
-
-    // region Address Index
 
     @Test
     fun `incrementAddressIndex should increment index and update path`() {
-        viewModel.setSelectedNetwork(BitkitCoreNetwork.BITCOIN)
+        sut.setSelectedNetwork(BitkitCoreNetwork.BITCOIN)
+        sut.incrementAddressIndex()
 
-        viewModel.incrementAddressIndex()
-
-        val state = viewModel.uiState.value
+        val state = sut.uiState.value
         assertEquals(1, state.addressIndex)
         assertEquals("m/84'/0'/0'/0/1", state.derivationPath)
     }
 
     @Test
-    fun `incrementAddressIndex multiple times should increment correctly`() {
-        viewModel.setSelectedNetwork(BitkitCoreNetwork.BITCOIN)
+    fun `setMessageToSign should update messageToSign`() {
+        val message = "Test message"
+        sut.setMessageToSign(message)
 
-        viewModel.incrementAddressIndex()
-        viewModel.incrementAddressIndex()
-        viewModel.incrementAddressIndex()
-
-        val state = viewModel.uiState.value
-        assertEquals(3, state.addressIndex)
-        assertEquals("m/84'/0'/0'/0/3", state.derivationPath)
-    }
-
-    // endregion
-
-    // region Derivation Path
-
-    @Test
-    fun `setDerivationPath should update path`() {
-        viewModel.setDerivationPath("m/49'/0'/0'/0/0")
-
-        assertEquals("m/49'/0'/0'/0/0", viewModel.uiState.value.derivationPath)
-    }
-
-    // endregion
-
-    // region Message Signing State
-
-    @Test
-    fun `setMessageToSign should update message`() {
-        viewModel.setMessageToSign("Test message")
-
-        assertEquals("Test message", viewModel.uiState.value.messageToSign)
+        assertEquals(message, sut.uiState.value.messageToSign)
     }
 
     @Test
-    fun `initial message should be default greeting`() {
-        assertEquals("Hello, Trezor!", viewModel.uiState.value.messageToSign)
-    }
+    fun `setSendAddress should update sendAddress`() {
+        val address = "bc1qtest123"
+        sut.setSendAddress(address)
 
-    // endregion
-
-    // region Lookup Input
-
-    @Test
-    fun `setLookupInput should update input`() {
-        viewModel.setLookupInput("xpub6C...")
-
-        assertEquals("xpub6C...", viewModel.uiState.value.lookupInput)
-    }
-
-    // endregion
-
-    // region Send Flow State
-
-    @Test
-    fun `setSendAddress should update address`() {
-        viewModel.setSendAddress("bc1qtest...")
-
-        assertEquals("bc1qtest...", viewModel.uiState.value.sendAddress)
+        assertEquals(address, sut.uiState.value.sendAddress)
     }
 
     @Test
-    fun `setSendAmount should update amount`() {
-        viewModel.setSendAmount("50000")
+    fun `setSendAmount should update sendAmountSats`() {
+        val amount = "50000"
+        sut.setSendAmount(amount)
 
-        assertEquals("50000", viewModel.uiState.value.sendAmountSats)
+        assertEquals(amount, sut.uiState.value.sendAmountSats)
     }
 
     @Test
-    fun `setSendFeeRate should update fee rate`() {
-        viewModel.setSendFeeRate("10")
+    fun `setSendFeeRate should update sendFeeRate`() {
+        val feeRate = "10"
+        sut.setSendFeeRate(feeRate)
 
-        assertEquals("10", viewModel.uiState.value.sendFeeRate)
+        assertEquals(feeRate, sut.uiState.value.sendFeeRate)
     }
 
     @Test
     fun `toggleSendMax should toggle isSendMax`() {
-        assertFalse(viewModel.uiState.value.isSendMax)
+        assertFalse(sut.uiState.value.isSendMax)
 
-        viewModel.toggleSendMax()
-        assertTrue(viewModel.uiState.value.isSendMax)
+        sut.toggleSendMax()
+        assertTrue(sut.uiState.value.isSendMax)
 
-        viewModel.toggleSendMax()
-        assertFalse(viewModel.uiState.value.isSendMax)
+        sut.toggleSendMax()
+        assertFalse(sut.uiState.value.isSendMax)
     }
 
     @Test
-    fun `resetSendFlow should clear all send fields`() {
-        viewModel.setSendAddress("bc1qtest")
-        viewModel.setSendAmount("50000")
-        viewModel.setSendFeeRate("10")
-        viewModel.toggleSendMax()
+    fun `resetSendFlow should clear all send-related state`() {
+        sut.setSendAddress("bc1qtest")
+        sut.setSendAmount("10000")
+        sut.setSendFeeRate("5")
+        sut.toggleSendMax()
 
-        viewModel.resetSendFlow()
+        sut.resetSendFlow()
 
-        val state = viewModel.uiState.value
+        val state = sut.uiState.value
         assertEquals("", state.sendAddress)
         assertEquals("", state.sendAmountSats)
         assertEquals("2", state.sendFeeRate)
         assertFalse(state.isSendMax)
         assertFalse(state.isComposing)
         assertFalse(state.isSigning)
-        assertNull(state.precomposedResult)
+        assertNull(state.composeResult)
         assertNull(state.signedTxResult)
         assertEquals(SendStep.FORM, state.sendStep)
+        assertFalse(state.isBroadcasting)
         assertNull(state.broadcastTxid)
     }
 
     @Test
-    fun `backToComposeForm should reset to FORM step`() {
-        viewModel.backToComposeForm()
+    fun `setLookupInput should update lookupInput`() {
+        val input = "xpub6test123"
+        sut.setLookupInput(input)
 
-        val state = viewModel.uiState.value
-        assertEquals(SendStep.FORM, state.sendStep)
-        assertNull(state.precomposedResult)
-        assertNull(state.signedTxResult)
+        assertEquals(input, sut.uiState.value.lookupInput)
     }
 
     // endregion
+
+    // region Async methods
+
+    @Test
+    fun `initialize should call trezorRepo initialize`() = test {
+        whenever(trezorRepo.initialize()).thenReturn(Result.success(Unit))
+
+        sut.initialize()
+        advanceUntilIdle()
+
+        verify(trezorRepo).initialize()
+    }
+
+    @Test
+    fun `scan should call trezorRepo scan`() = test {
+        whenever(trezorRepo.scan()).thenReturn(Result.success(emptyList()))
+
+        sut.scan()
+        advanceUntilIdle()
+
+        verify(trezorRepo).scan()
+    }
+
+    @Test
+    fun `connect should call trezorRepo connect with deviceId`() = test {
+        val deviceId = "device-123"
+        whenever(trezorRepo.connect(deviceId)).thenReturn(Result.failure(RuntimeException("test")))
+
+        sut.connect(deviceId)
+        advanceUntilIdle()
+
+        verify(trezorRepo).connect(deviceId)
+    }
+
+    @Test
+    fun `disconnect should call trezorRepo disconnect`() = test {
+        whenever(trezorRepo.disconnect()).thenReturn(Result.success(Unit))
+
+        sut.disconnect()
+        advanceUntilIdle()
+
+        verify(trezorRepo).disconnect()
+    }
+
+    @Test
+    fun `getAddress should clear isGettingAddress on success`() = test {
+        whenever(trezorRepo.getAddress(any(), any(), any(), any()))
+            .thenReturn(Result.success(mock()))
+
+        sut.getAddress()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isGettingAddress)
+    }
+
+    @Test
+    fun `getAddress should clear isGettingAddress on failure`() = test {
+        whenever(trezorRepo.getAddress(any(), any(), any(), any()))
+            .thenReturn(Result.failure(RuntimeException("test")))
+
+        sut.getAddress()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isGettingAddress)
+    }
+
+    @Test
+    fun `signMessage should not call repo when message is blank`() = test {
+        sut.setMessageToSign("")
+
+        sut.signMessage()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).signMessage(any(), any(), any())
+    }
+
+    @Test
+    fun `verifyMessage should not call repo when no signature exists`() = test {
+        sut.verifyMessage()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).verifyMessage(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `broadcastSignedTx should not call repo when no signedTxResult`() = test {
+        sut.broadcastSignedTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).broadcastRawTx(any(), any())
+    }
+
+    @Test
+    fun `clearError should call trezorRepo clearError`() {
+        sut.clearError()
+
+        verify(trezorRepo).clearError()
+    }
+
+    @Test
+    fun `submitPairingCode should call trezorRepo submitPairingCode`() {
+        val code = "123456"
+        sut.submitPairingCode(code)
+
+        verify(trezorRepo).submitPairingCode(code)
+    }
+
+    @Test
+    fun `cancelPairingCode should call trezorRepo cancelPairingCode`() {
+        sut.cancelPairingCode()
+
+        verify(trezorRepo).cancelPairingCode()
+    }
+
+    @Test
+    fun `hasKnownDevices should delegate to trezorRepo`() {
+        whenever(trezorRepo.hasKnownDevices()).thenReturn(true)
+
+        assertTrue(sut.hasKnownDevices())
+        verify(trezorRepo).hasKnownDevices()
+    }
+
+    // endregion
+
+    private fun createViewModel() = TrezorViewModel(
+        bgDispatcher = testDispatcher,
+        trezorRepo = trezorRepo,
+    )
 }
