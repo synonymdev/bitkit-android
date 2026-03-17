@@ -64,6 +64,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(false))
         whenever(trezorTransport.externalDisconnect).thenReturn(MutableSharedFlow())
         whenever(context.filesDir).thenReturn(tempFolder.root)
+        whenever { trezorStore.loadKnownDevices() }.thenReturn(emptyList())
     }
 
     private fun createSut(): TrezorRepo = TrezorRepo(
