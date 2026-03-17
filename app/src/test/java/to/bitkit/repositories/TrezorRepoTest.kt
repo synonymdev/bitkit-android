@@ -18,6 +18,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import to.bitkit.data.TrezorStore
 import to.bitkit.env.Env
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
@@ -47,6 +48,7 @@ class TrezorRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val trezorService = mock<TrezorService>()
     private val trezorTransport = mock<TrezorTransport>()
+    private val trezorStore = mock<TrezorStore>()
     private val prefs = mock<SharedPreferences>()
     private val prefsEditor = mock<SharedPreferences.Editor>()
 
@@ -68,7 +70,8 @@ class TrezorRepoTest : BaseUnitTest() {
         context = context,
         trezorService = trezorService,
         trezorTransport = trezorTransport,
-        bgDispatcher = testDispatcher,
+        trezorStore = trezorStore,
+        ioDispatcher = testDispatcher,
     )
 
     @Suppress("LongParameterList")
