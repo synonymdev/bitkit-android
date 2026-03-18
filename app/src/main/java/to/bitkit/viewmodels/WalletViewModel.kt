@@ -306,7 +306,7 @@ class WalletViewModel @Inject constructor(
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
                 }
-                checkForOrphanedChannelMonitorRecovery()
+                // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
                 Logger.error("Node startup error", it, context = TAG)
