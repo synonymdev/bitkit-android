@@ -53,7 +53,6 @@ import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toImmutableMap
 import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
@@ -189,7 +188,7 @@ fun ActivityDetailScreen(
                     if (item is Activity.Onchain) {
                         isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
                         boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
-                            detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds).toImmutableMap()
+                            detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
                         } else {
                             persistentMapOf()
                         }
@@ -202,7 +201,7 @@ fun ActivityDetailScreen(
                 // Update boostTxDoesExist when boostTxIds change
                 LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else emptyList()) {
                     if (item is Activity.Onchain && item.v1.boostTxIds.isNotEmpty()) {
-                        boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds).toImmutableMap()
+                        boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
                     }
                 }
 

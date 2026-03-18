@@ -41,7 +41,6 @@ import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
@@ -77,8 +76,8 @@ fun ChannelOrdersScreen(
     LaunchedEffect(Unit) { blocktank.refreshOrders() }
 
     Content(
-        orders = orders.toImmutableList(),
-        cJitEntries = cJitEntries.toImmutableList(),
+        orders = orders,
+        cJitEntries = cJitEntries,
         onBack = onBackClick,
         onClickOrder = onOrderItemClick,
         onClickCjit = onCjitItemClick,

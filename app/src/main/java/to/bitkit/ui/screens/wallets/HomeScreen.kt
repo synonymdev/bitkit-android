@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -353,6 +354,10 @@ private fun Content(
         LARGE_SCREEN_ACTIVITY_COUNT
     }
 
+    val paginatedActivities = remember(latestActivities, activityCount) {
+        latestActivities?.take(activityCount)?.toImmutableList()
+    }
+
     Box {
         TopBar(
             hazeState = hazeState,
@@ -385,7 +390,7 @@ private fun Content(
                 0 -> WalletPage(
                     isRefreshing = isRefreshing,
                     homeUiState = homeUiState,
-                    latestActivities = latestActivities?.take(activityCount),
+                    latestActivities = paginatedActivities,
                     balances = balances,
                     onRefresh = onRefresh,
                     onNavigateToSettingUp = onNavigateToSettingUp,

@@ -59,6 +59,8 @@ import to.bitkit.viewmodels.VssDebugViewModel
 import to.bitkit.viewmodels.VssLdkKeyItem
 import java.io.File
 
+private val vssTabs = VssTab.entries.toImmutableList()
+
 @Composable
 fun VssDebugScreen(
     navController: NavController,
@@ -118,7 +120,7 @@ private fun VssDebugContent(
                 .verticalScroll(rememberScrollState())
         ) {
             CustomTabRowWithSpacing(
-                tabs = VssTab.entries.toImmutableList(),
+                tabs = vssTabs,
                 currentTabIndex = selectedVssTab,
                 onTabChange = { selectedVssTab = it.ordinal },
             )
