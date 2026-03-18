@@ -23,6 +23,7 @@ internal object Env {
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
+    const val walletSyncTimeoutSecs = 10_uL
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "$VERSION_NAME (${BuildConfig.VERSION_CODE})"
 
