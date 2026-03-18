@@ -1,6 +1,8 @@
 package to.bitkit.services
 
+import android.content.Context
 import com.synonym.bitkitcore.AddressType
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -71,6 +73,7 @@ typealias NodeEventHandler = suspend (Event) -> Unit
 @Suppress("LargeClass", "TooManyFunctions")
 @Singleton
 class LightningService @Inject constructor(
+    @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
@@ -81,7 +84,16 @@ class LightningService @Inject constructor(
     companion object {
         private const val TAG = "LightningService"
         private const val NODE_ID_PREVIEW_LEN = 20
+        private const val STALE_MONITOR_RECOVERY_ATTEMPTED_KEY = "staleMonitorRecoveryAttempted"
     }
+
+    private val prefs by lazy {
+        context.getSharedPreferences("lightning_recovery", Context.MODE_PRIVATE)
+    }
+
+    private var staleMonitorRecoveryAttempted: Boolean
+        get() = prefs.getBoolean(STALE_MONITOR_RECOVERY_ATTEMPTED_KEY, false)
+        set(value) = prefs.edit().putBoolean(STALE_MONITOR_RECOVERY_ATTEMPTED_KEY, value).apply()
 
     @Volatile
     var node: Node? = null
@@ -177,25 +189,53 @@ class LightningService @Inject constructor(
                 passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),
             )
         }
-        try {
-            val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
-            val vssUrl = Env.vssServerUrl
-            val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
-            val fixedHeaders = emptyMap<String, String>()
-            Logger.verbose(
-                "Building node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'",
+        val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
+        val vssUrl = Env.vssServerUrl
+        val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
+        val fixedHeaders = emptyMap<String, String>()
+        Logger.verbose(
+            "Building node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'",
+            context = TAG,
+        )
+
+        fun buildNode() = if (lnurlAuthServerUrl.isNotEmpty()) {
+            builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
+        } else {
+            builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
+        }
+
+        val node = try {
+            buildNode()
+        } catch (e: BuildException.ReadFailed) {
+            if (staleMonitorRecoveryAttempted) throw LdkError(e)
+
+            // Build failed with ReadFailed — likely a stale ChannelMonitor (DangerousValue).
+            // Retry once with accept_stale_channel_monitors for one-time recovery.
+            Logger.warn(
+                "Build failed with ReadFailed. Retrying with accept_stale_channel_monitors for one-time recovery.",
+                e,
                 context = TAG,
             )
-            if (lnurlAuthServerUrl.isNotEmpty()) {
-                builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
-            } else {
-                builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
+            staleMonitorRecoveryAttempted = true
+            builder.setAcceptStaleChannelMonitors(true)
+            try {
+                val recovered = buildNode()
+                Logger.info("Stale monitor recovery: build succeeded with accept_stale", context = TAG)
+                recovered
+            } catch (retryError: BuildException) {
+                throw LdkError(retryError)
             }
         } catch (e: BuildException) {
             throw LdkError(e)
-        } finally {
-            // TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values
         }
+
+        // Mark recovery as attempted after any successful build (whether recovery was needed or not).
+        // This ensures unaffected users never trigger the retry path on future startups.
+        if (!staleMonitorRecoveryAttempted) {
+            staleMonitorRecoveryAttempted = true
+        }
+
+        node
     }
 
     private suspend fun Builder.configureGossipSource(customRgsServerUrl: String?) {
