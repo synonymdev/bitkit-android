@@ -514,13 +514,6 @@ class TrezorRepo @Inject constructor(
         BitkitCoreNetwork.SIGNET -> "ssl://electrum.blockstream.info:60002"
     }
 
-    private fun electrumUrlForNetwork(network: TrezorCoinType): String = when (network) {
-        TrezorCoinType.BITCOIN -> Env.electrumUrlForNetwork(BitkitCoreNetwork.BITCOIN)
-        TrezorCoinType.TESTNET -> Env.electrumUrlForNetwork(BitkitCoreNetwork.TESTNET)
-        TrezorCoinType.REGTEST -> Env.electrumUrlForNetwork(BitkitCoreNetwork.REGTEST)
-        TrezorCoinType.SIGNET -> Env.electrumUrlForNetwork(BitkitCoreNetwork.SIGNET)
-    }
-
     private suspend fun ensureConnected() {
         if (trezorService.isConnected()) return
         val deviceId = _state.value.connectedDeviceId
