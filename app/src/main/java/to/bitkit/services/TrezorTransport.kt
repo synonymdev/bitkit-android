@@ -49,6 +49,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import androidx.core.content.edit
 
 /**
  * Transport callback implementation for Trezor communication.
@@ -141,7 +142,7 @@ class TrezorTransport @Inject constructor(
                     migrated++
                 }
                 if (migrated > 0) {
-                    espPrefs.edit().clear().commit()
+                    espPrefs.edit(commit = true) { clear() }
                     Logger.info("Migrated '$migrated' THP credentials from SharedPreferences to files", context = TAG)
                 }
             } catch (e: Exception) {
@@ -266,7 +267,7 @@ class TrezorTransport @Inject constructor(
     override fun callMessage(
         path: String,
         messageType: UShort,
-        data: ByteArray
+        data: ByteArray,
     ): TrezorCallMessageResult? {
         // For BLE/THP devices, the Rust side now handles THP protocol directly.
         // This callback returns null to let Rust use its built-in THP implementation.
@@ -1076,7 +1077,7 @@ class TrezorTransport @Inject constructor(
 
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic
+            characteristic: BluetoothGattCharacteristic,
         ) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path] ?: return
@@ -1099,7 +1100,7 @@ class TrezorTransport @Inject constructor(
         override fun onCharacteristicWrite(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
-            status: Int
+            status: Int,
         ) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path] ?: return
@@ -1113,7 +1114,7 @@ class TrezorTransport @Inject constructor(
         override fun onDescriptorWrite(
             gatt: BluetoothGatt,
             descriptor: BluetoothGattDescriptor,
-            status: Int
+            status: Int,
         ) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path] ?: return
