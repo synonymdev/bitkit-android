@@ -27,6 +27,7 @@ import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import androidx.core.content.edit
 import com.synonym.bitkitcore.NativeDeviceInfo
 import com.synonym.bitkitcore.TrezorCallMessageResult
 import com.synonym.bitkitcore.TrezorTransportCallback
@@ -49,7 +50,6 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
-import androidx.core.content.edit
 
 /**
  * Transport callback implementation for Trezor communication.
