@@ -182,36 +182,37 @@ class TrezorTransport @Inject constructor(
 
     // ==================== TrezorTransportCallback Implementation ====================
 
-    @Suppress("TooGenericExceptionCaught")
     override fun enumerateDevices(): List<NativeDeviceInfo> {
         val devices = mutableListOf<NativeDeviceInfo>()
 
         // Enumerate USB devices
-        try {
-            val usbDevices = usbManager.deviceList.values
+        runCatching {
+            usbManager.deviceList.values
                 .filter { isTrezorDevice(it) }
                 .map { device ->
                     NativeDeviceInfo(
                         path = device.deviceName,
                         transportType = "usb",
-                        name = try { device.productName } catch (_: SecurityException) { null },
+                        name = runCatching { device.productName }.getOrNull(),
                         vendorId = device.vendorId.toUShort(),
                         productId = device.productId.toUShort(),
                     )
                 }
-            devices.addAll(usbDevices)
-            Logger.debug("USB enumerate found '${usbDevices.size}' Trezor device(s)", context = TAG)
-        } catch (e: Exception) {
-            Logger.error("USB enumerate failed", e, context = TAG)
+        }.onSuccess {
+            devices.addAll(it)
+            Logger.debug("USB enumerate found '${it.size}' Trezor device(s)", context = TAG)
+        }.onFailure {
+            Logger.error("USB enumerate failed", it, context = TAG)
         }
 
         // Enumerate Bluetooth devices
-        try {
-            val bleDevices = enumerateBleDevices()
-            devices.addAll(bleDevices)
-            Logger.debug("BLE enumerate found '${bleDevices.size}' Trezor device(s)", context = TAG)
-        } catch (e: Exception) {
-            Logger.error("BLE enumerate failed", e, context = TAG)
+        runCatching {
+            enumerateBleDevices()
+        }.onSuccess {
+            devices.addAll(it)
+            Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
+        }.onFailure {
+            Logger.error("BLE enumerate failed", it, context = TAG)
         }
 
         Logger.info("Total enumerate found '${devices.size}' Trezor device(s)", context = TAG)
@@ -448,16 +449,15 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     fun clearDeviceCredential(deviceId: String) {
-        try {
+        runCatching {
             val file = credentialFile(deviceId)
             TrezorDebugLog.log("CLEAR", "clearDeviceCredential for: $deviceId, exists=${file.exists()}")
             file.delete()
             Logger.info("Cleared device credential for: '$deviceId'", context = TAG)
-        } catch (e: Exception) {
-            TrezorDebugLog.log("CLEAR", "EXCEPTION: ${e.message}")
-            Logger.error("Failed to clear device credential", e, context = TAG)
+        }.onFailure {
+            TrezorDebugLog.log("CLEAR", "EXCEPTION: ${it.message}")
+            Logger.error("Failed to clear device credential", it, context = TAG)
         }
     }
 
