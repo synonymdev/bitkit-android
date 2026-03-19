@@ -17,9 +17,6 @@ class AdvancedSettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
-    val isDevModeEnabled = settingsStore.data.map { it.isDevModeEnabled }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     val selectedAddressTypeName = settingsStore.data
         .map { it.selectedAddressType.toAddressType()?.addressTypeInfo()?.shortName ?: "" }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
