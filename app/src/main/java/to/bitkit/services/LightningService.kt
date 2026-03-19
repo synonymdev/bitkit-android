@@ -195,22 +195,17 @@ class LightningService @Inject constructor(
                 }
             }
 
-            buildNode().recoverCatching {
-                if (it !is BuildException.DangerousValue) throw it
-                // Handle `DangerousValue` with recovery flow
+            buildNode().recoverCatching { error ->
+                if (error !is BuildException.DangerousValue) throw error
                 Logger.warn(
-                    "Build failed with DangerousValue. Retrying with `accept_stale_channel_monitors` for recovery.",
-                    it,
+                    "Retrying build failed with 'DangerousValue' using 'setAcceptStaleChannelMonitors' for recovery.",
+                    error,
                     context = TAG,
                 )
                 builder.setAcceptStaleChannelMonitors(true)
                 buildNode()
-                    .onFailure { recoveryError ->
-                        Logger.error(
-                            "Error in recovery attempt with `accept_stale_channel_monitors`.",
-                            recoveryError,
-                            context = TAG,
-                        )
+                    .onFailure {
+                        Logger.error("Failed recovery retry using 'setAcceptStaleChannelMonitors'.", it, context = TAG)
                     }
                     .getOrThrow()
             }.getOrThrow()
@@ -249,7 +244,7 @@ class LightningService @Inject constructor(
                     lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
                     feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
-                connectionTimeoutSecs = Env.walletSyncTimeoutSecs, // 10s
+                connectionTimeoutSecs = Env.walletSyncTimeoutSecs,
             ),
         )
     }
