@@ -27,6 +27,7 @@ import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.synonym.bitkitcore.NativeDeviceInfo
 import com.synonym.bitkitcore.TrezorCallMessageResult
@@ -497,10 +498,11 @@ class TrezorTransport @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
 
-        context.registerReceiver(
+        ContextCompat.registerReceiver(
+            context,
             receiver,
             IntentFilter(ACTION_USB_PERMISSION),
-            Context.RECEIVER_NOT_EXPORTED,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
 
         try {
@@ -530,13 +532,11 @@ class TrezorTransport @Inject constructor(
 
         for (i in 0 until usbInterface.endpointCount) {
             val endpoint = usbInterface.getEndpoint(i)
-            when {
-                endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT &&
-                    endpoint.direction == UsbConstants.USB_DIR_IN -> {
+            when (endpoint.direction) {
+                UsbConstants.USB_DIR_IN if endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT -> {
                     readEndpoint = endpoint
                 }
-                endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT &&
-                    endpoint.direction == UsbConstants.USB_DIR_OUT -> {
+                UsbConstants.USB_DIR_OUT if endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT -> {
                     writeEndpoint = endpoint
                 }
             }
@@ -716,6 +716,7 @@ class TrezorTransport @Inject constructor(
         }
     }
 
+    @SuppressLint("MissingPermission")
     private val bleScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
@@ -1075,6 +1076,7 @@ class TrezorTransport @Inject constructor(
             Logger.info("BLE services discovered: '$path'", context = TAG)
         }
 
+        @Suppress("OVERRIDE_DEPRECATION")
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
