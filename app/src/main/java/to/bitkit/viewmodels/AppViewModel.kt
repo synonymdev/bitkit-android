@@ -2396,7 +2396,7 @@ class AppViewModel @Inject constructor(
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
     private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
-        if (!Env.isE2eTest && Env.isDebug) return@withContext
+        if (Env.isDebug) return@withContext
 
         delay(SCREEN_TRANSITION_DELAY)
 
