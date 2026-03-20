@@ -2,19 +2,27 @@ package to.bitkit.ui.settings.support
 
 import android.content.Intent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -33,21 +41,22 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.Links
 import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
+private val BrandColor = Colors.Brand
 
 @Composable
 fun SupportScreen(
@@ -144,60 +153,96 @@ private fun Content(
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__support__report),
-                iconRes = R.drawable.ic_warning,
+                icon = { SettingsIcon(R.drawable.ic_warning) },
                 onClick = onClickReportIssue,
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__support__help),
-                iconRes = R.drawable.ic_question,
+                icon = { SettingsIcon(R.drawable.ic_question) },
                 onClick = onClickHelpCenter,
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__support__status),
-                iconRes = R.drawable.ic_settings_support,
+                icon = { SettingsIcon(R.drawable.ic_power) },
                 onClick = onClickAppStatus,
                 modifier = Modifier.testTag("AppStatus"),
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__about__legal),
-                iconRes = R.drawable.ic_file_text,
+                icon = { SettingsIcon(R.drawable.ic_file_text) },
                 onClick = onClickLegal,
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__about__share),
-                iconRes = R.drawable.ic_share,
+                icon = { SettingsIcon(R.drawable.ic_share) },
                 onClick = onClickShare,
             )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__about__version),
-                iconRes = R.drawable.ic_stack,
-                value = SettingsButtonValue.StringValue(appVersion),
-                onClick = onClickVersion,
-                modifier = Modifier.testTag("DevOptions"),
-            )
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            Image(
-                painter = painterResource(R.drawable.bitkit_logo),
-                contentDescription = null,
+            // Version row — no chevron, value on right
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 32.dp, vertical = 16.dp)
-                    .height(82.dp)
-                    .testTag("AboutLogo"),
-            )
-
-            Links(modifier = Modifier.fillMaxWidth())
-
-            VerticalSpacer(16.dp)
-
-            BodyS(
-                text = stringResource(R.string.settings__support__copyright),
-                color = Colors.White64,
-            )
+                    .heightIn(min = 52.dp)
+                    .clickableAlpha { onClickVersion() }
+                    .testTag("DevOptions"),
+            ) {
+                SettingsIcon(R.drawable.ic_stack)
+                BodyM(
+                    text = stringResource(R.string.settings__about__version),
+                    modifier = Modifier.weight(1f),
+                )
+                BodyM(text = appVersion, color = Colors.White64)
+            }
+            HorizontalDivider()
 
             VerticalSpacer(32.dp)
+
+            // Part 1: Logo with diagonal orange crossing through it
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clipToBounds()
+                    .drawBehind {
+                        val path = Path().apply {
+                            moveTo(size.width, size.height * 0.1f)
+                            lineTo(0f, size.height * 0.65f)
+                            lineTo(0f, size.height)
+                            lineTo(size.width, size.height)
+                            close()
+                        }
+                        drawPath(path, color = BrandColor)
+                    },
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.bitkit_logo),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                        .testTag("AboutLogo"),
+                )
+            }
+
+            // Part 2: Solid orange background for bottom content
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Colors.Brand),
+            ) {
+                VerticalSpacer(16.dp)
+
+                Links(modifier = Modifier.fillMaxWidth())
+
+                VerticalSpacer(16.dp)
+
+                BodyM(
+                    text = stringResource(R.string.settings__support__copyright),
+                    color = Colors.White64,
+                )
+
+                VerticalSpacer(32.dp)
+            }
         }
     }
 }

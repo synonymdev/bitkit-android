@@ -1,27 +1,19 @@
 package to.bitkit.ui.settings
 
-import androidx.annotation.DrawableRes
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -37,12 +29,12 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
-import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAuthCheck
@@ -634,24 +626,6 @@ private fun AdvancedTabContent(
 
         VerticalSpacer(32.dp)
     }
-}
-
-@Composable
-private fun SettingsIcon(@DrawableRes iconRes: Int) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(32.dp)
-            .background(color = Colors.Black, shape = CircleShape),
-    ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            tint = Colors.Brand,
-            modifier = Modifier.size(16.dp),
-        )
-    }
-    HorizontalSpacer(8.dp)
 }
 
 @Preview(showBackground = true)

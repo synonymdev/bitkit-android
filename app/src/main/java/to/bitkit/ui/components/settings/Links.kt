@@ -9,6 +9,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -30,7 +31,7 @@ fun Links(modifier: Modifier = Modifier) {
                 val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_WEBSITE.toUri())
                 context.startActivity(intent)
             },
-            containerColor = Colors.White16,
+            containerColor = Color.Transparent,
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
@@ -44,7 +45,7 @@ fun Links(modifier: Modifier = Modifier) {
                 val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_MEDIUM.toUri())
                 context.startActivity(intent)
             },
-            containerColor = Colors.White16,
+            containerColor = Color.Transparent,
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
@@ -58,7 +59,7 @@ fun Links(modifier: Modifier = Modifier) {
                 val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_X.toUri())
                 context.startActivity(intent)
             },
-            containerColor = Colors.White16,
+            containerColor = Color.Transparent,
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
@@ -72,7 +73,7 @@ fun Links(modifier: Modifier = Modifier) {
                 val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_DISCORD.toUri())
                 context.startActivity(intent)
             },
-            containerColor = Colors.White16,
+            containerColor = Color.Transparent,
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
@@ -86,7 +87,7 @@ fun Links(modifier: Modifier = Modifier) {
                 val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_TELEGRAM.toUri())
                 context.startActivity(intent)
             },
-            containerColor = Colors.White16,
+            containerColor = Color.Transparent,
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
@@ -100,7 +101,7 @@ fun Links(modifier: Modifier = Modifier) {
                 val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_GITHUB.toUri())
                 context.startActivity(intent)
             },
-            containerColor = Colors.White16,
+            containerColor = Color.Transparent,
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
