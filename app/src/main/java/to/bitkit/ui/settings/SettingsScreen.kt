@@ -235,6 +235,7 @@ private fun SettingsContent(
         CustomTabRowWithSpacing(
             tabs = tabs,
             currentTabIndex = pagerState.currentPage,
+            selectedColor = Colors.White,
             onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
             modifier = Modifier.padding(horizontal = 16.dp),
         )
