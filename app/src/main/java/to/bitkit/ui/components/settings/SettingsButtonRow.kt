@@ -34,7 +34,6 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun SettingsButtonRow(
     title: String,
@@ -50,6 +49,77 @@ fun SettingsButtonRow(
     loading: Boolean = false,
     onClick: () -> Unit,
 ) {
+    SettingsButtonRowCore(
+        title = title,
+        hasIcon = iconRes != null,
+        subtitle = subtitle,
+        value = value,
+        description = description,
+        maxLinesSubtitle = maxLinesSubtitle,
+        enabled = enabled,
+        loading = loading,
+        onClick = onClick,
+        icon = if (iconRes != null) {
+            {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier
+                        .size(iconSize)
+                        .padding(end = 10.dp),
+                )
+            }
+        } else {
+            null
+        },
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun SettingsButtonRow(
+    title: String,
+    icon: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    value: SettingsButtonValue = SettingsButtonValue.None,
+    description: String? = null,
+    maxLinesSubtitle: Int = Int.MAX_VALUE,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit,
+) {
+    SettingsButtonRowCore(
+        title = title,
+        hasIcon = true,
+        icon = { icon() },
+        subtitle = subtitle,
+        value = value,
+        description = description,
+        maxLinesSubtitle = maxLinesSubtitle,
+        enabled = enabled,
+        loading = loading,
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+@Suppress("CyclomaticComplexMethod")
+@Composable
+private fun SettingsButtonRowCore(
+    title: String,
+    hasIcon: Boolean,
+    modifier: Modifier = Modifier,
+    icon: (@Composable () -> Unit)? = null,
+    subtitle: String? = null,
+    value: SettingsButtonValue = SettingsButtonValue.None,
+    description: String? = null,
+    maxLinesSubtitle: Int = Int.MAX_VALUE,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit,
+) {
     val alphaModifier = Modifier.then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
     Column(
         modifier = modifier
@@ -57,7 +127,7 @@ fun SettingsButtonRow(
     ) {
         Column(modifier = alphaModifier) {
             val rowHeight = when {
-                subtitle != null && iconRes != null -> 90.dp
+                subtitle != null && hasIcon -> 90.dp
                 subtitle != null -> 74.dp
                 else -> 52.dp
             }
@@ -67,14 +137,8 @@ fun SettingsButtonRow(
                     .fillMaxWidth()
                     .heightIn(min = rowHeight)
             ) {
-                if (iconRes != null) {
-                    Icon(
-                        painter = painterResource(iconRes),
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(iconSize),
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
+                if (icon != null) {
+                    icon()
                 }
                 Column(
                     verticalArrangement = Arrangement.Center,
