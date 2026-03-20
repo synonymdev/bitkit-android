@@ -166,6 +166,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun resetDismissedSuggestions() {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }
+        }
+    }
+
     val lastUsedTags = settingsStore.data.map { it.lastUsedTags }
         .asStateFlow(initialValue = emptyList())
 

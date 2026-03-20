@@ -200,6 +200,16 @@ private fun Menu(
         )
 
         DrawerItem(
+            label = stringResource(R.string.wallet__drawer__support),
+            iconRes = R.drawable.ic_settings_support,
+            onClick = {
+                rootNavController.navigateIfNotCurrent(Routes.Support)
+                scope.launch { drawerState.close() }
+            },
+            modifier = Modifier.testTag("DrawerSupport")
+        )
+
+        DrawerItem(
             label = stringResource(R.string.wallet__drawer__settings),
             iconRes = R.drawable.ic_settings,
             onClick = {

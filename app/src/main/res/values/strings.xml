@@ -484,6 +484,7 @@
     <string name="security__pin_choose_header">Choose 4-Digit PIN</string>
     <string name="security__pin_choose_text">Please use a PIN you will remember. If you forget your PIN you can reset it, but that will require restoring your wallet.</string>
     <string name="security__pin_disable_button">Disable PIN</string>
+    <string name="security__pin_enable_button">Enable PIN</string>
     <string name="security__pin_disable_text">PIN code is currently enabled. If you want to disable your PIN, you need to enter your current PIN code first.</string>
     <string name="security__pin_disable_title">Disable PIN</string>
     <string name="security__pin_enter">Please enter your PIN code</string>
@@ -570,6 +571,7 @@
     <string name="settings__adv__reset_desc">Are you sure you want to reset the suggestions? They will reappear in case you have removed them from your Bitkit wallet overview.</string>
     <string name="settings__adv__reset_title">Reset Suggestions?</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__adv__section_networks">Networks</string>
     <string name="settings__adv__section_other">Other</string>
     <string name="settings__adv__section_payments">Payments</string>
@@ -587,7 +589,8 @@
     <string name="settings__backup__failed_message">Bitkit failed to back up wallet data. Retrying in {interval, plural, one {# minute} other {# minutes}}.</string>
     <string name="settings__backup__failed_title">Data Backup Failure</string>
     <string name="settings__backup__latest">latest data backups</string>
-    <string name="settings__backup__reset">Reset and restore wallet</string>
+    <string name="settings__backup__data">Data backups</string>
+    <string name="settings__backup__reset">Reset wallet</string>
     <string name="settings__backup__status_failed">Failed Backup: {time}</string>
     <string name="settings__backup__status_running">Running</string>
     <string name="settings__backup__status_success">Latest Backup: {time}</string>
@@ -653,7 +656,9 @@
     <string name="settings__general__denomination_classic">Classic (₿ 0.00010000)</string>
     <string name="settings__general__denomination_label">Bitcoin denomination</string>
     <string name="settings__general__denomination_modern">Modern (₿ 10 000)</string>
-    <string name="settings__general__speed">Transaction speed</string>
+    <string name="settings__general__section_interface">Interface</string>
+    <string name="settings__general__section_payments">Payments</string>
+    <string name="settings__general__speed">Transaction Speed</string>
     <string name="settings__general__speed_default">Default Transaction Speed</string>
     <string name="settings__general__speed_fee_custom">Set Custom Fee</string>
     <string name="settings__general__speed_fee_total">₿ {feeSats} for the average transaction</string>
@@ -680,6 +685,9 @@
     <string name="settings__rgs__update_success_description">You may need to restart the app once or twice for this change to take effect.</string>
     <string name="settings__rgs__update_success_title">Rapid-Gossip-Sync Server Updated</string>
     <string name="settings__security__clipboard">Read clipboard for ease of use</string>
+    <string name="settings__security__section_backup">Back up or reset</string>
+    <string name="settings__security__section_privacy">Privacy</string>
+    <string name="settings__security__section_safety">Safety</string>
     <string name="settings__security__footer">When enabled, you can use {biometryTypeName} instead of your PIN code to unlock your wallet or send payments.</string>
     <string name="settings__security__hide_balance_on_open">Hide balance on open</string>
     <string name="settings__security__pin">PIN Code</string>
@@ -688,9 +696,9 @@
     <string name="settings__security__pin_enabled">Enabled</string>
     <string name="settings__security__pin_payments">Require PIN for payments</string>
     <string name="settings__security__swipe_balance_to_hide">Swipe balance to hide</string>
-    <string name="settings__security__use_bio">Use {biometryTypeName} instead</string>
+    <string name="settings__security__use_bio">{biometryTypeName} instead of PIN</string>
     <string name="settings__security__warn_100">Warn when sending over $100</string>
-    <string name="settings__security_title">Security and Privacy</string>
+    <string name="settings__security_title">Security</string>
     <string name="settings__settings">Settings</string>
     <string name="settings__status__backup__error">Failed to complete a full backup</string>
     <string name="settings__status__backup__pending">Backing up...</string>
@@ -722,7 +730,8 @@
     <string name="settings__support__report">Report Issue</string>
     <string name="settings__support__report_text">Please describe the issue you are experiencing or ask a general question.</string>
     <string name="settings__support__status">App Status</string>
-    <string name="settings__support__text">Need help? Report your issue from within Bitkit, visit the help center, check the status, or reach out to us on our social channels.</string>
+    <string name="settings__support__copyright">Bitkit was crafted by Synonym Software, S.A. DE C.V. ©2025. All rights reserved.</string>
+    <string name="settings__support__text">Need help? Report your issue from within Bitkit or visit our help center.</string>
     <string name="settings__support__text_button">Send</string>
     <string name="settings__support__text_success">Thank you for contacting us! We will try to get back to you as soon as possible.</string>
     <string name="settings__support__text_success_button">OK</string>
@@ -734,7 +743,13 @@
     <string name="settings__support_title">Support</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Show Widget Titles</string>
-    <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="settings__widgets__reset_suggestions">Reset Suggestions Cards</string>
+    <string name="settings__widgets__reset_widgets">Reset Widgets</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">Are you sure you want to reset the widgets? The default widget set with default configurations will be displayed.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">Reset Widgets?</string>
+    <string name="settings__widgets__section_display">Display</string>
+    <string name="settings__widgets__section_reset">Reset To Defaults</string>
+    <string name="settings__widgets__showWidgets">Show Widgets</string>
     <string name="slashtags__onboarding_profile1_header">Own your\n&lt;accent&gt;profile&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Set up your public profile and links, so your Bitkit contacts can reach you or pay you anytime, anywhere.</string>
     <string name="slashtags__profile">Profile</string>
@@ -848,6 +863,7 @@
     <string name="wallet__drawer__profile">Profile</string>
     <string name="wallet__drawer__settings">Settings</string>
     <string name="wallet__drawer__shop">Shop</string>
+    <string name="wallet__drawer__support">Support</string>
     <string name="wallet__drawer__status">App Status</string>
     <string name="wallet__drawer__wallet">Wallet</string>
     <string name="wallet__drawer__widgets">Widgets</string>

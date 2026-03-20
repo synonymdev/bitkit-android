@@ -32,7 +32,7 @@ fun ChangePinResultScreen(
 ) {
     ChangePinResultContent(
         onOkClick = {
-            navController.popBackStack<Routes.SecuritySettings>(inclusive = false)
+            navController.popBackStack<Routes.Settings>(inclusive = false)
         },
         onBackClick = {
             navController.popBackStack()

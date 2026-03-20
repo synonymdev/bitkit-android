@@ -1,203 +1,629 @@
 package to.bitkit.ui.settings
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.models.Toast
+import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.transactionSpeedUiText
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.AuthCheckAction
+import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.navigateToAboutSettings
-import to.bitkit.ui.navigateToAdvancedSettings
-import to.bitkit.ui.navigateToBackupSettings
+import to.bitkit.ui.navigateToAuthCheck
+import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToDevSettings
-import to.bitkit.ui.navigateToGeneralSettings
-import to.bitkit.ui.navigateToSecuritySettings
+import to.bitkit.ui.navigateToLanguageSettings
+import to.bitkit.ui.navigateToLocalCurrencySettings
+import to.bitkit.ui.navigateToPinManagement
+import to.bitkit.ui.navigateToQuickPaySettings
+import to.bitkit.ui.navigateToTagsSettings
+import to.bitkit.ui.navigateToTransactionSpeedSettings
+import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
+import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.settingsViewModel
-import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.viewmodels.LanguageViewModel
 
-private const val DEV_MODE_TAP_THRESHOLD = 5
+private enum class SettingsTab(private val titleRes: Int) : TabItem {
+    General(R.string.settings__general_title),
+    Security(R.string.settings__security_title),
+    Advanced(R.string.settings__advanced_title);
+
+    override val uiText @Composable get() = stringResource(titleRes)
+}
 
 @Composable
 fun SettingsScreen(
     navController: NavController,
+    advancedViewModel: AdvancedSettingsViewModel = hiltViewModel(),
+    languageViewModel: LanguageViewModel = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
+    val currencies = LocalCurrencies.current
+
+    // General tab state
+    val defaultTransactionSpeed by settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
+    val lastUsedTags by settings.lastUsedTags.collectAsStateWithLifecycle()
+    val quickPayIntroSeen by settings.quickPayIntroSeen.collectAsStateWithLifecycle()
+    val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
+    val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
+    val languageUiState by languageViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Security tab state
+    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val enableSwipeToHideBalance by settings.enableSwipeToHideBalance.collectAsStateWithLifecycle()
+    val hideBalanceOnOpen by settings.hideBalanceOnOpen.collectAsStateWithLifecycle()
+    val enableAutoReadClipboard by settings.enableAutoReadClipboard.collectAsStateWithLifecycle()
+    val enableSendAmountWarning by settings.enableSendAmountWarning.collectAsStateWithLifecycle()
+
+    // Advanced tab state
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
-    var enableDevModeTapCount by remember { mutableIntStateOf(0) }
-    val haptic = LocalHapticFeedback.current
-    val context = LocalContext.current
+    val selectedAddressTypeName by advancedViewModel.selectedAddressTypeName.collectAsStateWithLifecycle()
 
-    SettingsScreenContent(
-        isDevModeEnabled = isDevModeEnabled,
-        onGeneralClick = { navController.navigateToGeneralSettings() },
-        onSecurityClick = { navController.navigateToSecuritySettings() },
-        onBackupClick = { navController.navigateToBackupSettings() },
-        onAdvancedClick = { navController.navigateToAdvancedSettings() },
-        onSupportClick = { navController.navigateTo(Routes.Support) },
-        onAboutClick = { navController.navigateToAboutSettings() },
-        onDevClick = { navController.navigateToDevSettings() },
-        onBackClick = { navController.popBackStack() },
-        onCogTap = {
-            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-            enableDevModeTapCount = enableDevModeTapCount + 1
+    LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
-            if (enableDevModeTapCount >= DEV_MODE_TAP_THRESHOLD) {
-                val newValue = !isDevModeEnabled
-                settings.setIsDevModeEnabled(newValue)
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-
-                app.toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(
-                        if (newValue) {
-                            R.string.settings__dev_enabled_title
-                        } else {
-                            R.string.settings__dev_disabled_title
-                        }
-                    ),
-                    description = context.getString(
-                        if (newValue) {
-                            R.string.settings__dev_enabled_message
-                        } else {
-                            R.string.settings__dev_disabled_message
-                        }
-                    ),
-                )
-                enableDevModeTapCount = 0
+    SettingsContent(
+        // General
+        selectedCurrency = currencies.selectedCurrency,
+        primaryDisplay = currencies.primaryDisplay,
+        defaultTransactionSpeed = defaultTransactionSpeed,
+        selectedLanguage = languageUiState.selectedLanguage.displayName,
+        showTagsButton = lastUsedTags.isNotEmpty(),
+        notificationsGranted = notificationsGranted,
+        onLanguageClick = { navController.navigateToLanguageSettings() },
+        onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
+        onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
+        onWidgetsClick = { navController.navigateToWidgetsSettings() },
+        onTagsClick = { navController.navigateToTagsSettings() },
+        onTransactionSpeedClick = { navController.navigateToTransactionSpeedSettings() },
+        onQuickPayClick = { navController.navigateToQuickPaySettings(quickPayIntroSeen) },
+        onBgPaymentsClick = {
+            if (bgPaymentsIntroSeen || notificationsGranted) {
+                navController.navigateTo(Routes.BackgroundPaymentsSettings)
+            } else {
+                navController.navigateTo(Routes.BackgroundPaymentsIntro)
             }
         },
+        // Security
+        isPinEnabled = isPinEnabled,
+        isBiometricEnabled = isBiometricEnabled,
+        isPinForPaymentsEnabled = isPinForPaymentsEnabled,
+        enableSwipeToHideBalance = enableSwipeToHideBalance,
+        hideBalanceOnOpen = hideBalanceOnOpen,
+        enableAutoReadClipboard = enableAutoReadClipboard,
+        enableSendAmountWarning = enableSendAmountWarning,
+        isBiometrySupported = rememberBiometricAuthSupported(),
+        onBackupWalletClick = { app.showSheet(Sheet.Backup()) },
+        onDataBackupsClick = { navController.navigateTo(Routes.BackupSettings) },
+        onResetWalletClick = {
+            if (isPinEnabled) {
+                navController.navigateToAuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET)
+            } else {
+                navController.navigateTo(Routes.ResetAndRestoreSettings)
+            }
+        },
+        onPinClick = { navController.navigateToPinManagement() },
+        onPinForPaymentsClick = {
+            navController.navigateToAuthCheck(
+                onSuccessActionId = AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS,
+            )
+        },
+        onUseBiometricsClick = {
+            navController.navigateToAuthCheck(
+                requireBiometrics = true,
+                onSuccessActionId = AuthCheckAction.TOGGLE_BIOMETRICS,
+            )
+        },
+        onSwipeToHideBalanceClick = { settings.setEnableSwipeToHideBalance(!enableSwipeToHideBalance) },
+        onHideBalanceOnOpenClick = { settings.setHideBalanceOnOpen(!hideBalanceOnOpen) },
+        onAutoReadClipboardClick = { settings.setEnableAutoReadClipboard(!enableAutoReadClipboard) },
+        onSendAmountWarningClick = { settings.setEnableSendAmountWarning(!enableSendAmountWarning) },
+        // Advanced
+        isDevModeEnabled = isDevModeEnabled,
+        selectedAddressTypeName = selectedAddressTypeName,
+        onDevSettingsClick = { navController.navigateToDevSettings() },
+        onAddressTypeClick = { navController.navigateTo(Routes.AddressTypePreference) },
+        onCoinSelectionClick = { navController.navigateTo(Routes.CoinSelectPreference) },
+        onAddressViewerClick = { navController.navigateTo(Routes.AddressViewer) },
+        onLightningConnectionsClick = { navController.navigateTo(Routes.LightningConnections) },
+        onLightningNodeClick = { navController.navigateTo(Routes.NodeInfo) },
+        onElectrumServerClick = { navController.navigateTo(Routes.ElectrumConfig) },
+        onRgsServerClick = { navController.navigateTo(Routes.RgsServer) },
+        // Navigation
+        onBackClick = { navController.popBackStack() },
     )
 }
 
+@Suppress("LongParameterList", "LongMethod")
 @Composable
-fun SettingsScreenContent(
-    isDevModeEnabled: Boolean,
-    onGeneralClick: () -> Unit,
-    onSecurityClick: () -> Unit,
-    onBackupClick: () -> Unit,
-    onAdvancedClick: () -> Unit,
-    onSupportClick: () -> Unit,
-    onAboutClick: () -> Unit,
-    onDevClick: () -> Unit,
-    onCogTap: () -> Unit,
-    onBackClick: () -> Unit,
+private fun SettingsContent(
+    // General
+    selectedCurrency: String = "USD",
+    primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
+    defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
+    selectedLanguage: String = "",
+    showTagsButton: Boolean = false,
+    notificationsGranted: Boolean = false,
+    onLanguageClick: () -> Unit = {},
+    onLocalCurrencyClick: () -> Unit = {},
+    onDefaultUnitClick: () -> Unit = {},
+    onWidgetsClick: () -> Unit = {},
+    onTagsClick: () -> Unit = {},
+    onTransactionSpeedClick: () -> Unit = {},
+    onQuickPayClick: () -> Unit = {},
+    onBgPaymentsClick: () -> Unit = {},
+    // Security
+    isPinEnabled: Boolean = false,
+    isBiometricEnabled: Boolean = false,
+    isPinForPaymentsEnabled: Boolean = false,
+    enableSwipeToHideBalance: Boolean = false,
+    hideBalanceOnOpen: Boolean = false,
+    enableAutoReadClipboard: Boolean = true,
+    enableSendAmountWarning: Boolean = true,
+    isBiometrySupported: Boolean = false,
+    onBackupWalletClick: () -> Unit = {},
+    onDataBackupsClick: () -> Unit = {},
+    onResetWalletClick: () -> Unit = {},
+    onPinClick: () -> Unit = {},
+    onPinForPaymentsClick: () -> Unit = {},
+    onUseBiometricsClick: () -> Unit = {},
+    onSwipeToHideBalanceClick: () -> Unit = {},
+    onHideBalanceOnOpenClick: () -> Unit = {},
+    onAutoReadClipboardClick: () -> Unit = {},
+    onSendAmountWarningClick: () -> Unit = {},
+    // Advanced
+    isDevModeEnabled: Boolean = false,
+    selectedAddressTypeName: String = "",
+    onDevSettingsClick: () -> Unit = {},
+    onAddressTypeClick: () -> Unit = {},
+    onCoinSelectionClick: () -> Unit = {},
+    onAddressViewerClick: () -> Unit = {},
+    onLightningConnectionsClick: () -> Unit = {},
+    onLightningNodeClick: () -> Unit = {},
+    onElectrumServerClick: () -> Unit = {},
+    onRgsServerClick: () -> Unit = {},
+    // Navigation
+    onBackClick: () -> Unit = {},
 ) {
+    var selectedTab by remember { mutableStateOf(SettingsTab.General) }
+    val tabs = remember { SettingsTab.entries }
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__settings),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__general_title),
-                iconRes = R.drawable.ic_settings_general,
-                onClick = onGeneralClick,
-                modifier = Modifier.testTag("GeneralSettings")
+
+        CustomTabRowWithSpacing(
+            tabs = tabs,
+            currentTabIndex = tabs.indexOf(selectedTab),
+            onTabChange = { selectedTab = it },
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+
+        when (selectedTab) {
+            SettingsTab.General -> GeneralTabContent(
+                selectedCurrency = selectedCurrency,
+                primaryDisplay = primaryDisplay,
+                defaultTransactionSpeed = defaultTransactionSpeed,
+                selectedLanguage = selectedLanguage,
+                showTagsButton = showTagsButton,
+                notificationsGranted = notificationsGranted,
+                onLanguageClick = onLanguageClick,
+                onLocalCurrencyClick = onLocalCurrencyClick,
+                onDefaultUnitClick = onDefaultUnitClick,
+                onWidgetsClick = onWidgetsClick,
+                onTagsClick = onTagsClick,
+                onTransactionSpeedClick = onTransactionSpeedClick,
+                onQuickPayClick = onQuickPayClick,
+                onBgPaymentsClick = onBgPaymentsClick,
             )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__security_title),
-                iconRes = R.drawable.ic_settings_security,
-                onClick = onSecurityClick,
-                modifier = Modifier.testTag("SecuritySettings")
+
+            SettingsTab.Security -> SecurityTabContent(
+                isPinEnabled = isPinEnabled,
+                isBiometricEnabled = isBiometricEnabled,
+                isPinForPaymentsEnabled = isPinForPaymentsEnabled,
+                enableSwipeToHideBalance = enableSwipeToHideBalance,
+                hideBalanceOnOpen = hideBalanceOnOpen,
+                enableAutoReadClipboard = enableAutoReadClipboard,
+                enableSendAmountWarning = enableSendAmountWarning,
+                isBiometrySupported = isBiometrySupported,
+                onBackupWalletClick = onBackupWalletClick,
+                onDataBackupsClick = onDataBackupsClick,
+                onResetWalletClick = onResetWalletClick,
+                onPinClick = onPinClick,
+                onPinForPaymentsClick = onPinForPaymentsClick,
+                onUseBiometricsClick = onUseBiometricsClick,
+                onSwipeToHideBalanceClick = onSwipeToHideBalanceClick,
+                onHideBalanceOnOpenClick = onHideBalanceOnOpenClick,
+                onAutoReadClipboardClick = onAutoReadClipboardClick,
+                onSendAmountWarningClick = onSendAmountWarningClick,
             )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__backup_title),
-                iconRes = R.drawable.ic_settings_backup,
-                onClick = onBackupClick,
-                modifier = Modifier.testTag("BackupSettings")
+
+            SettingsTab.Advanced -> AdvancedTabContent(
+                isDevModeEnabled = isDevModeEnabled,
+                selectedAddressTypeName = selectedAddressTypeName,
+                onDevSettingsClick = onDevSettingsClick,
+                onAddressTypeClick = onAddressTypeClick,
+                onCoinSelectionClick = onCoinSelectionClick,
+                onAddressViewerClick = onAddressViewerClick,
+                onLightningConnectionsClick = onLightningConnectionsClick,
+                onLightningNodeClick = onLightningNodeClick,
+                onElectrumServerClick = onElectrumServerClick,
+                onRgsServerClick = onRgsServerClick,
             )
+        }
+    }
+}
+
+@Composable
+private fun GeneralTabContent(
+    selectedCurrency: String,
+    primaryDisplay: PrimaryDisplay,
+    defaultTransactionSpeed: TransactionSpeed,
+    selectedLanguage: String,
+    showTagsButton: Boolean,
+    notificationsGranted: Boolean,
+    onLanguageClick: () -> Unit,
+    onLocalCurrencyClick: () -> Unit,
+    onDefaultUnitClick: () -> Unit,
+    onWidgetsClick: () -> Unit,
+    onTagsClick: () -> Unit,
+    onTransactionSpeedClick: () -> Unit,
+    onQuickPayClick: () -> Unit,
+    onBgPaymentsClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Interface section
+        SectionHeader(title = stringResource(R.string.settings__general__section_interface))
+
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__language_title),
+            iconRes = R.drawable.ic_warning,
+            value = SettingsButtonValue.StringValue(selectedLanguage),
+            onClick = onLanguageClick,
+            modifier = Modifier.testTag("LanguageSettings"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__general__currency_local),
+            iconRes = R.drawable.ic_coins,
+            value = SettingsButtonValue.StringValue(selectedCurrency),
+            onClick = onLocalCurrencyClick,
+            modifier = Modifier.testTag("CurrenciesSettings"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__general__unit),
+            iconRes = R.drawable.ic_coins,
+            value = SettingsButtonValue.StringValue(
+                when (primaryDisplay) {
+                    PrimaryDisplay.BITCOIN -> stringResource(R.string.settings__general__unit_bitcoin)
+                    PrimaryDisplay.FIAT -> selectedCurrency
+                }
+            ),
+            onClick = onDefaultUnitClick,
+            modifier = Modifier.testTag("UnitSettings"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__widgets__nav_title),
+            iconRes = R.drawable.ic_warning,
+            onClick = onWidgetsClick,
+            modifier = Modifier.testTag("WidgetsSettings"),
+        )
+        if (showTagsButton) {
             SettingsButtonRow(
-                title = stringResource(R.string.settings__advanced_title),
-                iconRes = R.drawable.ic_settings_advanced,
-                onClick = onAdvancedClick,
-                modifier = Modifier.testTag("AdvancedSettings")
+                title = stringResource(R.string.settings__general__tags),
+                iconRes = R.drawable.ic_tag,
+                onClick = onTagsClick,
+                modifier = Modifier.testTag("TagsSettings"),
             )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__support_title),
-                iconRes = R.drawable.ic_settings_support,
-                onClick = onSupportClick,
-                modifier = Modifier.testTag("Support")
+        }
+
+        // Payments section
+        SectionHeader(
+            title = stringResource(R.string.settings__general__section_payments),
+            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+        )
+
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__general__speed),
+            iconRes = R.drawable.ic_speed_normal,
+            value = SettingsButtonValue.StringValue(defaultTransactionSpeed.transactionSpeedUiText()),
+            onClick = onTransactionSpeedClick,
+            modifier = Modifier.testTag("TransactionSpeedSettings"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__quickpay__nav_title),
+            iconRes = R.drawable.ic_warning,
+            onClick = onQuickPayClick,
+            modifier = Modifier.testTag("QuickpaySettings"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__bg__title),
+            iconRes = R.drawable.ic_bell,
+            value = SettingsButtonValue.StringValue(
+                stringResource(if (notificationsGranted) R.string.settings__bg__on else R.string.settings__bg__off)
+            ),
+            onClick = onBgPaymentsClick,
+            modifier = Modifier.testTag("BackgroundPaymentSettings"),
+        )
+
+        VerticalSpacer(32.dp)
+    }
+}
+
+@Suppress("LongParameterList")
+@Composable
+private fun SecurityTabContent(
+    isPinEnabled: Boolean,
+    isBiometricEnabled: Boolean,
+    isPinForPaymentsEnabled: Boolean,
+    enableSwipeToHideBalance: Boolean,
+    hideBalanceOnOpen: Boolean,
+    enableAutoReadClipboard: Boolean,
+    enableSendAmountWarning: Boolean,
+    isBiometrySupported: Boolean,
+    onBackupWalletClick: () -> Unit,
+    onDataBackupsClick: () -> Unit,
+    onResetWalletClick: () -> Unit,
+    onPinClick: () -> Unit,
+    onPinForPaymentsClick: () -> Unit,
+    onUseBiometricsClick: () -> Unit,
+    onSwipeToHideBalanceClick: () -> Unit,
+    onHideBalanceOnOpenClick: () -> Unit,
+    onAutoReadClipboardClick: () -> Unit,
+    onSendAmountWarningClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Back up or reset section
+        SectionHeader(title = stringResource(R.string.settings__security__section_backup))
+
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__backup__wallet),
+            iconRes = R.drawable.ic_warning,
+            onClick = onBackupWalletClick,
+            modifier = Modifier.testTag("BackupWallet"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__backup__data),
+            iconRes = R.drawable.ic_warning,
+            onClick = onDataBackupsClick,
+            modifier = Modifier.testTag("BackupSettings"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__backup__reset),
+            iconRes = R.drawable.ic_warning,
+            onClick = onResetWalletClick,
+            modifier = Modifier.testTag("ResetAndRestore"),
+        )
+
+        // Safety section
+        SectionHeader(
+            title = stringResource(R.string.settings__security__section_safety),
+            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+        )
+
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__security__pin),
+            iconRes = R.drawable.ic_warning,
+            value = SettingsButtonValue.StringValue(
+                stringResource(
+                    if (isPinEnabled) {
+                        R.string.settings__security__pin_enabled
+                    } else {
+                        R.string.settings__security__pin_disabled
+                    }
+                )
+            ),
+            onClick = onPinClick,
+            modifier = Modifier.testTag("PINCode"),
+        )
+
+        if (isPinEnabled) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__security__pin_payments),
+                iconRes = R.drawable.ic_coins,
+                isChecked = isPinForPaymentsEnabled,
+                onClick = onPinForPaymentsClick,
+                modifier = Modifier.testTag("EnablePinForPayments"),
             )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__about_title),
-                iconRes = R.drawable.ic_settings_about,
-                onClick = onAboutClick,
-                modifier = Modifier.testTag("About")
-            )
-            if (isDevModeEnabled) {
-                SettingsButtonRow(
-                    title = stringResource(R.string.settings__dev_title),
-                    iconRes = R.drawable.ic_settings_dev,
-                    onClick = onDevClick,
-                    modifier = Modifier.testTag("DevSettings")
+
+            if (isBiometrySupported) {
+                SettingsSwitchRow(
+                    title = run {
+                        val bioTypeName = stringResource(R.string.security__bio)
+                        stringResource(R.string.settings__security__use_bio)
+                            .replace("{biometryTypeName}", bioTypeName)
+                    },
+                    iconRes = R.drawable.ic_warning,
+                    isChecked = isBiometricEnabled,
+                    onClick = onUseBiometricsClick,
+                    modifier = Modifier.testTag("UseBiometryInstead"),
                 )
             }
-            Spacer(Modifier.weight(1f))
-            Image(
-                painter = painterResource(R.drawable.cog),
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(256.dp)
-                    .clickableAlpha(1f) { onCogTap() }
-                    .testTag("DevOptions")
-            )
-            Spacer(Modifier.weight(1f))
         }
+
+        SettingsSwitchRow(
+            title = stringResource(R.string.settings__security__warn_100),
+            iconRes = R.drawable.ic_warning,
+            isChecked = enableSendAmountWarning,
+            onClick = onSendAmountWarningClick,
+            modifier = Modifier.testTag("SendAmountWarning"),
+        )
+
+        // Privacy section
+        SectionHeader(
+            title = stringResource(R.string.settings__security__section_privacy),
+            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+        )
+
+        SettingsSwitchRow(
+            title = stringResource(R.string.settings__security__swipe_balance_to_hide),
+            iconRes = R.drawable.ic_warning,
+            isChecked = enableSwipeToHideBalance,
+            onClick = onSwipeToHideBalanceClick,
+            modifier = Modifier.testTag("SwipeBalanceToHide"),
+        )
+        SettingsSwitchRow(
+            title = stringResource(R.string.settings__security__hide_balance_on_open),
+            iconRes = R.drawable.ic_warning,
+            isChecked = hideBalanceOnOpen,
+            onClick = onHideBalanceOnOpenClick,
+            modifier = Modifier.testTag("HideBalanceOnOpen"),
+        )
+        SettingsSwitchRow(
+            title = stringResource(R.string.settings__security__clipboard),
+            iconRes = R.drawable.ic_clipboard_text,
+            isChecked = enableAutoReadClipboard,
+            onClick = onAutoReadClipboardClick,
+            modifier = Modifier.testTag("AutoReadClipboard"),
+        )
+
+        VerticalSpacer(32.dp)
+    }
+}
+
+@Composable
+private fun AdvancedTabContent(
+    isDevModeEnabled: Boolean,
+    selectedAddressTypeName: String,
+    onDevSettingsClick: () -> Unit,
+    onAddressTypeClick: () -> Unit,
+    onCoinSelectionClick: () -> Unit,
+    onAddressViewerClick: () -> Unit,
+    onLightningConnectionsClick: () -> Unit,
+    onLightningNodeClick: () -> Unit,
+    onElectrumServerClick: () -> Unit,
+    onRgsServerClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState())
+            .testTag("advanced_settings_screen")
+    ) {
+        // Debug section (only if dev mode enabled)
+        if (isDevModeEnabled) {
+            SectionHeader(title = stringResource(R.string.settings__adv__section_debug))
+
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__dev_title),
+                iconRes = R.drawable.ic_settings_dev,
+                onClick = onDevSettingsClick,
+                modifier = Modifier.testTag("DevSettings"),
+            )
+        }
+
+        // Payments section
+        SectionHeader(title = stringResource(R.string.settings__adv__section_payments))
+
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__addr_type__title),
+            iconRes = R.drawable.ic_warning,
+            value = if (selectedAddressTypeName.isNotEmpty()) {
+                SettingsButtonValue.StringValue(selectedAddressTypeName)
+            } else {
+                SettingsButtonValue.None
+            },
+            onClick = onAddressTypeClick,
+            modifier = Modifier.testTag("AddressTypePreference"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__adv__coin_selection),
+            iconRes = R.drawable.ic_coins,
+            onClick = onCoinSelectionClick,
+            modifier = Modifier.testTag("CoinSelectPreference"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__adv__address_viewer),
+            iconRes = R.drawable.ic_eye,
+            onClick = onAddressViewerClick,
+            modifier = Modifier.testTag("AddressViewer"),
+        )
+
+        // Networks section
+        SectionHeader(
+            title = stringResource(R.string.settings__adv__section_networks),
+            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+        )
+
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__adv__lightning_connections),
+            iconRes = R.drawable.ic_git_branch,
+            onClick = onLightningConnectionsClick,
+            modifier = Modifier.testTag("Channels"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__adv__lightning_node),
+            iconRes = R.drawable.ic_git_branch,
+            onClick = onLightningNodeClick,
+            modifier = Modifier.testTag("LightningNodeInfo"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__adv__electrum_server),
+            iconRes = R.drawable.ic_warning,
+            onClick = onElectrumServerClick,
+            modifier = Modifier.testTag("ElectrumConfig"),
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__adv__rgs_server),
+            iconRes = R.drawable.ic_broadcast,
+            onClick = onRgsServerClick,
+            modifier = Modifier.testTag("RGSServer"),
+        )
+
+        VerticalSpacer(32.dp)
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-private fun Preview() {
+private fun PreviewGeneral() {
     AppThemeSurface {
-        SettingsScreenContent(
-            isDevModeEnabled = true,
-            onGeneralClick = {},
-            onSecurityClick = {},
-            onBackupClick = {},
-            onAdvancedClick = {},
-            onSupportClick = {},
-            onAboutClick = {},
-            onDevClick = {},
-            onCogTap = {},
-            onBackClick = {},
-        )
+        SettingsContent()
     }
 }

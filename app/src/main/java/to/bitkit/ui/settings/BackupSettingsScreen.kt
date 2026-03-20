@@ -31,23 +31,15 @@ import to.bitkit.env.Env
 import to.bitkit.ext.toRelativeTimeString
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
-import to.bitkit.ui.Routes
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.backupsViewModel
-import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.FillWidth
-import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.navigateTo
-import to.bitkit.ui.navigateToAuthCheck
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -60,23 +52,12 @@ import kotlin.time.ExperimentalTime
 fun BackupSettingsScreen(
     navController: NavController,
 ) {
-    val app = appViewModel ?: return
-    val settings = settingsViewModel ?: return
     val viewModel = backupsViewModel ?: return
 
-    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     BackupSettingsScreenContent(
         uiState = uiState,
-        onBackupClick = { app.showSheet(Sheet.Backup()) },
-        onResetAndRestoreClick = {
-            if (isPinEnabled) {
-                navController.navigateToAuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET)
-            } else {
-                navController.navigateTo(Routes.ResetAndRestoreSettings)
-            }
-        },
         onRetryBackup = { category -> viewModel.retryBackup(category) },
         onBack = { navController.popBackStack() },
     )
@@ -85,15 +66,13 @@ fun BackupSettingsScreen(
 @Composable
 private fun BackupSettingsScreenContent(
     uiState: BackupStatusUiState,
-    onBackupClick: () -> Unit,
-    onResetAndRestoreClick: () -> Unit,
     onRetryBackup: (BackupCategory) -> Unit,
     onBack: () -> Unit,
 ) {
     val allSynced = uiState.categories.all { !it.status.isRequired }
     ScreenColumn {
         AppTopBar(
-            titleText = stringResource(R.string.settings__backup__title),
+            titleText = stringResource(R.string.settings__backup__data),
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
@@ -103,17 +82,7 @@ private fun BackupSettingsScreenContent(
                 .verticalScroll(rememberScrollState())
                 .testTag("BackupScrollView")
         ) {
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__backup__wallet),
-                onClick = onBackupClick,
-                modifier = Modifier.testTag("BackupWallet"),
-            )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__backup__reset),
-                onClick = onResetAndRestoreClick,
-                modifier = Modifier.testTag("ResetAndRestore"),
-            )
-            VerticalSpacer(28.dp)
+            VerticalSpacer(16.dp)
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Caption13Up(
@@ -263,8 +232,6 @@ private fun Preview() {
     AppThemeSurface {
         BackupSettingsScreenContent(
             uiState = BackupStatusUiState(categories = categories),
-            onBackupClick = {},
-            onResetAndRestoreClick = {},
             onRetryBackup = {},
             onBack = {},
         )

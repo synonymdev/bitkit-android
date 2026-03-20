@@ -122,8 +122,6 @@ import to.bitkit.ui.screens.widgets.suggestions.SuggestionsViewModel
 import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
-import to.bitkit.ui.settings.AboutScreen
-import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.CJitDetailScreen
@@ -132,7 +130,6 @@ import to.bitkit.ui.settings.LanguageSettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
-import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
 import to.bitkit.ui.settings.advanced.AddressViewerScreen
@@ -144,7 +141,6 @@ import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsIntroScreen
 import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsSettings
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
 import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
-import to.bitkit.ui.settings.general.GeneralSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
@@ -156,7 +152,7 @@ import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
 import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
-import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
@@ -527,12 +523,10 @@ private fun RootNavHost(
         comingSoon(navController)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
-        generalSettings(navController)
-        advancedSettings(navController)
-        aboutSettings(navController)
+        generalSettingsSubScreens(navController)
+        advancedSettingsSubScreens(navController)
         transactionSpeedSettings(navController)
-        securitySettings(navController)
-        disablePin(navController)
+        pinManagement(navController)
         changePin(navController)
         changePinNew(navController)
         changePinConfirm(navController)
@@ -972,11 +966,7 @@ private fun NavGraphBuilder.shop(
     }
 }
 
-private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.GeneralSettings> {
-        GeneralSettingsScreen(navController)
-    }
-
+private fun NavGraphBuilder.generalSettingsSubScreens(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.WidgetsSettings> {
         WidgetsSettingsScreen(navController)
     }
@@ -1000,10 +990,7 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     }
 }
 
-private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.AdvancedSettings> {
-        AdvancedSettingsScreen(navController)
-    }
+private fun NavGraphBuilder.advancedSettingsSubScreens(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.CoinSelectPreference> {
         CoinSelectPreferenceScreen(navController)
     }
@@ -1024,16 +1011,6 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     }
 }
 
-private fun NavGraphBuilder.aboutSettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.AboutSettings> {
-        AboutScreen(
-            onBack = {
-                navController.popBackStack()
-            }
-        )
-    }
-}
-
 private fun NavGraphBuilder.transactionSpeedSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.TransactionSpeedSettings> {
         TransactionSpeedSettingsScreen(navController)
@@ -1043,15 +1020,9 @@ private fun NavGraphBuilder.transactionSpeedSettings(navController: NavHostContr
     }
 }
 
-private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.SecuritySettings> {
-        SecuritySettingsScreen(navController = navController)
-    }
-}
-
-private fun NavGraphBuilder.disablePin(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.DisablePin> {
-        DisablePinScreen(navController)
+private fun NavGraphBuilder.pinManagement(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.PinManagement> {
+        PinManagementScreen(navController)
     }
 }
 
@@ -1517,11 +1488,7 @@ inline fun <reified T : Any> NavController.navigateTo(
     }
 }
 
-fun NavController.navigateToGeneralSettings() = navigateTo(Routes.GeneralSettings)
-
-fun NavController.navigateToSecuritySettings() = navigateTo(Routes.SecuritySettings)
-
-fun NavController.navigateToDisablePin() = navigateTo(Routes.DisablePin)
+fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)
 
 fun NavController.navigateToChangePin() = navigateTo(Routes.ChangePin)
 
@@ -1592,9 +1559,6 @@ fun NavController.navigateToTagsSettings() = navigateTo(Routes.TagsSettings)
 
 fun NavController.navigateToLanguageSettings() = navigateTo(Routes.LanguageSettings)
 
-fun NavController.navigateToAdvancedSettings() = navigateTo(Routes.AdvancedSettings)
-
-fun NavController.navigateToAboutSettings() = navigateTo(Routes.AboutSettings)
 // endregion
 
 @Stable
@@ -1615,9 +1579,6 @@ sealed interface Routes {
     data object NodeInfo : Routes
 
     @Serializable
-    data object GeneralSettings : Routes
-
-    @Serializable
     data object TransactionSpeedSettings : Routes
 
     @Serializable
@@ -1625,9 +1586,6 @@ sealed interface Routes {
 
     @Serializable
     data object TagsSettings : Routes
-
-    @Serializable
-    data object AdvancedSettings : Routes
 
     @Serializable
     data object CoinSelectPreference : Routes
@@ -1645,16 +1603,10 @@ sealed interface Routes {
     data object AddressViewer : Routes
 
     @Serializable
-    data object AboutSettings : Routes
-
-    @Serializable
     data object CustomFeeSettings : Routes
 
     @Serializable
-    data object SecuritySettings : Routes
-
-    @Serializable
-    data object DisablePin : Routes
+    data object PinManagement : Routes
 
     @Serializable
     data object ChangePin : Routes
