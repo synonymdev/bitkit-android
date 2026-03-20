@@ -40,6 +40,60 @@ fun SettingsSwitchRow(
     iconTint: Color = Color.Unspecified,
     colors: SwitchColors = AppSwitchDefaults.colors,
 ) {
+    SettingsSwitchRowCore(
+        title = title,
+        isChecked = isChecked,
+        onClick = onClick,
+        subtitle = subtitle,
+        colors = colors,
+        icon = if (iconRes != null) {
+            {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(32.dp),
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+        } else {
+            null
+        },
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun SettingsSwitchRow(
+    title: String,
+    isChecked: Boolean,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    colors: SwitchColors = AppSwitchDefaults.colors,
+) {
+    SettingsSwitchRowCore(
+        title = title,
+        isChecked = isChecked,
+        onClick = onClick,
+        subtitle = subtitle,
+        colors = colors,
+        icon = { icon() },
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun SettingsSwitchRowCore(
+    title: String,
+    isChecked: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    icon: (@Composable () -> Unit)? = null,
+    colors: SwitchColors = AppSwitchDefaults.colors,
+) {
     Column(
         modifier = modifier.heightIn(min = 52.dp),
     ) {
@@ -51,14 +105,8 @@ fun SettingsSwitchRow(
                 .clickableAlpha { onClick() }
                 .padding(vertical = 16.dp)
         ) {
-            if (iconRes != null) {
-                Icon(
-                    painter = painterResource(iconRes),
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(32.dp),
-                )
-                Spacer(modifier = Modifier.width(10.dp))
+            if (icon != null) {
+                icon()
             }
 
             Column(

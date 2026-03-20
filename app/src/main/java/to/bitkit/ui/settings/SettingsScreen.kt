@@ -1,19 +1,27 @@
 package to.bitkit.ui.settings
 
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -29,6 +37,7 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
@@ -325,24 +334,21 @@ private fun GeneralTabContent(
 
         SettingsButtonRow(
             title = stringResource(R.string.settings__language_title),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_translate) },
             value = SettingsButtonValue.StringValue(selectedLanguage),
             onClick = onLanguageClick,
             modifier = Modifier.testTag("LanguageSettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__currency_local),
-            iconRes = R.drawable.ic_coins,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_coins) },
             value = SettingsButtonValue.StringValue(selectedCurrency),
             onClick = onLocalCurrencyClick,
             modifier = Modifier.testTag("CurrenciesSettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__unit),
-            iconRes = R.drawable.ic_coins,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_bitcoin_modern) },
             value = SettingsButtonValue.StringValue(
                 when (primaryDisplay) {
                     PrimaryDisplay.BITCOIN -> stringResource(R.string.settings__general__unit_bitcoin)
@@ -354,16 +360,14 @@ private fun GeneralTabContent(
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__widgets__nav_title),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_stack) },
             onClick = onWidgetsClick,
             modifier = Modifier.testTag("WidgetsSettings"),
         )
         if (showTagsButton) {
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__tags),
-                iconRes = R.drawable.ic_tag,
-                iconTint = Colors.Brand,
+                icon = { SettingsIcon(R.drawable.ic_tag) },
                 onClick = onTagsClick,
                 modifier = Modifier.testTag("TagsSettings"),
             )
@@ -377,23 +381,20 @@ private fun GeneralTabContent(
 
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__speed),
-            iconRes = R.drawable.ic_speed_normal,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_speed_normal) },
             value = SettingsButtonValue.StringValue(defaultTransactionSpeed.transactionSpeedUiText()),
             onClick = onTransactionSpeedClick,
             modifier = Modifier.testTag("TransactionSpeedSettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__quickpay__nav_title),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_caret_double_right) },
             onClick = onQuickPayClick,
             modifier = Modifier.testTag("QuickpaySettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__bg__title),
-            iconRes = R.drawable.ic_bell,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_bell) },
             value = SettingsButtonValue.StringValue(
                 stringResource(if (notificationsGranted) R.string.settings__bg__on else R.string.settings__bg__off)
             ),
@@ -438,22 +439,19 @@ private fun SecurityTabContent(
 
         SettingsButtonRow(
             title = stringResource(R.string.settings__backup__wallet),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_lock_key) },
             onClick = onBackupWalletClick,
             modifier = Modifier.testTag("BackupWallet"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__backup__data),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_database) },
             onClick = onDataBackupsClick,
             modifier = Modifier.testTag("BackupSettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__backup__reset),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_arrow_counter_clockwise) },
             onClick = onResetWalletClick,
             modifier = Modifier.testTag("ResetAndRestore"),
         )
@@ -466,8 +464,7 @@ private fun SecurityTabContent(
 
         SettingsButtonRow(
             title = stringResource(R.string.settings__security__pin),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_shield) },
             value = SettingsButtonValue.StringValue(
                 stringResource(
                     if (isPinEnabled) {
@@ -484,8 +481,7 @@ private fun SecurityTabContent(
         if (isPinEnabled) {
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__security__pin_payments),
-                iconRes = R.drawable.ic_coins,
-                iconTint = Colors.Brand,
+                icon = { SettingsIcon(R.drawable.ic_coins) },
                 isChecked = isPinForPaymentsEnabled,
                 onClick = onPinForPaymentsClick,
                 modifier = Modifier.testTag("EnablePinForPayments"),
@@ -498,8 +494,7 @@ private fun SecurityTabContent(
                         stringResource(R.string.settings__security__use_bio)
                             .replace("{biometryTypeName}", bioTypeName)
                     },
-                    iconRes = R.drawable.ic_warning,
-                    iconTint = Colors.Brand,
+                    icon = { SettingsIcon(R.drawable.ic_smiley) },
                     isChecked = isBiometricEnabled,
                     onClick = onUseBiometricsClick,
                     modifier = Modifier.testTag("UseBiometryInstead"),
@@ -509,8 +504,7 @@ private fun SecurityTabContent(
 
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__warn_100),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_warning) },
             isChecked = enableSendAmountWarning,
             onClick = onSendAmountWarningClick,
             modifier = Modifier.testTag("SendAmountWarning"),
@@ -524,24 +518,21 @@ private fun SecurityTabContent(
 
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__swipe_balance_to_hide),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_hand_pointing) },
             isChecked = enableSwipeToHideBalance,
             onClick = onSwipeToHideBalanceClick,
             modifier = Modifier.testTag("SwipeBalanceToHide"),
         )
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__hide_balance_on_open),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_eye_slash) },
             isChecked = hideBalanceOnOpen,
             onClick = onHideBalanceOnOpenClick,
             modifier = Modifier.testTag("HideBalanceOnOpen"),
         )
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__clipboard),
-            iconRes = R.drawable.ic_clipboard_text,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_clipboard_text) },
             isChecked = enableAutoReadClipboard,
             onClick = onAutoReadClipboardClick,
             modifier = Modifier.testTag("AutoReadClipboard"),
@@ -577,8 +568,7 @@ private fun AdvancedTabContent(
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__dev_title),
-                iconRes = R.drawable.ic_settings_dev,
-                iconTint = Colors.Brand,
+                icon = { SettingsIcon(R.drawable.ic_settings_dev) },
                 onClick = onDevSettingsClick,
                 modifier = Modifier.testTag("DevSettings"),
             )
@@ -589,8 +579,7 @@ private fun AdvancedTabContent(
 
         SettingsButtonRow(
             title = stringResource(R.string.settings__addr_type__title),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_list_dashes) },
             value = if (selectedAddressTypeName.isNotEmpty()) {
                 SettingsButtonValue.StringValue(selectedAddressTypeName)
             } else {
@@ -601,15 +590,13 @@ private fun AdvancedTabContent(
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__coin_selection),
-            iconRes = R.drawable.ic_coins,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_coins) },
             onClick = onCoinSelectionClick,
             modifier = Modifier.testTag("CoinSelectPreference"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__address_viewer),
-            iconRes = R.drawable.ic_eye,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_eye) },
             onClick = onAddressViewerClick,
             modifier = Modifier.testTag("AddressViewer"),
         )
@@ -622,35 +609,49 @@ private fun AdvancedTabContent(
 
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__lightning_connections),
-            iconRes = R.drawable.ic_git_branch,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_lightning) },
             onClick = onLightningConnectionsClick,
             modifier = Modifier.testTag("Channels"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__lightning_node),
-            iconRes = R.drawable.ic_git_branch,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_git_branch) },
             onClick = onLightningNodeClick,
             modifier = Modifier.testTag("LightningNodeInfo"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__electrum_server),
-            iconRes = R.drawable.ic_warning,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_hard_drives) },
             onClick = onElectrumServerClick,
             modifier = Modifier.testTag("ElectrumConfig"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__rgs_server),
-            iconRes = R.drawable.ic_broadcast,
-            iconTint = Colors.Brand,
+            icon = { SettingsIcon(R.drawable.ic_broadcast) },
             onClick = onRgsServerClick,
             modifier = Modifier.testTag("RGSServer"),
         )
 
         VerticalSpacer(32.dp)
     }
+}
+
+@Composable
+private fun SettingsIcon(@DrawableRes iconRes: Int) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(32.dp)
+            .background(color = Colors.Black, shape = CircleShape),
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = Colors.Brand,
+            modifier = Modifier.size(16.dp),
+        )
+    }
+    HorizontalSpacer(8.dp)
 }
 
 @Preview(showBackground = true)

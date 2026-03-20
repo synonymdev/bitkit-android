@@ -149,7 +149,7 @@ private fun Content(
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__support__help),
-                iconRes = R.drawable.ic_warning,
+                iconRes = R.drawable.ic_question,
                 onClick = onClickHelpCenter,
             )
             SettingsButtonRow(
@@ -160,7 +160,7 @@ private fun Content(
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__about__legal),
-                iconRes = R.drawable.ic_warning,
+                iconRes = R.drawable.ic_file_text,
                 onClick = onClickLegal,
             )
             SettingsButtonRow(
