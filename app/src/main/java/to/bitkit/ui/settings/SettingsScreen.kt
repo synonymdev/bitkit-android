@@ -3,14 +3,15 @@ package to.bitkit.ui.settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
@@ -218,8 +220,9 @@ private fun SettingsContent(
     // Navigation
     onBackClick: () -> Unit = {},
 ) {
-    var selectedTab by remember { mutableStateOf(SettingsTab.General) }
     val tabs = remember { SettingsTab.entries }
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val scope = rememberCoroutineScope()
 
     ScreenColumn {
         AppTopBar(
@@ -230,62 +233,64 @@ private fun SettingsContent(
 
         CustomTabRowWithSpacing(
             tabs = tabs,
-            currentTabIndex = tabs.indexOf(selectedTab),
-            onTabChange = { selectedTab = it },
+            currentTabIndex = pagerState.currentPage,
+            onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
             modifier = Modifier.padding(horizontal = 16.dp),
         )
 
-        when (selectedTab) {
-            SettingsTab.General -> GeneralTabContent(
-                selectedCurrency = selectedCurrency,
-                primaryDisplay = primaryDisplay,
-                defaultTransactionSpeed = defaultTransactionSpeed,
-                selectedLanguage = selectedLanguage,
-                showTagsButton = showTagsButton,
-                notificationsGranted = notificationsGranted,
-                onLanguageClick = onLanguageClick,
-                onLocalCurrencyClick = onLocalCurrencyClick,
-                onDefaultUnitClick = onDefaultUnitClick,
-                onWidgetsClick = onWidgetsClick,
-                onTagsClick = onTagsClick,
-                onTransactionSpeedClick = onTransactionSpeedClick,
-                onQuickPayClick = onQuickPayClick,
-                onBgPaymentsClick = onBgPaymentsClick,
-            )
+        HorizontalPager(state = pagerState) { page ->
+            when (tabs[page]) {
+                SettingsTab.General -> GeneralTabContent(
+                    selectedCurrency = selectedCurrency,
+                    primaryDisplay = primaryDisplay,
+                    defaultTransactionSpeed = defaultTransactionSpeed,
+                    selectedLanguage = selectedLanguage,
+                    showTagsButton = showTagsButton,
+                    notificationsGranted = notificationsGranted,
+                    onLanguageClick = onLanguageClick,
+                    onLocalCurrencyClick = onLocalCurrencyClick,
+                    onDefaultUnitClick = onDefaultUnitClick,
+                    onWidgetsClick = onWidgetsClick,
+                    onTagsClick = onTagsClick,
+                    onTransactionSpeedClick = onTransactionSpeedClick,
+                    onQuickPayClick = onQuickPayClick,
+                    onBgPaymentsClick = onBgPaymentsClick,
+                )
 
-            SettingsTab.Security -> SecurityTabContent(
-                isPinEnabled = isPinEnabled,
-                isBiometricEnabled = isBiometricEnabled,
-                isPinForPaymentsEnabled = isPinForPaymentsEnabled,
-                enableSwipeToHideBalance = enableSwipeToHideBalance,
-                hideBalanceOnOpen = hideBalanceOnOpen,
-                enableAutoReadClipboard = enableAutoReadClipboard,
-                enableSendAmountWarning = enableSendAmountWarning,
-                isBiometrySupported = isBiometrySupported,
-                onBackupWalletClick = onBackupWalletClick,
-                onDataBackupsClick = onDataBackupsClick,
-                onResetWalletClick = onResetWalletClick,
-                onPinClick = onPinClick,
-                onPinForPaymentsClick = onPinForPaymentsClick,
-                onUseBiometricsClick = onUseBiometricsClick,
-                onSwipeToHideBalanceClick = onSwipeToHideBalanceClick,
-                onHideBalanceOnOpenClick = onHideBalanceOnOpenClick,
-                onAutoReadClipboardClick = onAutoReadClipboardClick,
-                onSendAmountWarningClick = onSendAmountWarningClick,
-            )
+                SettingsTab.Security -> SecurityTabContent(
+                    isPinEnabled = isPinEnabled,
+                    isBiometricEnabled = isBiometricEnabled,
+                    isPinForPaymentsEnabled = isPinForPaymentsEnabled,
+                    enableSwipeToHideBalance = enableSwipeToHideBalance,
+                    hideBalanceOnOpen = hideBalanceOnOpen,
+                    enableAutoReadClipboard = enableAutoReadClipboard,
+                    enableSendAmountWarning = enableSendAmountWarning,
+                    isBiometrySupported = isBiometrySupported,
+                    onBackupWalletClick = onBackupWalletClick,
+                    onDataBackupsClick = onDataBackupsClick,
+                    onResetWalletClick = onResetWalletClick,
+                    onPinClick = onPinClick,
+                    onPinForPaymentsClick = onPinForPaymentsClick,
+                    onUseBiometricsClick = onUseBiometricsClick,
+                    onSwipeToHideBalanceClick = onSwipeToHideBalanceClick,
+                    onHideBalanceOnOpenClick = onHideBalanceOnOpenClick,
+                    onAutoReadClipboardClick = onAutoReadClipboardClick,
+                    onSendAmountWarningClick = onSendAmountWarningClick,
+                )
 
-            SettingsTab.Advanced -> AdvancedTabContent(
-                isDevModeEnabled = isDevModeEnabled,
-                selectedAddressTypeName = selectedAddressTypeName,
-                onDevSettingsClick = onDevSettingsClick,
-                onAddressTypeClick = onAddressTypeClick,
-                onCoinSelectionClick = onCoinSelectionClick,
-                onAddressViewerClick = onAddressViewerClick,
-                onLightningConnectionsClick = onLightningConnectionsClick,
-                onLightningNodeClick = onLightningNodeClick,
-                onElectrumServerClick = onElectrumServerClick,
-                onRgsServerClick = onRgsServerClick,
-            )
+                SettingsTab.Advanced -> AdvancedTabContent(
+                    isDevModeEnabled = isDevModeEnabled,
+                    selectedAddressTypeName = selectedAddressTypeName,
+                    onDevSettingsClick = onDevSettingsClick,
+                    onAddressTypeClick = onAddressTypeClick,
+                    onCoinSelectionClick = onCoinSelectionClick,
+                    onAddressViewerClick = onAddressViewerClick,
+                    onLightningConnectionsClick = onLightningConnectionsClick,
+                    onLightningNodeClick = onLightningNodeClick,
+                    onElectrumServerClick = onElectrumServerClick,
+                    onRgsServerClick = onRgsServerClick,
+                )
+            }
         }
     }
 }
