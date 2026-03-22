@@ -246,7 +246,8 @@ class HomeViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     widgetsWithPosition = it.widgetsWithPosition
-                        .filterNot { widget -> widget.type == widgetType },
+                        .filterNot { widget -> widget.type == widgetType }
+                        .toImmutableList(),
                     deleteWidgetAlert = null,
                 )
             }

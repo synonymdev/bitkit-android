@@ -76,6 +76,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -420,7 +421,7 @@ private fun Content(
 private fun WalletPage(
     isRefreshing: Boolean,
     homeUiState: HomeUiState,
-    latestActivities: List<Activity>?,
+    latestActivities: ImmutableList<Activity>?,
     balances: BalanceState,
     onRefresh: () -> Unit,
     onNavigateToSettingUp: () -> Unit,
@@ -619,7 +620,7 @@ private fun WidgetsPage(
 
 @Composable
 private fun SuggestionsSection(
-    suggestions: List<Suggestion>,
+    suggestions: ImmutableList<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
     modifier: Modifier = Modifier,
@@ -882,7 +883,7 @@ private val previewBalances = BalanceState(
     totalLightningSats = 45_000u,
 )
 
-private val previewWidgets = listOf(
+private val previewWidgets = persistentListOf(
     WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 0),
     WidgetWithPosition(type = WidgetType.PRICE, position = 1),
     WidgetWithPosition(type = WidgetType.BLOCK, position = 2),
@@ -926,6 +927,10 @@ private val previewWeather = WeatherModel(
     icon = "\u2600\uFE0F",
 )
 
+private val previewLatestActivities = previewActivityItems.take(3).toImmutableList()
+private val previewBanners = ActivityBannerType.entries.map { BannerItem(type = it, title = "") }.toImmutableList()
+private val previewSuggestions = Suggestion.entries.take(4).toImmutableList()
+
 @Preview(showSystemUi = true)
 @Composable
 private fun PreviewWithActivity() {
@@ -937,7 +942,7 @@ private fun PreviewWithActivity() {
                     showWidgets = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = previewBalances,
             )
             TabBar()
@@ -956,7 +961,7 @@ private fun PreviewEmpty() {
                     showEmptyState = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = BalanceState(),
             )
             TabBar()
@@ -973,10 +978,10 @@ private fun PreviewWithBanners() {
                 isRefreshing = false,
                 homeUiState = HomeUiState(
                     showWidgets = true,
-                    banners = ActivityBannerType.entries.map { BannerItem(type = it, title = "") },
+                    banners = previewBanners,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = previewBalances,
             )
             TabBar()
@@ -996,7 +1001,7 @@ private fun PreviewWithOnboardingHint() {
                     showWidgetsOnboardingHint = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = previewBalances,
             )
             TabBar()
@@ -1019,10 +1024,10 @@ private fun PreviewWidgetsPage() {
                     currentArticle = previewArticle,
                     currentPrice = previewPrice,
                     currentWeather = previewWeather,
-                    suggestions = Suggestion.entries.take(4),
+                    suggestions = previewSuggestions,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = previewBalances,
             )
             TabBar()
@@ -1048,7 +1053,7 @@ private fun PreviewWidgetsEditing() {
                     currentWeather = previewWeather,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = previewBalances,
             )
             TabBar()
@@ -1067,7 +1072,7 @@ private fun PreviewTabletLandscape() {
                     showWidgets = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = previewBalances,
             )
             TabBar()
@@ -1086,7 +1091,7 @@ private fun PreviewTabletPortrait() {
                     showWidgets = true,
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewActivityItems.take(3).toImmutableList(),
+                latestActivities = previewLatestActivities,
                 balances = previewBalances,
             )
             TabBar()

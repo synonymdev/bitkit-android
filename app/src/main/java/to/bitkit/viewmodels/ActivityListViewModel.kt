@@ -7,8 +7,11 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
@@ -56,7 +59,9 @@ class ActivityListViewModel @Inject constructor(
     val searchText: StateFlow<String> = _filters.map { it.searchText }.stateInScope("")
     val startDate: StateFlow<Long?> = _filters.map { it.startDate }.stateInScope(null)
     val endDate: StateFlow<Long?> = _filters.map { it.endDate }.stateInScope(null)
-    val selectedTags: StateFlow<Set<String>> = _filters.map { it.tags }.stateInScope(emptySet())
+    val selectedTags: StateFlow<ImmutableSet<String>> = _filters.map { it.tags.toImmutableSet() }.stateInScope(
+        persistentSetOf()
+    )
     val selectedTab: StateFlow<ActivityTab> = _filters.map { it.tab }.stateInScope(ActivityTab.ALL)
 
     fun setSearchText(text: String) = _filters.update { it.copy(searchText = text) }
