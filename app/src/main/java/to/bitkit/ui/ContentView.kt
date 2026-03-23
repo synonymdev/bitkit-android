@@ -148,10 +148,6 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
-import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
-import to.bitkit.ui.settings.pin.ChangePinNewScreen
-import to.bitkit.ui.settings.pin.ChangePinResultScreen
-import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
@@ -163,6 +159,7 @@ import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
+import to.bitkit.ui.sheets.ChangePinSheet
 import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.GiftSheet
@@ -394,6 +391,7 @@ fun ContentView(
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()
                         is Sheet.Pin -> PinSheet(sheet, appViewModel)
+                        Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
                         is Sheet.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
                         Sheet.ForceTransfer -> ForceTransferSheet(appViewModel, transferViewModel)
@@ -527,10 +525,6 @@ private fun RootNavHost(
         advancedSettingsSubScreens(navController)
         transactionSpeedSettings(navController)
         pinManagement(navController)
-        changePin(navController)
-        changePinNew(navController)
-        changePinConfirm(navController)
-        changePinResult(navController)
         defaultUnitSettings(currencyViewModel, navController)
         localCurrencySettings(currencyViewModel, navController)
         backupSettings(navController)
@@ -1026,34 +1020,6 @@ private fun NavGraphBuilder.pinManagement(navController: NavHostController) {
     }
 }
 
-private fun NavGraphBuilder.changePin(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePin> {
-        ChangePinScreen(navController)
-    }
-}
-
-private fun NavGraphBuilder.changePinNew(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinNew> {
-        ChangePinNewScreen(navController)
-    }
-}
-
-private fun NavGraphBuilder.changePinConfirm(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinConfirm> {
-        val route = it.toRoute<Routes.ChangePinConfirm>()
-        ChangePinConfirmScreen(
-            newPin = route.newPin,
-            navController = navController,
-        )
-    }
-}
-
-private fun NavGraphBuilder.changePinResult(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinResult> {
-        ChangePinResultScreen(navController)
-    }
-}
-
 private fun NavGraphBuilder.defaultUnitSettings(
     currencyViewModel: CurrencyViewModel,
     navController: NavHostController,
@@ -1490,16 +1456,6 @@ inline fun <reified T : Any> NavController.navigateTo(
 
 fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)
 
-fun NavController.navigateToChangePin() = navigateTo(Routes.ChangePin)
-
-fun NavController.navigateToChangePinNew() = navigateTo(Routes.ChangePinNew)
-
-fun NavController.navigateToChangePinConfirm(newPin: String) = navigateTo(
-    Routes.ChangePinConfirm(newPin),
-)
-
-fun NavController.navigateToChangePinResult() = navigateTo(Routes.ChangePinResult)
-
 fun NavController.navigateToAuthCheck(
     showLogoOnPin: Boolean = false,
     requirePin: Boolean = false,
@@ -1607,18 +1563,6 @@ sealed interface Routes {
 
     @Serializable
     data object PinManagement : Routes
-
-    @Serializable
-    data object ChangePin : Routes
-
-    @Serializable
-    data object ChangePinNew : Routes
-
-    @Serializable
-    data class ChangePinConfirm(val newPin: String) : Routes
-
-    @Serializable
-    data object ChangePinResult : Routes
 
     @Serializable
     data class AuthCheck(

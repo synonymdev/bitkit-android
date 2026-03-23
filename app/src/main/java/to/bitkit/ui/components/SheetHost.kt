@@ -39,6 +39,7 @@ sealed interface Sheet {
     data class Send(val route: SendRoute = SendRoute.Recipient) : Sheet
     data object Receive : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
+    data object ChangePin : Sheet
     data class Backup(val route: BackupRoute = BackupRoute.ShowMnemonic) : Sheet
     data object ActivityDateRangeSelector : Sheet
     data object ActivityTagSelector : Sheet

@@ -30,7 +30,6 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.navigateToAuthCheck
-import to.bitkit.ui.navigateToChangePin
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -49,7 +48,7 @@ fun PinManagementScreen(
     Content(
         isPinEnabled = isPinEnabled,
         onEnablePinClick = { app.showSheet(Sheet.Pin()) },
-        onChangePinClick = { navController.navigateToChangePin() },
+        onChangePinClick = { app.showSheet(Sheet.ChangePin) },
         onDisablePinClick = {
             navController.navigateToAuthCheck(
                 requirePin = true,
