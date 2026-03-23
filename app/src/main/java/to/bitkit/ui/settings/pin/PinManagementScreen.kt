@@ -101,7 +101,11 @@ private fun Content(
                     .weight(1f)
             ) {
                 Image(
-                    painter = painterResource(R.drawable.shield),
+                    painter = if (isPinEnabled) {
+                        painterResource(R.drawable.shield_check)
+                    } else {
+                        painterResource(R.drawable.shield)
+                    },
                     contentDescription = null,
                     modifier = Modifier.size(256.dp),
                 )
