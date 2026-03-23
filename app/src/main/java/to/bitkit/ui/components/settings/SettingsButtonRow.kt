@@ -183,7 +183,7 @@ private fun SettingsButtonRowCore(
                     }
 
                     is SettingsButtonValue.StringValue -> {
-                        BodyM(text = value.value, modifier = Modifier.testTag("Value"))
+                        BodyM(text = value.value, color = Colors.White64, modifier = Modifier.testTag("Value"))
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(
                             painter = painterResource(R.drawable.ic_chevron_right),
