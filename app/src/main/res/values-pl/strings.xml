@@ -499,7 +499,7 @@
     <string name="security__display_seed">Pokaż frazę odzyskiwania</string>
     <string name="security__contact_support">Skontaktuj się z pomocą techniczną</string>
     <string name="security__wipe_app">Wyczyść aplikację</string>
-    <string name="security__cp_title">Zmień kod PIN</string>
+    <string name="security__cp_title">Zmień PIN</string>
     <string name="security__cp_text">Możesz zmienić swój kod PIN na nową\n4-cyfrową kombinację. Najpierw wprowadź aktualny kod PIN.</string>
     <string name="security__cp_retype_title">Wpisz ponownie kod PIN</string>
     <string name="security__cp_retype_text">Wpisz proszę ponownie 4 cyfrowy kod PIN aby zakończyć konfigurację.</string>
@@ -565,7 +565,7 @@
     <string name="settings__security__clipboard">Odczytaj schowek dla wygody użytkowania</string>
     <string name="settings__security__warn_100">Ostrzegaj przy transakcji powyżej 100 USD</string>
     <string name="settings__security__pin">Kod PIN</string>
-    <string name="settings__security__pin_change">Zmień kod PIN</string>
+    <string name="settings__security__pin_change">Zmień PIN</string>
     <string name="settings__security__pin_payments">Wymagaj PIN-u do płatności</string>
     <string name="settings__security__pin_enabled">Włączone</string>
     <string name="settings__security__pin_disabled">Wyłączone</string>

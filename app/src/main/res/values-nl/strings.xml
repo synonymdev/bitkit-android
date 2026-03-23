@@ -442,7 +442,7 @@
     <string name="security__cp_setnew_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>
     <string name="security__cp_setnew_title">Nieuwe pincode instellen</string>
     <string name="security__cp_text">Je kunt je pincode wijzigen naar een nieuwe\n4-cijferige combinatie. Voer eerst je huidige pincode in.</string>
-    <string name="security__cp_title">Pincode wijzigen</string>
+    <string name="security__cp_title">PIN wijzigen</string>
     <string name="security__cp_try_again">Probeer opnieuw, dit is niet dezelfde pincode.</string>
     <string name="security__display_seed">Herstelzin tonen</string>
     <string name="security__mnemonic_confirm">Herstelzin bevestigen</string>
@@ -664,7 +664,7 @@
     <string name="settings__security__footer">Wanneer ingeschakeld, kun je {biometryTypeName} gebruiken in plaats van je pincode om je wallet te ontgrendelen of betalingen te verzenden.</string>
     <string name="settings__security__hide_balance_on_open">Saldo verbergen bij openen</string>
     <string name="settings__security__pin">Pincode</string>
-    <string name="settings__security__pin_change">Pincode wijzigen</string>
+    <string name="settings__security__pin_change">PIN wijzigen</string>
     <string name="settings__security__pin_disabled">Uitgeschakeld</string>
     <string name="settings__security__pin_enabled">Ingeschakeld</string>
     <string name="settings__security__pin_payments">Pincode vereisen voor betalingen</string>

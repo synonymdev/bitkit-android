@@ -664,7 +664,7 @@
     <string name="settings__security__footer">Pokud povoleno, můžete pro odemčení peněženky nebo zaslání platby použít {biometryTypeName} namísto PIN kódu.</string>
     <string name="settings__security__hide_balance_on_open">Skrýt zůstatek při otevření</string>
     <string name="settings__security__pin">PIN kód</string>
-    <string name="settings__security__pin_change">Změna PIN kódu</string>
+    <string name="settings__security__pin_change">Změna PIN</string>
     <string name="settings__security__pin_disabled">Zakázáno</string>
     <string name="settings__security__pin_enabled">Povoleno</string>
     <string name="settings__security__pin_payments">Při platbě vyžadovat PIN</string>

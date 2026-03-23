@@ -664,7 +664,7 @@
     <string name="settings__security__footer">Quan està habilitat, pots utilitzar {biometryTypeName} en lloc del teu codi PIN per desbloquejar la cartera o enviar pagaments.</string>
     <string name="settings__security__hide_balance_on_open">Amagar saldo en obrir</string>
     <string name="settings__security__pin">Codi PIN</string>
-    <string name="settings__security__pin_change">Canviar el codi PIN</string>
+    <string name="settings__security__pin_change">Canviar PIN</string>
     <string name="settings__security__pin_disabled">Desactivat</string>
     <string name="settings__security__pin_enabled">Activat</string>
     <string name="settings__security__pin_payments">Requereix un PIN per als pagaments</string>

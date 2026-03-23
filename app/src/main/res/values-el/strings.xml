@@ -664,7 +664,7 @@
     <string name="settings__security__footer">Όταν είναι ενεργοποιημένο, μπορείς να χρησιμοποιήσεις {biometryTypeName} αντί του κωδικού PIN για ξεκλείδωμα πορτοφολιού ή αποστολή πληρωμών.</string>
     <string name="settings__security__hide_balance_on_open">Απόκρυψη υπολοίπου στο άνοιγμα</string>
     <string name="settings__security__pin">Κωδικός PIN</string>
-    <string name="settings__security__pin_change">Αλλαγή κωδικού PIN</string>
+    <string name="settings__security__pin_change">Αλλαγή PIN</string>
     <string name="settings__security__pin_disabled">Απενεργοποιημένο</string>
     <string name="settings__security__pin_enabled">Ενεργοποιημένο</string>
     <string name="settings__security__pin_payments">Απαίτηση PIN για πληρωμές</string>

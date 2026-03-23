@@ -664,7 +664,7 @@
     <string name="settings__security__footer">Quanto attivato, puoi usare {biometryTypeName} invece del tuo codice PIN per sbloccare il tuo wallet o inviare pagamenti.</string>
     <string name="settings__security__hide_balance_on_open">Nascondi il saldo all\'apertura</string>
     <string name="settings__security__pin">Codice PIN</string>
-    <string name="settings__security__pin_change">Cambia codice PIN</string>
+    <string name="settings__security__pin_change">Cambia PIN</string>
     <string name="settings__security__pin_disabled">Disattivato</string>
     <string name="settings__security__pin_enabled">Attivato</string>
     <string name="settings__security__pin_payments">Richiedi PIN per i pagamenti</string>

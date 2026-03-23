@@ -664,7 +664,7 @@
     <string name="settings__security__footer">Quando ativado, você poderá usar {biometryTypeName} em vez do PIN para desbloquear ou pagar.</string>
     <string name="settings__security__hide_balance_on_open">Ocultar saldo ao abrir o app</string>
     <string name="settings__security__pin">Código PIN</string>
-    <string name="settings__security__pin_change">Alterar o código PIN</string>
+    <string name="settings__security__pin_change">Alterar PIN</string>
     <string name="settings__security__pin_disabled">Desativado</string>
     <string name="settings__security__pin_enabled">Ativado</string>
     <string name="settings__security__pin_payments">Solicitar PIN para pagar</string>

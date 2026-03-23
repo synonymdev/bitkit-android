@@ -559,7 +559,7 @@
     <string name="settings__security__clipboard">Leer portapapeles para facilitar uso</string>
     <string name="settings__security__warn_100">Advertir al enviar más de $100</string>
     <string name="settings__security__pin">Código PIN</string>
-    <string name="settings__security__pin_change">Cambiar código PIN</string>
+    <string name="settings__security__pin_change">Cambiar PIN</string>
     <string name="settings__security__pin_payments">Pedir PIN al realizar pagos</string>
     <string name="settings__security__pin_enabled">Activado</string>
     <string name="settings__security__pin_disabled">Desactivado</string>

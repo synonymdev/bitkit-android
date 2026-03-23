@@ -680,7 +680,7 @@
     <string name="settings__security__footer">Когда включено, вы можете использовать {biometryTypeName} вместо PIN-кода для разблокировки кошелька или отправки платежей.</string>
     <string name="settings__security__hide_balance_on_open">Скрывать Баланс при Открытии</string>
     <string name="settings__security__pin">PIN-код</string>
-    <string name="settings__security__pin_change">Сменить PIN-код</string>
+    <string name="settings__security__pin_change">Сменить PIN</string>
     <string name="settings__security__pin_disabled">Выключен</string>
     <string name="settings__security__pin_enabled">Включён</string>
     <string name="settings__security__pin_payments">Требовать PIN-код для Платежей</string>

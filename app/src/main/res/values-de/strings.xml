@@ -583,7 +583,7 @@
     <string name="settings__security__clipboard">Lesen der Zwischenablage erlauben</string>
     <string name="settings__security__warn_100">Warnen beim Senden von über $100</string>
     <string name="settings__security__pin">PIN Code</string>
-    <string name="settings__security__pin_change">PIN Code ändern</string>
+    <string name="settings__security__pin_change">PIN ändern</string>
     <string name="settings__security__pin_payments">PIN für Zahlungen anfordern</string>
     <string name="settings__security__pin_enabled">Aktiviert</string>
     <string name="settings__security__pin_disabled">Deaktiviert</string>

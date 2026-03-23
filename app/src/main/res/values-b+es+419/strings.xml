@@ -664,7 +664,7 @@
     <string name="settings__security__footer">Cuando está activado, puedes usar {biometryTypeName} en lugar de tu PIN para desbloquear tu billetera o enviar pagos.</string>
     <string name="settings__security__hide_balance_on_open">Ocultar saldo al abrir</string>
     <string name="settings__security__pin">Código PIN</string>
-    <string name="settings__security__pin_change">Cambiar código PIN</string>
+    <string name="settings__security__pin_change">Cambiar PIN</string>
     <string name="settings__security__pin_disabled">Disabilitado</string>
     <string name="settings__security__pin_enabled">Activado</string>
     <string name="settings__security__pin_payments">Exigir PIN para pagamientos</string>

@@ -691,7 +691,7 @@
     <string name="settings__security__footer">When enabled, you can use {biometryTypeName} instead of your PIN code to unlock your wallet or send payments.</string>
     <string name="settings__security__hide_balance_on_open">Hide balance on open</string>
     <string name="settings__security__pin">PIN Code</string>
-    <string name="settings__security__pin_change">Change PIN Code</string>
+    <string name="settings__security__pin_change">Change PIN</string>
     <string name="settings__security__pin_disabled">Disabled</string>
     <string name="settings__security__pin_enabled">Enabled</string>
     <string name="settings__security__pin_payments">Require PIN for payments</string>
