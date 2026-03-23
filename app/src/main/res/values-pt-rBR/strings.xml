@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">Digite novamente o novo PIN</string>
     <string name="security__cp_setnew_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
     <string name="security__cp_setnew_title">Definir novo PIN</string>
-    <string name="security__cp_text">Você pode alterar seu código PIN para uma nova\ncombinação de 4 dígitos. Primeiro, digite seu código PIN atual.</string>
+    <string name="security__cp_text">Digite seu PIN &lt;accent>atual&lt;/accent> para alterá-lo.</string>
     <string name="security__cp_title">Alterar PIN</string>
     <string name="security__cp_try_again">Tente novamente, este não é o mesmo PIN.</string>
     <string name="security__display_seed">Mostrar Seed</string>

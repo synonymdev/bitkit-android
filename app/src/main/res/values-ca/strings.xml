@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">Torna a escriure el nou PIN</string>
     <string name="security__cp_setnew_text">Si us plau, utilitza un PIN que recordis. Si oblides el teu PIN pots restablir-lo, però caldrà restaurar la cartera.</string>
     <string name="security__cp_setnew_title">Configura un nou PIN</string>
-    <string name="security__cp_text">Pots canviar el teu codi PIN a una nova\ncombinació de 4 dígits. Si us plau, introdueix primer el teu codi PIN actual.</string>
+    <string name="security__cp_text">Introdueix el teu PIN &lt;accent>actual&lt;/accent> per canviar-lo.</string>
     <string name="security__cp_title">Canvia el PIN</string>
     <string name="security__cp_try_again">Torna a provar, això no és el mateix PIN.</string>
     <string name="security__display_seed">Mostrar frase de recuperació</string>

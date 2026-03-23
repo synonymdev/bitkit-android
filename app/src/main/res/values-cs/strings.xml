@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">Znovu zadejte nový PIN</string>
     <string name="security__cp_setnew_text">Použijte prosím PIN, který si zapamatujete. Pokud svůj PIN zapomenete, můžete jej resetovat, ale to bude vyžadovat obnovení vaší peněženky.</string>
     <string name="security__cp_setnew_title">Nastavte nový PIN</string>
-    <string name="security__cp_text">Svůj PIN kód můžete změnit na novou\n4místnou kombinaci. Nejprve zadejte svůj aktuální PIN kód.</string>
+    <string name="security__cp_text">Zadejte svůj &lt;accent>aktuální&lt;/accent> PIN pro jeho změnu.</string>
     <string name="security__cp_title">Změna PIN</string>
     <string name="security__cp_try_again">Zkuste to znovu, toto není stejný PIN.</string>
     <string name="security__display_seed">Zobrazit seed frázi</string>

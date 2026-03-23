@@ -49,6 +49,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.composableWithDefaultTransitions
+import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.viewmodels.AppViewModel
 
 private val NumberPadHeight = 350.dp
@@ -197,7 +198,7 @@ private fun ValidateContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         BodyM(
-            text = stringResource(R.string.security__cp_text),
+            text = stringResource(R.string.security__cp_text).withAccentBoldBright(),
             color = Colors.White64,
             modifier = Modifier.padding(horizontal = 32.dp),
         )

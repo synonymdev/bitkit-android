@@ -500,7 +500,7 @@
     <string name="security__contact_support">Skontaktuj się z pomocą techniczną</string>
     <string name="security__wipe_app">Wyczyść aplikację</string>
     <string name="security__cp_title">Zmień PIN</string>
-    <string name="security__cp_text">Możesz zmienić swój kod PIN na nową\n4-cyfrową kombinację. Najpierw wprowadź aktualny kod PIN.</string>
+    <string name="security__cp_text">Wprowadź swój &lt;accent>aktualny&lt;/accent> PIN, aby go zmienić.</string>
     <string name="security__cp_retype_title">Wpisz ponownie kod PIN</string>
     <string name="security__cp_retype_text">Wpisz proszę ponownie 4 cyfrowy kod PIN aby zakończyć konfigurację.</string>
     <string name="security__cp_setnew_title">Ustaw nowy kod PIN</string>

@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">Digita il Nuovo PIN</string>
     <string name="security__cp_setnew_text">Utilizza un PIN che ricorderai. Se dimentichi il PIN, puoi reimpostarlo, ma ciò richiede il ripristino del wallet.</string>
     <string name="security__cp_setnew_title">Imposta Nuovo PIN</string>
-    <string name="security__cp_text">Puoi cambiare il codice PIN con una nuova\ncombinazione di 4 cifre. Inserisci prima il codice PIN corrente.</string>
+    <string name="security__cp_text">Inserisci il tuo PIN &lt;accent>attuale&lt;/accent> per cambiarlo.</string>
     <string name="security__cp_title">Cambia PIN</string>
     <string name="security__cp_try_again">Provi di nuovo, il PIN non coincide.</string>
     <string name="security__display_seed">Mostra la Seed Phrase</string>

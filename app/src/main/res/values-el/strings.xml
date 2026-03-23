@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">Επανάληψη νέου PIN</string>
     <string name="security__cp_setnew_text">Χρησιμοποίησε ένα PIN που θα θυμάσαι. Αν ξεχάσεις το PIN σου μπορείς να το επαναφέρεις, αλλά αυτό θα απαιτήσει επαναφορά του πορτοφολιού σου.</string>
     <string name="security__cp_setnew_title">Ορισμός νέου PIN</string>
-    <string name="security__cp_text">Μπορείς να αλλάξεις τον κωδικό PIN σου σε νέο\nσυνδυασμό 4 ψηφίων. Εισάγαγε πρώτα τον τρέχοντα κωδικό PIN.</string>
+    <string name="security__cp_text">Εισαγάγετε το &lt;accent>τρέχον&lt;/accent> PIN σας για να το αλλάξετε.</string>
     <string name="security__cp_title">Αλλαγή PIN</string>
     <string name="security__cp_try_again">Δοκίμασε ξανά, δεν είναι το ίδιο PIN.</string>
     <string name="security__display_seed">Εμφάνιση φράσης seed</string>

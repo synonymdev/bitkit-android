@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">أعد كتابة PIN الجديد</string>
     <string name="security__cp_setnew_text">يرجى استخدام رمز PIN ستتذكره. إذا نسيت رمز PIN، يمكنك إعادة تعيينه، لكن ذلك سيتطلب استعادة محفظتك.</string>
     <string name="security__cp_setnew_title">تعيين PIN جديد</string>
-    <string name="security__cp_text">يمكنك تغيير PIN إلى تركيبة\nجديدة من 4 أرقام. يرجى إدخال رمز PIN الحالي أولاً.</string>
+    <string name="security__cp_text">أدخل رقم PIN &lt;accent>الحالي&lt;/accent> لتغييره.</string>
     <string name="security__cp_title">تغيير PIN</string>
     <string name="security__cp_try_again">حاول مرة أخرى، هذا ليس نفس رمز PIN.</string>
     <string name="security__display_seed">عرض عبارة الاسترداد</string>

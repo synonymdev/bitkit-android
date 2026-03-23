@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">Nieuwe pincode opnieuw typen</string>
     <string name="security__cp_setnew_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>
     <string name="security__cp_setnew_title">Nieuwe pincode instellen</string>
-    <string name="security__cp_text">Je kunt je pincode wijzigen naar een nieuwe\n4-cijferige combinatie. Voer eerst je huidige pincode in.</string>
+    <string name="security__cp_text">Voer je &lt;accent>huidige&lt;/accent> PIN in om deze te wijzigen.</string>
     <string name="security__cp_title">PIN wijzigen</string>
     <string name="security__cp_try_again">Probeer opnieuw, dit is niet dezelfde pincode.</string>
     <string name="security__display_seed">Herstelzin tonen</string>

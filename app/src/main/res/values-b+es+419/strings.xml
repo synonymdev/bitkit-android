@@ -441,7 +441,7 @@
     <string name="security__cp_retype_title">Reintroducir nuevo PIN</string>
     <string name="security__cp_setnew_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que resetear su billetera.</string>
     <string name="security__cp_setnew_title">Establecer nuevo PIN</string>
-    <string name="security__cp_text">Puede cambiar su código PIN por una nueva\ncombinación de 4 dígitos. Por favor, introduzca primero su código PIN actual.</string>
+    <string name="security__cp_text">Introduzca su PIN &lt;accent>actual&lt;/accent> para cambiarlo.</string>
     <string name="security__cp_title">Cambiar PIN</string>
     <string name="security__cp_try_again">Inténtelo de nuevo, no es el mismo PIN.</string>
     <string name="security__display_seed">Mostrar frase semilla</string>

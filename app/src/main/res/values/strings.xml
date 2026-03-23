@@ -448,7 +448,7 @@
     <string name="security__cp_retype_title">Retype New PIN</string>
     <string name="security__cp_setnew_text">Please use a PIN you will remember. If you forget your PIN you can reset it, but that will require restoring your wallet.</string>
     <string name="security__cp_setnew_title">Set New PIN</string>
-    <string name="security__cp_text">You can change your PIN code to a new\n4-digit combination. Please enter your current PIN code first.</string>
+    <string name="security__cp_text">Enter your &lt;accent>current&lt;/accent> PIN to change it.</string>
     <string name="security__cp_title">Change PIN</string>
     <string name="security__cp_try_again">Try again, this is not the same PIN.</string>
     <string name="security__display_seed">Show Seed Phrase</string>

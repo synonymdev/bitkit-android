@@ -499,7 +499,7 @@
     <string name="security__contact_support">Contactar Suporte</string>
     <string name="security__wipe_app">Limpar Aplicativo</string>
     <string name="security__cp_title">Alterar PIN</string>
-    <string name="security__cp_text">Você pode alterar seu código PIN para uma nova\ncombinação de 4 dígitos. Primeiro, digite seu código PIN atual.</string>
+    <string name="security__cp_text">Digite seu PIN &lt;accent>atual&lt;/accent> para alterá-lo.</string>
     <string name="security__cp_retype_title">Digite novamente o novo PIN</string>
     <string name="security__cp_retype_text">Digite novamente o PIN de 4 dígitos para concluir o processo de configuração.</string>
     <string name="security__cp_setnew_title">Definir novo PIN</string>

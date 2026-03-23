@@ -455,7 +455,7 @@
     <string name="security__cp_retype_title">Повторите Новый PIN-код</string>
     <string name="security__cp_setnew_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
     <string name="security__cp_setnew_title">Новый PIN-код</string>
-    <string name="security__cp_text">Вы можете изменить свой PIN-код на новую\nчетырёхзначную комбинацию. Сначала введите текущий PIN-код.</string>
+    <string name="security__cp_text">Введите &lt;accent>текущий&lt;/accent> PIN, чтобы изменить его.</string>
     <string name="security__cp_title">Изменить PIN-код</string>
     <string name="security__cp_try_again">Попробуйте ещё раз, это не тот PIN-код.</string>
     <string name="security__display_seed">Показать Фразу Восстановления</string>
