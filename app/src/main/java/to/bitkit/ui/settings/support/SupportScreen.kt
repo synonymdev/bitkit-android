@@ -41,6 +41,7 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.Links
 import to.bitkit.ui.components.settings.SettingsButtonRow
@@ -143,6 +144,7 @@ private fun Content(
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
             VerticalSpacer(16.dp)
@@ -197,7 +199,7 @@ private fun Content(
             HorizontalDivider()
 
             VerticalSpacer(32.dp)
-
+            FillHeight()
             // Part 1: Logo with diagonal orange crossing through it
             Box(
                 modifier = Modifier
