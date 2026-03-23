@@ -3,6 +3,7 @@ package to.bitkit.ui.settings.support
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -256,7 +257,31 @@ private fun SupportFooter() {
             color = Colors.White64,
         )
 
+        VerticalSpacer(16.dp)
+
+        BrandEndorsement()
+
         VerticalSpacer(32.dp)
+    }
+}
+
+@Composable
+private fun BrandEndorsement() {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_synonym_logo),
+            contentDescription = null,
+            modifier = Modifier.height(24.dp),
+        )
+        Image(
+            painter = painterResource(R.drawable.ic_tether_company),
+            contentDescription = null,
+            modifier = Modifier.height(16.dp),
+        )
     }
 }
 
