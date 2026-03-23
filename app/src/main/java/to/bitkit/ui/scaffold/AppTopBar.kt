@@ -30,6 +30,7 @@ import to.bitkit.ui.LocalDrawerState
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,6 +108,7 @@ fun DrawerNavIcon(
             Icon(
                 painter = painterResource(id = R.drawable.ic_list),
                 contentDescription = stringResource(R.string.settings__settings),
+                tint = Colors.White,
                 modifier = Modifier.size(24.dp)
             )
         }
