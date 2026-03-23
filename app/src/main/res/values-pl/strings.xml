@@ -502,7 +502,7 @@
     <string name="security__cp_title">Zmień PIN</string>
     <string name="security__cp_text">Wprowadź swój &lt;accent>aktualny&lt;/accent> PIN, aby go zmienić.</string>
     <string name="security__cp_retype_title">Wpisz ponownie kod PIN</string>
-    <string name="security__cp_retype_text">Wpisz proszę ponownie 4 cyfrowy kod PIN aby zakończyć konfigurację.</string>
+    <string name="security__cp_retype_text">Wpisz ponownie 4-cyfrowy PIN, aby zakończyć konfigurację i zapisać nowy PIN.</string>
     <string name="security__cp_setnew_title">Ustaw nowy kod PIN</string>
     <string name="security__cp_setnew_text">Użyj kodu PIN, który zapamiętasz. Jeśli zapomnisz kodu PIN, możesz go zresetować, ale będzie to wymagało przywrócenia portfela.</string>
     <string name="security__cp_try_again">Spróbuj ponownie, kody PIN się różnią.</string>

@@ -437,7 +437,7 @@
     <string name="security__contact_support">Contactar Suporte</string>
     <string name="security__cp_changed_text">Você alterou com sucesso seu PIN para uma nova combinação de 4 dígitos.</string>
     <string name="security__cp_changed_title">PIN alterado</string>
-    <string name="security__cp_retype_text">Digite novamente o PIN de 4 dígitos para concluir o processo de configuração.</string>
+    <string name="security__cp_retype_text">Digite novamente o PIN de 4 dígitos para concluir o processo de configuração e salvar seu novo PIN.</string>
     <string name="security__cp_retype_title">Digite novamente o novo PIN</string>
     <string name="security__cp_setnew_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
     <string name="security__cp_setnew_title">Definir novo PIN</string>

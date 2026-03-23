@@ -356,8 +356,7 @@ private fun ResultContent(
             .navigationBarsPadding(),
     ) {
         SheetTopBar(
-            titleText = stringResource(R.string.security__cp_changed_title),
-            onBack = onBackClick,
+            titleText = stringResource(R.string.security__cp_changed_title)
         )
 
         Spacer(modifier = Modifier.height(16.dp))

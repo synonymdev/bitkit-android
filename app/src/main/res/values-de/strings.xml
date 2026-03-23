@@ -502,7 +502,7 @@
     <string name="security__cp_title">PIN ändern</string>
     <string name="security__cp_text">Geben Sie Ihre &lt;accent>aktuelle&lt;/accent> PIN ein, um sie zu ändern.</string>
     <string name="security__cp_retype_title">Neuen PIN erneut eingeben</string>
-    <string name="security__cp_retype_text">Bitte gib deinen 4-stelligen PIN erneut ein, um den Einrichtungsprozess abzuschließen.</string>
+    <string name="security__cp_retype_text">Bitte gib deinen 4-stelligen PIN erneut ein, um die Einrichtung abzuschließen und deinen neuen PIN zu speichern.</string>
     <string name="security__cp_setnew_title">Neuen PIN festlegen</string>
     <string name="security__cp_setnew_text">Bitte verwende einen PIN, den du dir merken wirst. Wenn du deinen PIN vergisst, kannst du ihn zurücksetzen, aber das erfordert die Wiederherstellung deines Wallets.</string>
     <string name="security__cp_try_again">Versuche es erneut, dieser PIN stimmt nicht überein.</string>

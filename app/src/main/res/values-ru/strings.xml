@@ -451,7 +451,7 @@
     <string name="security__contact_support">Связаться с Поддержкой</string>
     <string name="security__cp_changed_text">Вы успешно изменили свой PIN-код на новую комбинацию из 4 цифр.</string>
     <string name="security__cp_changed_title">PIN-код Изменён</string>
-    <string name="security__cp_retype_text">Повторно введите 4-значный PIN-код, чтобы завершить процесс установки.</string>
+    <string name="security__cp_retype_text">Повторно введите 4-значный PIN, чтобы завершить настройку и сохранить новый PIN.</string>
     <string name="security__cp_retype_title">Повторите Новый PIN-код</string>
     <string name="security__cp_setnew_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
     <string name="security__cp_setnew_title">Новый PIN-код</string>

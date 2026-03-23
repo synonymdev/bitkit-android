@@ -444,7 +444,7 @@
     <string name="security__contact_support">Contact Support</string>
     <string name="security__cp_changed_text">You have successfully changed your PIN to a new 4-digit combination.</string>
     <string name="security__cp_changed_title">PIN changed</string>
-    <string name="security__cp_retype_text">Please retype your 4-digit PIN to complete the setup process.</string>
+    <string name="security__cp_retype_text">Please retype your 4-digit PIN to complete the setup process and save your new PIN.</string>
     <string name="security__cp_retype_title">Retype New PIN</string>
     <string name="security__cp_setnew_text">Please use a PIN you will remember. If you forget your PIN you can reset it, but that will require restoring your wallet.</string>
     <string name="security__cp_setnew_title">Set New PIN</string>

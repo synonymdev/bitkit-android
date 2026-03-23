@@ -437,7 +437,7 @@
     <string name="security__contact_support">Contactar con el servicio de asistencia</string>
     <string name="security__cp_changed_text">Ha cambiado correctamente su PIN por una nueva combinación de 4 dígitos.</string>
     <string name="security__cp_changed_title">PIN cambiado</string>
-    <string name="security__cp_retype_text">Vuelva a introducir su PIN de 4 dígitos para completar el proceso de configuración.</string>
+    <string name="security__cp_retype_text">Vuelva a introducir su PIN de 4 dígitos para completar la configuración y guardar su nuevo PIN.</string>
     <string name="security__cp_retype_title">Reintroducir nuevo PIN</string>
     <string name="security__cp_setnew_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su monedero.</string>
     <string name="security__cp_setnew_title">Establecer nuevo PIN</string>

@@ -437,7 +437,7 @@
     <string name="security__contact_support">Contacta amb el suport</string>
     <string name="security__cp_changed_text">Has canviat correctament el teu PIN a una nova combinació de 4 dígits.</string>
     <string name="security__cp_changed_title">El PIN ha canviat</string>
-    <string name="security__cp_retype_text">Si us plau, torna a escriure el teu PIN de 4 dígits per completar el procés de configuració.</string>
+    <string name="security__cp_retype_text">Torna a escriure el teu PIN de 4 dígits per completar la configuració i desar el teu nou PIN.</string>
     <string name="security__cp_retype_title">Torna a escriure el nou PIN</string>
     <string name="security__cp_setnew_text">Si us plau, utilitza un PIN que recordis. Si oblides el teu PIN pots restablir-lo, però caldrà restaurar la cartera.</string>
     <string name="security__cp_setnew_title">Configura un nou PIN</string>

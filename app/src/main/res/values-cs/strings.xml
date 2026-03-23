@@ -437,7 +437,7 @@
     <string name="security__contact_support">Kontaktovat podporu</string>
     <string name="security__cp_changed_text">Úspěšně jste změnili svůj PIN na novou 4místnou kombinaci.</string>
     <string name="security__cp_changed_title">PIN změněn</string>
-    <string name="security__cp_retype_text">Chcete-li dokončit proces nastavení, zadejte znovu svůj 4místný kód PIN.</string>
+    <string name="security__cp_retype_text">Zadejte znovu svůj 4místný PIN pro dokončení nastavení a uložení nového PIN.</string>
     <string name="security__cp_retype_title">Znovu zadejte nový PIN</string>
     <string name="security__cp_setnew_text">Použijte prosím PIN, který si zapamatujete. Pokud svůj PIN zapomenete, můžete jej resetovat, ale to bude vyžadovat obnovení vaší peněženky.</string>
     <string name="security__cp_setnew_title">Nastavte nový PIN</string>

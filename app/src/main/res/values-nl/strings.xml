@@ -437,7 +437,7 @@
     <string name="security__contact_support">Contact opnemen met support</string>
     <string name="security__cp_changed_text">Je hebt je pincode succesvol gewijzigd naar een nieuwe 4-cijferige combinatie.</string>
     <string name="security__cp_changed_title">Pincode gewijzigd</string>
-    <string name="security__cp_retype_text">Typ je 4-cijferige pincode opnieuw in om het installatieproces te voltooien.</string>
+    <string name="security__cp_retype_text">Typ je 4-cijferige PIN opnieuw in om de instelling te voltooien en je nieuwe PIN op te slaan.</string>
     <string name="security__cp_retype_title">Nieuwe pincode opnieuw typen</string>
     <string name="security__cp_setnew_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>
     <string name="security__cp_setnew_title">Nieuwe pincode instellen</string>

@@ -437,7 +437,7 @@
     <string name="security__contact_support">Επικοινωνία με υποστήριξη</string>
     <string name="security__cp_changed_text">Άλλαξες επιτυχώς το PIN σου σε νέο συνδυασμό 4 ψηφίων.</string>
     <string name="security__cp_changed_title">Το PIN άλλαξε</string>
-    <string name="security__cp_retype_text">Πληκτρολόγησε ξανά το 4ψήφιο PIN για να ολοκληρώσεις τη διαδικασία ρύθμισης.</string>
+    <string name="security__cp_retype_text">Πληκτρολόγησε ξανά το 4ψήφιο PIN για να ολοκληρώσεις τη ρύθμιση και να αποθηκεύσεις το νέο PIN.</string>
     <string name="security__cp_retype_title">Επανάληψη νέου PIN</string>
     <string name="security__cp_setnew_text">Χρησιμοποίησε ένα PIN που θα θυμάσαι. Αν ξεχάσεις το PIN σου μπορείς να το επαναφέρεις, αλλά αυτό θα απαιτήσει επαναφορά του πορτοφολιού σου.</string>
     <string name="security__cp_setnew_title">Ορισμός νέου PIN</string>

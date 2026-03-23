@@ -437,7 +437,7 @@
     <string name="security__contact_support">Contatta l\'Assistenza</string>
     <string name="security__cp_changed_text">Hai cambiato con successo il PIN con una nuova combinazione a 4 cifre.</string>
     <string name="security__cp_changed_title">Il PIN è stato modificato</string>
-    <string name="security__cp_retype_text">Digita nuovamente il tuo PIN a 4 cifre per completare il processo di configurazione.</string>
+    <string name="security__cp_retype_text">Digita nuovamente il tuo PIN a 4 cifre per completare la configurazione e salvare il nuovo PIN.</string>
     <string name="security__cp_retype_title">Digita il Nuovo PIN</string>
     <string name="security__cp_setnew_text">Utilizza un PIN che ricorderai. Se dimentichi il PIN, puoi reimpostarlo, ma ciò richiede il ripristino del wallet.</string>
     <string name="security__cp_setnew_title">Imposta Nuovo PIN</string>

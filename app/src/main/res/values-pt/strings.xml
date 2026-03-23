@@ -501,7 +501,7 @@
     <string name="security__cp_title">Alterar PIN</string>
     <string name="security__cp_text">Digite seu PIN &lt;accent>atual&lt;/accent> para alterá-lo.</string>
     <string name="security__cp_retype_title">Digite novamente o novo PIN</string>
-    <string name="security__cp_retype_text">Digite novamente o PIN de 4 dígitos para concluir o processo de configuração.</string>
+    <string name="security__cp_retype_text">Digite novamente o PIN de 4 dígitos para concluir o processo de configuração e salvar seu novo PIN.</string>
     <string name="security__cp_setnew_title">Definir novo PIN</string>
     <string name="security__cp_setnew_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
     <string name="security__cp_try_again">Tente novamente, este não é o mesmo PIN.</string>
