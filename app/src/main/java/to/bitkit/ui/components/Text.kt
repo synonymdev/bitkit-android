@@ -73,11 +73,28 @@ fun Headline20(
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
-        text = text.toUpperCase(),
+        text = text,
         style = AppTextStyles.Headline.merge(
             fontSize = 20.sp,
             lineHeight = 20.sp,
             letterSpacing = (-.5).sp,
+            color = color,
+        ),
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun Headline24(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    Text(
+        text = text.toUpperCase(),
+        style = AppTextStyles.Headline.merge(
+            fontSize = 24.sp,
+            lineHeight = 24.sp,
             color = color,
         ),
         modifier = modifier,

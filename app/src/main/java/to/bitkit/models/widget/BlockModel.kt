@@ -1,10 +1,12 @@
 package to.bitkit.models.widget
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.BlockDTO
 import to.bitkit.ext.toDateUTC
 import to.bitkit.ext.toTimeUTC
 
+@Immutable
 @Serializable
 data class BlockModel(
     val height: String,

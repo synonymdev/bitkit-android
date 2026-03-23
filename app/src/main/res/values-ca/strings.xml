@@ -792,7 +792,7 @@
     <string name="wallet__activity_removed">Eliminat de la Mempool</string>
     <string name="wallet__activity_sent">Enviat</string>
     <string name="wallet__activity_sent_self">Enviat a mi mateix</string>
-    <string name="wallet__activity_show_all">Mostra tota l\'activitat</string>
+    <string name="wallet__activity_show_all">Mostra-ho tot</string>
     <string name="wallet__activity_status">Estat</string>
     <string name="wallet__activity_successful">Exitós</string>
     <string name="wallet__activity_tabs__all">Tots</string>

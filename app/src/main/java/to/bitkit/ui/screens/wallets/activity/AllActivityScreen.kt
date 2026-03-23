@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.wallets.activity
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,8 +49,6 @@ fun AllActivityScreen(
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val tabs = ActivityTab.entries
     val currentTabIndex = tabs.indexOf(selectedTab)
-
-    BackHandler { onBack() }
 
     AllActivityScreenContent(
         filteredActivities = filteredActivities,

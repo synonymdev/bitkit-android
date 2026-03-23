@@ -131,7 +131,11 @@ internal object Env {
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
 
     const val REPO_URL = "https://github.com/synonymdev/bitkit-android"
-    const val RELEASE_URL = "$REPO_URL/releases/download/updater/release.json"
+    val RELEASE_URL = if (isE2eTest) {
+        "https://github.com/synonymdev/bitkit-e2e-tests/releases/download/updater/release.json"
+    } else {
+        "$REPO_URL/releases/download/updater/release.json"
+    }
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BTC_MAP_URL = "https://btcmap.org/map"
     const val BITKIT_WEBSITE = "https://bitkit.to/"
