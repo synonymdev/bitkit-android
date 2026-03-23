@@ -478,7 +478,7 @@
     <string name="security__pin_choose_text">Si us plau, utilitza un PIN que recordis. Si oblides el teu PIN pots restablir-lo, però caldrà restaurar la cartera.</string>
     <string name="security__pin_disable_button">Desactiva el PIN</string>
     <string name="security__pin_disable_text">El codi PIN està actualment habilitat. Si vols desactivar el teu codi PIN, has d\'introduir primer el teu codi PIN actual.</string>
-    <string name="security__pin_disable_title">Desactiva el PIN</string>
+    <string name="security__pin_enabled_title">PIN activat</string>
     <string name="security__pin_enter">Si us plau, introduïu el vostre codi PIN</string>
     <string name="security__pin_forgot_reset">Restablir (Es necessita la frase de recuperació)</string>
     <string name="security__pin_forgot_text">Has oblidat el PIN? Restableix i recupera la teva cartera Bitkit amb la teva frase de recuperació. Configura un nou PIN després de completar la recuperació.</string>

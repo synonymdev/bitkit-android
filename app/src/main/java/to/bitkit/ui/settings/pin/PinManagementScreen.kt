@@ -72,7 +72,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(
                 if (isPinEnabled) {
-                    R.string.security__pin_disable_title
+                    R.string.security__pin_enabled_title
                 } else {
                     R.string.settings__security__pin
                 }

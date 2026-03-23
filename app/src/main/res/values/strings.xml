@@ -486,7 +486,7 @@
     <string name="security__pin_disable_button">Disable PIN</string>
     <string name="security__pin_enable_button">Enable PIN</string>
     <string name="security__pin_disable_text">PIN code is currently enabled. If you want to disable your PIN, you need to enter your current PIN code first.</string>
-    <string name="security__pin_disable_title">Disable PIN</string>
+    <string name="security__pin_enabled_title">PIN Enabled</string>
     <string name="security__pin_enter">Please enter your PIN code</string>
     <string name="security__pin_forgot_reset">Reset (Requires Recovery Phrase)</string>
     <string name="security__pin_forgot_text">Forgot your PIN? Reset and recover your Bitkit wallet with your recovery phrase. Set a new PIN after completing recovery.</string>

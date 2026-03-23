@@ -492,7 +492,7 @@
     <string name="security__pin_choose_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
     <string name="security__pin_disable_button">Отключить PIN-код</string>
     <string name="security__pin_disable_text">PIN-код в настоящее время включен. Если вы хотите отключить свой PIN-код, вам необходимо сначала ввести текущий PIN-код.</string>
-    <string name="security__pin_disable_title">Отключить PIN-код</string>
+    <string name="security__pin_enabled_title">PIN включён</string>
     <string name="security__pin_enter">Пожалуйста, введите PIN-код</string>
     <string name="security__pin_forgot_reset">Сбросить (требуется Фраза Восстановления)</string>
     <string name="security__pin_forgot_text">Забыли свой PIN-код? Сбросьте и восстановите свой кошелёк Bitkit с помощью фразы восстановления. Установите новый PIN-код после завершения восстановления.</string>

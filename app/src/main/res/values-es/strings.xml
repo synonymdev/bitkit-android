@@ -463,7 +463,7 @@
     <string name="security__pin_retype_header">Vuelva a introducir el PIN de 4 dígitos</string>
     <string name="security__pin_retype_text">Vuelva a introducir su PIN de 4 dígitos para completar el proceso de configuración.</string>
     <string name="security__pin_not_match">Inténtelo de nuevo, no es el mismo PIN.</string>
-    <string name="security__pin_disable_title">Desactivar PIN</string>
+    <string name="security__pin_enabled_title">PIN activado</string>
     <string name="security__pin_disable_text">El código PIN está actualmente activado. Si desea desactivar su PIN, deberá introducir primero su código PIN actual.</string>
     <string name="security__pin_disable_button">Desactivar PIN</string>
     <string name="security__pin_enter">Por favor, introduzca su código PIN</string>

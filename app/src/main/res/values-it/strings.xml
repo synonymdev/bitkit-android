@@ -478,7 +478,7 @@
     <string name="security__pin_choose_text">Utilizza un PIN che ricorderai. Se dimentichi il PIN, puoi reimpostarlo, ma ciò richiede il ripristino del wallet.</string>
     <string name="security__pin_disable_button">Disabilita il PIN</string>
     <string name="security__pin_disable_text">Il codice PIN è abilitato. Se vuoi disattivare il PIN, prima inserisci il PIN corrente.</string>
-    <string name="security__pin_disable_title">Disabilita il PIN</string>
+    <string name="security__pin_enabled_title">PIN attivato</string>
     <string name="security__pin_enter">Inserisci il codice PIN</string>
     <string name="security__pin_forgot_reset">Reset (Richiede la Recovery Phrase)</string>
     <string name="security__pin_forgot_text">Ha dimenticato il PIN? Resetta e recupera il tuo wallet Bitkit con la recovery phrase. Imposta un nuovo PIN dopo aver completato il recupero.</string>

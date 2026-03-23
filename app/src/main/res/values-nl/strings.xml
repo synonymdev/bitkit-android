@@ -478,7 +478,7 @@
     <string name="security__pin_choose_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>
     <string name="security__pin_disable_button">Pincode uitschakelen</string>
     <string name="security__pin_disable_text">Pincode is momenteel ingeschakeld. Als je je pincode wilt uitschakelen, moet je eerst je huidige pincode invoeren.</string>
-    <string name="security__pin_disable_title">Pincode uitschakelen</string>
+    <string name="security__pin_enabled_title">PIN ingeschakeld</string>
     <string name="security__pin_enter">Voer je pincode in</string>
     <string name="security__pin_forgot_reset">Resetten (herstelzin vereist)</string>
     <string name="security__pin_forgot_text">Pincode vergeten? Reset en herstel je Bitkit-wallet met je herstelzin. Stel een nieuwe pincode in na het voltooien van het herstel.</string>
