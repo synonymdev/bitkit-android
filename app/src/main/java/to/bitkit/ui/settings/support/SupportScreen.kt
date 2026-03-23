@@ -143,109 +143,120 @@ private fun Content(
 
         Column(
             modifier = Modifier
-                .padding(horizontal = 16.dp)
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
-            VerticalSpacer(16.dp)
+            // Padded content — setting rows
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                VerticalSpacer(16.dp)
 
-            BodyM(text = stringResource(R.string.settings__support__text), color = Colors.White64)
+                BodyM(text = stringResource(R.string.settings__support__text), color = Colors.White64)
 
-            VerticalSpacer(16.dp)
+                VerticalSpacer(16.dp)
 
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__support__report),
-                icon = { SettingsIcon(R.drawable.ic_warning) },
-                onClick = onClickReportIssue,
-            )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__support__help),
-                icon = { SettingsIcon(R.drawable.ic_question) },
-                onClick = onClickHelpCenter,
-            )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__support__status),
-                icon = { SettingsIcon(R.drawable.ic_power) },
-                onClick = onClickAppStatus,
-                modifier = Modifier.testTag("AppStatus"),
-            )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__about__legal),
-                icon = { SettingsIcon(R.drawable.ic_file_text) },
-                onClick = onClickLegal,
-            )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__about__share),
-                icon = { SettingsIcon(R.drawable.ic_share) },
-                onClick = onClickShare,
-            )
-
-            // Version row — no chevron, value on right
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp)
-                    .clickableAlpha { onClickVersion() }
-                    .testTag("DevOptions"),
-            ) {
-                SettingsIcon(R.drawable.ic_stack)
-                BodyM(
-                    text = stringResource(R.string.settings__about__version),
-                    modifier = Modifier.weight(1f),
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__support__report),
+                    icon = { SettingsIcon(R.drawable.ic_warning) },
+                    onClick = onClickReportIssue,
                 )
-                BodyM(text = appVersion, color = Colors.White64)
-            }
-            HorizontalDivider()
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__support__help),
+                    icon = { SettingsIcon(R.drawable.ic_question) },
+                    onClick = onClickHelpCenter,
+                )
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__support__status),
+                    icon = { SettingsIcon(R.drawable.ic_power) },
+                    onClick = onClickAppStatus,
+                    modifier = Modifier.testTag("AppStatus"),
+                )
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__about__legal),
+                    icon = { SettingsIcon(R.drawable.ic_file_text) },
+                    onClick = onClickLegal,
+                )
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__about__share),
+                    icon = { SettingsIcon(R.drawable.ic_share) },
+                    onClick = onClickShare,
+                )
 
-            VerticalSpacer(32.dp)
-            FillHeight()
-            // Part 1: Logo with diagonal orange crossing through it
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clipToBounds()
-                    .drawBehind {
-                        val path = Path().apply {
-                            moveTo(size.width, size.height * 0.1f)
-                            lineTo(0f, size.height * 0.65f)
-                            lineTo(0f, size.height)
-                            lineTo(size.width, size.height)
-                            close()
-                        }
-                        drawPath(path, color = BrandColor)
-                    },
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.bitkit_logo),
-                    contentDescription = null,
+                // Version row — no chevron, value on right
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(100.dp)
-                        .testTag("AboutLogo"),
-                )
+                        .heightIn(min = 52.dp)
+                        .clickableAlpha { onClickVersion() }
+                        .testTag("DevOptions"),
+                ) {
+                    SettingsIcon(R.drawable.ic_stack)
+                    BodyM(
+                        text = stringResource(R.string.settings__about__version),
+                        modifier = Modifier.weight(1f),
+                    )
+                    BodyM(text = appVersion, color = Colors.White64)
+                }
+                HorizontalDivider()
             }
 
-            // Part 2: Solid orange background for bottom content
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Colors.Brand),
-            ) {
-                VerticalSpacer(16.dp)
+            VerticalSpacer(32.dp)
 
-                Links(modifier = Modifier.fillMaxWidth())
+            FillHeight()
 
-                VerticalSpacer(16.dp)
-
-                BodyM(
-                    text = stringResource(R.string.settings__support__copyright),
-                    color = Colors.White64,
-                )
-
-                VerticalSpacer(32.dp)
-            }
+            SupportFooter()
         }
+    }
+}
+
+@Composable
+private fun SupportFooter() {
+    // Bitkit logo with diagonal orange crossing through it
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clipToBounds()
+            .drawBehind {
+                val path = Path().apply {
+                    moveTo(size.width, size.height * 0.1f)
+                    lineTo(0f, size.height * 0.65f)
+                    lineTo(0f, size.height)
+                    lineTo(size.width, size.height)
+                    close()
+                }
+                drawPath(path, color = BrandColor)
+            },
+    ) {
+        Image(
+            painter = painterResource(R.drawable.bitkit_logo),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp)
+                .padding(horizontal = 16.dp)
+                .testTag("AboutLogo"),
+        )
+    }
+
+    // Solid orange background for bottom content
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Colors.Brand)
+            .padding(horizontal = 16.dp),
+    ) {
+        VerticalSpacer(16.dp)
+
+        Links(modifier = Modifier.fillMaxWidth())
+
+        VerticalSpacer(16.dp)
+
+        BodyM(
+            text = stringResource(R.string.settings__support__copyright),
+            color = Colors.White64,
+        )
+
+        VerticalSpacer(32.dp)
     }
 }
 
