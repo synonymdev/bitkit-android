@@ -79,6 +79,7 @@ fun SettingsScreen(
     // General tab state
     val defaultTransactionSpeed by settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
     val lastUsedTags by settings.lastUsedTags.collectAsStateWithLifecycle()
+    val showWidgets by settings.showWidgets.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settings.quickPayIntroSeen.collectAsStateWithLifecycle()
     val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
@@ -105,7 +106,8 @@ fun SettingsScreen(
         primaryDisplay = currencies.primaryDisplay,
         defaultTransactionSpeed = defaultTransactionSpeed,
         selectedLanguage = languageUiState.selectedLanguage.displayName,
-        showTagsButton = lastUsedTags.isNotEmpty(),
+        showWidgets = showWidgets,
+        tagCount = lastUsedTags.size,
         notificationsGranted = notificationsGranted,
         onLanguageClick = { navController.navigateToLanguageSettings() },
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
@@ -179,7 +181,8 @@ private fun SettingsContent(
     primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
     defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
     selectedLanguage: String = "",
-    showTagsButton: Boolean = false,
+    showWidgets: Boolean = true,
+    tagCount: Int = 0,
     notificationsGranted: Boolean = false,
     onLanguageClick: () -> Unit = {},
     onLocalCurrencyClick: () -> Unit = {},
@@ -252,7 +255,8 @@ private fun SettingsContent(
                     primaryDisplay = primaryDisplay,
                     defaultTransactionSpeed = defaultTransactionSpeed,
                     selectedLanguage = selectedLanguage,
-                    showTagsButton = showTagsButton,
+                    showWidgets = showWidgets,
+                    tagCount = tagCount,
                     notificationsGranted = notificationsGranted,
                     onLanguageClick = onLanguageClick,
                     onLocalCurrencyClick = onLocalCurrencyClick,
@@ -308,7 +312,8 @@ private fun GeneralTabContent(
     primaryDisplay: PrimaryDisplay,
     defaultTransactionSpeed: TransactionSpeed,
     selectedLanguage: String,
-    showTagsButton: Boolean,
+    showWidgets: Boolean,
+    tagCount: Int,
     notificationsGranted: Boolean,
     onLanguageClick: () -> Unit,
     onLocalCurrencyClick: () -> Unit,
@@ -357,13 +362,17 @@ private fun GeneralTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__widgets__nav_title),
             icon = { SettingsIcon(R.drawable.ic_stack) },
+            value = SettingsButtonValue.StringValue(
+                stringResource(if (showWidgets) R.string.settings__bg__on else R.string.settings__bg__off)
+            ),
             onClick = onWidgetsClick,
             modifier = Modifier.testTag("WidgetsSettings"),
         )
-        if (showTagsButton) {
+        if (tagCount > 0) {
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__tags),
                 icon = { SettingsIcon(R.drawable.ic_tag) },
+                value = SettingsButtonValue.StringValue(tagCount.toString()),
                 onClick = onTagsClick,
                 modifier = Modifier.testTag("TagsSettings"),
             )
@@ -636,7 +645,7 @@ private fun AdvancedTabContent(
 @Composable
 private fun PreviewGeneral() {
     AppThemeSurface {
-        SettingsContent(showTagsButton = true)
+        SettingsContent(tagCount = 3)
     }
 }
 
