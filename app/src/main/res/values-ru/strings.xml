@@ -491,7 +491,8 @@
     <string name="security__pin_choose_header">Выберите 4-значный PIN-код</string>
     <string name="security__pin_choose_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
     <string name="security__pin_disable_button">Отключить PIN-код</string>
-    <string name="security__pin_disable_text">PIN-код в настоящее время включен. Если вы хотите отключить свой PIN-код, вам необходимо сначала ввести текущий PIN-код.</string>
+    <string name="security__pin_disable_text">Введите &lt;accent>PIN&lt;/accent>, чтобы отключить его.</string>
+    <string name="security__pin_enabled_text">PIN-код в настоящее время включён. Если вы хотите отключить или изменить PIN, сначала введите текущий PIN-код.</string>
     <string name="security__pin_enabled_title">PIN включён</string>
     <string name="security__pin_enter">Пожалуйста, введите PIN-код</string>
     <string name="security__pin_forgot_reset">Сбросить (требуется Фраза Восстановления)</string>

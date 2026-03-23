@@ -463,8 +463,9 @@
     <string name="security__pin_retype_header">4-stelligen PIN erneut eingeben</string>
     <string name="security__pin_retype_text">Bitte gib deinen 4-stelligen PIN erneut ein, um den Einrichtungsprozess abzuschließen.</string>
     <string name="security__pin_not_match">Versuche es erneut, dieser PIN stimmt nicht überein.</string>
+    <string name="security__pin_enabled_text">Der PIN-Code ist derzeit aktiviert. Wenn du ihn deaktivieren oder ändern möchtest, musst du zuerst deinen aktuellen PIN-Code eingeben.</string>
     <string name="security__pin_enabled_title">PIN aktiviert</string>
-    <string name="security__pin_disable_text">Der PIN-Code ist derzeit aktiviert. Wenn du deinen PIN deaktivieren möchtest, musst du zuerst deinen aktuellen PIN-Code eingeben.</string>
+    <string name="security__pin_disable_text">Geben Sie Ihre &lt;accent>PIN&lt;/accent> ein, um sie zu deaktivieren.</string>
     <string name="security__pin_disable_button">PIN deaktivieren</string>
     <string name="security__pin_enter">Bitte gib deinen PIN-Code ein</string>
     <string name="security__pin_last_attempt">Letzter Versuch. Wenn du den falschen PIN erneut eingibst, wird dein Wallet zurückgesetzt.</string>

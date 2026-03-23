@@ -477,7 +477,8 @@
     <string name="security__pin_choose_header">اختر رمز PIN من 4 أرقام</string>
     <string name="security__pin_choose_text">يرجى استخدام رمز PIN ستتذكره. إذا نسيت رمز PIN، يمكنك إعادة تعيينه، لكن ذلك سيتطلب استعادة محفظتك.</string>
     <string name="security__pin_disable_button">تعطيل PIN</string>
-    <string name="security__pin_disable_text">رمز PIN مفعل حاليًا. إذا أردت تعطيل رمز PIN، تحتاج إلى إدخال رمز PIN الحالي أولاً.</string>
+    <string name="security__pin_disable_text">أدخل رقم &lt;accent>PIN&lt;/accent> لتعطيله.</string>
+    <string name="security__pin_enabled_text">رمز PIN مفعل حالياً. إذا كنت تريد تعطيله أو تغييره، يجب إدخال رمز PIN الحالي أولاً.</string>
     <string name="security__pin_enabled_title">PIN مفعل</string>
     <string name="security__pin_enter">يرجى إدخال رمز PIN</string>
     <string name="security__pin_forgot_reset">إعادة التعيين (يتطلب عبارة الاسترداد)</string>

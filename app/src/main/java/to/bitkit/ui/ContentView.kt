@@ -161,6 +161,7 @@ import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
 import to.bitkit.ui.sheets.ChangePinSheet
 import to.bitkit.ui.sheets.ConnectionClosedSheet
+import to.bitkit.ui.sheets.DisablePinSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.GiftSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
@@ -392,6 +393,7 @@ fun ContentView(
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()
                         is Sheet.Pin -> PinSheet(sheet, appViewModel)
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
+                        Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
                         is Sheet.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
                         Sheet.ForceTransfer -> ForceTransferSheet(appViewModel, transferViewModel)

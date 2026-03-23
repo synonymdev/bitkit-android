@@ -477,7 +477,8 @@
     <string name="security__pin_choose_header">Escolha o PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
     <string name="security__pin_disable_button">Desativar PIN</string>
-    <string name="security__pin_disable_text">O código PIN está ativado no momento. Se quiser desativar o PIN, você precisará, primeiro, digitar o código PIN atual.</string>
+    <string name="security__pin_disable_text">Digite seu &lt;accent>PIN&lt;/accent> para desativá-lo.</string>
+    <string name="security__pin_enabled_text">O código PIN está ativado. Se deseja desativá-lo ou alterá-lo, primeiro digite seu código PIN atual.</string>
     <string name="security__pin_enabled_title">PIN ativado</string>
     <string name="security__pin_enter">Por favor, digite seu código PIN</string>
     <string name="security__pin_forgot_reset">Restaurar (Requer a Frase de Recuperação)</string>

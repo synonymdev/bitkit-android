@@ -477,7 +477,8 @@
     <string name="security__pin_choose_header">Kies 4-cijferige pincode</string>
     <string name="security__pin_choose_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>
     <string name="security__pin_disable_button">Pincode uitschakelen</string>
-    <string name="security__pin_disable_text">Pincode is momenteel ingeschakeld. Als je je pincode wilt uitschakelen, moet je eerst je huidige pincode invoeren.</string>
+    <string name="security__pin_disable_text">Voer je &lt;accent>PIN&lt;/accent> in om deze uit te schakelen.</string>
+    <string name="security__pin_enabled_text">De PIN is momenteel ingeschakeld. Als je deze wilt uitschakelen of wijzigen, moet je eerst je huidige PIN invoeren.</string>
     <string name="security__pin_enabled_title">PIN ingeschakeld</string>
     <string name="security__pin_enter">Voer je pincode in</string>
     <string name="security__pin_forgot_reset">Resetten (herstelzin vereist)</string>

@@ -477,7 +477,8 @@
     <string name="security__pin_choose_header">Vyberte 4místný PIN</string>
     <string name="security__pin_choose_text">Použijte prosím PIN, který si zapamatujete. Pokud svůj PIN zapomenete, můžete jej resetovat, ale to bude vyžadovat obnovení vaší peněženky.</string>
     <string name="security__pin_disable_button">Zakázat PIN</string>
-    <string name="security__pin_disable_text">PIN kód je aktuálně povolen. Pokud chcete deaktivovat svůj PIN, musíte nejprve zadat svůj aktuální PIN kód.</string>
+    <string name="security__pin_disable_text">Zadejte svůj &lt;accent>PIN&lt;/accent> pro jeho deaktivaci.</string>
+    <string name="security__pin_enabled_text">PIN kód je aktuálně povolen. Pokud jej chcete deaktivovat nebo změnit, musíte nejprve zadat aktuální PIN kód.</string>
     <string name="security__pin_enabled_title">PIN povolen</string>
     <string name="security__pin_enter">Zadejte prosím svůj PIN kód</string>
     <string name="security__pin_forgot_reset">Resetovat (vyžaduje obnovovací frázi)</string>

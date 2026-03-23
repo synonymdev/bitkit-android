@@ -477,7 +477,8 @@
     <string name="security__pin_choose_header">Επίλεξε 4ψήφιο PIN</string>
     <string name="security__pin_choose_text">Χρησιμοποίησε ένα PIN που θα θυμάσαι. Αν ξεχάσεις το PIN σου μπορείς να το επαναφέρεις, αλλά αυτό θα απαιτήσει επαναφορά του πορτοφολιού σου.</string>
     <string name="security__pin_disable_button">Απενεργοποίηση PIN</string>
-    <string name="security__pin_disable_text">Ο κωδικός PIN είναι ενεργοποιημένος. Αν θέλεις να απενεργοποιήσεις το PIN, πρέπει να εισάγεις πρώτα τον τρέχοντα κωδικό PIN.</string>
+    <string name="security__pin_disable_text">Εισαγάγετε το &lt;accent>PIN&lt;/accent> σας για να το απενεργοποιήσετε.</string>
+    <string name="security__pin_enabled_text">Ο κωδικός PIN είναι ενεργοποιημένος. Αν θέλετε να τον απενεργοποιήσετε ή να τον αλλάξετε, πρέπει πρώτα να εισαγάγετε τον τρέχοντα κωδικό PIN.</string>
     <string name="security__pin_enabled_title">PIN ενεργοποιημένο</string>
     <string name="security__pin_enter">Εισάγαγε τον κωδικό PIN</string>
     <string name="security__pin_forgot_reset">Επαναφορά (Απαιτείται φράση ανάκτησης)</string>

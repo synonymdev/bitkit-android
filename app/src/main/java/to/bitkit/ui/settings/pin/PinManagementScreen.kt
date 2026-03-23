@@ -22,14 +22,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Sheet
-import to.bitkit.ui.navigateToAuthCheck
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -49,12 +46,7 @@ fun PinManagementScreen(
         isPinEnabled = isPinEnabled,
         onEnablePinClick = { app.showSheet(Sheet.Pin()) },
         onChangePinClick = { app.showSheet(Sheet.ChangePin) },
-        onDisablePinClick = {
-            navController.navigateToAuthCheck(
-                requirePin = true,
-                onSuccessActionId = AuthCheckAction.DISABLE_PIN,
-            ) { popUpTo(Routes.Settings) }
-        },
+        onDisablePinClick = { app.showSheet(Sheet.DisablePin) },
         onBackClick = { navController.popBackStack() },
     )
 }
@@ -85,7 +77,7 @@ private fun Content(
             BodyM(
                 text = stringResource(
                     if (isPinEnabled) {
-                        R.string.security__pin_disable_text
+                        R.string.security__pin_enabled_text
                     } else {
                         R.string.security__pin_security_text
                     }

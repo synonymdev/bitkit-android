@@ -463,8 +463,9 @@
     <string name="security__pin_retype_header">Wpisz ponownie 4 cyfrowy kod PIN</string>
     <string name="security__pin_retype_text">Wpisz proszę ponownie 4 cyfrowy kod PIN aby zakończyć konfigurację.</string>
     <string name="security__pin_not_match">Spróbuj ponownie, kody PIN się różnią.</string>
+    <string name="security__pin_enabled_text">Kod PIN jest obecnie włączony. Jeśli chcesz go wyłączyć lub zmienić, najpierw wprowadź aktualny kod PIN.</string>
     <string name="security__pin_enabled_title">PIN włączony</string>
-    <string name="security__pin_disable_text">Kod PIN jest obecnie aktywny. Jeśli chcesz go wyłączyć pierw musisz podać aktualny kod PIN.</string>
+    <string name="security__pin_disable_text">Wprowadź swój &lt;accent>PIN&lt;/accent>, aby go wyłączyć.</string>
     <string name="security__pin_disable_button">Wyłącz kod PIN</string>
     <string name="security__pin_enter">Podaj proszę kod PIN</string>
     <string name="security__pin_last_attempt">Ostatnia próba. Wpisanie błędnego kodu spowoduje zresetowanie portfela.</string>

@@ -477,7 +477,8 @@
     <string name="security__pin_choose_header">Elija un PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su monedero.</string>
     <string name="security__pin_disable_button">Desactivar PIN</string>
-    <string name="security__pin_disable_text">El código PIN está actualmente activado. Si desea desactivar su PIN, deberá introducir primero su código PIN actual.</string>
+    <string name="security__pin_disable_text">Introduzca su &lt;accent>PIN&lt;/accent> para desactivarlo.</string>
+    <string name="security__pin_enabled_text">El código PIN está actualmente activado. Si desea desactivarlo o cambiarlo, primero debe introducir su código PIN actual.</string>
     <string name="security__pin_enabled_title">PIN activado</string>
     <string name="security__pin_enter">Por favor, introduzca su código PIN</string>
     <string name="security__pin_forgot_reset">Restablecer (requiere frase de recuperación)</string>

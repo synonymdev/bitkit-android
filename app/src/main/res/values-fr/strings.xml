@@ -463,8 +463,9 @@
     <string name="security__pin_retype_header">Retapez le code PIN à 4 chiffres</string>
     <string name="security__pin_retype_text">Veuillez retaper votre code PIN à 4 chiffres pour terminer la procédure de configuration.</string>
     <string name="security__pin_not_match">Réessayez, il ne s\'agit pas du même code PIN.</string>
+    <string name="security__pin_enabled_text">Le code PIN est actuellement activé. Si vous souhaitez le désactiver ou le modifier, vous devez d\'abord saisir votre code PIN actuel.</string>
     <string name="security__pin_enabled_title">PIN activé</string>
-    <string name="security__pin_disable_text">Le code PIN est actuellement activé. Si vous souhaitez désactiver votre code PIN, vous devez d\'abord saisir votre code PIN actuel.</string>
+    <string name="security__pin_disable_text">Saisissez votre &lt;accent>PIN&lt;/accent> pour le désactiver.</string>
     <string name="security__pin_disable_button">Désactiver le code PIN</string>
     <string name="security__pin_enter">Veuillez saisir votre code PIN</string>
     <string name="security__pin_last_attempt">Dernière tentative. Si vous saisissez à nouveau un code PIN erroné, votre portefeuille sera réinitialisé.</string>
