@@ -2,11 +2,13 @@ package to.bitkit.ui.sheets
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -40,8 +42,7 @@ import to.bitkit.ui.components.PinDots
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -49,6 +50,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
+
+private val NumberPadHeight = 350.dp
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -60,7 +63,6 @@ fun ChangePinSheet(app: AppViewModel) {
         modifier = Modifier
             .fillMaxWidth()
             .sheetHeight(SheetSize.MEDIUM)
-            .gradientBackground()
     ) {
         NavHost(
             navController = navController,
@@ -180,61 +182,65 @@ private fun ValidateContent(
 ) {
     val isLastAttempt = attemptsRemaining == 1
 
-    ScreenColumn(
-        noBackground = true,
-        modifier = Modifier.testTag("ChangePIN"),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+            .navigationBarsPadding()
+            .testTag("ChangePIN"),
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.security__cp_title),
-            onBackClick = onBackClick,
+            onBack = onBackClick,
         )
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) {
-            BodyM(
-                text = stringResource(R.string.security__cp_text),
-                color = Colors.White64,
-            )
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(32.dp))
+        BodyM(
+            text = stringResource(R.string.security__cp_text),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
 
-            AnimatedVisibility(visible = attemptsRemaining < Env.PIN_ATTEMPTS) {
-                if (isLastAttempt) {
-                    BodyS(
-                        text = stringResource(R.string.security__pin_last_attempt),
-                        color = Colors.Brand,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.testTag("LastAttempt")
-                    )
-                } else {
-                    BodyS(
-                        text = stringResource(R.string.security__pin_attempts)
-                            .replace("{attemptsRemaining}", "$attemptsRemaining"),
-                        color = Colors.Brand,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .clickableAlpha { onClickForgotPin() }
-                            .testTag("AttemptsRemaining")
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(32.dp))
+
+        AnimatedVisibility(visible = attemptsRemaining < Env.PIN_ATTEMPTS) {
+            if (isLastAttempt) {
+                BodyS(
+                    text = stringResource(R.string.security__pin_last_attempt),
+                    color = Colors.Brand,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("LastAttempt"),
+                )
+            } else {
+                BodyS(
+                    text = stringResource(R.string.security__pin_attempts)
+                        .replace("{attemptsRemaining}", "$attemptsRemaining"),
+                    color = Colors.Brand,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickableAlpha { onClickForgotPin() }
+                        .testTag("AttemptsRemaining"),
+                )
             }
-
-            PinDots(
-                pin = pin,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            NumberPad(
-                onPress = onKeyPress,
-                type = NumberPadType.SIMPLE,
-                modifier = Modifier.height(350.dp),
-            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        PinDots(pin = pin)
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        NumberPad(
+            onPress = onKeyPress,
+            type = NumberPadType.SIMPLE,
+            modifier = Modifier
+                .height(NumberPadHeight),
+        )
     }
 }
 
@@ -244,39 +250,40 @@ private fun NewPinContent(
     onKeyPress: (String) -> Unit,
     onBackClick: () -> Unit,
 ) {
-    ScreenColumn(
-        noBackground = true,
-        modifier = Modifier.testTag("ChangePIN2"),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+            .navigationBarsPadding()
+            .testTag("ChangePIN2"),
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.security__cp_setnew_title),
-            onBackClick = onBackClick,
+            onBack = onBackClick,
         )
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) {
-            BodyM(
-                text = stringResource(R.string.security__cp_setnew_text),
-                color = Colors.White64,
-            )
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(32.dp))
+        BodyM(
+            text = stringResource(R.string.security__cp_setnew_text),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
 
-            PinDots(
-                pin = pin,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
+        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
-            Spacer(modifier = Modifier.weight(1f))
+        PinDots(pin = pin)
 
-            NumberPad(
-                onPress = onKeyPress,
-                type = NumberPadType.SIMPLE,
-                modifier = Modifier.height(350.dp),
-            )
-        }
+        Spacer(modifier = Modifier.height(32.dp))
+
+        NumberPad(
+            onPress = onKeyPress,
+            type = NumberPadType.SIMPLE,
+            modifier = Modifier
+                .height(NumberPadHeight)
+                .background(Colors.Black),
+        )
     }
 }
 
@@ -287,50 +294,52 @@ private fun ConfirmContent(
     onKeyPress: (String) -> Unit,
     onBackClick: () -> Unit,
 ) {
-    ScreenColumn(
-        noBackground = true,
-        modifier = Modifier.testTag("ChangePIN2"),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+            .navigationBarsPadding()
+            .testTag("ChangePIN2"),
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.security__cp_retype_title),
-            onBackClick = onBackClick,
+            onBack = onBackClick,
         )
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) {
-            BodyM(
-                text = stringResource(R.string.security__cp_retype_text),
-                color = Colors.White64,
-            )
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(32.dp))
+        BodyM(
+            text = stringResource(R.string.security__cp_retype_text),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
 
-            AnimatedVisibility(visible = showError) {
-                BodyS(
-                    text = stringResource(R.string.security__cp_try_again),
-                    textAlign = TextAlign.Center,
-                    color = Colors.Brand,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("WrongPIN")
-                )
-            }
+        Spacer(modifier = Modifier.height(32.dp))
 
-            PinDots(
-                pin = pin,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            NumberPad(
-                onPress = onKeyPress,
-                type = NumberPadType.SIMPLE,
-                modifier = Modifier.height(350.dp),
+        AnimatedVisibility(visible = showError) {
+            BodyS(
+                text = stringResource(R.string.security__cp_try_again),
+                textAlign = TextAlign.Center,
+                color = Colors.Brand,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("WrongPIN"),
             )
         }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        PinDots(pin = pin)
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        NumberPad(
+            onPress = onKeyPress,
+            type = NumberPadType.SIMPLE,
+            modifier = Modifier
+                .height(NumberPadHeight)
+                .background(Colors.Black),
+        )
     }
 }
 
@@ -339,37 +348,47 @@ private fun ResultContent(
     onOkClick: () -> Unit,
     onBackClick: () -> Unit,
 ) {
-    ScreenColumn(noBackground = true) {
-        AppTopBar(stringResource(R.string.security__cp_changed_title), onBackClick = onBackClick)
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+            .navigationBarsPadding(),
+    ) {
+        SheetTopBar(
+            titleText = stringResource(R.string.security__cp_changed_title),
+            onBack = onBackClick,
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        BodyM(
+            text = stringResource(R.string.security__cp_changed_text),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
+
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
         ) {
-            BodyM(
-                text = stringResource(R.string.security__cp_changed_text),
-                color = Colors.White64,
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                modifier = Modifier.size(256.dp),
             )
-
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.check),
-                    contentDescription = null,
-                    modifier = Modifier.size(256.dp)
-                )
-            }
-
-            PrimaryButton(
-                text = stringResource(R.string.common__ok),
-                onClick = onOkClick,
-                modifier = Modifier.testTag("OK")
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
+
+        PrimaryButton(
+            text = stringResource(R.string.common__ok),
+            onClick = onOkClick,
+            modifier = Modifier
+                .padding(horizontal = 32.dp)
+                .testTag("OK"),
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
