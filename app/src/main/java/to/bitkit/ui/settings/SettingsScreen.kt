@@ -221,9 +221,13 @@ private fun SettingsContent(
     onRgsServerClick: () -> Unit = {},
     // Navigation
     onBackClick: () -> Unit = {},
+    initialTab: SettingsTab = SettingsTab.General,
 ) {
     val tabs = remember { SettingsTab.entries }
-    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val pagerState = rememberPagerState(
+        initialPage = tabs.indexOf(initialTab),
+        pageCount = { tabs.size },
+    )
     val scope = rememberCoroutineScope()
 
     ScreenColumn {
@@ -632,6 +636,32 @@ private fun AdvancedTabContent(
 @Composable
 private fun PreviewGeneral() {
     AppThemeSurface {
-        SettingsContent()
+        SettingsContent(showTagsButton = true)
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewSecurity() {
+    AppThemeSurface {
+        SettingsContent(
+            isPinEnabled = true,
+            isPinForPaymentsEnabled = true,
+            enableSwipeToHideBalance = true,
+            isBiometrySupported = true,
+            initialTab = SettingsTab.Security,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewAdvanced() {
+    AppThemeSurface {
+        SettingsContent(
+            isDevModeEnabled = true,
+            selectedAddressTypeName = "Taproot",
+            initialTab = SettingsTab.Advanced,
+        )
     }
 }
