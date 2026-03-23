@@ -80,6 +80,7 @@ fun SettingsScreen(
     val defaultTransactionSpeed by settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
     val lastUsedTags by settings.lastUsedTags.collectAsStateWithLifecycle()
     val showWidgets by settings.showWidgets.collectAsStateWithLifecycle()
+    val isQuickPayEnabled by settings.isQuickpayEnabled.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settings.quickPayIntroSeen.collectAsStateWithLifecycle()
     val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
@@ -108,6 +109,7 @@ fun SettingsScreen(
         selectedLanguage = languageUiState.selectedLanguage.displayName,
         showWidgets = showWidgets,
         tagCount = lastUsedTags.size,
+        isQuickPayEnabled = isQuickPayEnabled,
         notificationsGranted = notificationsGranted,
         onLanguageClick = { navController.navigateToLanguageSettings() },
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
@@ -183,6 +185,7 @@ private fun SettingsContent(
     selectedLanguage: String = "",
     showWidgets: Boolean = true,
     tagCount: Int = 0,
+    isQuickPayEnabled: Boolean = false,
     notificationsGranted: Boolean = false,
     onLanguageClick: () -> Unit = {},
     onLocalCurrencyClick: () -> Unit = {},
@@ -257,6 +260,7 @@ private fun SettingsContent(
                     selectedLanguage = selectedLanguage,
                     showWidgets = showWidgets,
                     tagCount = tagCount,
+                    isQuickPayEnabled = isQuickPayEnabled,
                     notificationsGranted = notificationsGranted,
                     onLanguageClick = onLanguageClick,
                     onLocalCurrencyClick = onLocalCurrencyClick,
@@ -314,6 +318,7 @@ private fun GeneralTabContent(
     selectedLanguage: String,
     showWidgets: Boolean,
     tagCount: Int,
+    isQuickPayEnabled: Boolean,
     notificationsGranted: Boolean,
     onLanguageClick: () -> Unit,
     onLocalCurrencyClick: () -> Unit,
@@ -402,6 +407,9 @@ private fun GeneralTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__quickpay__nav_title),
             icon = { SettingsIcon(R.drawable.ic_caret_double_right) },
+            value = SettingsButtonValue.StringValue(
+                stringResource(if (isQuickPayEnabled) R.string.settings__bg__on else R.string.settings__bg__off)
+            ),
             onClick = onQuickPayClick,
             modifier = Modifier.testTag("QuickpaySettings"),
         )
