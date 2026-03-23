@@ -201,7 +201,7 @@ private fun Menu(
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__support),
-            iconRes = R.drawable.ic_settings_support,
+            iconRes = R.drawable.ic_chats_circle,
             onClick = {
                 rootNavController.navigateIfNotCurrent(Routes.Support)
                 scope.launch { drawerState.close() }
