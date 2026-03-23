@@ -81,7 +81,6 @@ internal fun BalanceLookupSection(
             onClick = onLookup,
             enabled = !uiState.isLookingUp && uiState.lookupInput.isNotBlank(),
             size = ButtonSize.Small,
-            modifier = Modifier.fillMaxWidth(),
         )
 
         AnimatedVisibility(visible = uiState.accountInfoResult != null) {

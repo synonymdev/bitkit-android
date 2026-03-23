@@ -877,6 +877,9 @@ private fun NavGraphBuilder.settings(
     composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(navController)
     }
+    composableWithDefaultTransitions<Routes.Trezor> {
+        TrezorScreen(navController)
+    }
     composableWithDefaultTransitions<Routes.LdkDebug> {
         LdkDebugScreen(navController)
     }
@@ -1022,9 +1025,6 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     }
     composableWithDefaultTransitions<Routes.NodeInfo> {
         NodeInfoScreen(navController)
-    }
-    composableWithDefaultTransitions<Routes.Trezor> {
-        TrezorScreen(navController)
     }
 }
 

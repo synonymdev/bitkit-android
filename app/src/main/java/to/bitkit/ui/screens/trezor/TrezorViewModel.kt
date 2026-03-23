@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.AccountInfoResult
@@ -562,6 +563,7 @@ class TrezorViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class TrezorUiState(
     val selectedNetwork: BitkitCoreNetwork = Env.network.toCoreNetwork(),
     val addressIndex: Int = 0,

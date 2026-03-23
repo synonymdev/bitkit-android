@@ -24,9 +24,12 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.hardware.usb.UsbRequest
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.synonym.bitkitcore.NativeDeviceInfo
 import com.synonym.bitkitcore.TrezorCallMessageResult
 import com.synonym.bitkitcore.TrezorTransportCallback
@@ -42,6 +45,7 @@ import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
 import to.bitkit.utils.Logger
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -141,7 +145,7 @@ class TrezorTransport @Inject constructor(
                     migrated++
                 }
                 if (migrated > 0) {
-                    espPrefs.edit().clear().commit()
+                    espPrefs.edit(commit = true) { clear() }
                     Logger.info("Migrated '$migrated' THP credentials from SharedPreferences to files", context = TAG)
                 }
             } catch (e: Exception) {
@@ -182,36 +186,37 @@ class TrezorTransport @Inject constructor(
 
     // ==================== TrezorTransportCallback Implementation ====================
 
-    @Suppress("TooGenericExceptionCaught")
     override fun enumerateDevices(): List<NativeDeviceInfo> {
         val devices = mutableListOf<NativeDeviceInfo>()
 
         // Enumerate USB devices
-        try {
-            val usbDevices = usbManager.deviceList.values
+        runCatching {
+            usbManager.deviceList.values
                 .filter { isTrezorDevice(it) }
                 .map { device ->
                     NativeDeviceInfo(
                         path = device.deviceName,
                         transportType = "usb",
-                        name = try { device.productName } catch (_: SecurityException) { null },
+                        name = runCatching { device.productName }.getOrNull(),
                         vendorId = device.vendorId.toUShort(),
                         productId = device.productId.toUShort(),
                     )
                 }
-            devices.addAll(usbDevices)
-            Logger.debug("USB enumerate found '${usbDevices.size}' Trezor device(s)", context = TAG)
-        } catch (e: Exception) {
-            Logger.error("USB enumerate failed", e, context = TAG)
+        }.onSuccess {
+            devices.addAll(it)
+            Logger.debug("USB enumerate found '${it.size}' Trezor device(s)", context = TAG)
+        }.onFailure {
+            Logger.error("USB enumerate failed", it, context = TAG)
         }
 
         // Enumerate Bluetooth devices
-        try {
-            val bleDevices = enumerateBleDevices()
-            devices.addAll(bleDevices)
-            Logger.debug("BLE enumerate found '${bleDevices.size}' Trezor device(s)", context = TAG)
-        } catch (e: Exception) {
-            Logger.error("BLE enumerate failed", e, context = TAG)
+        runCatching {
+            enumerateBleDevices()
+        }.onSuccess {
+            devices.addAll(it)
+            Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
+        }.onFailure {
+            Logger.error("BLE enumerate failed", it, context = TAG)
         }
 
         Logger.info("Total enumerate found '${devices.size}' Trezor device(s)", context = TAG)
@@ -265,7 +270,7 @@ class TrezorTransport @Inject constructor(
     override fun callMessage(
         path: String,
         messageType: UShort,
-        data: ByteArray
+        data: ByteArray,
     ): TrezorCallMessageResult? {
         // For BLE/THP devices, the Rust side now handles THP protocol directly.
         // This callback returns null to let Rust use its built-in THP implementation.
@@ -448,16 +453,15 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     fun clearDeviceCredential(deviceId: String) {
-        try {
+        runCatching {
             val file = credentialFile(deviceId)
             TrezorDebugLog.log("CLEAR", "clearDeviceCredential for: $deviceId, exists=${file.exists()}")
             file.delete()
             Logger.info("Cleared device credential for: '$deviceId'", context = TAG)
-        } catch (e: Exception) {
-            TrezorDebugLog.log("CLEAR", "EXCEPTION: ${e.message}")
-            Logger.error("Failed to clear device credential", e, context = TAG)
+        }.onFailure {
+            TrezorDebugLog.log("CLEAR", "EXCEPTION: ${it.message}")
+            Logger.error("Failed to clear device credential", it, context = TAG)
         }
     }
 
@@ -496,10 +500,11 @@ class TrezorTransport @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
 
-        context.registerReceiver(
+        ContextCompat.registerReceiver(
+            context,
             receiver,
             IntentFilter(ACTION_USB_PERMISSION),
-            Context.RECEIVER_NOT_EXPORTED,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
 
         try {
@@ -529,13 +534,11 @@ class TrezorTransport @Inject constructor(
 
         for (i in 0 until usbInterface.endpointCount) {
             val endpoint = usbInterface.getEndpoint(i)
-            when {
-                endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT &&
-                    endpoint.direction == UsbConstants.USB_DIR_IN -> {
+            when (endpoint.direction) {
+                UsbConstants.USB_DIR_IN if endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT -> {
                     readEndpoint = endpoint
                 }
-                endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT &&
-                    endpoint.direction == UsbConstants.USB_DIR_OUT -> {
+                UsbConstants.USB_DIR_OUT if endpoint.type == UsbConstants.USB_ENDPOINT_XFER_INT -> {
                     writeEndpoint = endpoint
                 }
             }
@@ -623,25 +626,39 @@ class TrezorTransport @Inject constructor(
                     error = "Device not open: $path",
                 )
 
-            val buffer = ByteArray(USB_CHUNK_SIZE)
-            val bytesRead = openDevice.connection.bulkTransfer(
-                openDevice.readEndpoint,
-                buffer,
-                buffer.size,
-                READ_TIMEOUT_MS,
-            )
+            val buffer = ByteBuffer.allocate(USB_CHUNK_SIZE)
+            val request = UsbRequest()
+            try {
+                if (!request.initialize(openDevice.connection, openDevice.readEndpoint)) {
+                    return TrezorTransportReadResult(
+                        success = false,
+                        data = byteArrayOf(),
+                        error = "Failed to initialize USB read request",
+                    )
+                }
+                if (!request.queue(buffer)) {
+                    return TrezorTransportReadResult(
+                        success = false,
+                        data = byteArrayOf(),
+                        error = "Failed to queue USB read request",
+                    )
+                }
+                openDevice.connection.requestWait(READ_TIMEOUT_MS.toLong())
+                    ?: return TrezorTransportReadResult(
+                        success = false,
+                        data = byteArrayOf(),
+                        error = "USB read timed out",
+                    )
 
-            if (bytesRead < 0) {
-                return TrezorTransportReadResult(
-                    success = false,
-                    data = byteArrayOf(),
-                    error = "Read failed: $bytesRead",
-                )
+                buffer.flip()
+                val bytesRead = buffer.remaining()
+                val data = ByteArray(bytesRead)
+                buffer.get(data)
+                Logger.debug("USB read '$bytesRead' bytes from '$path'", context = TAG)
+                TrezorTransportReadResult(success = true, data = data, error = "")
+            } finally {
+                request.close()
             }
-
-            val data = buffer.copyOf(bytesRead)
-            Logger.debug("USB read '$bytesRead' bytes from '$path'", context = TAG)
-            TrezorTransportReadResult(success = true, data = data, error = "")
         } catch (e: Exception) {
             Logger.error("USB read failed", e, context = TAG)
             TrezorTransportReadResult(success = false, data = byteArrayOf(), error = e.message ?: "Unknown error")
@@ -654,19 +671,29 @@ class TrezorTransport @Inject constructor(
             val openDevice = usbConnections[path]
                 ?: return TrezorTransportWriteResult(success = false, error = "Device not open: $path")
 
-            val bytesWritten = openDevice.connection.bulkTransfer(
-                openDevice.writeEndpoint,
-                data,
-                data.size,
-                WRITE_TIMEOUT_MS,
-            )
+            val buffer = ByteBuffer.wrap(data)
+            val request = UsbRequest()
+            try {
+                if (!request.initialize(openDevice.connection, openDevice.writeEndpoint)) {
+                    return TrezorTransportWriteResult(
+                        success = false,
+                        error = "Failed to initialize USB write request",
+                    )
+                }
+                if (!request.queue(buffer)) {
+                    return TrezorTransportWriteResult(
+                        success = false,
+                        error = "Failed to queue USB write request",
+                    )
+                }
+                openDevice.connection.requestWait(WRITE_TIMEOUT_MS.toLong())
+                    ?: return TrezorTransportWriteResult(success = false, error = "USB write timed out")
 
-            if (bytesWritten < 0) {
-                return TrezorTransportWriteResult(success = false, error = "Write failed: $bytesWritten")
+                Logger.debug("USB wrote '${data.size}' bytes to '$path'", context = TAG)
+                TrezorTransportWriteResult(success = true, error = "")
+            } finally {
+                request.close()
             }
-
-            Logger.debug("USB wrote '$bytesWritten' bytes to '$path'", context = TAG)
-            TrezorTransportWriteResult(success = true, error = "")
         } catch (e: Exception) {
             Logger.error("USB write failed", e, context = TAG)
             TrezorTransportWriteResult(success = false, error = e.message ?: "Unknown error")
@@ -715,6 +742,7 @@ class TrezorTransport @Inject constructor(
         }
     }
 
+    @SuppressLint("MissingPermission")
     private val bleScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
@@ -1074,9 +1102,10 @@ class TrezorTransport @Inject constructor(
             Logger.info("BLE services discovered: '$path'", context = TAG)
         }
 
+        @Suppress("OVERRIDE_DEPRECATION")
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic
+            characteristic: BluetoothGattCharacteristic,
         ) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path] ?: return
@@ -1099,7 +1128,7 @@ class TrezorTransport @Inject constructor(
         override fun onCharacteristicWrite(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
-            status: Int
+            status: Int,
         ) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path] ?: return
@@ -1113,7 +1142,7 @@ class TrezorTransport @Inject constructor(
         override fun onDescriptorWrite(
             gatt: BluetoothGatt,
             descriptor: BluetoothGattDescriptor,
-            status: Int
+            status: Int,
         ) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path] ?: return

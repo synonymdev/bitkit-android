@@ -56,6 +56,9 @@ fun DevSettingsScreen(
             SettingsButtonRow("VSS") { navController.navigateTo(Routes.VssDebug) }
             SettingsButtonRow("Probing Tool") { navController.navigateTo(Routes.ProbingTool) }
 
+            SectionHeader("HARDWARE WALLET")
+            SettingsButtonRow("Trezor") { navController.navigateTo(Routes.Trezor) }
+
             SectionHeader("LOGS")
             SettingsButtonRow("Logs") { navController.navigateTo(Routes.Logs) }
             SettingsTextButtonRow(

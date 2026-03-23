@@ -506,20 +506,7 @@ class TrezorRepo @Inject constructor(
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
-    private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = when (network) {
-        BitkitCoreNetwork.BITCOIN -> "ssl://bitkit.to:9999"
-        BitkitCoreNetwork.TESTNET -> "ssl://electrum.blockstream.info:60002"
-        BitkitCoreNetwork.TESTNET4 -> "ssl://electrum.blockstream.info:60002"
-        BitkitCoreNetwork.REGTEST -> "ssl://electrs.bitkit.stag0.blocktank.to:9999"
-        BitkitCoreNetwork.SIGNET -> "ssl://electrum.blockstream.info:60002"
-    }
-
-    private fun electrumUrlForNetwork(network: TrezorCoinType): String = when (network) {
-        TrezorCoinType.BITCOIN -> Env.electrumUrlForNetwork(BitkitCoreNetwork.BITCOIN)
-        TrezorCoinType.TESTNET -> Env.electrumUrlForNetwork(BitkitCoreNetwork.TESTNET)
-        TrezorCoinType.REGTEST -> Env.electrumUrlForNetwork(BitkitCoreNetwork.REGTEST)
-        TrezorCoinType.SIGNET -> Env.electrumUrlForNetwork(BitkitCoreNetwork.SIGNET)
-    }
+    private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = Env.electrumUrlForNetwork(network)
 
     private suspend fun ensureConnected() {
         if (trezorService.isConnected()) return

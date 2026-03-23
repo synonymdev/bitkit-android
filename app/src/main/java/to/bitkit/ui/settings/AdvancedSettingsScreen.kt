@@ -37,12 +37,10 @@ fun AdvancedSettingsScreen(
     navController: NavController,
     viewModel: AdvancedSettingsViewModel = hiltViewModel(),
 ) {
-    val isDevModeEnabled by viewModel.isDevModeEnabled.collectAsStateWithLifecycle()
     var showResetSuggestionsDialog by remember { mutableStateOf(false) }
     val selectedAddressTypeName by viewModel.selectedAddressTypeName.collectAsStateWithLifecycle()
 
     Content(
-        isDevModeEnabled = isDevModeEnabled,
         showResetSuggestionsDialog = showResetSuggestionsDialog,
         selectedAddressTypeName = selectedAddressTypeName,
         onBack = { navController.popBackStack() },
@@ -67,9 +65,6 @@ fun AdvancedSettingsScreen(
         onAddressViewerClick = {
             navController.navigateTo(Routes.AddressViewer)
         },
-        onTrezorClick = {
-            navController.navigate(Routes.Trezor)
-        },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
         onResetSuggestionsDialogConfirm = {
             viewModel.resetSuggestions()
@@ -82,7 +77,6 @@ fun AdvancedSettingsScreen(
 
 @Composable
 private fun Content(
-    isDevModeEnabled: Boolean = false,
     showResetSuggestionsDialog: Boolean,
     selectedAddressTypeName: String = "",
     onBack: () -> Unit = {},
@@ -93,7 +87,6 @@ private fun Content(
     onElectrumServerClick: () -> Unit = {},
     onRgsServerClick: () -> Unit = {},
     onAddressViewerClick: () -> Unit = {},
-    onTrezorClick: () -> Unit = {},
     onSuggestionsResetClick: () -> Unit = {},
     onResetSuggestionsDialogConfirm: () -> Unit = {},
     onResetSuggestionsDialogCancel: () -> Unit = {},
@@ -157,17 +150,6 @@ private fun Content(
                 onClick = onRgsServerClick,
                 modifier = Modifier.testTag("RGSServer"),
             )
-
-            // Hardware Wallet Section
-            if (isDevModeEnabled) {
-                SectionHeader(title = "Hardware Wallet")
-
-                SettingsButtonRow(
-                    title = "Trezor",
-                    onClick = onTrezorClick,
-                    modifier = Modifier.testTag("Trezor"),
-                )
-            }
 
             // Other Section
             SectionHeader(title = stringResource(R.string.settings__adv__section_other))
