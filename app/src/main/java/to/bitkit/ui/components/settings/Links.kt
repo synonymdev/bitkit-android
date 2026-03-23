@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import to.bitkit.R
 import to.bitkit.env.Env
-import to.bitkit.ui.theme.Colors
 
 private data class SocialLink(@DrawableRes val iconRes: Int, val url: String)
 
