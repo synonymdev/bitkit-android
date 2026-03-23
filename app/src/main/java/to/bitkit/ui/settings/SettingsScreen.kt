@@ -386,7 +386,15 @@ private fun GeneralTabContent(
 
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__speed),
-            icon = { SettingsIcon(R.drawable.ic_speed_normal) },
+            icon = {
+                SettingsIcon(
+                    when (defaultTransactionSpeed) {
+                        is TransactionSpeed.Fast -> R.drawable.ic_speed_fast
+                        is TransactionSpeed.Slow -> R.drawable.ic_speed_slow
+                        else -> R.drawable.ic_speed_normal
+                    }
+                )
+            },
             value = SettingsButtonValue.StringValue(defaultTransactionSpeed.transactionSpeedUiText()),
             onClick = onTransactionSpeedClick,
             modifier = Modifier.testTag("TransactionSpeedSettings"),
