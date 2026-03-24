@@ -101,6 +101,7 @@ fun SettingsScreen(
     val selectedAddressTypeName by advancedViewModel.selectedAddressTypeName.collectAsStateWithLifecycle()
     val openChannelCount by advancedViewModel.openChannelCount.collectAsStateWithLifecycle()
     val truncatedNodeId by advancedViewModel.truncatedNodeId.collectAsStateWithLifecycle()
+    val isCustomElectrum by advancedViewModel.isCustomElectrum.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
@@ -168,6 +169,7 @@ fun SettingsScreen(
         selectedAddressTypeName = selectedAddressTypeName,
         openChannelCount = openChannelCount,
         truncatedNodeId = truncatedNodeId,
+        isCustomElectrum = isCustomElectrum,
         onDevSettingsClick = { navController.navigateToDevSettings() },
         onAddressTypeClick = { navController.navigateTo(Routes.AddressTypePreference) },
         onCoinSelectionClick = { navController.navigateTo(Routes.CoinSelectPreference) },
@@ -226,6 +228,7 @@ private fun SettingsContent(
     selectedAddressTypeName: String = "",
     openChannelCount: Int = 0,
     truncatedNodeId: String = "",
+    isCustomElectrum: Boolean = false,
     onDevSettingsClick: () -> Unit = {},
     onAddressTypeClick: () -> Unit = {},
     onCoinSelectionClick: () -> Unit = {},
@@ -308,6 +311,7 @@ private fun SettingsContent(
                     selectedAddressTypeName = selectedAddressTypeName,
                     openChannelCount = openChannelCount,
                     truncatedNodeId = truncatedNodeId,
+                    isCustomElectrum = isCustomElectrum,
                     onDevSettingsClick = onDevSettingsClick,
                     onAddressTypeClick = onAddressTypeClick,
                     onCoinSelectionClick = onCoinSelectionClick,
@@ -582,6 +586,7 @@ private fun AdvancedTabContent(
     selectedAddressTypeName: String,
     openChannelCount: Int,
     truncatedNodeId: String,
+    isCustomElectrum: Boolean,
     onDevSettingsClick: () -> Unit,
     onAddressTypeClick: () -> Unit,
     onCoinSelectionClick: () -> Unit,
@@ -668,6 +673,15 @@ private fun AdvancedTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__electrum_server),
             icon = { SettingsIcon(R.drawable.ic_hard_drives) },
+            value = SettingsButtonValue.StringValue(
+                stringResource(
+                    if (isCustomElectrum) {
+                        R.string.settings__adv__electrum_custom
+                    } else {
+                        R.string.settings__adv__electrum_auto
+                    }
+                )
+            ),
             onClick = onElectrumServerClick,
             modifier = Modifier.testTag("ElectrumConfig"),
         )

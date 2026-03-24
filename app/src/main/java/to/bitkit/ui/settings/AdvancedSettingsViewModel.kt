@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.toAddressType
@@ -33,6 +34,10 @@ class AdvancedSettingsViewModel @Inject constructor(
     val truncatedNodeId = lightningRepo.lightningState
         .map { it.nodeId.take(NODE_ID_PREFIX_LENGTH).ifEmpty { "" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    val isCustomElectrum = settingsStore.data
+        .map { it.electrumServer != Env.electrumServerUrl }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun resetSuggestions() {
         viewModelScope.launch {
