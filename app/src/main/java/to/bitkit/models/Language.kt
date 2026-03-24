@@ -11,7 +11,7 @@ enum class Language(
     val isSystemDefault: Boolean = false,
 ) {
     SYSTEM_DEFAULT(
-        displayName = "System Default",
+        displayName = "System Settings",
         languageCode = "system",
         countryCode = null,
         isSystemDefault = true
