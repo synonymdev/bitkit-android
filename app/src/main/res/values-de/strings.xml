@@ -668,7 +668,7 @@
     <string name="settings__adv__address_viewer">Adressanzeige</string>
     <string name="settings__adv__suggestions_reset">Vorschläge zurücksetzen</string>
     <string name="settings__adv__reset_title">Vorschläge zurücksetzen?</string>
-    <string name="settings__adv__reset_desc">Bist du dir sicher, dass du die Vorschläge löschen möchtest? Diese werden erneut angezeigt, wenn du sie aus deiner Bitkit Wallet Übersicht entfernt hast.</string>
+    <string name="settings__adv__reset_desc">Bist du dir sicher, dass du die Vorschläge löschen möchtest? Diese werden erneut angezeigt, wenn du sie entfernt hast.</string>
     <string name="settings__adv__reset_confirm">Ja, zurücksetzen</string>
     <string name="settings__adv__lightning_connections">Lightning Verbindungen</string>
     <string name="settings__adv__lightning_node">Lightning Node</string>

@@ -649,7 +649,7 @@
     <string name="settings__adv__address_viewer">Visualizador de Endereços</string>
     <string name="settings__adv__suggestions_reset">Resetar Sugestões</string>
     <string name="settings__adv__reset_title">Resetar Sugestões?</string>
-    <string name="settings__adv__reset_desc">Tem certeza de que deseja resetar as sugestões? Eles reaparecerão na tela inicial caso você tenha removido.</string>
+    <string name="settings__adv__reset_desc">Tem certeza de que deseja resetar as sugestões? Eles reaparecerão caso você tenha removido.</string>
     <string name="settings__adv__reset_confirm">Sim, Resetar</string>
     <string name="settings__adv__lightning_connections">Conexões Lightning</string>
     <string name="settings__adv__lightning_node">Nó Lightning</string>

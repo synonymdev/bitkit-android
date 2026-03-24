@@ -549,7 +549,7 @@
     <string name="settings__adv__lightning_connections">Lightning-verbindingen</string>
     <string name="settings__adv__lightning_node">Lightning Node</string>
     <string name="settings__adv__reset_confirm">Ja, resetten</string>
-    <string name="settings__adv__reset_desc">Weet je zeker dat je de suggesties wilt resetten? Ze verschijnen opnieuw als je ze uit je Bitkit-walletoverzicht hebt verwijderd.</string>
+    <string name="settings__adv__reset_desc">Weet je zeker dat je de suggesties wilt resetten? Ze verschijnen opnieuw als je ze hebt verwijderd.</string>
     <string name="settings__adv__reset_title">Suggesties resetten?</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
     <string name="settings__adv__section_networks">Netwerken</string>

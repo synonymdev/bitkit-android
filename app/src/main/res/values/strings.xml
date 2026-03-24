@@ -569,7 +569,7 @@
     <string name="settings__adv__lightning_connections">Lightning Connections</string>
     <string name="settings__adv__lightning_node">Lightning Node</string>
     <string name="settings__adv__reset_confirm">Yes, Reset</string>
-    <string name="settings__adv__reset_desc">Are you sure you want to reset the suggestions? They will reappear in case you have removed them from your Bitkit wallet overview.</string>
+    <string name="settings__adv__reset_desc">Are you sure you want to reset the suggestions? They will reappear in case you have removed them.</string>
     <string name="settings__adv__reset_title">Reset Suggestions?</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
     <string name="settings__adv__section_debug">Debug</string>

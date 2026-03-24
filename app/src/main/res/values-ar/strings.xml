@@ -549,7 +549,7 @@
     <string name="settings__adv__lightning_connections">اتصالات Lightning</string>
     <string name="settings__adv__lightning_node">عقدة Lightning</string>
     <string name="settings__adv__reset_confirm">نعم، أعد التعيين</string>
-    <string name="settings__adv__reset_desc">هل أنت متأكد من رغبتك في إعادة تعيين الاقتراحات؟ ستظهر مرة أخرى في حال إزالتها من نظرة عامة محفظة Bitkit.</string>
+    <string name="settings__adv__reset_desc">هل أنت متأكد من رغبتك في إعادة تعيين الاقتراحات؟ ستظهر مرة أخرى في حال إزالتها.</string>
     <string name="settings__adv__reset_title">إعادة تعيين الاقتراحات؟</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
     <string name="settings__adv__section_networks">الشبكات</string>

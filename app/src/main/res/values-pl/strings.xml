@@ -668,7 +668,7 @@
     <string name="settings__adv__address_viewer">Przeglądarka adresów</string>
     <string name="settings__adv__suggestions_reset">Resetuj sugestie</string>
     <string name="settings__adv__reset_title">Resetuj sugestie?</string>
-    <string name="settings__adv__reset_desc">Zresetować sugestie? Usunięte elementy pojawią się ponownie w widoku portfela Bitkit.</string>
+    <string name="settings__adv__reset_desc">Zresetować sugestie? Usunięte elementy pojawią się ponownie.</string>
     <string name="settings__adv__reset_confirm">Tak, zresetuj</string>
     <string name="settings__adv__lightning_connections">Połączenia z Lightning</string>
     <string name="settings__adv__lightning_node">Węzeł Lightning</string>

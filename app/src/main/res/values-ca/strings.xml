@@ -549,7 +549,7 @@
     <string name="settings__adv__lightning_connections">Connexions Lightning</string>
     <string name="settings__adv__lightning_node">Node de Lightning</string>
     <string name="settings__adv__reset_confirm">Sí, reinicia</string>
-    <string name="settings__adv__reset_desc">Estàs segur que vols restablir els suggeriments? Tornaran a aparèixer si els has eliminat del resum de la teva cartera Bitkit.</string>
+    <string name="settings__adv__reset_desc">Estàs segur que vols restablir els suggeriments? Tornaran a aparèixer si els has eliminat.</string>
     <string name="settings__adv__reset_title">Restablir suggeriments?</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
     <string name="settings__adv__section_networks">Xarxes</string>

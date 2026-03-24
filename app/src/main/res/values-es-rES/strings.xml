@@ -549,7 +549,7 @@
     <string name="settings__adv__lightning_connections">Conexiones Lightning</string>
     <string name="settings__adv__lightning_node">Nodo Lightning</string>
     <string name="settings__adv__reset_confirm">Sí, restaurar</string>
-    <string name="settings__adv__reset_desc">¿Estás seguro de que deseas restablecer las sugerencias? Volverán a aparecer en caso de que las hayas eliminado de la vista general de tu monedero Bitkit.</string>
+    <string name="settings__adv__reset_desc">¿Estás seguro de que deseas restablecer las sugerencias? Volverán a aparecer en caso de que las hayas eliminado.</string>
     <string name="settings__adv__reset_title">¿Restablecer sugerencias?</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
     <string name="settings__adv__section_networks">Redes</string>

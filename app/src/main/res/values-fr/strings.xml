@@ -668,7 +668,7 @@
     <string name="settings__adv__address_viewer">Visualisateur d\'adresses</string>
     <string name="settings__adv__suggestions_reset">Suggestions de réinitialisation</string>
     <string name="settings__adv__reset_title">Suggestions de réinitialisation ?</string>
-    <string name="settings__adv__reset_desc">Êtes-vous sûr de vouloir réinitialiser les suggestions ? Elles réapparaîtront si vous les avez supprimées de l\'aperçu de votre portefeuille Bitkit.</string>
+    <string name="settings__adv__reset_desc">Êtes-vous sûr de vouloir réinitialiser les suggestions ? Elles réapparaîtront si vous les avez supprimées.</string>
     <string name="settings__adv__reset_confirm">Oui, Réinitialisation</string>
     <string name="settings__adv__lightning_connections">Connexions Lightning</string>
     <string name="settings__adv__lightning_node">Nœud Lightning</string>
