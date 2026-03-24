@@ -700,7 +700,17 @@ private fun AdvancedTabContent(
 @Composable
 private fun PreviewGeneral() {
     AppThemeSurface {
-        SettingsContent(tagCount = 3)
+        SettingsContent(
+            selectedCurrency = "USD",
+            currencySymbol = "$",
+            primaryDisplay = PrimaryDisplay.BITCOIN,
+            defaultTransactionSpeed = TransactionSpeed.Medium,
+            selectedLanguage = "System Settings",
+            showWidgets = true,
+            tagCount = 8,
+            isQuickPayEnabled = true,
+            notificationsGranted = true,
+        )
     }
 }
 
@@ -725,6 +735,8 @@ private fun PreviewAdvanced() {
         SettingsContent(
             isDevModeEnabled = true,
             selectedAddressTypeName = "Taproot",
+            openChannelCount = 2,
+            truncatedNodeId = "34sdx",
             initialTab = SettingsTab.Advanced,
         )
     }
