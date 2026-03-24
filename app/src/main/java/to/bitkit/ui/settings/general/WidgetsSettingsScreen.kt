@@ -42,9 +42,8 @@ fun WidgetsSettingsScreen(
         showWidgetTitles = showWidgetTitles,
         onShowWidgetsClick = { settings.setShowWidgets(!showWidgets) },
         onShowWidgetTitlesClick = { settings.setShowWidgetTitles(!showWidgetTitles) },
-        onResetSuggestionsClick = {
-            settings.resetDismissedSuggestions()
-        },
+        onResetWidgetsClick = { settings.resetWidgets() },
+        onResetSuggestionsClick = { settings.resetDismissedSuggestions() },
     )
 }
 
@@ -55,8 +54,10 @@ private fun WidgetsSettingsContent(
     onBackClick: () -> Unit = {},
     onShowWidgetsClick: () -> Unit = {},
     onShowWidgetTitlesClick: () -> Unit = {},
+    onResetWidgetsClick: () -> Unit = {},
     onResetSuggestionsClick: () -> Unit = {},
 ) {
+    var showResetWidgetsDialog by remember { mutableStateOf(false) }
     var showResetSuggestionsDialog by remember { mutableStateOf(false) }
 
     ScreenColumn {
@@ -91,9 +92,28 @@ private fun WidgetsSettingsContent(
             )
 
             SettingsButtonRow(
+                title = stringResource(R.string.settings__widgets__reset_widgets),
+                onClick = { showResetWidgetsDialog = true },
+                modifier = Modifier.testTag("ResetWidgets"),
+            )
+            SettingsButtonRow(
                 title = stringResource(R.string.settings__widgets__reset_suggestions),
                 onClick = { showResetSuggestionsDialog = true },
                 modifier = Modifier.testTag("ResetSuggestions"),
+            )
+        }
+
+        if (showResetWidgetsDialog) {
+            AppAlertDialog(
+                title = stringResource(R.string.settings__widgets__reset_widgets_dialog_title),
+                text = stringResource(R.string.settings__widgets__reset_widgets_dialog_description),
+                confirmText = stringResource(R.string.settings__adv__reset_confirm),
+                onConfirm = {
+                    onResetWidgetsClick()
+                    showResetWidgetsDialog = false
+                },
+                onDismiss = { showResetWidgetsDialog = false },
+                modifier = Modifier.testTag("reset_widgets_dialog"),
             )
         }
 
