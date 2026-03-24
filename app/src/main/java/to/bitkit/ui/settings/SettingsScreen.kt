@@ -98,6 +98,7 @@ fun SettingsScreen(
     // Advanced tab state
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     val selectedAddressTypeName by advancedViewModel.selectedAddressTypeName.collectAsStateWithLifecycle()
+    val openChannelCount by advancedViewModel.openChannelCount.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
@@ -162,6 +163,7 @@ fun SettingsScreen(
         // Advanced
         isDevModeEnabled = isDevModeEnabled,
         selectedAddressTypeName = selectedAddressTypeName,
+        openChannelCount = openChannelCount,
         onDevSettingsClick = { navController.navigateToDevSettings() },
         onAddressTypeClick = { navController.navigateTo(Routes.AddressTypePreference) },
         onCoinSelectionClick = { navController.navigateTo(Routes.CoinSelectPreference) },
@@ -217,6 +219,7 @@ private fun SettingsContent(
     // Advanced
     isDevModeEnabled: Boolean = false,
     selectedAddressTypeName: String = "",
+    openChannelCount: Int = 0,
     onDevSettingsClick: () -> Unit = {},
     onAddressTypeClick: () -> Unit = {},
     onCoinSelectionClick: () -> Unit = {},
@@ -296,6 +299,7 @@ private fun SettingsContent(
                 SettingsTab.Advanced -> AdvancedTabContent(
                     isDevModeEnabled = isDevModeEnabled,
                     selectedAddressTypeName = selectedAddressTypeName,
+                    openChannelCount = openChannelCount,
                     onDevSettingsClick = onDevSettingsClick,
                     onAddressTypeClick = onAddressTypeClick,
                     onCoinSelectionClick = onCoinSelectionClick,
@@ -567,6 +571,7 @@ private fun SecurityTabContent(
 private fun AdvancedTabContent(
     isDevModeEnabled: Boolean,
     selectedAddressTypeName: String,
+    openChannelCount: Int,
     onDevSettingsClick: () -> Unit,
     onAddressTypeClick: () -> Unit,
     onCoinSelectionClick: () -> Unit,
@@ -631,6 +636,11 @@ private fun AdvancedTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__lightning_connections),
             icon = { SettingsIcon(R.drawable.ic_lightning) },
+            value = if (openChannelCount > 0) {
+                SettingsButtonValue.StringValue(openChannelCount.toString())
+            } else {
+                SettingsButtonValue.None
+            },
             onClick = onLightningConnectionsClick,
             modifier = Modifier.testTag("Channels"),
         )
