@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.lightning
 
 import android.content.Context
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -11,6 +12,9 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,8 +75,8 @@ class ChannelDetailViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 channelLoadState = ChannelLoadState.Success(channelUi),
-                paidOrders = blocktankRepo.blocktankState.value.paidOrders,
-                cjitEntries = blocktankRepo.blocktankState.value.cjitEntries,
+                paidOrders = blocktankRepo.blocktankState.value.paidOrders.toImmutableList(),
+                cjitEntries = blocktankRepo.blocktankState.value.cjitEntries.toImmutableList(),
                 isClosedChannel = isClosedChannel,
                 nodeId = lightningRepo.getNodeId().orEmpty(),
             )
@@ -171,8 +175,8 @@ class ChannelDetailViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             channelLoadState = ChannelLoadState.Success(updatedChannel),
-                            paidOrders = blocktankState.paidOrders,
-                            cjitEntries = blocktankState.cjitEntries,
+                            paidOrders = blocktankState.paidOrders.toImmutableList(),
+                            cjitEntries = blocktankState.cjitEntries.toImmutableList(),
                             nodeId = lightningRepo.getNodeId().orEmpty(),
                         )
                     }
@@ -186,8 +190,8 @@ class ChannelDetailViewModel @Inject constructor(
                             it.copy(
                                 channelLoadState = ChannelLoadState.Success(closedChannel),
                                 isClosedChannel = true,
-                                paidOrders = blocktankState.paidOrders,
-                                cjitEntries = blocktankState.cjitEntries,
+                                paidOrders = blocktankState.paidOrders.toImmutableList(),
+                                cjitEntries = blocktankState.cjitEntries.toImmutableList(),
                                 nodeId = lightningRepo.getNodeId().orEmpty(),
                             )
                         }
@@ -200,10 +204,11 @@ class ChannelDetailViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class ChannelDetailUiState(
     val channelLoadState: ChannelLoadState = ChannelLoadState.Loading,
-    val paidOrders: List<IBtOrder> = emptyList(),
-    val cjitEntries: List<IcJitEntry> = emptyList(),
+    val paidOrders: ImmutableList<IBtOrder> = persistentListOf(),
+    val cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     val txTime: ULong? = null,
     val isRefreshing: Boolean = false,
     val isClosedChannel: Boolean = false,

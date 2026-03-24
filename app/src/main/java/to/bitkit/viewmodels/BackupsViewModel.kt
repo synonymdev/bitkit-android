@@ -1,8 +1,12 @@
 package to.bitkit.viewmodels
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,7 +41,7 @@ class BackupsViewModel @Inject constructor(
                     val cachedStatus = cachedStatuses[category] ?: BackupItemStatus(synced = 0, required = 1)
                     category.toUiState(cachedStatus)
                 }
-                _uiState.update { it.copy(categories = categories) }
+                _uiState.update { it.copy(categories = categories.toImmutableList()) }
             }
         }
     }
@@ -72,8 +76,9 @@ data class BackupCategoryUiState(
     val disableRetry: Boolean = false,
 )
 
+@Immutable
 data class BackupStatusUiState(
-    val categories: List<BackupCategoryUiState> = emptyList(),
+    val categories: ImmutableList<BackupCategoryUiState> = persistentListOf(),
 )
 
 fun BackupCategory.toUiState(status: BackupItemStatus = BackupItemStatus()): BackupCategoryUiState {

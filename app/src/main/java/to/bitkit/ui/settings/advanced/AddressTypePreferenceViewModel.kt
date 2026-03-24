@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +51,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             settingsStore.data.first().let { settings ->
                 val selected = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
-                val monitored = settings.addressTypesToMonitor.toSet()
+                val monitored = settings.addressTypesToMonitor.toImmutableSet()
                 _uiState.update {
                     it.copy(
                         selectedAddressType = selected,
@@ -154,7 +157,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
 @Immutable
 data class AddressTypePreferenceUiState(
     val selectedAddressType: AddressType = DEFAULT_ADDRESS_TYPE,
-    val monitoredTypes: Set<String> = setOf(DEFAULT_ADDRESS_TYPE_STRING),
+    val monitoredTypes: ImmutableSet<String> = persistentSetOf(DEFAULT_ADDRESS_TYPE_STRING),
     val showMonitoredTypes: Boolean = false,
     val isLoading: Boolean = false,
 )

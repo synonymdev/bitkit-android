@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.ui.components.VerticalSpacer
 
@@ -22,7 +23,7 @@ private const val DRAG_SCALE = 1.05f
 
 @Composable
 fun DragDropColumn(
-    items: List<WidgetWithPosition>,
+    items: ImmutableList<WidgetWithPosition>,
     onMove: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
     itemContent: @Composable (WidgetWithPosition, Boolean, Modifier) -> Unit,

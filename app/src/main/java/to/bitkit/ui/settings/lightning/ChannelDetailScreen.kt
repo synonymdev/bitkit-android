@@ -51,6 +51,8 @@ import com.synonym.bitkitcore.IBtPayment
 import com.synonym.bitkitcore.IDiscount
 import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.IcJitEntry
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -180,8 +182,8 @@ private fun Content(
 @Composable
 private fun ChannelDetailContent(
     channel: ChannelUi,
-    blocktankOrders: List<IBtOrder> = emptyList(),
-    cjitEntries: List<IcJitEntry> = emptyList(),
+    blocktankOrders: ImmutableList<IBtOrder> = persistentListOf(),
+    cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     txTime: ULong? = null,
     isRefreshing: Boolean = false,
     isClosedChannel: Boolean = false,
@@ -682,7 +684,7 @@ private fun PreviewChannelWithOrder() {
                     isUsable = true,
                 ),
             ),
-            blocktankOrders = listOf(
+            blocktankOrders = persistentListOf(
                 IBtOrder(
                     id = "bt_order_12345",
                     state = BtOrderState.OPEN,
@@ -764,7 +766,7 @@ private fun PreviewPendingOrder() {
                     isUsable = false,
                 ),
             ),
-            blocktankOrders = listOf(
+            blocktankOrders = persistentListOf(
                 IBtOrder(
                     id = "pending_order_67890",
                     state = BtOrderState.CREATED,
@@ -851,7 +853,7 @@ private fun PreviewExpiredOrder() {
                     isUsable = false,
                 ),
             ),
-            blocktankOrders = listOf(
+            blocktankOrders = persistentListOf(
                 IBtOrder(
                     id = "expired_order_99999",
                     state = BtOrderState.EXPIRED,
@@ -925,7 +927,7 @@ private fun PreviewChannelWithCjit() {
                     isUsable = true,
                 ),
             ),
-            cjitEntries = listOf(
+            cjitEntries = persistentListOf(
                 IcJitEntry(
                     id = "cjit_entry_456",
                     state = CJitStateEnum.COMPLETED,

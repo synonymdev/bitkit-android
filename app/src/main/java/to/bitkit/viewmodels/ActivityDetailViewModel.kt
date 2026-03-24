@@ -8,6 +8,8 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.TransactionDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -188,8 +190,8 @@ class ActivityDetailViewModel @Inject constructor(
         _boostSheetVisible.update { false }
     }
 
-    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
-        return activityRepo.getBoostTxDoesExist(boostTxIds)
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): ImmutableMap<String, Boolean> {
+        return activityRepo.getBoostTxDoesExist(boostTxIds).toImmutableMap()
     }
 
     suspend fun isCpfpChildTransaction(txId: String): Boolean {

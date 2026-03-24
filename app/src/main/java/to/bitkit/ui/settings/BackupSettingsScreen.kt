@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.toRelativeTimeString
@@ -262,7 +263,7 @@ private fun Preview() {
 
     AppThemeSurface {
         BackupSettingsScreenContent(
-            uiState = BackupStatusUiState(categories = categories),
+            uiState = BackupStatusUiState(categories = categories.toImmutableList()),
             onBackupClick = {},
             onResetAndRestoreClick = {},
             onRetryBackup = {},

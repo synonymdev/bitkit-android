@@ -36,6 +36,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.vssclient.LdkNamespace
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
@@ -57,6 +58,8 @@ import to.bitkit.viewmodels.VssDebugUiState
 import to.bitkit.viewmodels.VssDebugViewModel
 import to.bitkit.viewmodels.VssLdkKeyItem
 import java.io.File
+
+private val vssTabs = VssTab.entries.toImmutableList()
 
 @Composable
 fun VssDebugScreen(
@@ -117,7 +120,7 @@ private fun VssDebugContent(
                 .verticalScroll(rememberScrollState())
         ) {
             CustomTabRowWithSpacing(
-                tabs = VssTab.entries,
+                tabs = vssTabs,
                 currentTabIndex = selectedVssTab,
                 onTabChange = { selectedVssTab = it.ordinal },
             )
@@ -320,7 +323,7 @@ private fun PreviewApp() {
         com.synonym.vssclient.KeyVersion(key.name, (i + 1).toLong())
     }
     var uiState by remember {
-        mutableStateOf(VssDebugUiState(vssKeys = vssKeys))
+        mutableStateOf(VssDebugUiState(vssKeys = vssKeys.toImmutableList()))
     }
 
     AppThemeSurface {
@@ -328,7 +331,7 @@ private fun PreviewApp() {
             uiState = uiState,
             onBackClick = {},
             onRefresh = {},
-            onListVssKeys = { uiState = uiState.copy(vssKeys = vssKeys) },
+            onListVssKeys = { uiState = uiState.copy(vssKeys = vssKeys.toImmutableList()) },
             onDeleteVssKey = {},
             onDeleteAllVssKeys = {},
             onListVssLdkKeys = {},
@@ -360,7 +363,7 @@ private fun PreviewLdk() {
         ),
     )
     var uiState by remember {
-        mutableStateOf(VssDebugUiState(vssLdkKeys = vssLdkKeys))
+        mutableStateOf(VssDebugUiState(vssLdkKeys = vssLdkKeys.toImmutableList()))
     }
 
     AppThemeSurface {
@@ -371,7 +374,7 @@ private fun PreviewLdk() {
             onListVssKeys = {},
             onDeleteVssKey = {},
             onDeleteAllVssKeys = {},
-            onListVssLdkKeys = { uiState = uiState.copy(vssLdkKeys = vssLdkKeys) },
+            onListVssLdkKeys = { uiState = uiState.copy(vssLdkKeys = vssLdkKeys.toImmutableList()) },
             onDeleteVssLdkKey = { _, _ -> },
             onShareVssLdkKey = { _, _, _ -> },
         )

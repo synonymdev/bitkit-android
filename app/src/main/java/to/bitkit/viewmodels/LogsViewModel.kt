@@ -6,6 +6,9 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,15 +32,15 @@ class LogsViewModel @Inject constructor(
         private const val TAG = "LogsViewModel"
     }
 
-    private val _logs = MutableStateFlow<List<LogFile>>(emptyList())
-    val logs: StateFlow<List<LogFile>> = _logs.asStateFlow()
+    private val _logs = MutableStateFlow<ImmutableList<LogFile>>(persistentListOf())
+    val logs: StateFlow<ImmutableList<LogFile>> = _logs.asStateFlow()
 
-    private val _selectedLogContent = MutableStateFlow<List<String>>(emptyList())
-    val selectedLogContent: StateFlow<List<String>> = _selectedLogContent.asStateFlow()
+    private val _selectedLogContent = MutableStateFlow<ImmutableList<String>>(persistentListOf())
+    val selectedLogContent: StateFlow<ImmutableList<String>> = _selectedLogContent.asStateFlow()
 
     fun loadLogs() {
         viewModelScope.launch {
-            val logFiles = logsRepo.getLogs().getOrDefault(emptyList())
+            val logFiles = logsRepo.getLogs().getOrDefault(emptyList()).toImmutableList()
             _logs.update { logFiles }
         }
     }
@@ -46,10 +49,10 @@ class LogsViewModel @Inject constructor(
         viewModelScope.launch {
             logsRepo.loadLogContent(logFile)
                 .onSuccess { content ->
-                    _selectedLogContent.update { content }
+                    _selectedLogContent.update { content.toImmutableList() }
                 }
                 .onFailure { e ->
-                    _selectedLogContent.update { listOf("Log file not found") }
+                    _selectedLogContent.update { persistentListOf("Log file not found") }
                     Logger.error("Failed to load log content", e, context = TAG)
                 }
         }

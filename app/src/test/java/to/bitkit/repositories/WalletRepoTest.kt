@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.GetAddressesResponse
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -67,7 +68,7 @@ class WalletRepoTest : BaseUnitTest() {
                 on { inboundCapacityMsat } doReturn 500_000u
                 on { isChannelReady } doReturn true
             }
-        )
+        ).toImmutableList()
         private val channelReady = Event.ChannelReady(
             channelId = "testChannelId",
             userChannelId = "testUserChannelId",

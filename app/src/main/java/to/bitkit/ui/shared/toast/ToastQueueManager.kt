@@ -1,5 +1,8 @@
 package to.bitkit.ui.shared.toast
 
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,7 +35,7 @@ class ToastQueueManager(private val scope: CoroutineScope) {
     val currentToast: StateFlow<Toast?> = _currentToast.asStateFlow()
 
     // Internal queue state
-    private val _queue = MutableStateFlow<List<Toast>>(emptyList())
+    private val _queue = MutableStateFlow<ImmutableList<Toast>>(persistentListOf())
     private var timerJob: Job? = null
     private var isPaused = false
 
@@ -43,9 +46,9 @@ class ToastQueueManager(private val scope: CoroutineScope) {
         _queue.update { current ->
             val newQueue = if (current.size >= MAX_QUEUE_SIZE) {
                 // Drop oldest (first item) when queue full
-                current.drop(1) + toast
+                (current.drop(1) + toast).toImmutableList()
             } else {
-                current + toast
+                (current + toast).toImmutableList()
             }
             newQueue
         }
@@ -91,7 +94,7 @@ class ToastQueueManager(private val scope: CoroutineScope) {
      */
     fun clear() {
         cancelTimer()
-        _queue.value = emptyList()
+        _queue.value = persistentListOf()
         _currentToast.value = null
         isPaused = false
     }
@@ -100,7 +103,7 @@ class ToastQueueManager(private val scope: CoroutineScope) {
         val nextToast = _queue.value.firstOrNull() ?: return
 
         // Remove from queue
-        _queue.update { it.drop(1) }
+        _queue.update { it.drop(1).toImmutableList() }
 
         // Display toast
         _currentToast.value = nextToast

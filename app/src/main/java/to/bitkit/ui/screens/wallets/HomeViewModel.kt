@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,7 +83,7 @@ class HomeViewModel @Inject constructor(
                         ) {
                             it.widgetsWithPosition
                         } else {
-                            widgetsData.widgets
+                            widgetsData.widgets.toImmutableList()
                         },
                         headlinePreferences = widgetsData.headlinePreferences,
                         factsPreferences = widgetsData.factsPreferences,
@@ -103,7 +104,7 @@ class HomeViewModel @Inject constructor(
 
         viewModelScope.launch {
             createSuggestionsFlow().collect { suggestions ->
-                _uiState.update { it.copy(suggestions = suggestions) }
+                _uiState.update { it.copy(suggestions = suggestions.toImmutableList()) }
             }
         }
 
@@ -223,7 +224,7 @@ class HomeViewModel @Inject constructor(
                 widget.copy(position = index)
             }
 
-            _uiState.update { it.copy(widgetsWithPosition = updatedWidgets) }
+            _uiState.update { it.copy(widgetsWithPosition = updatedWidgets.toImmutableList()) }
         }
     }
 
@@ -245,7 +246,8 @@ class HomeViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     widgetsWithPosition = it.widgetsWithPosition
-                        .filterNot { widget -> widget.type == widgetType },
+                        .filterNot { widget -> widget.type == widgetType }
+                        .toImmutableList(),
                     deleteWidgetAlert = null,
                 )
             }
@@ -289,7 +291,7 @@ class HomeViewModel @Inject constructor(
                 ).takeIf { balanceState.balanceInTransferToSavings > 0uL },
             )
         }.collect { banners ->
-            _uiState.update { it.copy(banners = banners) }
+            _uiState.update { it.copy(banners = banners.toImmutableList()) }
         }
     }
 
