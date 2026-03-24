@@ -4,14 +4,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -25,11 +22,11 @@ import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -77,17 +74,7 @@ fun DefaultUnitSettingsScreenContent(
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__unit_bitcoin),
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_bitcoin_modern),
-                        contentDescription = null,
-                        tint = Colors.White,
-                        modifier = Modifier
-                            .padding(8.dp)
-                            .padding(end = 8.dp)
-                            .size(16.dp)
-                    )
-                },
+                icon = { SettingsIcon(R.drawable.ic_bitcoin_modern) },
                 value = SettingsButtonValue.BooleanValue(primaryDisplay == PrimaryDisplay.BITCOIN),
                 onClick = { onPrimaryUnitClick(PrimaryDisplay.BITCOIN) },
                 modifier = Modifier.testTag(stringResource(R.string.settings__general__unit_bitcoin))
@@ -95,17 +82,7 @@ fun DefaultUnitSettingsScreenContent(
 
             SettingsButtonRow(
                 title = selectedCurrency,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_unit_fiat),
-                        contentDescription = null,
-                        tint = Colors.White,
-                        modifier = Modifier
-                            .padding(8.dp)
-                            .padding(end = 8.dp)
-                            .size(16.dp)
-                    )
-                },
+                icon = { SettingsIcon(R.drawable.ic_unit_fiat) },
                 value = SettingsButtonValue.BooleanValue(primaryDisplay == PrimaryDisplay.FIAT),
                 onClick = { onPrimaryUnitClick(PrimaryDisplay.FIAT) },
                 modifier = Modifier.testTag(selectedCurrency)
