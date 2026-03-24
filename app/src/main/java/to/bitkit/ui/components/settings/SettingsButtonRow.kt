@@ -66,8 +66,8 @@ fun SettingsButtonRow(
                     contentDescription = null,
                     tint = iconTint,
                     modifier = Modifier
+                        .padding(end = 10.dp)
                         .size(iconSize)
-                        .padding(end = 10.dp),
                 )
             }
         } else {
