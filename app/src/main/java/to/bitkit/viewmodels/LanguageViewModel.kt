@@ -1,8 +1,12 @@
 package to.bitkit.viewmodels
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +36,7 @@ class LanguageViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 selectedLanguage = currentLanguage,
-                languages = appLocaleManager.getSupportedLanguages()
+                languages = appLocaleManager.getSupportedLanguages().toImmutableList()
             )
         }
     }
@@ -43,8 +47,9 @@ class LanguageViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class LanguageUiState(
     val selectedLanguage: Language = Language.SYSTEM_DEFAULT,
-    val languages: List<Language> = listOf(),
+    val languages: ImmutableList<Language> = persistentListOf(),
     val isLoading: Boolean = false,
 )

@@ -13,6 +13,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.models.Language
 import to.bitkit.ui.components.Text13Up
@@ -86,7 +87,7 @@ private fun Preview() {
         Content(
             uiState = LanguageUiState(
                 selectedLanguage = Language.SPANISH,
-                languages = Language.entries
+                languages = Language.entries.toImmutableList()
             ),
             onBackClick = {},
             onClickLanguage = {},

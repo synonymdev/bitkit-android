@@ -22,7 +22,6 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
@@ -124,7 +123,8 @@ private fun WidgetsSettingsContent(
                             .padding(end = 8.dp)
                             .size(16.dp)
                     )
-                },                onClick = { showResetSuggestionsDialog = true },
+                },
+                onClick = { showResetSuggestionsDialog = true },
                 modifier = Modifier.testTag("ResetSuggestions"),
             )
         }

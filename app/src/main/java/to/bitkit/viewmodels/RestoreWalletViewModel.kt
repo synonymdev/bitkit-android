@@ -1,8 +1,15 @@
 package to.bitkit.viewmodels
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,7 +69,7 @@ class RestoreWalletViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     focusedIndex = null,
-                    suggestions = emptyList()
+                    suggestions = persistentListOf()
                 )
             }
         }
@@ -71,7 +78,7 @@ class RestoreWalletViewModel @Inject constructor(
     fun onSelectSuggestion(suggestion: String) {
         _uiState.value.focusedIndex?.let { index ->
             updateWordValidity(index, suggestion)
-            _uiState.update { it.copy(suggestions = emptyList()) }
+            _uiState.update { it.copy(suggestions = persistentListOf()) }
         }
     }
 
@@ -116,12 +123,12 @@ class RestoreWalletViewModel @Inject constructor(
 
             _uiState.update {
                 it.copy(
-                    words = newWords,
-                    invalidWordIndices = invalidIndices,
+                    words = newWords.toImmutableList(),
+                    invalidWordIndices = invalidIndices.toImmutableSet(),
                     is24Words = pastedWords.size == WORDS_MAX,
                     shouldDismissKeyboard = invalidIndices.isEmpty(),
                     focusedIndex = null,
-                    suggestions = emptyList(),
+                    suggestions = persistentListOf(),
                 )
             }
             recomputeValidationState()
@@ -142,8 +149,8 @@ class RestoreWalletViewModel @Inject constructor(
 
         _uiState.update {
             it.copy(
-                words = newWords,
-                invalidWordIndices = newInvalidIndices,
+                words = newWords.toImmutableList(),
+                invalidWordIndices = newInvalidIndices.toImmutableSet(),
             )
         }
         recomputeValidationState()
@@ -151,7 +158,7 @@ class RestoreWalletViewModel @Inject constructor(
 
     private fun updateSuggestions(input: String, index: Int?) = viewModelScope.launch {
         if (index == null || input.length < 2) {
-            _uiState.update { it.copy(suggestions = emptyList()) }
+            _uiState.update { it.copy(suggestions = persistentListOf()) }
             return@launch
         }
 
@@ -162,7 +169,7 @@ class RestoreWalletViewModel @Inject constructor(
             suggestions
         }
 
-        _uiState.update { it.copy(suggestions = filtered) }
+        _uiState.update { it.copy(suggestions = filtered.toImmutableList()) }
     }
 
     private suspend fun RestoreWalletUiState.areButtonsEnabled(): Boolean {
@@ -187,10 +194,11 @@ class RestoreWalletViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class RestoreWalletUiState(
-    val words: List<String> = List(WORDS_MAX) { "" },
-    val invalidWordIndices: Set<Int> = emptySet(),
-    val suggestions: List<String> = emptyList(),
+    val words: ImmutableList<String> = List(WORDS_MAX) { "" }.toImmutableList(),
+    val invalidWordIndices: ImmutableSet<Int> = persistentSetOf(),
+    val suggestions: ImmutableList<String> = persistentListOf(),
     val focusedIndex: Int? = null,
     val bip39Passphrase: String = "",
     val showingPassphrase: Boolean = false,

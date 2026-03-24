@@ -5,6 +5,8 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
@@ -60,7 +62,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `findOrderForTransfer finds order by channelId`() = test {
         val order = mock<IBtOrder> { on { id } doReturn ORDER_ID }
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = listOf(order))))
+        val state = BlocktankState(orders = listOf(order).toImmutableList())
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(state))
 
         val result = sut.findOrderForTransfer(ORDER_ID, null)
 
@@ -70,7 +73,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `findOrderForTransfer finds order by channelId matching order id`() = test {
         val order = mock<IBtOrder> { on { id } doReturn ORDER_ID }
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = listOf(order))))
+        val state = BlocktankState(orders = listOf(order).toImmutableList())
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(state))
 
         val result = sut.findOrderForTransfer(ORDER_ID, null)
 
@@ -79,7 +83,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
     @Test
     fun `findOrderForTransfer returns null when order not found`() = test {
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = emptyList())))
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = persistentListOf())))
 
         val result = sut.findOrderForTransfer("non-existent-id", null)
 

@@ -55,6 +55,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
@@ -311,7 +313,7 @@ private fun Content(
 
 @Composable
 private fun BoxScope.SuggestionsRow(
-    suggestions: List<String>,
+    suggestions: ImmutableList<String>,
     onSelect: (String) -> Unit,
 ) {
     AnimatedVisibility(
@@ -452,7 +454,7 @@ private fun PreviewValid() {
     AppThemeSurface {
         Content(
             uiState = RestoreWalletUiState(
-                words = List(12) { if (it % 2 == 0) "abandon" else "ability" },
+                words = List(12) { if (it % 2 == 0) "abandon" else "ability" }.toImmutableList(),
                 is24Words = false,
             ),
             checksumErrorVisible = false,
@@ -467,7 +469,7 @@ private fun PreviewInvalid() {
     AppThemeSurface {
         Content(
             uiState = RestoreWalletUiState(
-                words = List(12) { if (it % 2 == 0) "rock" else "roll" },
+                words = List(12) { if (it % 2 == 0) "rock" else "roll" }.toImmutableList(),
                 is24Words = false,
             ),
             checksumErrorVisible = true,
@@ -484,7 +486,7 @@ private fun Preview24Words() {
         Content(
             uiState = RestoreWalletUiState(
                 is24Words = true,
-                words = List(24) { "word${it + 1}" }
+                words = List(24) { "word${it + 1}" }.toImmutableList()
             ),
             checksumErrorVisible = false,
             areButtonsEnabled = false,

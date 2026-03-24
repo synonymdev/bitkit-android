@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -609,7 +610,7 @@ private fun PreviewOnChain() {
         BottomSheetPreview {
             Content(
                 uiState = sendUiState().copy(
-                    selectedTags = listOf("car", "house", "uber"),
+                    selectedTags = persistentListOf("car", "house", "uber"),
                     fee = SendFee.OnChain(1_234),
                     speed = TransactionSpeed.Medium,
                 ),
@@ -631,7 +632,7 @@ private fun PreviewOnChainLongFeeSmallScreen() {
             Content(
                 uiState = sendUiState().copy(
                     amount = 2_345_678u,
-                    selectedTags = listOf("car", "house", "uber"),
+                    selectedTags = persistentListOf("car", "house", "uber"),
                     fee = SendFee.OnChain(654_321),
                     speed = TransactionSpeed.Custom(12_345u),
                 ),
@@ -651,7 +652,7 @@ private fun PreviewOnChainFeeLoading() {
         BottomSheetPreview {
             Content(
                 uiState = sendUiState().copy(
-                    selectedTags = listOf("car", "house", "uber"),
+                    selectedTags = persistentListOf("car", "house", "uber"),
                     fee = null,
                 ),
                 isNodeRunning = true,
@@ -673,7 +674,7 @@ private fun PreviewLightning() {
                 uiState = sendUiState().copy(
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
-                    selectedTags = emptyList(),
+                    selectedTags = persistentListOf(),
                     fee = SendFee.Lightning(43),
                 ),
                 isNodeRunning = true,

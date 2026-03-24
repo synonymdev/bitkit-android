@@ -2,6 +2,7 @@ package to.bitkit.ui.settings.lightning
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
@@ -10,6 +11,9 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.SortDirection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,7 +81,7 @@ class LightningConnectionsViewModel @Inject constructor(
                                     baseIndex = openChannels.size + pendingConnections.size + index,
                                     connectionText = context.getString(R.string.lightning__connection),
                                 )
-                            }.reversed()
+                            }.reversed().toImmutableList()
                         )
                     }
                 }
@@ -103,11 +107,13 @@ class LightningConnectionsViewModel @Inject constructor(
                         isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                         openChannels = channels.filterOpen().map { channel ->
                             channel.mapToUiModel(channels, blocktankState.paidOrders, connectionText)
-                        },
+                        }.toImmutableList(),
                         pendingConnections = getPendingConnections(channels, blocktankState.paidOrders)
-                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
+                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) }
+                            .toImmutableList(),
                         failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders)
-                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) },
+                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) }
+                            .toImmutableList(),
                         localBalance = calculateLocalBalance(channels),
                         remoteBalance = channels.calculateRemoteBalance(),
                     )
@@ -284,13 +290,14 @@ internal fun ClosedChannelDetails.toChannelUi(
     )
 }
 
+@Stable
 data class LightningConnectionsUiState(
     val isNodeRunning: Boolean = true,
     val isRefreshing: Boolean = false,
-    val openChannels: List<ChannelUi> = emptyList(),
-    val pendingConnections: List<ChannelUi> = emptyList(),
-    val failedOrders: List<ChannelUi> = emptyList(),
-    val closedChannels: List<ChannelUi> = emptyList(),
+    val openChannels: ImmutableList<ChannelUi> = persistentListOf(),
+    val pendingConnections: ImmutableList<ChannelUi> = persistentListOf(),
+    val failedOrders: ImmutableList<ChannelUi> = persistentListOf(),
+    val closedChannels: ImmutableList<ChannelUi> = persistentListOf(),
     val localBalance: ULong = 0u,
     val remoteBalance: ULong = 0u,
 )

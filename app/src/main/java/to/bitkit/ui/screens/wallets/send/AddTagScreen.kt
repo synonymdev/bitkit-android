@@ -24,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.components.BottomSheetPreview
@@ -156,7 +157,7 @@ private fun Preview() {
         BottomSheetPreview {
             AddTagContent(
                 uiState = AddTagUiState(
-                    tagsSuggestions = listOf("Lunch", "Mom", "Dad", "Dinner", "Tip", "Gift")
+                    tagsSuggestions = listOf("Lunch", "Mom", "Dad", "Dinner", "Tip", "Gift").toImmutableList()
                 ),
                 onTagSelected = {},
                 onInputUpdated = {},

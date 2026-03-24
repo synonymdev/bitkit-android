@@ -1,10 +1,14 @@
 package to.bitkit.ui.screens.recovery
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,7 +54,7 @@ class RecoveryMnemonicViewModel @Inject constructor(
                     return@launch
                 }
 
-                val mnemonicWords = mnemonic.split(" ").filter { it.isNotBlank() }
+                val mnemonicWords = mnemonic.split(" ").filter { it.isNotBlank() }.toImmutableList()
 
                 _uiState.update {
                     it.copy(
@@ -76,8 +80,9 @@ class RecoveryMnemonicViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class RecoveryMnemonicUiState(
     val isLoading: Boolean = true,
-    val mnemonicWords: List<String> = emptyList(),
+    val mnemonicWords: ImmutableList<String> = persistentListOf(),
     val passphrase: String = "",
 )

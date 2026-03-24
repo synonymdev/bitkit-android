@@ -18,6 +18,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.rawId
 import to.bitkit.ui.components.BodyM
@@ -36,7 +39,7 @@ import java.util.Locale
 
 @Composable
 fun ActivityListGrouped(
-    items: List<Activity>?,
+    items: ImmutableList<Activity>?,
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -204,7 +207,7 @@ private fun Preview() {
     AppThemeSurface {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             ActivityListGrouped(
-                items = previewActivityItems,
+                items = previewActivityItems.toImmutableList(),
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
             )
@@ -217,7 +220,7 @@ private fun Preview() {
 private fun PreviewEmpty() {
     AppThemeSurface {
         ActivityListGrouped(
-            items = emptyList(),
+            items = persistentListOf(),
             onActivityItemClick = {},
             onEmptyActivityRowClick = {},
         )
@@ -229,7 +232,7 @@ private fun PreviewEmpty() {
 private fun PreviewEmptyWithFooter() {
     AppThemeSurface {
         ActivityListGrouped(
-            items = emptyList(),
+            items = persistentListOf(),
             onActivityItemClick = {},
             onEmptyActivityRowClick = {},
             showFooter = true,

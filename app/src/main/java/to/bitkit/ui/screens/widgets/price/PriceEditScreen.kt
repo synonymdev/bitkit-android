@@ -28,6 +28,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
@@ -84,7 +86,7 @@ fun PriceEditScreen(
 fun PriceEditContent(
     onBack: () -> Unit,
     priceModel: PriceDTO,
-    allPeriodsUsd: List<PriceWidgetData>,
+    allPeriodsUsd: ImmutableList<PriceWidgetData>,
     onClickReset: () -> Unit,
     onClickGraph: (GraphPeriod) -> Unit,
     onClickTradingPair: (TradingPair) -> Unit,
@@ -321,7 +323,7 @@ private fun Preview() {
                 ),
                 source = "Kraken"
             ),
-            allPeriodsUsd = listOf(
+            allPeriodsUsd = persistentListOf(
                 PriceWidgetData(
                     pair = TradingPair.BTC_USD,
                     period = GraphPeriod.ONE_DAY,

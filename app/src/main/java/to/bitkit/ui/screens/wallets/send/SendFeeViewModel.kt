@@ -1,10 +1,16 @@
 package to.bitkit.ui.screens.wallets.send
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -54,7 +60,7 @@ class SendFeeViewModel @Inject constructor(
             }
         }
         calculateMaxSatPerVByte()
-        val disabledRates = fees.filter { it.value.toULong() > maxFee }.keys.toSet()
+        val disabledRates = fees.filter { it.value.toULong() > maxFee }.keys.toImmutableSet()
         _uiState.update {
             it.copy(
                 selected = selected,
@@ -175,12 +181,13 @@ class SendFeeViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class SendFeeUiState(
-    val fees: Map<FeeRate, Long> = emptyMap(),
+    val fees: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val selected: FeeRate? = null,
     val custom: TransactionSpeed.Custom? = null,
     val input: String = "",
     val totalFeeText: String = "",
-    val disabledRates: Set<FeeRate> = emptySet(),
+    val disabledRates: ImmutableSet<FeeRate> = persistentSetOf(),
     val shouldContinue: Boolean? = null,
 )

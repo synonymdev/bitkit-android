@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PrimaryDisplay
@@ -235,7 +236,7 @@ private fun SettingsContent(
     onBackClick: () -> Unit = {},
     initialTab: SettingsTab = SettingsTab.General,
 ) {
-    val tabs = remember { SettingsTab.entries }
+    val tabs = remember { SettingsTab.entries.toImmutableList() }
     val pagerState = rememberPagerState(
         initialPage = tabs.indexOf(initialTab),
         pageCount = { tabs.size },

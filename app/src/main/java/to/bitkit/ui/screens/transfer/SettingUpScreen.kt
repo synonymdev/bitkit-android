@@ -21,6 +21,7 @@ import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.regtestMine
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
@@ -141,7 +142,7 @@ private fun SettingUpScreen(
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                val steps = listOf(
+                val steps = persistentListOf(
                     stringResource(R.string.lightning__setting_up_step1),
                     stringResource(R.string.lightning__setting_up_step2),
                     stringResource(R.string.lightning__setting_up_step3),
