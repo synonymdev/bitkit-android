@@ -14,7 +14,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,8 +74,8 @@ class ChannelDetailViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 channelLoadState = ChannelLoadState.Success(channelUi),
-                paidOrders = blocktankRepo.blocktankState.value.paidOrders.toImmutableList(),
-                cjitEntries = blocktankRepo.blocktankState.value.cjitEntries.toImmutableList(),
+                paidOrders = blocktankRepo.blocktankState.value.paidOrders,
+                cjitEntries = blocktankRepo.blocktankState.value.cjitEntries,
                 isClosedChannel = isClosedChannel,
                 nodeId = lightningRepo.getNodeId().orEmpty(),
             )
@@ -175,8 +174,8 @@ class ChannelDetailViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             channelLoadState = ChannelLoadState.Success(updatedChannel),
-                            paidOrders = blocktankState.paidOrders.toImmutableList(),
-                            cjitEntries = blocktankState.cjitEntries.toImmutableList(),
+                            paidOrders = blocktankState.paidOrders,
+                            cjitEntries = blocktankState.cjitEntries,
                             nodeId = lightningRepo.getNodeId().orEmpty(),
                         )
                     }
@@ -190,8 +189,8 @@ class ChannelDetailViewModel @Inject constructor(
                             it.copy(
                                 channelLoadState = ChannelLoadState.Success(closedChannel),
                                 isClosedChannel = true,
-                                paidOrders = blocktankState.paidOrders.toImmutableList(),
-                                cjitEntries = blocktankState.cjitEntries.toImmutableList(),
+                                paidOrders = blocktankState.paidOrders,
+                                cjitEntries = blocktankState.cjitEntries,
                                 nodeId = lightningRepo.getNodeId().orEmpty(),
                             )
                         }

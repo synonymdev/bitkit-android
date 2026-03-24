@@ -162,7 +162,7 @@ private fun Content(
                     Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
                     ChannelList(
                         status = ChannelStatusUi.PENDING,
-                        channels = uiState.pendingConnections.reversed().toImmutableList(),
+                        channels = uiState.pendingConnections,
                         onClickChannel = onClickChannel,
                     )
                 }
@@ -173,7 +173,7 @@ private fun Content(
                     Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
                     ChannelList(
                         status = ChannelStatusUi.OPEN,
-                        channels = uiState.openChannels.reversed().toImmutableList(),
+                        channels = uiState.openChannels,
                         onClickChannel = onClickChannel,
                     )
                 }
@@ -185,7 +185,7 @@ private fun Content(
                         Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
                         ChannelList(
                             status = ChannelStatusUi.CLOSED,
-                            channels = uiState.failedOrders.reversed().toImmutableList(),
+                            channels = uiState.failedOrders,
                             onClickChannel = onClickChannel,
                         )
                     }
