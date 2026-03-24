@@ -107,6 +107,7 @@ fun SettingsScreen(
     SettingsContent(
         // General
         selectedCurrency = currencies.selectedCurrency,
+        currencySymbol = currencies.currencySymbol,
         primaryDisplay = currencies.primaryDisplay,
         defaultTransactionSpeed = defaultTransactionSpeed,
         selectedLanguage = languageUiState.selectedLanguage.displayName,
@@ -185,6 +186,7 @@ fun SettingsScreen(
 private fun SettingsContent(
     // General
     selectedCurrency: String = "USD",
+    currencySymbol: String = "$",
     primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
     defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
     selectedLanguage: String = "",
@@ -262,6 +264,7 @@ private fun SettingsContent(
             when (tabs[page]) {
                 SettingsTab.General -> GeneralTabContent(
                     selectedCurrency = selectedCurrency,
+                    currencySymbol = currencySymbol,
                     primaryDisplay = primaryDisplay,
                     defaultTransactionSpeed = defaultTransactionSpeed,
                     selectedLanguage = selectedLanguage,
@@ -322,6 +325,7 @@ private fun SettingsContent(
 @Composable
 private fun GeneralTabContent(
     selectedCurrency: String,
+    currencySymbol: String,
     primaryDisplay: PrimaryDisplay,
     defaultTransactionSpeed: TransactionSpeed,
     selectedLanguage: String,
@@ -357,7 +361,7 @@ private fun GeneralTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__currency_local),
             icon = { SettingsIcon(R.drawable.ic_coins) },
-            value = SettingsButtonValue.StringValue(selectedCurrency),
+            value = SettingsButtonValue.StringValue("$selectedCurrency ($currencySymbol)"),
             onClick = onLocalCurrencyClick,
             modifier = Modifier.testTag("CurrenciesSettings"),
         )
