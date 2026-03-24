@@ -99,6 +99,7 @@ fun SettingsScreen(
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     val selectedAddressTypeName by advancedViewModel.selectedAddressTypeName.collectAsStateWithLifecycle()
     val openChannelCount by advancedViewModel.openChannelCount.collectAsStateWithLifecycle()
+    val truncatedNodeId by advancedViewModel.truncatedNodeId.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
@@ -164,6 +165,7 @@ fun SettingsScreen(
         isDevModeEnabled = isDevModeEnabled,
         selectedAddressTypeName = selectedAddressTypeName,
         openChannelCount = openChannelCount,
+        truncatedNodeId = truncatedNodeId,
         onDevSettingsClick = { navController.navigateToDevSettings() },
         onAddressTypeClick = { navController.navigateTo(Routes.AddressTypePreference) },
         onCoinSelectionClick = { navController.navigateTo(Routes.CoinSelectPreference) },
@@ -220,6 +222,7 @@ private fun SettingsContent(
     isDevModeEnabled: Boolean = false,
     selectedAddressTypeName: String = "",
     openChannelCount: Int = 0,
+    truncatedNodeId: String = "",
     onDevSettingsClick: () -> Unit = {},
     onAddressTypeClick: () -> Unit = {},
     onCoinSelectionClick: () -> Unit = {},
@@ -300,6 +303,7 @@ private fun SettingsContent(
                     isDevModeEnabled = isDevModeEnabled,
                     selectedAddressTypeName = selectedAddressTypeName,
                     openChannelCount = openChannelCount,
+                    truncatedNodeId = truncatedNodeId,
                     onDevSettingsClick = onDevSettingsClick,
                     onAddressTypeClick = onAddressTypeClick,
                     onCoinSelectionClick = onCoinSelectionClick,
@@ -572,6 +576,7 @@ private fun AdvancedTabContent(
     isDevModeEnabled: Boolean,
     selectedAddressTypeName: String,
     openChannelCount: Int,
+    truncatedNodeId: String,
     onDevSettingsClick: () -> Unit,
     onAddressTypeClick: () -> Unit,
     onCoinSelectionClick: () -> Unit,
@@ -647,6 +652,11 @@ private fun AdvancedTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__lightning_node),
             icon = { SettingsIcon(R.drawable.ic_git_branch) },
+            value = if (truncatedNodeId.isNotEmpty()) {
+                SettingsButtonValue.StringValue("$truncatedNodeId...")
+            } else {
+                SettingsButtonValue.None
+            },
             onClick = onLightningNodeClick,
             modifier = Modifier.testTag("LightningNodeInfo"),
         )

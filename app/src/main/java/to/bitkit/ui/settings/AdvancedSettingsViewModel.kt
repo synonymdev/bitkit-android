@@ -14,6 +14,8 @@ import to.bitkit.models.toAddressType
 import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
 
+private const val NODE_ID_PREFIX_LENGTH = 5
+
 @HiltViewModel
 class AdvancedSettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
@@ -27,6 +29,10 @@ class AdvancedSettingsViewModel @Inject constructor(
     val openChannelCount = lightningRepo.lightningState
         .map { it.channels.filterOpen().size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val truncatedNodeId = lightningRepo.lightningState
+        .map { it.nodeId.take(NODE_ID_PREFIX_LENGTH).ifEmpty { "" } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     fun resetSuggestions() {
         viewModelScope.launch {
