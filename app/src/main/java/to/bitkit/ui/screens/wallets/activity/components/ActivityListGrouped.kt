@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.rawId
 import to.bitkit.ui.components.BodyM
@@ -68,6 +67,7 @@ fun ActivityListGrouped(
                                 is Activity.Lightning -> "lightning_${item.rawId()}"
                                 is Activity.Onchain -> "onchain_${item.rawId()}"
                             }
+
                             else -> "item_$index"
                         }
                     }
@@ -207,7 +207,7 @@ private fun Preview() {
     AppThemeSurface {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             ActivityListGrouped(
-                items = previewActivityItems.toImmutableList(),
+                items = previewActivityItems,
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
             )

@@ -5,10 +5,12 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.ext.create
 import java.util.Calendar
 
-val previewActivityItems = buildList {
+val previewActivityItems: ImmutableList<Activity> = buildList {
     val today: Calendar = Calendar.getInstance()
     val yesterday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
     val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
@@ -107,7 +109,7 @@ val previewActivityItems = buildList {
             )
         )
     )
-}
+}.toImmutableList()
 
-fun previewOnchainActivityItems() = previewActivityItems.filter { it is Activity.Onchain }
-fun previewLightningActivityItems() = previewActivityItems.filter { it is Activity.Lightning }
+fun previewOnchainActivityItems() = previewActivityItems.filterIsInstance<Activity.Onchain>().toImmutableList()
+fun previewLightningActivityItems() = previewActivityItems.filterIsInstance<Activity.Lightning>().toImmutableList()

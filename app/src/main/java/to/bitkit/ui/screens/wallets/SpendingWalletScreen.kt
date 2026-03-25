@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
@@ -159,7 +158,7 @@ private fun Preview() {
         Box {
             SpendingWalletScreen(
                 channels = persistentListOf(createChannelDetails()),
-                lightningActivities = previewLightningActivityItems().toImmutableList(),
+                lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
@@ -179,7 +178,7 @@ private fun PreviewTransfer() {
         Box {
             SpendingWalletScreen(
                 channels = persistentListOf(createChannelDetails()),
-                lightningActivities = previewLightningActivityItems().toImmutableList(),
+                lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},

@@ -117,6 +117,8 @@ enum class ActivityTab : TabItem {
         }
 }
 
+private val previewTabs = ActivityTab.entries.toImmutableList()
+
 @Preview
 @Composable
 private fun Preview() {
@@ -128,7 +130,7 @@ private fun Preview() {
             onTagClick = {},
             hasDateRangeFilter = false,
             onDateRangeClick = {},
-            tabs = ActivityTab.entries.toImmutableList(),
+            tabs = previewTabs,
             currentTabIndex = 0,
             onTabChange = {},
             modifier = Modifier.padding(16.dp)
@@ -147,7 +149,7 @@ private fun PreviewWithTags() {
             onTagClick = {},
             hasDateRangeFilter = false,
             onDateRangeClick = {},
-            tabs = ActivityTab.entries.toImmutableList(),
+            tabs = previewTabs,
             currentTabIndex = 0,
             onTabChange = {},
             selectedTags = persistentSetOf("Tag1", "Tag2"),

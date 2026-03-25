@@ -107,13 +107,13 @@ class LightningConnectionsViewModel @Inject constructor(
                         isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                         openChannels = channels.filterOpen().map { channel ->
                             channel.mapToUiModel(channels, blocktankState.paidOrders, connectionText)
-                        }.toImmutableList(),
+                        }.reversed().toImmutableList(),
                         pendingConnections = getPendingConnections(channels, blocktankState.paidOrders)
                             .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) }
-                            .toImmutableList(),
+                            .reversed().toImmutableList(),
                         failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders)
                             .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) }
-                            .toImmutableList(),
+                            .reversed().toImmutableList(),
                         localBalance = calculateLocalBalance(channels),
                         remoteBalance = channels.calculateRemoteBalance(),
                     )

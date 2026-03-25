@@ -20,7 +20,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,7 +34,6 @@ import androidx.navigation.NavController
 import com.synonym.bitkitcore.ILspNode
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.BestBlock
