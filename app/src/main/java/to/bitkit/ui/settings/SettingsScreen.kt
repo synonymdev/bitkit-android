@@ -70,6 +70,7 @@ private enum class SettingsTab(@StringRes private val titleRes: Int) : TabItem {
     override val uiText @Composable get() = stringResource(titleRes)
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun SettingsScreen(
     navController: NavController,
@@ -137,94 +138,67 @@ fun SettingsScreen(
             truncatedNodeId = truncatedNodeId,
             isCustomElectrum = isCustomElectrum,
         ),
-        onLanguageClick = { navController.navigateToLanguageSettings() },
-        onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
-        onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
-        onWidgetsClick = { navController.navigateToWidgetsSettings() },
-        onTagsClick = { navController.navigateToTagsSettings() },
-        onTransactionSpeedClick = { navController.navigateToTransactionSpeedSettings() },
-        onQuickPayClick = { navController.navigateToQuickPaySettings(quickPayIntroSeen) },
-        onBgPaymentsClick = {
-            if (bgPaymentsIntroSeen || notificationsGranted) {
-                navController.navigateTo(Routes.BackgroundPaymentsSettings)
-            } else {
-                navController.navigateTo(Routes.BackgroundPaymentsIntro)
+        onEvent = { event ->
+            when (event) {
+                SettingsEvent.LanguageClick -> navController.navigateToLanguageSettings()
+                SettingsEvent.LocalCurrencyClick -> navController.navigateToLocalCurrencySettings()
+                SettingsEvent.DefaultUnitClick -> navController.navigateToDefaultUnitSettings()
+                SettingsEvent.WidgetsClick -> navController.navigateToWidgetsSettings()
+                SettingsEvent.TagsClick -> navController.navigateToTagsSettings()
+                SettingsEvent.TransactionSpeedClick -> navController.navigateToTransactionSpeedSettings()
+                SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
+                SettingsEvent.BgPaymentsClick -> {
+                    if (bgPaymentsIntroSeen || notificationsGranted) {
+                        navController.navigateTo(Routes.BackgroundPaymentsSettings)
+                    } else {
+                        navController.navigateTo(Routes.BackgroundPaymentsIntro)
+                    }
+                }
+                SettingsEvent.BackupWalletClick -> app.showSheet(Sheet.Backup())
+                SettingsEvent.DataBackupsClick -> navController.navigateTo(Routes.BackupSettings)
+                SettingsEvent.ResetWalletClick -> {
+                    if (isPinEnabled) {
+                        navController.navigateToAuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET)
+                    } else {
+                        navController.navigateTo(Routes.ResetAndRestoreSettings)
+                    }
+                }
+                SettingsEvent.PinClick -> navController.navigateToPinManagement()
+                SettingsEvent.PinForPaymentsClick -> {
+                    navController.navigateToAuthCheck(
+                        onSuccessActionId = AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS,
+                    )
+                }
+                SettingsEvent.UseBiometricsClick -> {
+                    navController.navigateToAuthCheck(
+                        requireBiometrics = true,
+                        onSuccessActionId = AuthCheckAction.TOGGLE_BIOMETRICS,
+                    )
+                }
+                SettingsEvent.SwipeToHideBalanceClick -> settings.setEnableSwipeToHideBalance(!enableSwipeToHideBalance)
+                SettingsEvent.HideBalanceOnOpenClick -> settings.setHideBalanceOnOpen(!hideBalanceOnOpen)
+                SettingsEvent.AutoReadClipboardClick -> settings.setEnableAutoReadClipboard(!enableAutoReadClipboard)
+                SettingsEvent.SendAmountWarningClick -> settings.setEnableSendAmountWarning(!enableSendAmountWarning)
+                SettingsEvent.DevSettingsClick -> navController.navigateToDevSettings()
+                SettingsEvent.AddressTypeClick -> navController.navigateTo(Routes.AddressTypePreference)
+                SettingsEvent.CoinSelectionClick -> navController.navigateTo(Routes.CoinSelectPreference)
+                SettingsEvent.AddressViewerClick -> navController.navigateTo(Routes.AddressViewer)
+                SettingsEvent.LightningConnectionsClick -> navController.navigateTo(Routes.LightningConnections)
+                SettingsEvent.LightningNodeClick -> navController.navigateTo(Routes.NodeInfo)
+                SettingsEvent.ElectrumServerClick -> navController.navigateTo(Routes.ElectrumConfig)
+                SettingsEvent.RgsServerClick -> navController.navigateTo(Routes.RgsServer)
+                SettingsEvent.BackClick -> navController.popBackStack()
             }
         },
-        onBackupWalletClick = { app.showSheet(Sheet.Backup()) },
-        onDataBackupsClick = { navController.navigateTo(Routes.BackupSettings) },
-        onResetWalletClick = {
-            if (isPinEnabled) {
-                navController.navigateToAuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET)
-            } else {
-                navController.navigateTo(Routes.ResetAndRestoreSettings)
-            }
-        },
-        onPinClick = { navController.navigateToPinManagement() },
-        onPinForPaymentsClick = {
-            navController.navigateToAuthCheck(
-                onSuccessActionId = AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS,
-            )
-        },
-        onUseBiometricsClick = {
-            navController.navigateToAuthCheck(
-                requireBiometrics = true,
-                onSuccessActionId = AuthCheckAction.TOGGLE_BIOMETRICS,
-            )
-        },
-        onSwipeToHideBalanceClick = { settings.setEnableSwipeToHideBalance(!enableSwipeToHideBalance) },
-        onHideBalanceOnOpenClick = { settings.setHideBalanceOnOpen(!hideBalanceOnOpen) },
-        onAutoReadClipboardClick = { settings.setEnableAutoReadClipboard(!enableAutoReadClipboard) },
-        onSendAmountWarningClick = { settings.setEnableSendAmountWarning(!enableSendAmountWarning) },
-        onDevSettingsClick = { navController.navigateToDevSettings() },
-        onAddressTypeClick = { navController.navigateTo(Routes.AddressTypePreference) },
-        onCoinSelectionClick = { navController.navigateTo(Routes.CoinSelectPreference) },
-        onAddressViewerClick = { navController.navigateTo(Routes.AddressViewer) },
-        onLightningConnectionsClick = { navController.navigateTo(Routes.LightningConnections) },
-        onLightningNodeClick = { navController.navigateTo(Routes.NodeInfo) },
-        onElectrumServerClick = { navController.navigateTo(Routes.ElectrumConfig) },
-        onRgsServerClick = { navController.navigateTo(Routes.RgsServer) },
-        onBackClick = { navController.popBackStack() },
     )
 }
 
-@Suppress("LongParameterList")
 @Composable
 private fun SettingsContent(
     generalState: GeneralTabState = GeneralTabState(),
     securityState: SecurityTabState = SecurityTabState(),
     advancedState: AdvancedTabState = AdvancedTabState(),
-    // General callbacks
-    onLanguageClick: () -> Unit = {},
-    onLocalCurrencyClick: () -> Unit = {},
-    onDefaultUnitClick: () -> Unit = {},
-    onWidgetsClick: () -> Unit = {},
-    onTagsClick: () -> Unit = {},
-    onTransactionSpeedClick: () -> Unit = {},
-    onQuickPayClick: () -> Unit = {},
-    onBgPaymentsClick: () -> Unit = {},
-    // Security callbacks
-    onBackupWalletClick: () -> Unit = {},
-    onDataBackupsClick: () -> Unit = {},
-    onResetWalletClick: () -> Unit = {},
-    onPinClick: () -> Unit = {},
-    onPinForPaymentsClick: () -> Unit = {},
-    onUseBiometricsClick: () -> Unit = {},
-    onSwipeToHideBalanceClick: () -> Unit = {},
-    onHideBalanceOnOpenClick: () -> Unit = {},
-    onAutoReadClipboardClick: () -> Unit = {},
-    onSendAmountWarningClick: () -> Unit = {},
-    // Advanced callbacks
-    onDevSettingsClick: () -> Unit = {},
-    onAddressTypeClick: () -> Unit = {},
-    onCoinSelectionClick: () -> Unit = {},
-    onAddressViewerClick: () -> Unit = {},
-    onLightningConnectionsClick: () -> Unit = {},
-    onLightningNodeClick: () -> Unit = {},
-    onElectrumServerClick: () -> Unit = {},
-    onRgsServerClick: () -> Unit = {},
-    // Navigation
-    onBackClick: () -> Unit = {},
+    onEvent: OnSettingsEvent = {},
     initialTab: SettingsTab = SettingsTab.General,
 ) {
     val tabs = remember { SettingsTab.entries.toImmutableList() }
@@ -237,7 +211,7 @@ private fun SettingsContent(
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__settings),
-            onBackClick = onBackClick,
+            onBackClick = { onEvent(SettingsEvent.BackClick) },
             actions = { DrawerNavIcon() },
         )
 
@@ -253,40 +227,17 @@ private fun SettingsContent(
             when (tabs[page]) {
                 SettingsTab.General -> GeneralTabContent(
                     state = generalState,
-                    onLanguageClick = onLanguageClick,
-                    onLocalCurrencyClick = onLocalCurrencyClick,
-                    onDefaultUnitClick = onDefaultUnitClick,
-                    onWidgetsClick = onWidgetsClick,
-                    onTagsClick = onTagsClick,
-                    onTransactionSpeedClick = onTransactionSpeedClick,
-                    onQuickPayClick = onQuickPayClick,
-                    onBgPaymentsClick = onBgPaymentsClick,
+                    onEvent = onEvent,
                 )
 
                 SettingsTab.Security -> SecurityTabContent(
                     state = securityState,
-                    onBackupWalletClick = onBackupWalletClick,
-                    onDataBackupsClick = onDataBackupsClick,
-                    onResetWalletClick = onResetWalletClick,
-                    onPinClick = onPinClick,
-                    onPinForPaymentsClick = onPinForPaymentsClick,
-                    onUseBiometricsClick = onUseBiometricsClick,
-                    onSwipeToHideBalanceClick = onSwipeToHideBalanceClick,
-                    onHideBalanceOnOpenClick = onHideBalanceOnOpenClick,
-                    onAutoReadClipboardClick = onAutoReadClipboardClick,
-                    onSendAmountWarningClick = onSendAmountWarningClick,
+                    onEvent = onEvent,
                 )
 
                 SettingsTab.Advanced -> AdvancedTabContent(
                     state = advancedState,
-                    onDevSettingsClick = onDevSettingsClick,
-                    onAddressTypeClick = onAddressTypeClick,
-                    onCoinSelectionClick = onCoinSelectionClick,
-                    onAddressViewerClick = onAddressViewerClick,
-                    onLightningConnectionsClick = onLightningConnectionsClick,
-                    onLightningNodeClick = onLightningNodeClick,
-                    onElectrumServerClick = onElectrumServerClick,
-                    onRgsServerClick = onRgsServerClick,
+                    onEvent = onEvent,
                 )
             }
         }
@@ -296,14 +247,7 @@ private fun SettingsContent(
 @Composable
 private fun GeneralTabContent(
     state: GeneralTabState,
-    onLanguageClick: () -> Unit,
-    onLocalCurrencyClick: () -> Unit,
-    onDefaultUnitClick: () -> Unit,
-    onWidgetsClick: () -> Unit,
-    onTagsClick: () -> Unit,
-    onTransactionSpeedClick: () -> Unit,
-    onQuickPayClick: () -> Unit,
-    onBgPaymentsClick: () -> Unit,
+    onEvent: OnSettingsEvent,
 ) {
     Column(
         modifier = Modifier
@@ -318,14 +262,14 @@ private fun GeneralTabContent(
             title = stringResource(R.string.settings__language_title),
             icon = { SettingsIcon(R.drawable.ic_translate) },
             value = SettingsButtonValue.StringValue(state.selectedLanguage),
-            onClick = onLanguageClick,
+            onClick = { onEvent(SettingsEvent.LanguageClick) },
             modifier = Modifier.testTag("LanguageSettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__currency_local),
             icon = { SettingsIcon(R.drawable.ic_coins) },
             value = SettingsButtonValue.StringValue("${state.selectedCurrency} (${state.currencySymbol})"),
-            onClick = onLocalCurrencyClick,
+            onClick = { onEvent(SettingsEvent.LocalCurrencyClick) },
             modifier = Modifier.testTag("CurrenciesSettings"),
         )
         SettingsButtonRow(
@@ -337,7 +281,7 @@ private fun GeneralTabContent(
                     PrimaryDisplay.FIAT -> state.selectedCurrency
                 }
             ),
-            onClick = onDefaultUnitClick,
+            onClick = { onEvent(SettingsEvent.DefaultUnitClick) },
             modifier = Modifier.testTag("UnitSettings"),
         )
         SettingsButtonRow(
@@ -346,7 +290,7 @@ private fun GeneralTabContent(
             value = SettingsButtonValue.StringValue(
                 stringResource(if (state.showWidgets) R.string.settings__bg__on else R.string.settings__bg__off)
             ),
-            onClick = onWidgetsClick,
+            onClick = { onEvent(SettingsEvent.WidgetsClick) },
             modifier = Modifier.testTag("WidgetsSettings"),
         )
         if (state.tagCount > 0) {
@@ -354,7 +298,7 @@ private fun GeneralTabContent(
                 title = stringResource(R.string.settings__general__tags),
                 icon = { SettingsIcon(R.drawable.ic_tag) },
                 value = SettingsButtonValue.StringValue(state.tagCount.toString()),
-                onClick = onTagsClick,
+                onClick = { onEvent(SettingsEvent.TagsClick) },
                 modifier = Modifier.testTag("TagsSettings"),
             )
         }
@@ -377,7 +321,7 @@ private fun GeneralTabContent(
                 )
             },
             value = SettingsButtonValue.StringValue(state.defaultTransactionSpeed.transactionSpeedUiText()),
-            onClick = onTransactionSpeedClick,
+            onClick = { onEvent(SettingsEvent.TransactionSpeedClick) },
             modifier = Modifier.testTag("TransactionSpeedSettings"),
         )
         SettingsButtonRow(
@@ -386,7 +330,7 @@ private fun GeneralTabContent(
             value = SettingsButtonValue.StringValue(
                 stringResource(if (state.isQuickPayEnabled) R.string.settings__bg__on else R.string.settings__bg__off)
             ),
-            onClick = onQuickPayClick,
+            onClick = { onEvent(SettingsEvent.QuickPayClick) },
             modifier = Modifier.testTag("QuickpaySettings"),
         )
         SettingsButtonRow(
@@ -397,7 +341,7 @@ private fun GeneralTabContent(
                     if (state.notificationsGranted) R.string.settings__bg__on else R.string.settings__bg__off
                 )
             ),
-            onClick = onBgPaymentsClick,
+            onClick = { onEvent(SettingsEvent.BgPaymentsClick) },
             modifier = Modifier.testTag("BackgroundPaymentSettings"),
         )
 
@@ -408,16 +352,7 @@ private fun GeneralTabContent(
 @Composable
 private fun SecurityTabContent(
     state: SecurityTabState,
-    onBackupWalletClick: () -> Unit,
-    onDataBackupsClick: () -> Unit,
-    onResetWalletClick: () -> Unit,
-    onPinClick: () -> Unit,
-    onPinForPaymentsClick: () -> Unit,
-    onUseBiometricsClick: () -> Unit,
-    onSwipeToHideBalanceClick: () -> Unit,
-    onHideBalanceOnOpenClick: () -> Unit,
-    onAutoReadClipboardClick: () -> Unit,
-    onSendAmountWarningClick: () -> Unit,
+    onEvent: OnSettingsEvent,
 ) {
     Column(
         modifier = Modifier
@@ -431,19 +366,19 @@ private fun SecurityTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__backup__wallet),
             icon = { SettingsIcon(R.drawable.ic_lock_key) },
-            onClick = onBackupWalletClick,
+            onClick = { onEvent(SettingsEvent.BackupWalletClick) },
             modifier = Modifier.testTag("BackupWallet"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__backup__data),
             icon = { SettingsIcon(R.drawable.ic_database) },
-            onClick = onDataBackupsClick,
+            onClick = { onEvent(SettingsEvent.DataBackupsClick) },
             modifier = Modifier.testTag("BackupSettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__backup__reset),
             icon = { SettingsIcon(R.drawable.ic_arrow_counter_clockwise) },
-            onClick = onResetWalletClick,
+            onClick = { onEvent(SettingsEvent.ResetWalletClick) },
             modifier = Modifier.testTag("ResetAndRestore"),
         )
 
@@ -465,7 +400,7 @@ private fun SecurityTabContent(
                     }
                 )
             ),
-            onClick = onPinClick,
+            onClick = { onEvent(SettingsEvent.PinClick) },
             modifier = Modifier.testTag("PINCode"),
         )
 
@@ -474,7 +409,7 @@ private fun SecurityTabContent(
                 title = stringResource(R.string.settings__security__pin_payments),
                 icon = { SettingsIcon(R.drawable.ic_coins) },
                 isChecked = state.isPinForPaymentsEnabled,
-                onClick = onPinForPaymentsClick,
+                onClick = { onEvent(SettingsEvent.PinForPaymentsClick) },
                 modifier = Modifier.testTag("EnablePinForPayments"),
             )
 
@@ -487,7 +422,7 @@ private fun SecurityTabContent(
                     },
                     icon = { SettingsIcon(R.drawable.ic_smiley) },
                     isChecked = state.isBiometricEnabled,
-                    onClick = onUseBiometricsClick,
+                    onClick = { onEvent(SettingsEvent.UseBiometricsClick) },
                     modifier = Modifier.testTag("UseBiometryInstead"),
                 )
             }
@@ -497,7 +432,7 @@ private fun SecurityTabContent(
             title = stringResource(R.string.settings__security__warn_100),
             icon = { SettingsIcon(R.drawable.ic_warning) },
             isChecked = state.enableSendAmountWarning,
-            onClick = onSendAmountWarningClick,
+            onClick = { onEvent(SettingsEvent.SendAmountWarningClick) },
             modifier = Modifier.testTag("SendAmountWarning"),
         )
 
@@ -511,21 +446,21 @@ private fun SecurityTabContent(
             title = stringResource(R.string.settings__security__swipe_balance_to_hide),
             icon = { SettingsIcon(R.drawable.ic_hand_pointing) },
             isChecked = state.enableSwipeToHideBalance,
-            onClick = onSwipeToHideBalanceClick,
+            onClick = { onEvent(SettingsEvent.SwipeToHideBalanceClick) },
             modifier = Modifier.testTag("SwipeBalanceToHide"),
         )
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__hide_balance_on_open),
             icon = { SettingsIcon(R.drawable.ic_eye_slash) },
             isChecked = state.hideBalanceOnOpen,
-            onClick = onHideBalanceOnOpenClick,
+            onClick = { onEvent(SettingsEvent.HideBalanceOnOpenClick) },
             modifier = Modifier.testTag("HideBalanceOnOpen"),
         )
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__clipboard),
             icon = { SettingsIcon(R.drawable.ic_clipboard_text) },
             isChecked = state.enableAutoReadClipboard,
-            onClick = onAutoReadClipboardClick,
+            onClick = { onEvent(SettingsEvent.AutoReadClipboardClick) },
             modifier = Modifier.testTag("AutoReadClipboard"),
         )
 
@@ -536,14 +471,7 @@ private fun SecurityTabContent(
 @Composable
 private fun AdvancedTabContent(
     state: AdvancedTabState,
-    onDevSettingsClick: () -> Unit,
-    onAddressTypeClick: () -> Unit,
-    onCoinSelectionClick: () -> Unit,
-    onAddressViewerClick: () -> Unit,
-    onLightningConnectionsClick: () -> Unit,
-    onLightningNodeClick: () -> Unit,
-    onElectrumServerClick: () -> Unit,
-    onRgsServerClick: () -> Unit,
+    onEvent: OnSettingsEvent,
 ) {
     Column(
         modifier = Modifier
@@ -559,7 +487,7 @@ private fun AdvancedTabContent(
             SettingsButtonRow(
                 title = stringResource(R.string.settings__dev_title),
                 icon = { SettingsIcon(R.drawable.ic_settings_dev) },
-                onClick = onDevSettingsClick,
+                onClick = { onEvent(SettingsEvent.DevSettingsClick) },
                 modifier = Modifier.testTag("DevSettings"),
             )
         }
@@ -575,19 +503,19 @@ private fun AdvancedTabContent(
             } else {
                 SettingsButtonValue.None
             },
-            onClick = onAddressTypeClick,
+            onClick = { onEvent(SettingsEvent.AddressTypeClick) },
             modifier = Modifier.testTag("AddressTypePreference"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__coin_selection),
             icon = { SettingsIcon(R.drawable.ic_coins) },
-            onClick = onCoinSelectionClick,
+            onClick = { onEvent(SettingsEvent.CoinSelectionClick) },
             modifier = Modifier.testTag("CoinSelectPreference"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__address_viewer),
             icon = { SettingsIcon(R.drawable.ic_eye) },
-            onClick = onAddressViewerClick,
+            onClick = { onEvent(SettingsEvent.AddressViewerClick) },
             modifier = Modifier.testTag("AddressViewer"),
         )
 
@@ -605,7 +533,7 @@ private fun AdvancedTabContent(
             } else {
                 SettingsButtonValue.None
             },
-            onClick = onLightningConnectionsClick,
+            onClick = { onEvent(SettingsEvent.LightningConnectionsClick) },
             modifier = Modifier.testTag("Channels"),
         )
         SettingsButtonRow(
@@ -616,7 +544,7 @@ private fun AdvancedTabContent(
             } else {
                 SettingsButtonValue.None
             },
-            onClick = onLightningNodeClick,
+            onClick = { onEvent(SettingsEvent.LightningNodeClick) },
             modifier = Modifier.testTag("LightningNodeInfo"),
         )
         SettingsButtonRow(
@@ -631,13 +559,13 @@ private fun AdvancedTabContent(
                     }
                 )
             ),
-            onClick = onElectrumServerClick,
+            onClick = { onEvent(SettingsEvent.ElectrumServerClick) },
             modifier = Modifier.testTag("ElectrumConfig"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__rgs_server),
             icon = { SettingsIcon(R.drawable.ic_broadcast) },
-            onClick = onRgsServerClick,
+            onClick = { onEvent(SettingsEvent.RgsServerClick) },
             modifier = Modifier.testTag("RGSServer"),
         )
 
@@ -691,6 +619,45 @@ private fun PreviewAdvanced() {
         )
     }
 }
+
+sealed interface SettingsEvent {
+    // General
+    data object LanguageClick : SettingsEvent
+    data object LocalCurrencyClick : SettingsEvent
+    data object DefaultUnitClick : SettingsEvent
+    data object WidgetsClick : SettingsEvent
+    data object TagsClick : SettingsEvent
+    data object TransactionSpeedClick : SettingsEvent
+    data object QuickPayClick : SettingsEvent
+    data object BgPaymentsClick : SettingsEvent
+
+    // Security
+    data object BackupWalletClick : SettingsEvent
+    data object DataBackupsClick : SettingsEvent
+    data object ResetWalletClick : SettingsEvent
+    data object PinClick : SettingsEvent
+    data object PinForPaymentsClick : SettingsEvent
+    data object UseBiometricsClick : SettingsEvent
+    data object SwipeToHideBalanceClick : SettingsEvent
+    data object HideBalanceOnOpenClick : SettingsEvent
+    data object AutoReadClipboardClick : SettingsEvent
+    data object SendAmountWarningClick : SettingsEvent
+
+    // Advanced
+    data object DevSettingsClick : SettingsEvent
+    data object AddressTypeClick : SettingsEvent
+    data object CoinSelectionClick : SettingsEvent
+    data object AddressViewerClick : SettingsEvent
+    data object LightningConnectionsClick : SettingsEvent
+    data object LightningNodeClick : SettingsEvent
+    data object ElectrumServerClick : SettingsEvent
+    data object RgsServerClick : SettingsEvent
+
+    // Navigation
+    data object BackClick : SettingsEvent
+}
+
+typealias OnSettingsEvent = (SettingsEvent) -> Unit
 
 @Immutable
 data class GeneralTabState(
