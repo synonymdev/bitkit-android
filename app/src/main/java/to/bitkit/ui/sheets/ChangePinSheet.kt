@@ -264,7 +264,6 @@ private fun NewPinContent(
             type = NumberPadType.SIMPLE,
             modifier = Modifier
                 .height(NumberPadHeight)
-                .background(Colors.Black),
         )
     }
 }
