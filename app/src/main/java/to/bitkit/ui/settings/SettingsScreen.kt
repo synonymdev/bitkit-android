@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -403,7 +404,7 @@ private fun GeneralTabContent(
         // Payments section
         SectionHeader(
             title = stringResource(R.string.settings__general__section_payments),
-            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+            padding = PaddingValues(top = 16.dp),
         )
 
         SettingsButtonRow(
@@ -497,7 +498,7 @@ private fun SecurityTabContent(
         // Safety section
         SectionHeader(
             title = stringResource(R.string.settings__security__section_safety),
-            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+            padding = PaddingValues(top = 16.dp),
         )
 
         SettingsButtonRow(
@@ -551,7 +552,7 @@ private fun SecurityTabContent(
         // Privacy section
         SectionHeader(
             title = stringResource(R.string.settings__security__section_privacy),
-            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+            padding = PaddingValues(top = 16.dp),
         )
 
         SettingsSwitchRow(
@@ -645,7 +646,7 @@ private fun AdvancedTabContent(
         // Networks section
         SectionHeader(
             title = stringResource(R.string.settings__adv__section_networks),
-            padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+            padding = PaddingValues(top = 16.dp),
         )
 
         SettingsButtonRow(

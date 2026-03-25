@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.general
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -89,7 +90,7 @@ private fun WidgetsSettingsContent(
             // Reset section
             SectionHeader(
                 title = stringResource(R.string.settings__widgets__section_reset),
-                padding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp),
+                padding = PaddingValues(top = 16.dp),
             )
 
             SettingsButtonRow(
