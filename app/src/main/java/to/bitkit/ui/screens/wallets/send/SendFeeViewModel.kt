@@ -13,6 +13,7 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -20,6 +21,7 @@ import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.FeeRate
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.data.SettingsStore
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
@@ -37,6 +39,7 @@ class SendFeeViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val currencyRepo: CurrencyRepo,
     private val walletRepo: WalletRepo,
+    private val settingsStore: SettingsStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SendFeeUiState())
@@ -52,25 +55,31 @@ class SendFeeViewModel @Inject constructor(
         val selected = FeeRate.fromSpeed(sendUiState.speed)
         val fees = sendUiState.fees
 
-        val custom = when (val speed = sendUiState.speed) {
-            is TransactionSpeed.Custom -> speed
-            else -> {
-                val satsPerVByte = sendUiState.feeRates?.getSatsPerVByteFor(speed) ?: 0u
-                TransactionSpeed.Custom(satsPerVByte)
+        viewModelScope.launch {
+            val custom = when (val speed = sendUiState.speed) {
+                is TransactionSpeed.Custom -> speed
+                else -> {
+                    val settingsSpeed = settingsStore.data.first().defaultTransactionSpeed
+                    val satsPerVByte = when (settingsSpeed) {
+                        is TransactionSpeed.Custom -> settingsSpeed.satsPerVByte
+                        else -> sendUiState.feeRates?.slow ?: 1u
+                    }
+                    TransactionSpeed.Custom(satsPerVByte)
+                }
             }
+            calculateMaxSatPerVByte()
+            val disabledRates = fees.filter { it.value.toULong() > maxFee }.keys.toImmutableSet()
+            _uiState.update {
+                it.copy(
+                    selected = selected,
+                    fees = fees,
+                    custom = custom,
+                    input = custom.satsPerVByte.toString().takeIf { custom.satsPerVByte > 0u } ?: "",
+                    disabledRates = disabledRates,
+                )
+            }
+            updateTotalFeeText()
         }
-        calculateMaxSatPerVByte()
-        val disabledRates = fees.filter { it.value.toULong() > maxFee }.keys.toImmutableSet()
-        _uiState.update {
-            it.copy(
-                selected = selected,
-                fees = fees,
-                custom = custom,
-                input = custom.satsPerVByte.toString().takeIf { custom.satsPerVByte > 0u } ?: "",
-                disabledRates = disabledRates,
-            )
-        }
-        updateTotalFeeText()
     }
 
     private fun getFeeLimit(): ULong {
