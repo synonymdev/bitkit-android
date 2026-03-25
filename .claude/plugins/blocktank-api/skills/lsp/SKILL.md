@@ -121,6 +121,36 @@ On HTTP errors (4xx/5xx), the script prints the status code to stderr and the er
 2. **Close channel** — `POST /regtest/channel/close` with `fundingTxId`, `vout`, and `forceCloseAfterSec: 0` for immediate close
 3. **Mine blocks** — `POST /regtest/chain/mine` with `count: 6` to finalize the closure
 
+### Workflow D: Automated Invoice Payments
+
+Bulk-create and pay invoices to populate the app with payment activity.
+
+**Prerequisites:** Dev debug build installed, wallet set up, LDK node running, open channel with inbound capacity, ADB connected.
+
+**Run with defaults** (21 invoices of 1..21 sats, mine 150 blocks in batches of 10):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/skills/lsp/scripts/pay-invoices.sh"
+```
+
+**Custom parameters** via env vars:
+
+```bash
+INVOICE_COUNT=10 DESCRIPTION="test-ovi-{i}" MINE_TOTAL=60 MINE_BATCH=10 \
+  "${CLAUDE_PLUGIN_ROOT}/skills/lsp/scripts/pay-invoices.sh"
+```
+
+- `DESCRIPTION` — invoice description; `{i}` is replaced with the invoice index (default: `dev-payment-{i}`)
+
+The script uses the `DevToolsProvider` ContentProvider (dev builds only) to create invoices on the app's LDK node via `adb shell content call`, then pays each via the LSP's `POST /regtest/channel/pay` endpoint.
+
+**Create a single invoice manually:**
+
+```bash
+adb shell "content call --uri content://to.bitkit.dev.devtools \
+  --method createInvoice --arg '{\"amount\":1000,\"description\":\"test\"}'"
+```
+
 ## State Machines
 
 ### Order States (`state2`)
