@@ -127,14 +127,13 @@ fun ChangePinSheet(app: AppViewModel) {
                 ConfirmContent(
                     pin = pin,
                     showError = showError,
-                    onKeyPress = { pin = handlePinKeyPress(pin, it) },
+                    onKeyPress = { key -> pin = handlePinKeyPress(pin, key) },
                     onBackClick = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<ChangePinRoute.Result> {
                 ResultContent(
                     onOkClick = onDismiss,
-                    onBackClick = onDismiss,
                 )
             }
         }
@@ -329,7 +328,6 @@ private fun ConfirmContent(
 @Composable
 private fun ResultContent(
     onOkClick: () -> Unit,
-    onBackClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -419,7 +417,6 @@ private fun PreviewResult() {
     AppThemeSurface {
         ResultContent(
             onOkClick = {},
-            onBackClick = {},
         )
     }
 }
