@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -79,7 +80,10 @@ fun SettingsSwitchRow(
         onClick = onClick,
         subtitle = subtitle,
         colors = colors,
-        icon = { icon() },
+        icon = {
+            icon()
+            HorizontalSpacer(8.dp)
+        },
         modifier = modifier,
     )
 }

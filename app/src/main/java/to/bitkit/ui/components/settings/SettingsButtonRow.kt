@@ -30,6 +30,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -93,7 +94,10 @@ fun SettingsButtonRow(
     SettingsButtonRowCore(
         title = title,
         hasIcon = true,
-        icon = { icon() },
+        icon = {
+            icon()
+            HorizontalSpacer(8.dp)
+        },
         subtitle = subtitle,
         value = value,
         description = description,
