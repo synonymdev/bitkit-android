@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings.pin
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -75,7 +74,6 @@ fun PinChooseScreen(
             type = NumberPadType.SIMPLE,
             modifier = Modifier
                 .height(350.dp)
-                .background(Colors.Black)
         )
     }
 }

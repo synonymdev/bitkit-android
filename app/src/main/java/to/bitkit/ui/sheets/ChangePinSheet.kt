@@ -2,7 +2,6 @@ package to.bitkit.ui.sheets
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -318,8 +317,7 @@ private fun ConfirmContent(
             onPress = onKeyPress,
             type = NumberPadType.SIMPLE,
             modifier = Modifier
-                .height(NumberPadHeight)
-                .background(Colors.Black),
+                .height(NumberPadHeight),
         )
     }
 }
