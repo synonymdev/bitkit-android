@@ -11,14 +11,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.theme.Colors
 
 @Composable
-fun SettingsIcon(@DrawableRes iconRes: Int) {
+fun SettingsIcon(
+    @DrawableRes iconRes: Int,
+    modifier: Modifier = Modifier,
+) {
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
+        modifier = modifier
             .size(32.dp)
             .background(color = Colors.Black, shape = CircleShape),
     ) {
@@ -29,5 +31,4 @@ fun SettingsIcon(@DrawableRes iconRes: Int) {
             modifier = Modifier.size(16.dp),
         )
     }
-    HorizontalSpacer(8.dp)
 }
