@@ -323,10 +323,13 @@ fun ContentRunning(
             icon = {
                 Icon(
                     painter = painterResource(
-                        if (showDetails) R.drawable.ic_eye_slash
-                        else when (uiState.payMethod) {
-                            SendMethod.ONCHAIN -> R.drawable.ic_speed_normal
-                            SendMethod.LIGHTNING -> R.drawable.ic_lightning
+                        if (showDetails) {
+                            R.drawable.ic_eye_slash
+                        } else {
+                            when (uiState.payMethod) {
+                                SendMethod.ONCHAIN -> R.drawable.ic_speed_normal
+                                SendMethod.LIGHTNING -> R.drawable.ic_lightning
+                            }
                         }
                     ),
                     contentDescription = null,

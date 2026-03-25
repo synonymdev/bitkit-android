@@ -17,11 +17,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ext.getSatsPerVByteFor
+import to.bitkit.data.SettingsStore
 import to.bitkit.models.FeeRate
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.data.SettingsStore
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
