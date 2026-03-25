@@ -10,6 +10,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -108,16 +109,34 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
     SettingsContent(
-        // General
-        selectedCurrency = currencies.selectedCurrency,
-        currencySymbol = currencies.currencySymbol,
-        primaryDisplay = currencies.primaryDisplay,
-        defaultTransactionSpeed = defaultTransactionSpeed,
-        selectedLanguage = languageUiState.selectedLanguage.displayName,
-        showWidgets = showWidgets,
-        tagCount = lastUsedTags.size,
-        isQuickPayEnabled = isQuickPayEnabled,
-        notificationsGranted = notificationsGranted,
+        generalState = GeneralTabState(
+            selectedCurrency = currencies.selectedCurrency,
+            currencySymbol = currencies.currencySymbol,
+            primaryDisplay = currencies.primaryDisplay,
+            defaultTransactionSpeed = defaultTransactionSpeed,
+            selectedLanguage = languageUiState.selectedLanguage.displayName,
+            showWidgets = showWidgets,
+            tagCount = lastUsedTags.size,
+            isQuickPayEnabled = isQuickPayEnabled,
+            notificationsGranted = notificationsGranted,
+        ),
+        securityState = SecurityTabState(
+            isPinEnabled = isPinEnabled,
+            isBiometricEnabled = isBiometricEnabled,
+            isPinForPaymentsEnabled = isPinForPaymentsEnabled,
+            enableSwipeToHideBalance = enableSwipeToHideBalance,
+            hideBalanceOnOpen = hideBalanceOnOpen,
+            enableAutoReadClipboard = enableAutoReadClipboard,
+            enableSendAmountWarning = enableSendAmountWarning,
+            isBiometrySupported = rememberBiometricAuthSupported(),
+        ),
+        advancedState = AdvancedTabState(
+            isDevModeEnabled = isDevModeEnabled,
+            selectedAddressTypeName = selectedAddressTypeName,
+            openChannelCount = openChannelCount,
+            truncatedNodeId = truncatedNodeId,
+            isCustomElectrum = isCustomElectrum,
+        ),
         onLanguageClick = { navController.navigateToLanguageSettings() },
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
         onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
@@ -132,15 +151,6 @@ fun SettingsScreen(
                 navController.navigateTo(Routes.BackgroundPaymentsIntro)
             }
         },
-        // Security
-        isPinEnabled = isPinEnabled,
-        isBiometricEnabled = isBiometricEnabled,
-        isPinForPaymentsEnabled = isPinForPaymentsEnabled,
-        enableSwipeToHideBalance = enableSwipeToHideBalance,
-        hideBalanceOnOpen = hideBalanceOnOpen,
-        enableAutoReadClipboard = enableAutoReadClipboard,
-        enableSendAmountWarning = enableSendAmountWarning,
-        isBiometrySupported = rememberBiometricAuthSupported(),
         onBackupWalletClick = { app.showSheet(Sheet.Backup()) },
         onDataBackupsClick = { navController.navigateTo(Routes.BackupSettings) },
         onResetWalletClick = {
@@ -166,12 +176,6 @@ fun SettingsScreen(
         onHideBalanceOnOpenClick = { settings.setHideBalanceOnOpen(!hideBalanceOnOpen) },
         onAutoReadClipboardClick = { settings.setEnableAutoReadClipboard(!enableAutoReadClipboard) },
         onSendAmountWarningClick = { settings.setEnableSendAmountWarning(!enableSendAmountWarning) },
-        // Advanced
-        isDevModeEnabled = isDevModeEnabled,
-        selectedAddressTypeName = selectedAddressTypeName,
-        openChannelCount = openChannelCount,
-        truncatedNodeId = truncatedNodeId,
-        isCustomElectrum = isCustomElectrum,
         onDevSettingsClick = { navController.navigateToDevSettings() },
         onAddressTypeClick = { navController.navigateTo(Routes.AddressTypePreference) },
         onCoinSelectionClick = { navController.navigateTo(Routes.CoinSelectPreference) },
@@ -180,24 +184,17 @@ fun SettingsScreen(
         onLightningNodeClick = { navController.navigateTo(Routes.NodeInfo) },
         onElectrumServerClick = { navController.navigateTo(Routes.ElectrumConfig) },
         onRgsServerClick = { navController.navigateTo(Routes.RgsServer) },
-        // Navigation
         onBackClick = { navController.popBackStack() },
     )
 }
 
-@Suppress("LongParameterList", "LongMethod")
+@Suppress("LongParameterList")
 @Composable
 private fun SettingsContent(
-    // General
-    selectedCurrency: String = "USD",
-    currencySymbol: String = "$",
-    primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
-    defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
-    selectedLanguage: String = "",
-    showWidgets: Boolean = true,
-    tagCount: Int = 0,
-    isQuickPayEnabled: Boolean = false,
-    notificationsGranted: Boolean = false,
+    generalState: GeneralTabState = GeneralTabState(),
+    securityState: SecurityTabState = SecurityTabState(),
+    advancedState: AdvancedTabState = AdvancedTabState(),
+    // General callbacks
     onLanguageClick: () -> Unit = {},
     onLocalCurrencyClick: () -> Unit = {},
     onDefaultUnitClick: () -> Unit = {},
@@ -206,15 +203,7 @@ private fun SettingsContent(
     onTransactionSpeedClick: () -> Unit = {},
     onQuickPayClick: () -> Unit = {},
     onBgPaymentsClick: () -> Unit = {},
-    // Security
-    isPinEnabled: Boolean = false,
-    isBiometricEnabled: Boolean = false,
-    isPinForPaymentsEnabled: Boolean = false,
-    enableSwipeToHideBalance: Boolean = false,
-    hideBalanceOnOpen: Boolean = false,
-    enableAutoReadClipboard: Boolean = true,
-    enableSendAmountWarning: Boolean = true,
-    isBiometrySupported: Boolean = false,
+    // Security callbacks
     onBackupWalletClick: () -> Unit = {},
     onDataBackupsClick: () -> Unit = {},
     onResetWalletClick: () -> Unit = {},
@@ -225,12 +214,7 @@ private fun SettingsContent(
     onHideBalanceOnOpenClick: () -> Unit = {},
     onAutoReadClipboardClick: () -> Unit = {},
     onSendAmountWarningClick: () -> Unit = {},
-    // Advanced
-    isDevModeEnabled: Boolean = false,
-    selectedAddressTypeName: String = "",
-    openChannelCount: Int = 0,
-    truncatedNodeId: String = "",
-    isCustomElectrum: Boolean = false,
+    // Advanced callbacks
     onDevSettingsClick: () -> Unit = {},
     onAddressTypeClick: () -> Unit = {},
     onCoinSelectionClick: () -> Unit = {},
@@ -268,15 +252,7 @@ private fun SettingsContent(
         HorizontalPager(state = pagerState) { page ->
             when (tabs[page]) {
                 SettingsTab.General -> GeneralTabContent(
-                    selectedCurrency = selectedCurrency,
-                    currencySymbol = currencySymbol,
-                    primaryDisplay = primaryDisplay,
-                    defaultTransactionSpeed = defaultTransactionSpeed,
-                    selectedLanguage = selectedLanguage,
-                    showWidgets = showWidgets,
-                    tagCount = tagCount,
-                    isQuickPayEnabled = isQuickPayEnabled,
-                    notificationsGranted = notificationsGranted,
+                    state = generalState,
                     onLanguageClick = onLanguageClick,
                     onLocalCurrencyClick = onLocalCurrencyClick,
                     onDefaultUnitClick = onDefaultUnitClick,
@@ -288,14 +264,7 @@ private fun SettingsContent(
                 )
 
                 SettingsTab.Security -> SecurityTabContent(
-                    isPinEnabled = isPinEnabled,
-                    isBiometricEnabled = isBiometricEnabled,
-                    isPinForPaymentsEnabled = isPinForPaymentsEnabled,
-                    enableSwipeToHideBalance = enableSwipeToHideBalance,
-                    hideBalanceOnOpen = hideBalanceOnOpen,
-                    enableAutoReadClipboard = enableAutoReadClipboard,
-                    enableSendAmountWarning = enableSendAmountWarning,
-                    isBiometrySupported = isBiometrySupported,
+                    state = securityState,
                     onBackupWalletClick = onBackupWalletClick,
                     onDataBackupsClick = onDataBackupsClick,
                     onResetWalletClick = onResetWalletClick,
@@ -309,11 +278,7 @@ private fun SettingsContent(
                 )
 
                 SettingsTab.Advanced -> AdvancedTabContent(
-                    isDevModeEnabled = isDevModeEnabled,
-                    selectedAddressTypeName = selectedAddressTypeName,
-                    openChannelCount = openChannelCount,
-                    truncatedNodeId = truncatedNodeId,
-                    isCustomElectrum = isCustomElectrum,
+                    state = advancedState,
                     onDevSettingsClick = onDevSettingsClick,
                     onAddressTypeClick = onAddressTypeClick,
                     onCoinSelectionClick = onCoinSelectionClick,
@@ -330,15 +295,7 @@ private fun SettingsContent(
 
 @Composable
 private fun GeneralTabContent(
-    selectedCurrency: String,
-    currencySymbol: String,
-    primaryDisplay: PrimaryDisplay,
-    defaultTransactionSpeed: TransactionSpeed,
-    selectedLanguage: String,
-    showWidgets: Boolean,
-    tagCount: Int,
-    isQuickPayEnabled: Boolean,
-    notificationsGranted: Boolean,
+    state: GeneralTabState,
     onLanguageClick: () -> Unit,
     onLocalCurrencyClick: () -> Unit,
     onDefaultUnitClick: () -> Unit,
@@ -360,14 +317,14 @@ private fun GeneralTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__language_title),
             icon = { SettingsIcon(R.drawable.ic_translate) },
-            value = SettingsButtonValue.StringValue(selectedLanguage),
+            value = SettingsButtonValue.StringValue(state.selectedLanguage),
             onClick = onLanguageClick,
             modifier = Modifier.testTag("LanguageSettings"),
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__currency_local),
             icon = { SettingsIcon(R.drawable.ic_coins) },
-            value = SettingsButtonValue.StringValue("$selectedCurrency ($currencySymbol)"),
+            value = SettingsButtonValue.StringValue("${state.selectedCurrency} (${state.currencySymbol})"),
             onClick = onLocalCurrencyClick,
             modifier = Modifier.testTag("CurrenciesSettings"),
         )
@@ -375,9 +332,9 @@ private fun GeneralTabContent(
             title = stringResource(R.string.settings__general__unit),
             icon = { SettingsIcon(R.drawable.ic_bitcoin_modern) },
             value = SettingsButtonValue.StringValue(
-                when (primaryDisplay) {
+                when (state.primaryDisplay) {
                     PrimaryDisplay.BITCOIN -> stringResource(R.string.settings__general__unit_bitcoin)
-                    PrimaryDisplay.FIAT -> selectedCurrency
+                    PrimaryDisplay.FIAT -> state.selectedCurrency
                 }
             ),
             onClick = onDefaultUnitClick,
@@ -387,16 +344,16 @@ private fun GeneralTabContent(
             title = stringResource(R.string.settings__widgets__nav_title),
             icon = { SettingsIcon(R.drawable.ic_stack) },
             value = SettingsButtonValue.StringValue(
-                stringResource(if (showWidgets) R.string.settings__bg__on else R.string.settings__bg__off)
+                stringResource(if (state.showWidgets) R.string.settings__bg__on else R.string.settings__bg__off)
             ),
             onClick = onWidgetsClick,
             modifier = Modifier.testTag("WidgetsSettings"),
         )
-        if (tagCount > 0) {
+        if (state.tagCount > 0) {
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__tags),
                 icon = { SettingsIcon(R.drawable.ic_tag) },
-                value = SettingsButtonValue.StringValue(tagCount.toString()),
+                value = SettingsButtonValue.StringValue(state.tagCount.toString()),
                 onClick = onTagsClick,
                 modifier = Modifier.testTag("TagsSettings"),
             )
@@ -412,14 +369,14 @@ private fun GeneralTabContent(
             title = stringResource(R.string.settings__general__speed),
             icon = {
                 SettingsIcon(
-                    when (defaultTransactionSpeed) {
+                    when (state.defaultTransactionSpeed) {
                         is TransactionSpeed.Fast -> R.drawable.ic_speed_fast
                         is TransactionSpeed.Slow -> R.drawable.ic_speed_slow
                         else -> R.drawable.ic_speed_normal
                     }
                 )
             },
-            value = SettingsButtonValue.StringValue(defaultTransactionSpeed.transactionSpeedUiText()),
+            value = SettingsButtonValue.StringValue(state.defaultTransactionSpeed.transactionSpeedUiText()),
             onClick = onTransactionSpeedClick,
             modifier = Modifier.testTag("TransactionSpeedSettings"),
         )
@@ -427,7 +384,7 @@ private fun GeneralTabContent(
             title = stringResource(R.string.settings__quickpay__nav_title),
             icon = { SettingsIcon(R.drawable.ic_caret_double_right) },
             value = SettingsButtonValue.StringValue(
-                stringResource(if (isQuickPayEnabled) R.string.settings__bg__on else R.string.settings__bg__off)
+                stringResource(if (state.isQuickPayEnabled) R.string.settings__bg__on else R.string.settings__bg__off)
             ),
             onClick = onQuickPayClick,
             modifier = Modifier.testTag("QuickpaySettings"),
@@ -436,7 +393,9 @@ private fun GeneralTabContent(
             title = stringResource(R.string.settings__bg__title),
             icon = { SettingsIcon(R.drawable.ic_bell) },
             value = SettingsButtonValue.StringValue(
-                stringResource(if (notificationsGranted) R.string.settings__bg__on else R.string.settings__bg__off)
+                stringResource(
+                    if (state.notificationsGranted) R.string.settings__bg__on else R.string.settings__bg__off
+                )
             ),
             onClick = onBgPaymentsClick,
             modifier = Modifier.testTag("BackgroundPaymentSettings"),
@@ -446,17 +405,9 @@ private fun GeneralTabContent(
     }
 }
 
-@Suppress("LongParameterList")
 @Composable
 private fun SecurityTabContent(
-    isPinEnabled: Boolean,
-    isBiometricEnabled: Boolean,
-    isPinForPaymentsEnabled: Boolean,
-    enableSwipeToHideBalance: Boolean,
-    hideBalanceOnOpen: Boolean,
-    enableAutoReadClipboard: Boolean,
-    enableSendAmountWarning: Boolean,
-    isBiometrySupported: Boolean,
+    state: SecurityTabState,
     onBackupWalletClick: () -> Unit,
     onDataBackupsClick: () -> Unit,
     onResetWalletClick: () -> Unit,
@@ -507,7 +458,7 @@ private fun SecurityTabContent(
             icon = { SettingsIcon(R.drawable.ic_shield) },
             value = SettingsButtonValue.StringValue(
                 stringResource(
-                    if (isPinEnabled) {
+                    if (state.isPinEnabled) {
                         R.string.settings__security__pin_enabled
                     } else {
                         R.string.settings__security__pin_disabled
@@ -518,16 +469,16 @@ private fun SecurityTabContent(
             modifier = Modifier.testTag("PINCode"),
         )
 
-        if (isPinEnabled) {
+        if (state.isPinEnabled) {
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__security__pin_payments),
                 icon = { SettingsIcon(R.drawable.ic_coins) },
-                isChecked = isPinForPaymentsEnabled,
+                isChecked = state.isPinForPaymentsEnabled,
                 onClick = onPinForPaymentsClick,
                 modifier = Modifier.testTag("EnablePinForPayments"),
             )
 
-            if (isBiometrySupported) {
+            if (state.isBiometrySupported) {
                 SettingsSwitchRow(
                     title = run {
                         val bioTypeName = stringResource(R.string.security__bio)
@@ -535,7 +486,7 @@ private fun SecurityTabContent(
                             .replace("{biometryTypeName}", bioTypeName)
                     },
                     icon = { SettingsIcon(R.drawable.ic_smiley) },
-                    isChecked = isBiometricEnabled,
+                    isChecked = state.isBiometricEnabled,
                     onClick = onUseBiometricsClick,
                     modifier = Modifier.testTag("UseBiometryInstead"),
                 )
@@ -545,7 +496,7 @@ private fun SecurityTabContent(
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__warn_100),
             icon = { SettingsIcon(R.drawable.ic_warning) },
-            isChecked = enableSendAmountWarning,
+            isChecked = state.enableSendAmountWarning,
             onClick = onSendAmountWarningClick,
             modifier = Modifier.testTag("SendAmountWarning"),
         )
@@ -559,21 +510,21 @@ private fun SecurityTabContent(
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__swipe_balance_to_hide),
             icon = { SettingsIcon(R.drawable.ic_hand_pointing) },
-            isChecked = enableSwipeToHideBalance,
+            isChecked = state.enableSwipeToHideBalance,
             onClick = onSwipeToHideBalanceClick,
             modifier = Modifier.testTag("SwipeBalanceToHide"),
         )
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__hide_balance_on_open),
             icon = { SettingsIcon(R.drawable.ic_eye_slash) },
-            isChecked = hideBalanceOnOpen,
+            isChecked = state.hideBalanceOnOpen,
             onClick = onHideBalanceOnOpenClick,
             modifier = Modifier.testTag("HideBalanceOnOpen"),
         )
         SettingsSwitchRow(
             title = stringResource(R.string.settings__security__clipboard),
             icon = { SettingsIcon(R.drawable.ic_clipboard_text) },
-            isChecked = enableAutoReadClipboard,
+            isChecked = state.enableAutoReadClipboard,
             onClick = onAutoReadClipboardClick,
             modifier = Modifier.testTag("AutoReadClipboard"),
         )
@@ -584,11 +535,7 @@ private fun SecurityTabContent(
 
 @Composable
 private fun AdvancedTabContent(
-    isDevModeEnabled: Boolean,
-    selectedAddressTypeName: String,
-    openChannelCount: Int,
-    truncatedNodeId: String,
-    isCustomElectrum: Boolean,
+    state: AdvancedTabState,
     onDevSettingsClick: () -> Unit,
     onAddressTypeClick: () -> Unit,
     onCoinSelectionClick: () -> Unit,
@@ -606,7 +553,7 @@ private fun AdvancedTabContent(
             .testTag("advanced_settings_screen")
     ) {
         // Debug section (only if dev mode enabled)
-        if (isDevModeEnabled) {
+        if (state.isDevModeEnabled) {
             SectionHeader(title = stringResource(R.string.settings__adv__section_debug))
 
             SettingsButtonRow(
@@ -623,8 +570,8 @@ private fun AdvancedTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__addr_type__title),
             icon = { SettingsIcon(R.drawable.ic_list_dashes) },
-            value = if (selectedAddressTypeName.isNotEmpty()) {
-                SettingsButtonValue.StringValue(selectedAddressTypeName)
+            value = if (state.selectedAddressTypeName.isNotEmpty()) {
+                SettingsButtonValue.StringValue(state.selectedAddressTypeName)
             } else {
                 SettingsButtonValue.None
             },
@@ -653,8 +600,8 @@ private fun AdvancedTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__lightning_connections),
             icon = { SettingsIcon(R.drawable.ic_lightning) },
-            value = if (openChannelCount > 0) {
-                SettingsButtonValue.StringValue(openChannelCount.toString())
+            value = if (state.openChannelCount > 0) {
+                SettingsButtonValue.StringValue(state.openChannelCount.toString())
             } else {
                 SettingsButtonValue.None
             },
@@ -664,8 +611,8 @@ private fun AdvancedTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__lightning_node),
             icon = { SettingsIcon(R.drawable.ic_git_branch) },
-            value = if (truncatedNodeId.isNotEmpty()) {
-                SettingsButtonValue.StringValue("$truncatedNodeId...")
+            value = if (state.truncatedNodeId.isNotEmpty()) {
+                SettingsButtonValue.StringValue("${state.truncatedNodeId}...")
             } else {
                 SettingsButtonValue.None
             },
@@ -677,7 +624,7 @@ private fun AdvancedTabContent(
             icon = { SettingsIcon(R.drawable.ic_hard_drives) },
             value = SettingsButtonValue.StringValue(
                 stringResource(
-                    if (isCustomElectrum) {
+                    if (state.isCustomElectrum) {
                         R.string.settings__adv__electrum_custom
                     } else {
                         R.string.settings__adv__electrum_auto
@@ -703,15 +650,12 @@ private fun AdvancedTabContent(
 private fun PreviewGeneral() {
     AppThemeSurface {
         SettingsContent(
-            selectedCurrency = "USD",
-            currencySymbol = "$",
-            primaryDisplay = PrimaryDisplay.BITCOIN,
-            defaultTransactionSpeed = TransactionSpeed.Medium,
-            selectedLanguage = "System Settings",
-            showWidgets = true,
-            tagCount = 8,
-            isQuickPayEnabled = true,
-            notificationsGranted = true,
+            generalState = GeneralTabState(
+                selectedLanguage = "System Settings",
+                tagCount = 8,
+                isQuickPayEnabled = true,
+                notificationsGranted = true,
+            ),
         )
     }
 }
@@ -721,10 +665,12 @@ private fun PreviewGeneral() {
 private fun PreviewSecurity() {
     AppThemeSurface {
         SettingsContent(
-            isPinEnabled = true,
-            isPinForPaymentsEnabled = true,
-            enableSwipeToHideBalance = true,
-            isBiometrySupported = true,
+            securityState = SecurityTabState(
+                isPinEnabled = true,
+                isPinForPaymentsEnabled = true,
+                enableSwipeToHideBalance = true,
+                isBiometrySupported = true,
+            ),
             initialTab = SettingsTab.Security,
         )
     }
@@ -735,11 +681,47 @@ private fun PreviewSecurity() {
 private fun PreviewAdvanced() {
     AppThemeSurface {
         SettingsContent(
-            isDevModeEnabled = true,
-            selectedAddressTypeName = "Taproot",
-            openChannelCount = 2,
-            truncatedNodeId = "34sdx",
+            advancedState = AdvancedTabState(
+                isDevModeEnabled = true,
+                selectedAddressTypeName = "Taproot",
+                openChannelCount = 2,
+                truncatedNodeId = "34sdx",
+            ),
             initialTab = SettingsTab.Advanced,
         )
     }
 }
+
+@Immutable
+data class GeneralTabState(
+    val selectedCurrency: String = "USD",
+    val currencySymbol: String = "$",
+    val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
+    val defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
+    val selectedLanguage: String = "",
+    val showWidgets: Boolean = true,
+    val tagCount: Int = 0,
+    val isQuickPayEnabled: Boolean = false,
+    val notificationsGranted: Boolean = false,
+)
+
+@Immutable
+data class SecurityTabState(
+    val isPinEnabled: Boolean = false,
+    val isBiometricEnabled: Boolean = false,
+    val isPinForPaymentsEnabled: Boolean = false,
+    val enableSwipeToHideBalance: Boolean = false,
+    val hideBalanceOnOpen: Boolean = false,
+    val enableAutoReadClipboard: Boolean = true,
+    val enableSendAmountWarning: Boolean = true,
+    val isBiometrySupported: Boolean = false,
+)
+
+@Immutable
+data class AdvancedTabState(
+    val isDevModeEnabled: Boolean = false,
+    val selectedAddressTypeName: String = "",
+    val openChannelCount: Int = 0,
+    val truncatedNodeId: String = "",
+    val isCustomElectrum: Boolean = false,
+)
