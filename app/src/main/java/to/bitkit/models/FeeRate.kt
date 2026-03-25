@@ -15,6 +15,13 @@ enum class FeeRate(
     @DrawableRes val icon: Int,
     val color: Color,
 ) {
+    INSTANT(
+        title = R.string.fee__instant__title,
+        description = R.string.fee__instant__description,
+        shortDescription = R.string.fee__instant__shortDescription,
+        color = Colors.Purple,
+        icon = R.drawable.ic_lightning,
+    ),
     FAST(
         title = R.string.fee__fast__title,
         description = R.string.fee__fast__description,
@@ -53,7 +60,7 @@ enum class FeeRate(
 
     fun toSpeed(): TransactionSpeed {
         return when (this) {
-            FAST -> TransactionSpeed.Fast
+            INSTANT, FAST -> TransactionSpeed.Fast
             NORMAL -> TransactionSpeed.Medium
             MINIMUM, SLOW -> TransactionSpeed.Slow
             CUSTOM -> TransactionSpeed.Custom(0u)
