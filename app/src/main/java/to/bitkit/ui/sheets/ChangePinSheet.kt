@@ -35,7 +35,6 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
@@ -48,11 +47,11 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.NumberPadHeight
 import to.bitkit.ui.utils.composableWithDefaultTransitions
+import to.bitkit.ui.utils.handlePinKeyPress
 import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.viewmodels.AppViewModel
-
-private val NumberPadHeight = 350.dp
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -86,13 +85,7 @@ fun ChangePinSheet(app: AppViewModel) {
                 ValidateContent(
                     pin = pin,
                     attemptsRemaining = attemptsRemaining,
-                    onKeyPress = { key ->
-                        if (key == KEY_DELETE) {
-                            if (pin.isNotEmpty()) pin = pin.dropLast(1)
-                        } else if (pin.length < Env.PIN_LENGTH) {
-                            pin += key
-                        }
-                    },
+                    onKeyPress = { pin = handlePinKeyPress(pin, it) },
                     onBackClick = onDismiss,
                     onClickForgotPin = { app.setShowForgotPin(true) },
                 )
@@ -108,13 +101,7 @@ fun ChangePinSheet(app: AppViewModel) {
 
                 NewPinContent(
                     pin = pin,
-                    onKeyPress = { key ->
-                        if (key == KEY_DELETE) {
-                            if (pin.isNotEmpty()) pin = pin.dropLast(1)
-                        } else if (pin.length < Env.PIN_LENGTH) {
-                            pin += key
-                        }
-                    },
+                    onKeyPress = { pin = handlePinKeyPress(pin, it) },
                     onBackClick = { navController.popBackStack() },
                 )
             }
@@ -139,13 +126,7 @@ fun ChangePinSheet(app: AppViewModel) {
                 ConfirmContent(
                     pin = pin,
                     showError = showError,
-                    onKeyPress = { key ->
-                        if (key == KEY_DELETE) {
-                            if (pin.isNotEmpty()) pin = pin.dropLast(1)
-                        } else if (pin.length < Env.PIN_LENGTH) {
-                            pin += key
-                        }
-                    },
+                    onKeyPress = { pin = handlePinKeyPress(pin, it) },
                     onBackClick = { navController.popBackStack() },
                 )
             }
