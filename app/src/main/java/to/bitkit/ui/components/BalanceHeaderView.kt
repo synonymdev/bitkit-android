@@ -1,6 +1,9 @@
 package to.bitkit.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,9 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -53,7 +60,7 @@ fun BalanceHeaderView(
 
     if (isPreview) {
         BalanceHeader(
-            modifier = modifier,
+            isBitcoinPrimary = true,
             smallRowSymbol = "$",
             smallRowText = "12.34",
             largeRowPrefix = prefix,
@@ -66,6 +73,7 @@ fun BalanceHeaderView(
             onClick = {},
             onToggleHideBalance = {},
             testTag = testTag,
+            modifier = modifier,
         )
         return
     }
@@ -88,7 +96,7 @@ fun BalanceHeaderView(
         val isBitcoinPrimary = primaryDisplay == PrimaryDisplay.BITCOIN
 
         BalanceHeader(
-            modifier = modifier,
+            isBitcoinPrimary = isBitcoinPrimary,
             smallRowSymbol = if (isBitcoinPrimary) fiat.symbol else btc.symbol,
             smallRowText = if (isBitcoinPrimary) fiat.formatted else btc.value,
             smallRowIsSymbolSuffix = if (isBitcoinPrimary) fiat.isSymbolSuffix else false,
@@ -105,13 +113,14 @@ fun BalanceHeaderView(
             onClick = onClick ?: { currency.switchUnit() },
             onToggleHideBalance = { settings.setHideBalance(!hideBalance) },
             testTag = testTag,
+            modifier = modifier,
         )
     }
 }
 
 @Composable
 fun BalanceHeader(
-    modifier: Modifier = Modifier,
+    isBitcoinPrimary: Boolean,
     smallRowSymbol: String? = null,
     smallRowText: String,
     smallRowIsSymbolSuffix: Boolean = false,
@@ -128,7 +137,24 @@ fun BalanceHeader(
     onClick: () -> Unit,
     onToggleHideBalance: () -> Unit = {},
     testTag: String? = null,
+    modifier: Modifier = Modifier,
 ) {
+    val smallRowState = remember(
+        isBitcoinPrimary, smallRowSymbol, smallRowText, smallRowIsSymbolSuffix,
+    ) {
+        SmallRowState(isBitcoinPrimary, smallRowSymbol, smallRowText, smallRowIsSymbolSuffix)
+    }
+
+    val largeRowState = remember(
+        isBitcoinPrimary, largeRowPrefix, largeRowText, largeRowSymbol,
+        largeRowIsSymbolSuffix, showSymbol,
+    ) {
+        LargeRowState(
+            isBitcoinPrimary, largeRowPrefix, largeRowText, largeRowSymbol,
+            largeRowIsSymbolSuffix, showSymbol,
+        )
+    }
+
     Column(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.Start,
@@ -140,28 +166,62 @@ fun BalanceHeader(
             .clickableAlpha { onClick() }
             .then(testTag?.let { Modifier.testTag(it) } ?: Modifier)
     ) {
-        SmallRow(
-            symbol = smallRowSymbol,
-            text = smallRowText,
-            isSymbolSuffix = smallRowIsSymbolSuffix,
-            hideBalance = hideBalance,
-            modifier = smallRowModifier,
-        )
+        AnimatedContent(
+            targetState = smallRowState,
+            transitionSpec = {
+                BalanceAnimations.swapSmallRowTransition using
+                    SizeTransform(clip = false)
+            },
+            contentKey = { it.isBitcoinPrimary },
+            label = "smallRowSwapAnimation",
+        ) { state ->
+            val scale by transition.animateFloat(label = "smallRowScale") {
+                if (it == EnterExitState.Visible) 1f else SMALL_ROW_SWAP_SCALE
+            }
+            SmallRow(
+                symbol = state.symbol,
+                text = state.text,
+                isSymbolSuffix = state.isSymbolSuffix,
+                hideBalance = hideBalance,
+                modifier = smallRowModifier.graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                },
+            )
+        }
 
         VerticalSpacer(12.dp)
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LargeRow(
-                prefix = largeRowPrefix,
-                text = largeRowText,
-                symbol = largeRowSymbol,
-                showSymbol = showSymbol,
-                isSymbolSuffix = largeRowIsSymbolSuffix,
-                hideBalance = hideBalance,
-                modifier = largeRowModifier,
-            )
+            AnimatedContent(
+                targetState = largeRowState,
+                transitionSpec = {
+                    BalanceAnimations.swapLargeRowTransition using
+                        SizeTransform(clip = false)
+                },
+                contentKey = { it.isBitcoinPrimary },
+                label = "largeRowSwapAnimation",
+            ) { state ->
+                val scale by transition.animateFloat(label = "largeRowScale") {
+                    if (it == EnterExitState.Visible) 1f else LARGE_ROW_SWAP_SCALE
+                }
+                LargeRow(
+                    prefix = state.prefix,
+                    text = state.text,
+                    symbol = state.symbol,
+                    showSymbol = state.showSymbol,
+                    isSymbolSuffix = state.isSymbolSuffix,
+                    hideBalance = hideBalance,
+                    modifier = largeRowModifier.graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        transformOrigin = TransformOrigin(0f, 0f)
+                    },
+                )
+            }
 
             if (showEyeIcon) {
                 Spacer(modifier = Modifier.weight(1f))
@@ -187,6 +247,28 @@ fun BalanceHeader(
         }
     }
 }
+
+// Matches iOS: .scale(scale: 1.5) for small row, .scale(scale: 0.5) for large row
+private const val SMALL_ROW_SWAP_SCALE = 1.5f
+private const val LARGE_ROW_SWAP_SCALE = 0.5f
+
+@Immutable
+private data class SmallRowState(
+    val isBitcoinPrimary: Boolean,
+    val symbol: String?,
+    val text: String,
+    val isSymbolSuffix: Boolean,
+)
+
+@Immutable
+private data class LargeRowState(
+    val isBitcoinPrimary: Boolean,
+    val prefix: String?,
+    val text: String,
+    val symbol: String,
+    val isSymbolSuffix: Boolean,
+    val showSymbol: Boolean,
+)
 
 @Composable
 fun LargeRow(
@@ -295,14 +377,15 @@ private fun SmallRow(
 private fun Preview() {
     AppThemeSurface {
         BalanceHeader(
+            isBitcoinPrimary = true,
             smallRowSymbol = "$",
             smallRowText = "27.36",
             largeRowPrefix = "+",
             largeRowText = "136 825",
             largeRowSymbol = "₿",
             showSymbol = true,
+            onClick = {},
             modifier = Modifier.fillMaxWidth(),
-            onClick = {}
         )
     }
 }
@@ -312,6 +395,7 @@ private fun Preview() {
 private fun PreviewHidden() {
     AppThemeSurface {
         BalanceHeader(
+            isBitcoinPrimary = true,
             smallRowSymbol = "$",
             smallRowText = "27.36",
             largeRowPrefix = "+",
@@ -320,9 +404,9 @@ private fun PreviewHidden() {
             showSymbol = true,
             hideBalance = true,
             isSwipeToHideEnabled = true,
-            modifier = Modifier.fillMaxWidth(),
             onClick = {},
-            onToggleHideBalance = {}
+            onToggleHideBalance = {},
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
