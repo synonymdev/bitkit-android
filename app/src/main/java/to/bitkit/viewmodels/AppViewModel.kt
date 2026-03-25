@@ -1080,6 +1080,7 @@ class AppViewModel @Inject constructor(
             }
             _sendUiState.update {
                 it.copy(
+                    payMethod = SendMethod.ONCHAIN,
                     speed = speed,
                     fee = SendFee.OnChain(fee),
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
@@ -1091,15 +1092,42 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onPaymentMethodSwitch() {
-        val nextPaymentMethod = when (_sendUiState.value.payMethod) {
+        val current = _sendUiState.value
+        if (!current.isUnified) return
+
+        val nextMethod = when (current.payMethod) {
             SendMethod.ONCHAIN -> SendMethod.LIGHTNING
             SendMethod.LIGHTNING -> SendMethod.ONCHAIN
         }
         _sendUiState.update {
             it.copy(
-                payMethod = nextPaymentMethod,
-                isAmountInputValid = validateAmount(it.amount, nextPaymentMethod),
+                payMethod = nextMethod,
+                isAmountInputValid = validateAmount(it.amount, nextMethod),
             )
+        }
+        when (nextMethod) {
+            SendMethod.ONCHAIN -> {
+                val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
+                _sendUiState.update { it.copy(speed = defaultSpeed) }
+                refreshFeeEstimates()
+            }
+            SendMethod.LIGHTNING -> {
+                _sendUiState.update { it.copy(fee = SendFee.Lightning(0)) }
+                estimateLightningRoutingFeesIfNeeded()
+            }
+        }
+    }
+
+    fun switchToLightning() {
+        viewModelScope.launch {
+            _sendUiState.update {
+                it.copy(
+                    payMethod = SendMethod.LIGHTNING,
+                    fee = SendFee.Lightning(0),
+                    isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
+                )
+            }
+            estimateLightningRoutingFeesIfNeeded()
         }
     }
 
