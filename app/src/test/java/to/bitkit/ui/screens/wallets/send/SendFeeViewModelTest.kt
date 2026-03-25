@@ -5,12 +5,15 @@ import com.synonym.bitkitcore.FeeRates
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
 import to.bitkit.models.FeeRate
 import to.bitkit.models.TransactionSpeed
@@ -29,6 +32,7 @@ class SendFeeViewModelTest : BaseUnitTest() {
     private val lightningRepo: LightningRepo = mock()
     private val currencyRepo: CurrencyRepo = mock()
     private val walletRepo: WalletRepo = mock()
+    private val settingsStore: SettingsStore = mock()
     private val context: Context = mock()
 
     private val balance = 100_000uL
@@ -44,7 +48,8 @@ class SendFeeViewModelTest : BaseUnitTest() {
         whenever(walletRepo.balanceState)
             .thenReturn(MutableStateFlow(BalanceState(totalOnchainSats = balance)))
 
-        sut = SendFeeViewModel(lightningRepo, currencyRepo, walletRepo, context)
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        sut = SendFeeViewModel(lightningRepo, currencyRepo, walletRepo, settingsStore, context)
     }
 
     @Test
