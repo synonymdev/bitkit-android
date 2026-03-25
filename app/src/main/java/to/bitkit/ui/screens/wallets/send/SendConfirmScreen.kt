@@ -49,9 +49,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ext.DatePattern
 import to.bitkit.ext.commentAllowed
-import to.bitkit.ext.formatted
+import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.components.BalanceHeaderView
@@ -84,7 +83,6 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
-import java.time.Instant
 
 @Suppress("MagicNumber")
 @Composable
@@ -563,10 +561,10 @@ private fun LightningDescription(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        val invoiceExpiryTimestamp = Instant.now().plusSeconds(expirySeconds.toLong())
-                            .formatted(DatePattern.INVOICE_EXPIRY)
-
-                        BodySSB(text = invoiceExpiryTimestamp)
+                        val invoiceExpiryText = remember(expirySeconds) {
+                            formatInvoiceExpiryRelative(expirySeconds)
+                        }
+                        BodySSB(text = invoiceExpiryText)
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
