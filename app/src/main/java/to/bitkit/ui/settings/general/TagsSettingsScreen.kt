@@ -16,7 +16,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.settings.SectionHeader
@@ -35,7 +34,7 @@ fun TagsSettingsScreen(
     val tags by settings.lastUsedTags.collectAsStateWithLifecycle()
 
     TagsSettingsContent(
-        tags = tags.toImmutableList(),
+        tags = tags,
         onClickTag = { tag ->
             settings.deleteLastUsedTag(tag)
             if (tags.size == 1) {

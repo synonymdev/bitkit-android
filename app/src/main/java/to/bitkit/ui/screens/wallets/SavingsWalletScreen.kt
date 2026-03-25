@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.models.BalanceState
 import to.bitkit.ui.LocalBalances
@@ -159,7 +158,7 @@ private fun Preview() {
         Box {
             SavingsWalletScreen(
                 isGeoBlocked = false,
-                onchainActivities = previewOnchainActivityItems().toImmutableList(),
+                onchainActivities = previewOnchainActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
@@ -179,7 +178,7 @@ private fun PreviewTransfer() {
         Box {
             SavingsWalletScreen(
                 isGeoBlocked = false,
-                onchainActivities = previewOnchainActivityItems().toImmutableList(),
+                onchainActivities = previewOnchainActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
@@ -222,7 +221,7 @@ private fun PreviewGeoBlocked() {
         Box {
             SavingsWalletScreen(
                 isGeoBlocked = true,
-                onchainActivities = previewOnchainActivityItems().toImmutableList(),
+                onchainActivities = previewOnchainActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},

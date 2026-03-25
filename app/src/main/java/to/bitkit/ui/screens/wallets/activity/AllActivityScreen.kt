@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -24,7 +23,6 @@ import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toImmutableSet
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Sheet
@@ -54,7 +52,7 @@ fun AllActivityScreen(
     val startDate by viewModel.startDate.collectAsStateWithLifecycle()
 
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
-    val tabs = remember { ActivityTab.entries.toImmutableList() }
+    val tabs = activityTabs
     val currentTabIndex = tabs.indexOf(selectedTab)
 
     AllActivityScreenContent(
@@ -62,7 +60,7 @@ fun AllActivityScreen(
         searchText = searchText,
         onSearchTextChange = { viewModel.setSearchText(it) },
         hasTagFilter = selectedTags.isNotEmpty(),
-        selectedTags = selectedTags.toImmutableSet(),
+        selectedTags = selectedTags,
         hasDateRangeFilter = startDate != null,
         tabs = tabs,
         currentTabIndex = currentTabIndex,
@@ -146,18 +144,20 @@ private fun AllActivityScreenContent(
     }
 }
 
+private val activityTabs = ActivityTab.entries.toImmutableList()
+
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
         AllActivityScreenContent(
-            filteredActivities = previewActivityItems.toImmutableList(),
+            filteredActivities = previewActivityItems,
             searchText = "",
             onSearchTextChange = {},
             hasTagFilter = false,
             selectedTags = persistentSetOf(),
             hasDateRangeFilter = false,
-            tabs = ActivityTab.entries.toImmutableList(),
+            tabs = activityTabs,
             currentTabIndex = 0,
             onTabChange = {},
             onBackClick = {},
@@ -181,7 +181,7 @@ private fun PreviewEmpty() {
             hasTagFilter = false,
             selectedTags = persistentSetOf("tag1", "tag2"),
             hasDateRangeFilter = false,
-            tabs = ActivityTab.entries.toImmutableList(),
+            tabs = activityTabs,
             currentTabIndex = 0,
             onTabChange = {},
             onBackClick = {},

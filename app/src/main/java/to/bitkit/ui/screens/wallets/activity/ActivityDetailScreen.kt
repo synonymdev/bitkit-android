@@ -52,7 +52,6 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
-import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
@@ -227,7 +226,7 @@ fun ActivityDetailScreen(
                     )
                     ActivityDetailContent(
                         item = item,
-                        tags = tags.toImmutableList(),
+                        tags = tags,
                         onRemoveTag = { detailViewModel.removeTag(it) },
                         onAddTagClick = { showAddTagSheet = true },
                         onAssignClick = { showAssignSheet = true },

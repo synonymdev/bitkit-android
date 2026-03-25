@@ -22,7 +22,6 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
-import kotlinx.collections.immutable.toImmutableSet
 import to.bitkit.R
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
@@ -49,7 +48,7 @@ fun TagSelectorSheet() {
 
     Content(
         availableTags = availableTags,
-        selectedTags = selectedTags.toImmutableSet(),
+        selectedTags = selectedTags,
         onTagClick = {
             activity.toggleTag(it)
             app.hideSheet()

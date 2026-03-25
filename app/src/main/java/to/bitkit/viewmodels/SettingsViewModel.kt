@@ -3,6 +3,8 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +37,7 @@ class SettingsViewModel @Inject constructor(
             settingsStore.update { it.copy(notificationsGranted = granted) }
         }
     }
+
     val showNotificationDetails = settingsStore.data.map { it.showNotificationDetails }
         .asStateFlow(initialValue = false)
 
@@ -183,8 +186,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val lastUsedTags = settingsStore.data.map { it.lastUsedTags }
-        .asStateFlow(initialValue = emptyList())
+    val lastUsedTags = settingsStore.data.map { it.lastUsedTags.toImmutableList() }
+        .asStateFlow(initialValue = persistentListOf())
 
     fun deleteLastUsedTag(tag: String) {
         viewModelScope.launch {

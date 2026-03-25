@@ -106,8 +106,8 @@ class ActivityListViewModel @Inject constructor(
         val all = activityRepo.getActivities(filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
         val filtered = filterOutReplacedSentTransactions(all)
         _latestActivities.update { filtered.take(SIZE_LATEST).toImmutableList() }
-        _lightningActivities.update { filtered.filter { it is Activity.Lightning }.toImmutableList() }
-        _onchainActivities.update { filtered.filter { it is Activity.Onchain }.toImmutableList() }
+        _lightningActivities.update { filtered.filterIsInstance<Activity.Lightning>().toImmutableList() }
+        _onchainActivities.update { filtered.filterIsInstance<Activity.Onchain>().toImmutableList() }
     }
 
     private suspend fun fetchFilteredActivities(filters: ActivityFilters): List<Activity>? {

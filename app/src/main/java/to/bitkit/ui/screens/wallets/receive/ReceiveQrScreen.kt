@@ -731,7 +731,7 @@ private fun PreviewAutoMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel).toImmutableList(),
+                    channels = persistentListOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -798,7 +798,7 @@ private fun PreviewSpendingMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel).toImmutableList(),
+                    channels = persistentListOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
