@@ -57,7 +57,7 @@ fun DisablePinSheet(app: AppViewModel) {
         }
     }
 
-    DisablePinContent(
+    Content(
         pin = pin,
         attemptsRemaining = attemptsRemaining,
         onKeyPress = { pin = handlePinKeyPress(pin, it) },
@@ -67,7 +67,7 @@ fun DisablePinSheet(app: AppViewModel) {
 }
 
 @Composable
-private fun DisablePinContent(
+private fun Content(
     pin: String,
     attemptsRemaining: Int,
     onKeyPress: (String) -> Unit,
@@ -143,7 +143,7 @@ private fun DisablePinContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        DisablePinContent(
+        Content(
             pin = "12",
             attemptsRemaining = 8,
             onKeyPress = {},

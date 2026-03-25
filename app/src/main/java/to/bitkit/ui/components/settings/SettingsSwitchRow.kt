@@ -3,12 +3,10 @@ package to.bitkit.ui.components.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
@@ -55,7 +53,7 @@ fun SettingsSwitchRow(
                     tint = iconTint,
                     modifier = Modifier.size(32.dp),
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                HorizontalSpacer(10.dp)
             }
         } else {
             null

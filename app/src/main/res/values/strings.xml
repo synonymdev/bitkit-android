@@ -866,8 +866,8 @@
     <string name="wallet__drawer__profile">Profile</string>
     <string name="wallet__drawer__settings">Settings</string>
     <string name="wallet__drawer__shop">Shop</string>
-    <string name="wallet__drawer__support">Support</string>
     <string name="wallet__drawer__status">App Status</string>
+    <string name="wallet__drawer__support">Support</string>
     <string name="wallet__drawer__wallet">Wallet</string>
     <string name="wallet__drawer__widgets">Widgets</string>
     <string name="wallet__error_invalid_bitcoin_address">Invalid bitcoin send address</string>

@@ -257,7 +257,6 @@ private fun GeneralTabContent(
             .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        // Interface section
         SectionHeader(title = stringResource(R.string.settings__general__section_interface))
 
         SettingsButtonRow(
@@ -305,7 +304,6 @@ private fun GeneralTabContent(
             )
         }
 
-        // Payments section
         SectionHeader(
             title = stringResource(R.string.settings__general__section_payments),
             padding = PaddingValues(top = 16.dp),
@@ -362,7 +360,6 @@ private fun SecurityTabContent(
             .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        // Back up or reset section
         SectionHeader(title = stringResource(R.string.settings__security__section_backup))
 
         SettingsButtonRow(
@@ -384,7 +381,6 @@ private fun SecurityTabContent(
             modifier = Modifier.testTag("ResetAndRestore"),
         )
 
-        // Safety section
         SectionHeader(
             title = stringResource(R.string.settings__security__section_safety),
             padding = PaddingValues(top = 16.dp),
@@ -438,7 +434,6 @@ private fun SecurityTabContent(
             modifier = Modifier.testTag("SendAmountWarning"),
         )
 
-        // Privacy section
         SectionHeader(
             title = stringResource(R.string.settings__security__section_privacy),
             padding = PaddingValues(top = 16.dp),
@@ -482,7 +477,6 @@ private fun AdvancedTabContent(
             .verticalScroll(rememberScrollState())
             .testTag("advanced_settings_screen")
     ) {
-        // Debug section (only if dev mode enabled)
         if (state.isDevModeEnabled) {
             SectionHeader(title = stringResource(R.string.settings__adv__section_debug))
 
@@ -494,7 +488,6 @@ private fun AdvancedTabContent(
             )
         }
 
-        // Payments section
         SectionHeader(title = stringResource(R.string.settings__adv__section_payments))
 
         SettingsButtonRow(
@@ -526,7 +519,6 @@ private fun AdvancedTabContent(
             modifier = Modifier.testTag("AddressViewer"),
         )
 
-        // Networks section
         SectionHeader(
             title = stringResource(R.string.settings__adv__section_networks),
             padding = PaddingValues(top = 16.dp),
