@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,7 +61,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.LanguageViewModel
 
-private enum class SettingsTab(private val titleRes: Int) : TabItem {
+private enum class SettingsTab(@StringRes private val titleRes: Int) : TabItem {
     General(R.string.settings__general_title),
     Security(R.string.settings__security_title),
     Advanced(R.string.settings__advanced_title);
