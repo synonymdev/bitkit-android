@@ -44,6 +44,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.Links
 import to.bitkit.ui.components.settings.SettingsButtonRow
@@ -59,7 +60,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
-private val BrandColor = Colors.Brand
 
 @Composable
 fun SupportScreen(
@@ -193,6 +193,7 @@ private fun Content(
                         .testTag("DevOptions"),
                 ) {
                     SettingsIcon(R.drawable.ic_stack)
+                    HorizontalSpacer(8.dp)
                     BodyM(
                         text = stringResource(R.string.settings__about__version),
                         modifier = Modifier.weight(1f),
@@ -226,7 +227,7 @@ private fun SupportFooter() {
                     lineTo(size.width, size.height)
                     close()
                 }
-                drawPath(path, color = BrandColor)
+                drawPath(path, color = Colors.Brand)
             },
     ) {
         Image(
