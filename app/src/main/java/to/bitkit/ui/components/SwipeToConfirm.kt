@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -61,6 +62,7 @@ private val Padding = 8.dp
 
 @Composable
 fun SwipeToConfirm(
+    modifier: Modifier = Modifier,
     text: String = stringResource(R.string.other__swipe),
     color: Color = Colors.Brand,
     icon: ImageVector = Icons.AutoMirrored.Default.ArrowForward,
@@ -68,8 +70,8 @@ fun SwipeToConfirm(
     endIconTint: Color = Colors.Black,
     loading: Boolean = false,
     confirmed: Boolean = false,
+    onProgressChange: ((Float) -> Unit)? = null,
     onConfirm: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val trailColor = remember(color) { color.copy(alpha = 0.24f) }
@@ -92,6 +94,12 @@ fun SwipeToConfirm(
             targetValue = if (confirmed) maxPanX else 0f,
             animationSpec = spring()
         )
+    }
+
+    LaunchedEffect(onProgressChange) {
+        if (onProgressChange == null) return@LaunchedEffect
+        snapshotFlow { panX.value / maxPanX }
+            .collect { onProgressChange(it.coerceIn(0f, 1f)) }
     }
 
     Box(
