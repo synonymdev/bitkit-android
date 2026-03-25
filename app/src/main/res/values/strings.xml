@@ -41,6 +41,7 @@
     <string name="common__delete_yes">Yes, Delete</string>
     <string name="common__dialog_cancel">No, Cancel</string>
     <string name="common__edit">Edit</string>
+    <string name="common__hide_details">Hide Details</string>
     <string name="common__empty">Empty</string>
     <string name="common__error">Error</string>
     <string name="common__error_body">Unknown error</string>
@@ -60,6 +61,7 @@
     <string name="common__save">Save</string>
     <string name="common__search">Search</string>
     <string name="common__share">Share</string>
+    <string name="common__show_details">Show Details</string>
     <string name="common__skip">Skip</string>
     <string name="common__success">Success</string>
     <string name="common__try_again">Try Again</string>
@@ -73,6 +75,8 @@
     <string name="fee__fast__description">±10-20 minutes</string>
     <string name="fee__fast__shortDescription">±10m</string>
     <string name="fee__fast__title">Fast</string>
+    <string name="fee__instant__description">Lightning Network</string>
+    <string name="fee__instant__shortDescription">Instant</string>
     <string name="fee__instant__title">Instant</string>
     <string name="fee__minimum__description">+2 hours</string>
     <string name="fee__minimum__shortDescription">+2h</string>
@@ -950,6 +954,7 @@
     <string name="wallet__send_error_create_tx">Unable to broadcast the transaction. Please try again.</string>
     <string name="wallet__send_error_tx_failed">Transaction Failed</string>
     <string name="wallet__send_fee_and_speed">Speed and fee</string>
+    <string name="wallet__send_from">Send from</string>
     <string name="wallet__send_fee_custom">Set Custom Fee</string>
     <string name="wallet__send_fee_error">Fee Invalid</string>
     <string name="wallet__send_fee_error_max">Unable to increase the fee any further. Otherwise, it will exceed half the current input balance.</string>
