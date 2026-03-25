@@ -2,7 +2,6 @@ package to.bitkit.ui.sheets
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -24,10 +23,12 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -88,7 +89,7 @@ private fun DisablePinContent(
             onBack = onBackClick,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         BodyM(
             text = stringResource(R.string.security__pin_disable_text).withAccentBoldBright(),
@@ -96,7 +97,7 @@ private fun DisablePinContent(
             modifier = Modifier.padding(horizontal = 32.dp),
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         AnimatedVisibility(visible = attemptsRemaining < Env.PIN_ATTEMPTS) {
             if (isLastAttempt) {
@@ -120,14 +121,14 @@ private fun DisablePinContent(
                         .testTag("AttemptsRemaining"),
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         PinDots(pin = pin)
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         NumberPad(
             onPress = onKeyPress,

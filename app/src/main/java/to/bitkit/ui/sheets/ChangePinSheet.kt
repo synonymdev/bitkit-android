@@ -5,7 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -35,11 +34,13 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -176,7 +177,7 @@ private fun ValidateContent(
             onBack = onBackClick,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         BodyM(
             text = stringResource(R.string.security__cp_text).withAccentBoldBright(),
@@ -184,7 +185,7 @@ private fun ValidateContent(
             modifier = Modifier.padding(horizontal = 32.dp),
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         AnimatedVisibility(visible = attemptsRemaining < Env.PIN_ATTEMPTS) {
             if (isLastAttempt) {
@@ -208,14 +209,14 @@ private fun ValidateContent(
                         .testTag("AttemptsRemaining"),
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         PinDots(pin = pin)
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         NumberPad(
             onPress = onKeyPress,
@@ -244,7 +245,7 @@ private fun NewPinContent(
             onBack = onBackClick,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         BodyM(
             text = stringResource(R.string.security__cp_setnew_text),
@@ -252,12 +253,12 @@ private fun NewPinContent(
             modifier = Modifier.padding(horizontal = 32.dp),
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-        Spacer(modifier = Modifier.weight(1f))
+        VerticalSpacer(32.dp)
+        FillHeight()
 
         PinDots(pin = pin)
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         NumberPad(
             onPress = onKeyPress,
@@ -288,7 +289,7 @@ private fun ConfirmContent(
             onBack = onBackClick,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         BodyM(
             text = stringResource(R.string.security__cp_retype_text),
@@ -296,7 +297,7 @@ private fun ConfirmContent(
             modifier = Modifier.padding(horizontal = 32.dp),
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         AnimatedVisibility(visible = showError) {
             BodyS(
@@ -309,11 +310,11 @@ private fun ConfirmContent(
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         PinDots(pin = pin)
 
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32.dp)
 
         NumberPad(
             onPress = onKeyPress,
@@ -340,7 +341,7 @@ private fun ResultContent(
             titleText = stringResource(R.string.security__cp_changed_title)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
         BodyM(
             text = stringResource(R.string.security__cp_changed_text),
@@ -369,7 +370,7 @@ private fun ResultContent(
                 .testTag("OK"),
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
     }
 }
 
