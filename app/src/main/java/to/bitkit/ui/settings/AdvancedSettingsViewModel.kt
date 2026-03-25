@@ -39,6 +39,10 @@ class AdvancedSettingsViewModel @Inject constructor(
         .map { it.electrumServer != Env.electrumServerUrl }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val coinSelectAuto = settingsStore.data
+        .map { it.coinSelectAuto }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     fun resetSuggestions() {
         viewModelScope.launch {
             settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }

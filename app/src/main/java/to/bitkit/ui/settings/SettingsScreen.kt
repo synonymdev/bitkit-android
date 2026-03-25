@@ -106,6 +106,7 @@ fun SettingsScreen(
     val openChannelCount by advancedViewModel.openChannelCount.collectAsStateWithLifecycle()
     val truncatedNodeId by advancedViewModel.truncatedNodeId.collectAsStateWithLifecycle()
     val isCustomElectrum by advancedViewModel.isCustomElectrum.collectAsStateWithLifecycle()
+    val coinSelectAuto by advancedViewModel.coinSelectAuto.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
@@ -134,6 +135,7 @@ fun SettingsScreen(
         advancedState = AdvancedTabState(
             isDevModeEnabled = isDevModeEnabled,
             selectedAddressTypeName = selectedAddressTypeName,
+            coinSelectAuto = coinSelectAuto,
             openChannelCount = openChannelCount,
             truncatedNodeId = truncatedNodeId,
             isCustomElectrum = isCustomElectrum,
@@ -509,6 +511,11 @@ private fun AdvancedTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__coin_selection),
             icon = { SettingsIcon(R.drawable.ic_coins) },
+            value = SettingsButtonValue.StringValue(
+                stringResource(
+                    if (state.coinSelectAuto) R.string.settings__adv__cs_auto else R.string.settings__adv__cs_manual
+                )
+            ),
             onClick = { onEvent(SettingsEvent.CoinSelectionClick) },
             modifier = Modifier.testTag("CoinSelectPreference"),
         )
@@ -688,6 +695,7 @@ data class SecurityTabState(
 data class AdvancedTabState(
     val isDevModeEnabled: Boolean = false,
     val selectedAddressTypeName: String = "",
+    val coinSelectAuto: Boolean = true,
     val openChannelCount: Int = 0,
     val truncatedNodeId: String = "",
     val isCustomElectrum: Boolean = false,
