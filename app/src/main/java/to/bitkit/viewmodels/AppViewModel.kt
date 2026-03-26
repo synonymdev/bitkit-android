@@ -1169,7 +1169,10 @@ class AppViewModel @Inject constructor(
                 }
             }
 
-            SendMethod.ONCHAIN -> amount > Defaults.dustLimit.toULong()
+            SendMethod.ONCHAIN -> {
+                val maxSendable = walletRepo.balanceState.value.maxSendOnchainSats
+                amount > Defaults.dustLimit.toULong() && amount <= maxSendable
+            }
         }
     }
 
