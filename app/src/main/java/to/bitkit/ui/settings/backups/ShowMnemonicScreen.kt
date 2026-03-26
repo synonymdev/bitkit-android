@@ -206,8 +206,8 @@ private fun ShowMnemonicContent(
                         R.string.security__mnemonic_never_share
                     }
                 ).withAccent(
-                    defaultColor = Colors.Red,
-                    accentStyle = SpanStyle(color = Colors.Red, fontWeight = FontWeight.Bold),
+                    defaultColor = Colors.Brand,
+                    accentStyle = SpanStyle(color = Colors.Brand, fontWeight = FontWeight.Bold),
                 )
                 BodyS(text = warningText)
             }
