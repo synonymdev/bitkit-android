@@ -38,12 +38,13 @@ create_invoice() {
     local amount="$1"
     local index="$2"
     local desc="${DESCRIPTION//\{i\}/$index}"
-    # Escape characters that could cause shell injection when passed through adb shell
+    # Escape for JSON validity and quoting safety. Variable expansion is literal
+    # and the value lands inside single quotes on the device shell, so only
+    # backslash, double-quote, single-quote, and newlines need handling.
     desc="${desc//\\/\\\\}"
-    desc="${desc//\$/\\$}"
-    desc="${desc//\`/\\\`}"
     desc="${desc//\"/\\\"}"
     desc="${desc//\'/\'\\\'\'}"
+    desc="${desc//$'\n'/\\n}"
     local raw
     raw=$(adb shell "content call --uri content://$AUTHORITY \
         --method createInvoice \
