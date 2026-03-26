@@ -572,7 +572,7 @@ private fun AdvancedTabContent(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewGeneral() {
     AppThemeSurface {
@@ -587,7 +587,7 @@ private fun PreviewGeneral() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewSecurity() {
     AppThemeSurface {
@@ -603,7 +603,7 @@ private fun PreviewSecurity() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewAdvanced() {
     AppThemeSurface {

@@ -130,7 +130,7 @@ private fun ConfirmPinContent(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -143,7 +143,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewRetry() {
     AppThemeSurface {

@@ -33,6 +33,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
@@ -369,51 +370,59 @@ private fun ResultContent(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewValidate() {
     AppThemeSurface {
-        ValidateContent(
-            pin = "12",
-            attemptsRemaining = 8,
-            onKeyPress = {},
-            onBackClick = {},
-            onClickForgotPin = {},
-        )
+        BottomSheetPreview {
+            ValidateContent(
+                pin = "12",
+                attemptsRemaining = 8,
+                onKeyPress = {},
+                onBackClick = {},
+                onClickForgotPin = {},
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewNew() {
     AppThemeSurface {
-        NewPinContent(
-            pin = "12",
-            onKeyPress = {},
-            onBackClick = {},
-        )
+        BottomSheetPreview {
+            NewPinContent(
+                pin = "12",
+                onKeyPress = {},
+                onBackClick = {},
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewConfirm() {
     AppThemeSurface {
-        ConfirmContent(
-            pin = "12",
-            showError = false,
-            onKeyPress = {},
-            onBackClick = {},
-        )
+        BottomSheetPreview {
+            ConfirmContent(
+                pin = "12",
+                showError = false,
+                onKeyPress = {},
+                onBackClick = {},
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewResult() {
     AppThemeSurface {
-        ResultContent(
-            onOkClick = {},
-        )
+        BottomSheetPreview {
+            ResultContent(
+                onOkClick = {},
+            )
+        }
     }
 }

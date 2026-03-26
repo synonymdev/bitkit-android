@@ -23,6 +23,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
@@ -139,16 +140,18 @@ private fun Content(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content(
-            pin = "12",
-            attemptsRemaining = 8,
-            onKeyPress = {},
-            onBackClick = {},
-            onClickForgotPin = {},
-        )
+        BottomSheetPreview {
+            Content(
+                pin = "12",
+                attemptsRemaining = 8,
+                onKeyPress = {},
+                onBackClick = {},
+                onClickForgotPin = {},
+            )
+        }
     }
 }
