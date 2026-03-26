@@ -192,7 +192,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
 - ALWAYS use `remember` for expensive Compose computations
-- ALWAYS add modifiers to the last place in the argument list when calling composable functions
+- ALWAYS add modifiers to the last place in the argument list when calling composable functions and NEVER add a trailing comma after the last `modifier` argument
 - NEVER add parameters with default values BEFORE the `modifier` parameter in composable functions - modifier must be the FIRST optional parameter
 - ALWAYS use `navController.navigateTo(route)` for simple navigation; NEVER use raw `navController.navigate(route)` — `navigateTo` prevents duplicate destinations
 - ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
