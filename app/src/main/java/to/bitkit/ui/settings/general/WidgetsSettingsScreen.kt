@@ -80,11 +80,13 @@ private fun WidgetsSettingsContent(
                 title = stringResource(R.string.settings__widgets__showWidgets),
                 isChecked = showWidgets,
                 onClick = onShowWidgetsClick,
+                modifier = Modifier.testTag("ShowWidgets"),
             )
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__widgets__showWidgetTitles),
                 isChecked = showWidgetTitles,
                 onClick = onShowWidgetTitlesClick,
+                modifier = Modifier.testTag("ShowWidgetTitles"),
             )
 
             // Reset section
