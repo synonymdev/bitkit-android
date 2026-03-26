@@ -477,7 +477,7 @@
     <string name="security__pass">passphrase</string>
     <string name="security__pass_confirm">Confirm Passphrase</string>
     <string name="security__pass_confirm_text">Enter the passphrase you added while setting up and creating your wallet.</string>
-    <string name="security__pass_never_share">&lt;accent&gt;Never share&lt;/accent&gt; your passphrase with anyone as this may result in the loss of funds.</string>
+    <string name="security__pass_never_share">&lt;accent&gt;Never share your passphrase&lt;/accent&gt; with anyone, as it may result in loss of funds. Keep it secret!</string>
     <string name="security__pass_recovery">&lt;accent&gt;Passphrase:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">You added a passphrase to your recovery phrase during wallet setup.</string>
     <string name="security__pass_your">Your Passphrase</string>
