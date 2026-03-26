@@ -41,6 +41,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferToSpendingUiState
@@ -74,6 +75,18 @@ fun SpendingAmountScreen(
                 TransferEffect.OnOrderCreated -> onOrderCreated()
                 is TransferEffect.ToastError -> toast(effect.title, effect.description)
                 is TransferEffect.ToastException -> toastException(effect.e)
+            }
+        }
+    }
+
+    LaunchedEffect(amountInputViewModel) {
+        amountInputViewModel.effect.collect {
+            when (it) {
+                AmountInputEffect.MaxExceeded -> toast(
+                    context.getString(R.string.lightning__spending_amount__error_max__title),
+                    context.getString(R.string.lightning__spending_amount__error_max__description)
+                        .replace("{amount}", "${uiState.maxAllowedToSend}"),
+                )
             }
         }
     }
@@ -155,6 +168,10 @@ private fun SpendingAmountNodeRunning(
     onClickMaxAmount: () -> Unit,
     onConfirmAmount: () -> Unit,
 ) {
+    LaunchedEffect(uiState.maxAllowedToSend) {
+        amountInputViewModel.setMaxAmount(uiState.maxAllowedToSend)
+    }
+
     Column(
         modifier = Modifier
             .padding(horizontal = 16.dp)

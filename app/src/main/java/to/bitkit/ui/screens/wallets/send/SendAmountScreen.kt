@@ -57,6 +57,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.LnurlParams
@@ -89,6 +90,19 @@ fun SendAmountScreen(
 
     LaunchedEffect(amountInputUiState.sats) {
         currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
+    }
+
+    LaunchedEffect(amountInputViewModel) {
+        amountInputViewModel.effect.collect {
+            when (it) {
+                AmountInputEffect.MaxExceeded -> app?.toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.wallet__send_amount_exceeded__title),
+                    description = context.getString(R.string.wallet__send_amount_exceeded__description),
+                    visibilityTime = Toast.VISIBILITY_TIME_SHORT,
+                )
+            }
+        }
     }
 
     LaunchedEffect(uiState.decodedInvoice, uiState.payMethod) {
@@ -201,6 +215,10 @@ private fun SendAmountNodeRunning(
                 val routingFee = uiState.estimatedRoutingFee
                 (maxLightning.safe() - routingFee.safe()).toLong()
             }
+        }
+
+        LaunchedEffect(availableAmount) {
+            amountInputViewModel.setMaxAmount(availableAmount)
         }
 
         Column(

@@ -11,6 +11,7 @@ data class Toast(
     enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }
 
     companion object {
+        const val VISIBILITY_TIME_SHORT = 1500L
         const val VISIBILITY_TIME_DEFAULT = 3000L
     }
 }

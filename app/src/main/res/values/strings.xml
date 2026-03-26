@@ -267,6 +267,8 @@
     <string name="lightning__setting_up_text">Please wait, your funds transfer is in progress. This should take &lt;accent&gt;±10 minutes.&lt;/accent&gt;</string>
     <string name="lightning__spendable_onchain">Spendable Onchain</string>
     <string name="lightning__spending">Spending</string>
+    <string name="lightning__spending_advanced__error_max__description">The receiving capacity is currently limited to ₿ {amount}.</string>
+    <string name="lightning__spending_advanced__error_max__title">Receiving Capacity Maximum</string>
     <string name="lightning__spending_advanced__fee">Liquidity fee</string>
     <string name="lightning__spending_advanced__title">Receiving\n&lt;accent&gt;capacity&lt;/accent&gt;</string>
     <string name="lightning__spending_amount__error_max__description">The amount you can transfer to your spending balance is currently limited to ₿ {amount}.</string>
@@ -1056,6 +1058,8 @@
     <string name="wallet__send">Send</string>
     <string name="wallet__send_address_placeholder">Enter an invoice, address, or profile key</string>
     <string name="wallet__send_amount">Bitcoin Amount</string>
+    <string name="wallet__send_amount_exceeded__description">The amount exceeds your available balance.</string>
+    <string name="wallet__send_amount_exceeded__title">Insufficient balance</string>
     <string name="wallet__send_available">Available</string>
     <string name="wallet__send_available_savings">Available (savings)</string>
     <string name="wallet__send_available_spending">Available (spending)</string>
