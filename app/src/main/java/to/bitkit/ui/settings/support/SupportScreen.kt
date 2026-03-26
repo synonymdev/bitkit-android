@@ -117,6 +117,7 @@ fun SupportScreen(
                             R.string.settings__dev_disabled_message
                         }
                     ),
+                    testTag = if (newValue) "DevModeEnabledToast" else "DevModeDisabledToast",
                 )
                 devModeTapCount = 0
             }
