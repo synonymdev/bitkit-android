@@ -39,7 +39,7 @@ fun AppTopBar(
     onBackClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     @DrawableRes icon: Int? = null,
-    actions: @Composable (RowScope.() -> Unit) = {},
+    actions: @Composable (RowScope.() -> Unit) = {}
 ) {
     CenterAlignedTopAppBar(
         navigationIcon = {
@@ -70,14 +70,14 @@ fun AppTopBar(
             containerColor = Color.Transparent,
             scrolledContainerColor = Color.Transparent,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
 @Composable
 fun BackNavIcon(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     IconButton(
         onClick = rememberDebouncedClick(onClick = onClick),
@@ -93,7 +93,7 @@ fun BackNavIcon(
 
 @Composable
 fun DrawerNavIcon(
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val isPreview = LocalInspectionMode.current
     val drawerState = LocalDrawerState.current
@@ -118,7 +118,7 @@ fun DrawerNavIcon(
 @Composable
 fun ScanNavIcon(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     IconButton(
         onClick = rememberDebouncedClick(onClick = onClick),

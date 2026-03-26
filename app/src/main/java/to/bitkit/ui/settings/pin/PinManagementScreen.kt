@@ -71,7 +71,7 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
             BodyM(
                 text = stringResource(
@@ -97,35 +97,35 @@ private fun Content(
                         painterResource(R.drawable.shield)
                     },
                     contentDescription = null,
-                    modifier = Modifier.size(256.dp),
+                    modifier = Modifier.size(256.dp)
                 )
             }
 
             if (isPinEnabled) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     SecondaryButton(
                         text = stringResource(R.string.settings__security__pin_change),
                         onClick = onChangePinClick,
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("ChangePIN"),
+                            .testTag("ChangePIN")
                     )
                     PrimaryButton(
                         text = stringResource(R.string.security__pin_disable_button),
                         onClick = onDisablePinClick,
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("DisablePin"),
+                            .testTag("DisablePin")
                     )
                 }
             } else {
                 PrimaryButton(
                     text = stringResource(R.string.security__pin_enable_button),
                     onClick = onEnablePinClick,
-                    modifier = Modifier.testTag("EnablePin"),
+                    modifier = Modifier.testTag("EnablePin")
                 )
             }
 

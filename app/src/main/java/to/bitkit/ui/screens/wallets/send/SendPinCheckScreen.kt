@@ -81,7 +81,7 @@ private fun PinCheckContent(
     onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
     onClickForgotPin: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val isLastAttempt = attemptsRemaining == 1
 
@@ -134,7 +134,7 @@ private fun PinCheckContent(
 
             PinDots(
                 pin = pin,
-                modifier = Modifier.padding(vertical = 16.dp),
+                modifier = Modifier.padding(vertical = 16.dp)
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -160,7 +160,7 @@ private fun Preview() {
                 onKeyPress = {},
                 onBack = {},
                 onClickForgotPin = {},
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -177,7 +177,7 @@ private fun PreviewAttemptsLeft() {
                 onKeyPress = {},
                 onBack = {},
                 onClickForgotPin = {},
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -194,7 +194,7 @@ private fun PreviewAttemptsLast() {
                 onKeyPress = {},
                 onBack = {},
                 onClickForgotPin = {},
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }

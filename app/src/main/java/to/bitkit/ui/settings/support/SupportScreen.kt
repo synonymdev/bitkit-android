@@ -171,12 +171,12 @@ private fun Content(
                     title = stringResource(R.string.settings__support__status),
                     icon = { SettingsIcon(R.drawable.ic_power) },
                     onClick = onClickAppStatus,
-                    modifier = Modifier.testTag("AppStatus"),
+                    modifier = Modifier.testTag("AppStatus")
                 )
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__about__legal),
                     icon = { SettingsIcon(R.drawable.ic_file_text) },
-                    onClick = onClickLegal,
+                    onClick = onClickLegal
                 )
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__about__share),
@@ -191,13 +191,13 @@ private fun Content(
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
                         .clickableAlpha { onClickVersion() }
-                        .testTag("DevOptions"),
+                        .testTag("DevOptions")
                 ) {
                     SettingsIcon(R.drawable.ic_stack)
                     HorizontalSpacer(8.dp)
                     BodyM(
                         text = stringResource(R.string.settings__about__version),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f)
                     )
                     BodyM(text = appVersion, color = Colors.White64)
                 }
@@ -238,7 +238,7 @@ private fun SupportFooter() {
                 .fillMaxWidth()
                 .height(100.dp)
                 .padding(horizontal = 16.dp)
-                .testTag("AboutLogo"),
+                .testTag("AboutLogo")
         )
     }
 
@@ -247,7 +247,7 @@ private fun SupportFooter() {
         modifier = Modifier
             .fillMaxWidth()
             .background(Colors.Brand)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
     ) {
         VerticalSpacer(16.dp)
 
@@ -273,17 +273,17 @@ private fun BrandEndorsement() {
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Image(
             painter = painterResource(R.drawable.ic_synonym_logo),
             contentDescription = null,
-            modifier = Modifier.height(24.dp),
+            modifier = Modifier.height(24.dp)
         )
         Image(
             painter = painterResource(R.drawable.ic_tether_company),
             contentDescription = null,
-            modifier = Modifier.height(16.dp),
+            modifier = Modifier.height(16.dp)
         )
     }
 }

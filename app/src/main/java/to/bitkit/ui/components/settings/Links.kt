@@ -33,19 +33,19 @@ fun Links(modifier: Modifier = Modifier) {
 
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = modifier,
+        modifier = modifier
     ) {
         socialLinks.forEach { link ->
             IconButton(
                 onClick = {
                     context.startActivity(Intent(Intent.ACTION_VIEW, link.url.toUri()))
                 },
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     painter = painterResource(link.iconRes),
                     contentDescription = null,
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

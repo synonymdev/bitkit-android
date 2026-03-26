@@ -68,7 +68,7 @@ fun DrawerMenu(
     rootNavController: NavController,
     hasSeenWidgetsIntro: Boolean,
     hasSeenShopIntro: Boolean,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
 
@@ -246,7 +246,7 @@ private fun Menu(
 private fun Scrim(
     visible: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -266,7 +266,7 @@ private fun DrawerItem(
     label: String,
     @DrawableRes iconRes: Int,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -316,7 +316,7 @@ private fun Preview() {
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
                 hasSeenWidgetsIntro = false,
                 hasSeenShopIntro = false,
-                modifier = Modifier.align(Alignment.TopEnd),
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }

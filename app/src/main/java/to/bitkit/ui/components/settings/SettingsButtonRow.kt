@@ -74,7 +74,7 @@ fun SettingsButtonRow(
         } else {
             null
         },
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -105,7 +105,7 @@ fun SettingsButtonRow(
         enabled = enabled,
         loading = loading,
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -178,7 +178,7 @@ private fun SettingsButtonRowCore(
                                     painter = painterResource(R.drawable.ic_checkmark),
                                     contentDescription = null,
                                     tint = Colors.Brand,
-                                    modifier = Modifier.size(32.dp),
+                                    modifier = Modifier.size(32.dp)
                                 )
 
                                 else -> Unit
@@ -193,7 +193,7 @@ private fun SettingsButtonRowCore(
                             painter = painterResource(R.drawable.ic_chevron_right),
                             contentDescription = null,
                             tint = Colors.White64,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
@@ -202,7 +202,7 @@ private fun SettingsButtonRowCore(
                             painter = painterResource(R.drawable.ic_chevron_right),
                             contentDescription = null,
                             tint = Colors.White64,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
@@ -215,7 +215,7 @@ private fun SettingsButtonRowCore(
                 color = Colors.White64,
                 modifier = Modifier
                     .padding(vertical = 4.dp)
-                    .then(alphaModifier),
+                    .then(alphaModifier)
             )
         }
     }

@@ -199,7 +199,7 @@ fun ContentView(
     settingsViewModel: SettingsViewModel,
     backupsViewModel: BackupsViewModel,
     hazeState: HazeState,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
 
@@ -487,7 +487,7 @@ fun ContentView(
                 rootNavController = navController,
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
-                modifier = Modifier.align(Alignment.TopEnd),
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }

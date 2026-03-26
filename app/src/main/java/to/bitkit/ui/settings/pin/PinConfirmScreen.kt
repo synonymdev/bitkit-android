@@ -79,7 +79,7 @@ private fun ConfirmPinContent(
     showError: Boolean,
     onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
@@ -97,7 +97,7 @@ private fun ConfirmPinContent(
         BodyM(
             text = stringResource(R.string.security__pin_retype_text),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         Spacer(modifier = Modifier.height(32.dp))

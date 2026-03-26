@@ -71,7 +71,7 @@ private fun WidgetsSettingsContent(
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
         ) {
             // Display section
             SectionHeader(title = stringResource(R.string.settings__widgets__section_display))
@@ -97,13 +97,13 @@ private fun WidgetsSettingsContent(
                 title = stringResource(R.string.settings__widgets__reset_widgets),
                 icon = { SettingsIcon(R.drawable.ic_arrow_counter_clockwise) },
                 onClick = { showResetWidgetsDialog = true },
-                modifier = Modifier.testTag("ResetWidgets"),
+                modifier = Modifier.testTag("ResetWidgets")
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__widgets__reset_suggestions),
                 icon = { SettingsIcon(R.drawable.ic_arrow_counter_clockwise) },
                 onClick = { showResetSuggestionsDialog = true },
-                modifier = Modifier.testTag("ResetSuggestions"),
+                modifier = Modifier.testTag("ResetSuggestions")
             )
         }
 
@@ -117,7 +117,7 @@ private fun WidgetsSettingsContent(
                     showResetWidgetsDialog = false
                 },
                 onDismiss = { showResetWidgetsDialog = false },
-                modifier = Modifier.testTag("reset_widgets_dialog"),
+                modifier = Modifier.testTag("reset_widgets_dialog")
             )
         }
 
@@ -131,7 +131,7 @@ private fun WidgetsSettingsContent(
                     showResetSuggestionsDialog = false
                 },
                 onDismiss = { showResetSuggestionsDialog = false },
-                modifier = Modifier.testTag("reset_suggestions_dialog"),
+                modifier = Modifier.testTag("reset_suggestions_dialog")
             )
         }
     }

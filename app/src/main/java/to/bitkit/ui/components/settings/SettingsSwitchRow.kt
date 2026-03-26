@@ -37,7 +37,7 @@ fun SettingsSwitchRow(
     subtitle: String? = null,
     iconRes: Int? = null,
     iconTint: Color = Color.Unspecified,
-    colors: SwitchColors = AppSwitchDefaults.colors,
+    colors: SwitchColors = AppSwitchDefaults.colors
 ) {
     SettingsSwitchRowCore(
         title = title,
@@ -51,14 +51,14 @@ fun SettingsSwitchRow(
                     painter = painterResource(iconRes),
                     contentDescription = null,
                     tint = iconTint,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(32.dp)
                 )
                 HorizontalSpacer(10.dp)
             }
         } else {
             null
         },
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -70,7 +70,7 @@ fun SettingsSwitchRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    colors: SwitchColors = AppSwitchDefaults.colors,
+    colors: SwitchColors = AppSwitchDefaults.colors
 ) {
     SettingsSwitchRowCore(
         title = title,
@@ -82,7 +82,7 @@ fun SettingsSwitchRow(
             icon()
             HorizontalSpacer(8.dp)
         },
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -94,10 +94,10 @@ private fun SettingsSwitchRowCore(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     icon: (@Composable () -> Unit)? = null,
-    colors: SwitchColors = AppSwitchDefaults.colors,
+    colors: SwitchColors = AppSwitchDefaults.colors
 ) {
     Column(
-        modifier = modifier.heightIn(min = 52.dp),
+        modifier = modifier.heightIn(min = 52.dp)
     ) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -115,7 +115,7 @@ private fun SettingsSwitchRowCore(
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 BodyM(text = title, color = Colors.White, overflow = TextOverflow.Ellipsis)
                 if (subtitle != null) {
@@ -141,7 +141,7 @@ private fun Preview() {
             SettingsSwitchRow(
                 title = "Setting 1",
                 isChecked = true,
-                onClick = {},
+                onClick = {}
             )
             SettingsSwitchRow(
                 title = "Setting 2",
