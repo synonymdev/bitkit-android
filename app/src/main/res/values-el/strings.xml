@@ -573,9 +573,7 @@
     <string name="settings__backup__status_failed">Αποτυχημένο αντίγραφο: {time}</string>
     <string name="settings__backup__status_running">Εκτελείται</string>
     <string name="settings__backup__status_success">Τελευταίο αντίγραφο: {time}</string>
-    <string name="settings__backup__title">Αντίγραφο ασφαλείας ή επαναφορά</string>
     <string name="settings__backup__wallet">Αντίγραφο ασφαλείας πορτοφολιού</string>
-    <string name="settings__backup_title">Αντίγραφο ή επαναφορά</string>
     <string name="settings__bg__customize">Προσαρμογή στις ρυθμίσεις Android Bitkit</string>
     <string name="settings__bg__disabled">Οι πληρωμές παρασκηνίου είναι απενεργοποιημένες επειδή αρνήθηκες τις ειδοποιήσεις.</string>
     <string name="settings__bg__enabled">Οι πληρωμές παρασκηνίου είναι ενεργοποιημένες. Μπορείς να λαμβάνεις κεφάλαια ακόμα και όταν η εφαρμογή είναι κλειστή (αν η συσκευή σου είναι συνδεδεμένη στο διαδίκτυο).</string>

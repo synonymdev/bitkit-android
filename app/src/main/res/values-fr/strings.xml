@@ -521,7 +521,6 @@
     <string name="settings__language_system_default">Paramètres système</string>
     <string name="settings__language_title">Langue</string>
     <string name="settings__security_title">Sécurité et vie privée</string>
-    <string name="settings__backup_title">Sauvegarde ou restauration</string>
     <string name="settings__advanced_title">Avancé</string>
     <string name="settings__about_title">A propos</string>
     <string name="settings__support_title">Support</string>
@@ -574,7 +573,6 @@
     <string name="settings__security__pin_disabled">Désactivé</string>
     <string name="settings__security__use_bio">Utilisez plutôt {biometryTypeName} </string>
     <string name="settings__security__footer">Lorsque cette option est activée, vous pouvez utiliser {biometryTypeName} au lieu de votre code PIN pour déverrouiller votre portefeuille ou envoyer des paiements.</string>
-    <string name="settings__backup__title">Sauvegarder ou restauration</string>
     <string name="settings__backup__wallet">Sauvegardez votre portefeuille</string>
     <string name="settings__backup__reset">Réinitialiser et restaurer le portefeuille</string>
     <string name="settings__backup__failed_title">Échec de la sauvegarde des données</string>

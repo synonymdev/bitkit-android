@@ -518,7 +518,6 @@
     <string name="settings__dev_disabled_message">As opções de desenvolvedor estão agora desabilitadas em todo o aplicativo.</string>
     <string name="settings__general_title">Geral</string>
     <string name="settings__security_title">Segurança e Privacidade</string>
-    <string name="settings__backup_title">Fazer backup ou Restaurar</string>
     <string name="settings__advanced_title">Avançado</string>
     <string name="settings__about_title">Sobre</string>
     <string name="settings__support_title">Suporte</string>
@@ -571,7 +570,6 @@
     <string name="settings__security__pin_disabled">Desativado</string>
     <string name="settings__security__use_bio">Usar {biometryTypeName}</string>
     <string name="settings__security__footer">Quando ativado, você poderá usar {biometryTypeName} em vez do PIN para desbloquear ou pagar.</string>
-    <string name="settings__backup__title">Fazer Backup ou Restaurar</string>
     <string name="settings__backup__wallet">Faça backup da sua carteira</string>
     <string name="settings__backup__reset">Reiniciar e restaurar carteira</string>
     <string name="settings__backup__failed_title">Falha no Backup</string>

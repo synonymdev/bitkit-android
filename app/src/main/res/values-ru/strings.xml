@@ -587,9 +587,7 @@
     <string name="settings__backup__status_failed">Ошибка резервного копирования: {time}</string>
     <string name="settings__backup__status_running">Выполняется</string>
     <string name="settings__backup__status_success">Последнее Резервное Копирование: {time}</string>
-    <string name="settings__backup__title">Резервное копирование</string>
     <string name="settings__backup__wallet">Создать Резервную Копию Кошелька</string>
-    <string name="settings__backup_title">Резервное копирование</string>
     <string name="settings__bg__customize">Настроить в настройках Android Bitkit</string>
     <string name="settings__bg__disabled">Фоновые платежи отключены, потому что вы отклонили уведомления.</string>
     <string name="settings__bg__enabled">Фоновые платежи включены. Вы можете получать средства, даже когда приложение закрыто (если ваше устройство подключено к интернету).</string>

@@ -519,7 +519,6 @@
     <string name="settings__dev_disabled_message">Opcje deweloperskie są teraz wyłączone w całej aplikacji.</string>
     <string name="settings__general_title">Ogólne</string>
     <string name="settings__security_title">Bezpieczeństwo i prywatność</string>
-    <string name="settings__backup_title">Utwórz kopię zapasową lub przywróć</string>
     <string name="settings__advanced_title">Zaawansowane</string>
     <string name="settings__about_title">Informacje</string>
     <string name="settings__support_title">Wsparcie</string>
@@ -572,7 +571,6 @@
     <string name="settings__security__pin_disabled">Wyłączone</string>
     <string name="settings__security__use_bio">Użyj {biometryTypeName} wzamian</string>
     <string name="settings__security__footer">Po włączeniu tej opcji możesz używać {biometryTypeName} zamiast kodu PIN do odblokowania portfela lub wysyłania płatności.</string>
-    <string name="settings__backup__title">Utwórz kopię zapasową lub przywróć</string>
     <string name="settings__backup__wallet">Utwórz kopię zapasową swojego portfela</string>
     <string name="settings__backup__reset">Resetowanie i przywracanie portfela</string>
     <string name="settings__backup__failed_title">Błąd tworzenia kopii zapasowej danych</string>

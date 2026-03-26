@@ -573,9 +573,7 @@
     <string name="settings__backup__status_failed">Respaldo fallido: {time}</string>
     <string name="settings__backup__status_running">En ejecución</string>
     <string name="settings__backup__status_success">Último respaldo: {time}</string>
-    <string name="settings__backup__title">Copia de seguridad o restaurar</string>
     <string name="settings__backup__wallet">Respalda tu monedero</string>
-    <string name="settings__backup_title">Copia de seguridad o restaurar</string>
     <string name="settings__bg__customize">Personalizar en ajustes de Bitkit en Android</string>
     <string name="settings__bg__disabled">Los pagos en segundo plano están desactivados porque has denegado las notificaciones.</string>
     <string name="settings__bg__enabled">Los pagos en segundo plano están activados. Puedes recibir fondos incluso cuando la aplicación está cerrada (si tu dispositivo está conectado a internet).</string>

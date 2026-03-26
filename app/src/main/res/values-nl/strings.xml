@@ -573,9 +573,7 @@
     <string name="settings__backup__status_failed">Mislukte backup: {time}</string>
     <string name="settings__backup__status_running">Bezig</string>
     <string name="settings__backup__status_success">Laatste backup: {time}</string>
-    <string name="settings__backup__title">Back-up of herstellen</string>
     <string name="settings__backup__wallet">Back-up maken van je wallet</string>
-    <string name="settings__backup_title">Back-up of herstellen</string>
     <string name="settings__bg__customize">Aanpassen in Android Bitkit-instellingen</string>
     <string name="settings__bg__disabled">Achtergrondbetalingen zijn uitgeschakeld omdat je notificaties hebt geweigerd.</string>
     <string name="settings__bg__enabled">Achtergrondbetalingen zijn ingeschakeld. Je kunt geld ontvangen zelfs als de app gesloten is (als je apparaat verbonden is met internet).</string>

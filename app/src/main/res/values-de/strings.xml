@@ -519,7 +519,6 @@
     <string name="settings__dev_disabled_message">Entwickler-Einstellungen sind jetzt in der gesamten App deaktiviert.</string>
     <string name="settings__general_title">Allgemein</string>
     <string name="settings__security_title">Sicherheit und Privatsphäre</string>
-    <string name="settings__backup_title">Backup und Wiederherstellung</string>
     <string name="settings__advanced_title">Fortgeschritten</string>
     <string name="settings__about_title">Über</string>
     <string name="settings__support_title">Support</string>
@@ -591,7 +590,6 @@
     <string name="settings__security__pin_disabled">Deaktiviert</string>
     <string name="settings__security__use_bio">Nutze {biometryTypeName}</string>
     <string name="settings__security__footer">Wenn eingeschaltet, kannst du {biometryTypeName} an Stelle von deinem PIN code verwenden, um dein Wallet zu entsperren oder Zahlungen zu senden.</string>
-    <string name="settings__backup__title">Backup und Wiederherstellung</string>
     <string name="settings__backup__wallet">Sichere dein Wallet</string>
     <string name="settings__backup__reset">Wallet zurücksetzen</string>
     <string name="settings__backup__failed_title">Backup fehlgeschlagen</string>

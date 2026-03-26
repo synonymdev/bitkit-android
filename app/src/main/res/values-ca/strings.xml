@@ -573,9 +573,7 @@
     <string name="settings__backup__status_failed">Còpia de seguretat fallida: {time}</string>
     <string name="settings__backup__status_running">Executant</string>
     <string name="settings__backup__status_success">Última còpia de seguretat: {time}</string>
-    <string name="settings__backup__title">Còpia de seguretat o restauració</string>
     <string name="settings__backup__wallet">Fes còpia de seguretat de la cartera</string>
-    <string name="settings__backup_title">Còpia de seguretat o restauració</string>
     <string name="settings__bg__customize">Personalitza a la configuració de Bitkit d\'Android</string>
     <string name="settings__bg__disabled">Els pagaments en segon pla estan desactivats perquè has denegat les notificacions.</string>
     <string name="settings__bg__enabled">Els pagaments en segon pla estan habilitats. Pots rebre fons fins i tot quan l\'aplicació està tancada (si el teu dispositiu està connectat a Internet).</string>

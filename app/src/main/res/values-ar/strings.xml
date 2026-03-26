@@ -573,9 +573,7 @@
     <string name="settings__backup__status_failed">فشل النسخ الاحتياطي: {time}</string>
     <string name="settings__backup__status_running">قيد التشغيل</string>
     <string name="settings__backup__status_success">آخر نسخة احتياطية: {time}</string>
-    <string name="settings__backup__title">النسخ الاحتياطي أو الاستعادة</string>
     <string name="settings__backup__wallet">نسخ محفظتك احتياطيًا</string>
-    <string name="settings__backup_title">النسخ الاحتياطي أو الاستعادة</string>
     <string name="settings__bg__customize">تخصيص في إعدادات Bitkit على Android</string>
     <string name="settings__bg__disabled">المدفوعات في الخلفية معطلة، لأنك رفضت الإشعارات.</string>
     <string name="settings__bg__enabled">المدفوعات في الخلفية مفعلة. يمكنك استلام الأموال حتى عندما يكون التطبيق مغلقًا (إذا كان جهازك متصلاً بالإنترنت).</string>

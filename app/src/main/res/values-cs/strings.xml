@@ -573,9 +573,7 @@
     <string name="settings__backup__status_failed">Zálohování se nezdařilo: {time}</string>
     <string name="settings__backup__status_running">Probíhá</string>
     <string name="settings__backup__status_success">Poslední záloha: {time}</string>
-    <string name="settings__backup__title">Záloha nebo obnovení</string>
     <string name="settings__backup__wallet">Zálohujte svou peněženku</string>
-    <string name="settings__backup_title">Záloha nebo obnovení</string>
     <string name="settings__bg__customize">Přizpůsobit v nastavení Android Bitkit</string>
     <string name="settings__bg__disabled">Platby na pozadí jsou zakázány, protože jste odmítli oznámení.</string>
     <string name="settings__bg__enabled">Platby na pozadí jsou povoleny. Prostředky můžete přijímat i při zavřené aplikaci (pokud je zařízení připojeno k internetu).</string>

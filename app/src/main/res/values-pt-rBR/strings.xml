@@ -573,9 +573,7 @@
     <string name="settings__backup__status_failed">Falha no backup: {time}</string>
     <string name="settings__backup__status_running">Executando</string>
     <string name="settings__backup__status_success">Último backup: {time}</string>
-    <string name="settings__backup__title">Fazer Backup ou Restaurar</string>
     <string name="settings__backup__wallet">Faça backup da sua carteira</string>
-    <string name="settings__backup_title">Fazer backup ou Restaurar</string>
     <string name="settings__bg__customize">Personalizar nas Configurações do Bitkit Android</string>
     <string name="settings__bg__disabled">Pagamentos em segundo plano estão desativados porque você negou notificações.</string>
     <string name="settings__bg__enabled">Pagamentos em segundo plano estão ativados. Você pode receber fundos mesmo quando o app está fechado (se seu dispositivo estiver conectado à internet).</string>

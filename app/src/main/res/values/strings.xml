@@ -596,9 +596,7 @@
     <string name="settings__backup__status_failed">Failed Backup: {time}</string>
     <string name="settings__backup__status_running">Running</string>
     <string name="settings__backup__status_success">Latest Backup: {time}</string>
-    <string name="settings__backup__title">Back Up Or Restore</string>
     <string name="settings__backup__wallet">Back up your wallet</string>
-    <string name="settings__backup_title">Back up or Restore</string>
     <string name="settings__bg__customize">Customize in Android Bitkit Settings</string>
     <string name="settings__bg__disabled">Background payments are disabled, because you have denied notifications.</string>
     <string name="settings__bg__enabled">Background payments are enabled. You can receive funds even when the app is closed (if your device is connected to the internet).</string>
