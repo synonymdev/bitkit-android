@@ -96,16 +96,14 @@ private fun SettingsSwitchRowCore(
     icon: (@Composable () -> Unit)? = null,
     colors: SwitchColors = AppSwitchDefaults.colors
 ) {
-    Column(
-        modifier = modifier.heightIn(min = 52.dp)
-    ) {
+    Column(modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 52.dp)
                 .clickableAlpha { onClick() }
-                .padding(vertical = 16.dp)
         ) {
             if (icon != null) {
                 icon()
