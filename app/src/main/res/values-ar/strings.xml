@@ -458,7 +458,8 @@
     <string name="security__mnemonic_load_error">فشل تحميل عبارة الاسترداد</string>
     <string name="security__mnemonic_multiple_header">أجهزة متعددة</string>
     <string name="security__mnemonic_multiple_text">لا تستخدم عبارة الاسترداد الخاصة بـ Bitkit في هواتف متعددة في وقت واحد، لأن هذا قد يفسد بياناتك.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;لا تشارك&lt;/accent&gt; عبارة الاسترداد أبدًا مع أي شخص لأن ذلك قد يؤدي إلى خسارة الأموال.</string>
+    <string name="security__mnemonic_never_share">تأكد من عدم رؤية أي شخص لشاشتك. &lt;accent&gt;لا تشارك عبارة الاسترداد أبدًا&lt;/accent&gt; مع أي شخص، لأن ذلك قد يؤدي إلى خسارة الأموال.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;لا يمكن لـ Bitkit الوصول إلى أموالك ولا يمكنه المساعدة في استردادها&lt;/accent&gt; إذا فقدت عبارة الاسترداد. احتفظ بها في مكان آمن!</string>
     <string name="security__mnemonic_phrase">عبارة الاسترداد</string>
     <string name="security__mnemonic_result_header">نجاح</string>
     <string name="security__mnemonic_result_text">تأكد من تخزين عبارة الاسترداد في &lt;accent&gt;مكان آمن&lt;/accent&gt;، لأن هذه هي &lt;accent&gt;الطريقة الوحيدة لاسترداد&lt;/accent&gt; أموالك!</string>

@@ -458,7 +458,8 @@
     <string name="security__mnemonic_load_error">Error en carregar la frase mnemotècnica</string>
     <string name="security__mnemonic_multiple_header">Múltiples dispositius</string>
     <string name="security__mnemonic_multiple_text">No utilitzis la teva frase de recuperació de Bitkit en múltiples telèfons simultàniament, ja que això pot corrompre les teves dades.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Mai comparteixis&lt;/accent&gt; la teva frase de recuperació amb ningú, ja que això pot resultar en la pèrdua de fons.</string>
+    <string name="security__mnemonic_never_share">Assegura\'t que ningú pugui veure la teva pantalla. &lt;accent&gt;Mai comparteixis la teva frase de recuperació&lt;/accent&gt; amb ningú, ja que pot resultar en la pèrdua de fons.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit no pot accedir als teus fons ni ajudar-te a recuperar-los&lt;/accent&gt; si perds la teva frase de recuperació. Guarda-la en un lloc segur!</string>
     <string name="security__mnemonic_phrase">Frase Mnemotècnica</string>
     <string name="security__mnemonic_result_header">Exitós</string>
     <string name="security__mnemonic_result_text">Assegura\'t de guardar la teva frase de recuperació en un &lt;accent&gt;lloc segur&lt;/accent&gt;, ja que aquesta és l\'&lt;accent&gt;única manera de recuperar&lt;/accent&gt; els teus diners!</string>

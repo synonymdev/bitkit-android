@@ -458,7 +458,8 @@
     <string name="security__mnemonic_load_error">Nepodařilo se načíst mnemotechnickou frázi</string>
     <string name="security__mnemonic_multiple_header">Více zařízení</string>
     <string name="security__mnemonic_multiple_text">Nepoužívejte obnovovací frázi Bitkit na více telefonech současně, protože by to mohlo poškodit vaše data.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Nikdy nikomu nesdělujte&lt;/accent&gt; svou frázi pro obnovení, protože to může vést ke ztrátě finančních prostředků.</string>
+    <string name="security__mnemonic_never_share">Ujistěte se, že nikdo nevidí vaši obrazovku. &lt;accent&gt;Nikdy nikomu nesdělujte svou frázi pro obnovení&lt;/accent&gt;, protože to může vést ke ztrátě prostředků.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit nemůže přistupovat k vašim prostředkům ani pomoci s jejich obnovením&lt;/accent&gt;, pokud ztratíte svou frázi pro obnovení. Uchovejte ji v bezpečí!</string>
     <string name="security__mnemonic_phrase">Mnemotechnická fráze</string>
     <string name="security__mnemonic_result_header">Úspěšné</string>
     <string name="security__mnemonic_result_text">Ujistěte se, že jste uložili frázi pro obnovení na &lt;accent&gt;bezpečném místě&lt;/accent&gt;, protože to je &lt;accent&gt;jediný způsob, jak získat&lt;/accent&gt; své peníze &lt;accent&gt;zpět&lt;/accent&gt;!</string>

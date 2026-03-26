@@ -458,7 +458,8 @@
     <string name="security__mnemonic_load_error">Error al cargar el mnemónico</string>
     <string name="security__mnemonic_multiple_header">Múltiples dispositivos</string>
     <string name="security__mnemonic_multiple_text">No uses tu frase de recuperación de Bitkit en varios teléfonos simultáneamente, ya que esto puede corromper tus datos.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Nunca compartas&lt;/accent&gt; tu frase de recuperación con nadie, ya que esto podría desembocar en la pérdida de fondos.</string>
+    <string name="security__mnemonic_never_share">Asegúrate de que nadie pueda ver tu pantalla. &lt;accent&gt;Nunca compartas tu frase de recuperación&lt;/accent&gt; con nadie, ya que podría resultar en la pérdida de fondos.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit no puede acceder a tus fondos ni ayudarte a recuperarlos&lt;/accent&gt; si pierdes tu frase de recuperación. ¡Guárdala en un lugar seguro!</string>
     <string name="security__mnemonic_phrase">Frase mnemotécnica</string>
     <string name="security__mnemonic_result_header">Éxito</string>
     <string name="security__mnemonic_result_text">Asegúrate de guardar tu frase de recuperación en un &lt;accent&gt;lugar seguro&lt;/accent&gt;, ya que esta es la &lt;accent&gt;única forma de recuperar&lt;/accent&gt; tu dinero.</string>

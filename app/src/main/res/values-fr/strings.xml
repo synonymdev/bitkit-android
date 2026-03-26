@@ -440,7 +440,8 @@
     <string name="security__mnemonic_write">Notez ces mots {length} dans le bon ordre et conservez-les dans un endroit sûr.</string>
     <string name="security__mnemonic_use">Utilisez les 12 mots ci-dessous pour récupérer votre argent ultérieurement.</string>
     <string name="security__mnemonic_reveal">Tapez pour révéler</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Ne communiquez jamais&lt;/accent&gt; votre phrase de recouvrement à qui que ce soit, car cela pourrait entraîner la perte des fonds.</string>
+    <string name="security__mnemonic_never_share">Assurez-vous que personne ne puisse voir votre écran. &lt;accent&gt;Ne partagez jamais votre phrase de récupération&lt;/accent&gt; avec qui que ce soit, car cela pourrait entraîner la perte de fonds.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit ne peut pas accéder à vos fonds ni vous aider à les récupérer&lt;/accent&gt; si vous perdez votre phrase de récupération. Conservez-la en lieu sûr !</string>
     <string name="security__mnemonic_confirm">Confirmer la phrase de récupération</string>
     <string name="security__mnemonic_confirm_tap">Tapez les 12 mots dans le bon ordre.</string>
     <string name="security__mnemonic_copied">Mnémonique copié dans le presse-papiers</string>

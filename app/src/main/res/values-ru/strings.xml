@@ -472,7 +472,8 @@
     <string name="security__mnemonic_load_error">Не удалось загрузить мнемоническую фразу</string>
     <string name="security__mnemonic_multiple_header">Несколько Устройств</string>
     <string name="security__mnemonic_multiple_text">Не используйте фразу восстановления Bitkit на нескольких телефонах одновременно, так как это может привести к повреждению ваших данных.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Никогда не делитесь&lt;/accent&gt; своей фразой восстановления с кем-либо, так как это может привести к потере средств.</string>
+    <string name="security__mnemonic_never_share">Убедитесь, что никто не видит ваш экран. &lt;accent&gt;Никогда не делитесь своей фразой восстановления&lt;/accent&gt; с кем-либо, так как это может привести к потере средств.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit не может получить доступ к вашим средствам и не может помочь их восстановить&lt;/accent&gt;, если вы потеряете фразу восстановления. Храните её в безопасности!</string>
     <string name="security__mnemonic_phrase">Фраза Восстановления</string>
     <string name="security__mnemonic_result_header">Успешно</string>
     <string name="security__mnemonic_result_text">Убедитесь, что храните свою фразу восстановления в &lt;accent&gt;безопасном месте&lt;/accent&gt;, так как это &lt;accent&gt;единственный способ восстановить&lt;/accent&gt; ваши средства!</string>

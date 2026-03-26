@@ -194,12 +194,23 @@ private fun ShowMnemonicContent(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            BodyS(
-                text = stringResource(R.string.security__mnemonic_never_share).withAccent(
+            AnimatedContent(
+                targetState = showMnemonic,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "warningText"
+            ) { revealed ->
+                val warningText = stringResource(
+                    if (revealed) {
+                        R.string.security__mnemonic_no_access
+                    } else {
+                        R.string.security__mnemonic_never_share
+                    }
+                ).withAccent(
                     defaultColor = Colors.Red,
                     accentStyle = SpanStyle(color = Colors.Red, fontWeight = FontWeight.Bold),
-                ),
-            )
+                )
+                BodyS(text = warningText)
+            }
 
             Spacer(modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.height(24.dp))

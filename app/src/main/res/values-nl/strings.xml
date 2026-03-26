@@ -458,7 +458,8 @@
     <string name="security__mnemonic_load_error">Herstelzin laden mislukt</string>
     <string name="security__mnemonic_multiple_header">Meerdere apparaten</string>
     <string name="security__mnemonic_multiple_text">Gebruik je Bitkit-herstelzin niet op meerdere telefoons tegelijk, dit kan je gegevens beschadigen.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Deel nooit&lt;/accent&gt; je herstelzin met iemand, dit kan leiden tot verlies van geld.</string>
+    <string name="security__mnemonic_never_share">Zorg ervoor dat niemand je scherm kan zien. &lt;accent&gt;Deel nooit je herstelzin&lt;/accent&gt; met iemand, dit kan leiden tot verlies van geld.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit heeft geen toegang tot je geld en kan niet helpen bij het herstellen ervan&lt;/accent&gt; als je je herstelzin verliest. Bewaar deze veilig!</string>
     <string name="security__mnemonic_phrase">Herstelzin</string>
     <string name="security__mnemonic_result_header">Succesvol</string>
     <string name="security__mnemonic_result_text">Bewaar je herstelzin op een &lt;accent&gt;veilige plek&lt;/accent&gt;, want dit is de &lt;accent&gt;enige manier om te herstellen&lt;/accent&gt; je geld!</string>

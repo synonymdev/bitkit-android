@@ -440,7 +440,8 @@
     <string name="security__mnemonic_write">Zapisz poniższe {length} słów według kolejności i przechowuj je w bezpiecznym miejscu.</string>
     <string name="security__mnemonic_use">Użyj 12 poniższych słów aby odzyskać swoje środki w przyszłości.</string>
     <string name="security__mnemonic_reveal">Stuknij aby pokazać</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Nigdy nie udostępniaj&lt;/accent&gt; nikomu swojej frazy odzyskiwania, ponieważ może to spowodować utratę środków.</string>
+    <string name="security__mnemonic_never_share">Upewnij się, że nikt nie widzi Twojego ekranu. &lt;accent&gt;Nigdy nie udostępniaj nikomu swojej frazy odzyskiwania&lt;/accent&gt;, ponieważ może to spowodować utratę środków.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit nie ma dostępu do Twoich środków i nie może pomóc w ich odzyskaniu&lt;/accent&gt;, jeśli utracisz frazę odzyskiwania. Przechowuj ją bezpiecznie!</string>
     <string name="security__mnemonic_confirm">Potwierdź hasło</string>
     <string name="security__mnemonic_confirm_tap">Wpisz 12 słów w poprawnej kolejności.</string>
     <string name="security__mnemonic_result_header">Sukces</string>

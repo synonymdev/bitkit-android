@@ -458,7 +458,8 @@
     <string name="security__mnemonic_load_error">Αποτυχία φόρτωσης mnemonic</string>
     <string name="security__mnemonic_multiple_header">Πολλαπλές συσκευές</string>
     <string name="security__mnemonic_multiple_text">Μη χρησιμοποιείς τη φράση ανάκτησης του Bitkit σε πολλά τηλέφωνα ταυτόχρονα, καθώς αυτό μπορεί να καταστρέψει τα δεδομένα σου.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Μην μοιράζεσαι ποτέ&lt;/accent&gt; τη φράση ανάκτησής σου με κανέναν, καθώς αυτό μπορεί να οδηγήσει σε απώλεια κεφαλαίων.</string>
+    <string name="security__mnemonic_never_share">Βεβαιώσου ότι κανείς δεν μπορεί να δει την οθόνη σου. &lt;accent&gt;Μην μοιράζεσαι ποτέ τη φράση ανάκτησής σου&lt;/accent&gt; με κανέναν, καθώς μπορεί να οδηγήσει σε απώλεια κεφαλαίων.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Το Bitkit δεν μπορεί να αποκτήσει πρόσβαση στα κεφάλαιά σου ούτε να βοηθήσει στην ανάκτησή τους&lt;/accent&gt; εάν χάσεις τη φράση ανάκτησής σου. Κράτησέ την ασφαλή!</string>
     <string name="security__mnemonic_phrase">Φράση Mnemonic</string>
     <string name="security__mnemonic_result_header">Επιτυχής</string>
     <string name="security__mnemonic_result_text">Βεβαιώσου ότι αποθηκεύεις τη φράση ανάκτησής σου σε &lt;accent&gt;ασφαλές μέρος&lt;/accent&gt;, καθώς αυτός είναι ο &lt;accent&gt;μόνος τρόπος να ανακτήσεις&lt;/accent&gt; τα χρήματά σου!</string>

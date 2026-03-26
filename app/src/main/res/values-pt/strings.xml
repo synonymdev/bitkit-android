@@ -441,7 +441,8 @@
     <string name="security__mnemonic_write">Anote essas  {length} palavras na ordem correta e guarde-as em um local seguro.</string>
     <string name="security__mnemonic_use">Use as 12 palavras abaixo para recuperar seu dinheiro em uma data posterior.</string>
     <string name="security__mnemonic_reveal">Toque para revelar</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Nunca compartilhe&lt;/accent&gt; sua frase de recuperação com ninguém, pois isso pode resultar na perda de fundos.</string>
+    <string name="security__mnemonic_never_share">Certifique-se de que ninguém possa ver o seu ecrã. &lt;accent&gt;Nunca partilhe a sua frase de recuperação&lt;/accent&gt; com ninguém, pois isso pode resultar na perda de fundos.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;O Bitkit não pode aceder aos seus fundos nem ajudar a recuperá-los&lt;/accent&gt; se perder a sua frase de recuperação. Mantenha-a segura!</string>
     <string name="security__mnemonic_confirm">Confirmar frase de recuperação</string>
     <string name="security__mnemonic_confirm_tap">Insira as 12 palavras na ordem correta.</string>
     <string name="security__mnemonic_result_header">Sucesso</string>

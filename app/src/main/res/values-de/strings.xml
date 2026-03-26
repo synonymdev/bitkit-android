@@ -440,7 +440,8 @@
     <string name="security__mnemonic_write">Schreibe diese {length} Wörter in der richtigen Reihenfolge auf und bewahre sie an einem sicheren Ort auf.</string>
     <string name="security__mnemonic_use">Verwende die folgenden 12 Wörter, um dein Geld zu einem späteren Zeitpunkt wiederherzustellen.</string>
     <string name="security__mnemonic_reveal">Tippen zum Anzeigen</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Teile&lt;/accent&gt; deine Wiederherstellungsphrase &lt;accent&gt;niemals&lt;/accent&gt; mit jemandem, da dies zum Verlust von Geldern führen kann.</string>
+    <string name="security__mnemonic_never_share">Stelle sicher, dass niemand deinen Bildschirm sehen kann. &lt;accent&gt;Teile deine Wiederherstellungsphrase niemals&lt;/accent&gt; mit jemandem, da dies zum Verlust von Geldern führen kann.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit kann nicht auf deine Gelder zugreifen und dir nicht bei der Wiederherstellung helfen&lt;/accent&gt;, wenn du deine Wiederherstellungsphrase verlierst. Bewahre sie sicher auf!</string>
     <string name="security__mnemonic_confirm">Wiederherstellungsphrase bestätigen</string>
     <string name="security__mnemonic_confirm_tap">Tippe die 12 Wörter in der richtigen Reihenfolge an.</string>
     <string name="security__mnemonic_result_header">Erfolgreich</string>
