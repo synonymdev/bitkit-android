@@ -652,7 +652,7 @@
     <string name="settings__fee__slow__label">Slow (cheaper)</string>
     <string name="settings__fee__slow__value">Slow </string>
     <string name="settings__general__currency_footer">Prices powered by Bitfinex &amp; CoinGecko.</string>
-    <string name="settings__general__currency_local">Local currency</string>
+    <string name="settings__general__currency_local">Local Currency</string>
     <string name="settings__general__currency_local_title">Local Currency</string>
     <string name="settings__general__currency_most_used">Most Used</string>
     <string name="settings__general__currency_other">Other Currencies</string>
