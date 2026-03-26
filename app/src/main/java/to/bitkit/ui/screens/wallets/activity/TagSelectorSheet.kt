@@ -18,6 +18,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
@@ -54,8 +58,8 @@ fun TagSelectorSheet() {
 
 @Composable
 private fun Content(
-    availableTags: List<String>,
-    selectedTags: Set<String>,
+    availableTags: ImmutableList<String>,
+    selectedTags: ImmutableSet<String>,
     onTagClick: (String) -> Unit = {},
 ) {
     Column(
@@ -103,8 +107,8 @@ private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
-                availableTags = listOf("Bitcoin", "Lightning", "Sent", "Received"),
-                selectedTags = setOf("Bitcoin", "Received"),
+                availableTags = persistentListOf("Bitcoin", "Lightning", "Sent", "Received"),
+                selectedTags = persistentSetOf("Bitcoin", "Received"),
             )
         }
     }

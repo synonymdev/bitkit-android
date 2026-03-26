@@ -8,6 +8,11 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.TransactionDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,7 +42,7 @@ class ActivityDetailViewModel @Inject constructor(
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
 
-    private val _tags = MutableStateFlow<List<String>>(emptyList())
+    private val _tags = MutableStateFlow<ImmutableList<String>>(persistentListOf())
     val tags = _tags.asStateFlow()
 
     private val _boostSheetVisible = MutableStateFlow(false)
@@ -48,11 +53,6 @@ class ActivityDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ActivityDetailUiState())
     val uiState: StateFlow<ActivityDetailUiState> = _uiState.asStateFlow()
-
-    fun setActivity(activity: Activity) {
-        this.activity = activity
-        loadTags()
-    }
 
     fun loadActivity(activityId: String) {
         viewModelScope.launch(bgDispatcher) {
@@ -93,7 +93,7 @@ class ActivityDetailViewModel @Inject constructor(
         observeJob = null
         _uiState.update { it.copy(activityLoadState = ActivityLoadState.Initial) }
         activity = null
-        _tags.value = emptyList()
+        _tags.update { persistentListOf() }
     }
 
     private fun observeActivityChanges(activityId: String) {
@@ -118,7 +118,7 @@ class ActivityDetailViewModel @Inject constructor(
             }
             .onFailure { error ->
                 Logger.warn("Failed to reload activity $activityId", error, context = TAG)
-                // Keep showing last known state on reload failure
+                // Keep showing the last known state on reload failure
             }
     }
 
@@ -127,11 +127,11 @@ class ActivityDetailViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             activityRepo.getActivityTags(id)
                 .onSuccess { activityTags ->
-                    _tags.value = activityTags
+                    _tags.update { activityTags.toImmutableList() }
                 }
-                .onFailure { e ->
-                    Logger.error("Failed to load tags for activity $id", e, TAG)
-                    _tags.value = emptyList()
+                .onFailure {
+                    Logger.error("Failed to load tags for activity $id", it, TAG)
+                    _tags.update { persistentListOf() }
                 }
         }
     }
@@ -143,8 +143,8 @@ class ActivityDetailViewModel @Inject constructor(
                 .onSuccess {
                     loadTags()
                 }
-                .onFailure { e ->
-                    Logger.error("Failed to remove tag $tag from activity $id", e, TAG)
+                .onFailure {
+                    Logger.error("Failed to remove tag $tag from activity $id", it, TAG)
                 }
         }
     }
@@ -157,8 +157,8 @@ class ActivityDetailViewModel @Inject constructor(
                     settingsStore.addLastUsedTag(tag)
                     loadTags()
                 }
-                .onFailure { e ->
-                    Logger.error("Failed to add tag $tag to activity $id", e, TAG)
+                .onFailure {
+                    Logger.error("Failed to add tag $tag to activity $id", it, TAG)
                 }
         }
     }
@@ -188,9 +188,8 @@ class ActivityDetailViewModel @Inject constructor(
         _boostSheetVisible.update { false }
     }
 
-    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
-        return activityRepo.getBoostTxDoesExist(boostTxIds)
-    }
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): ImmutableMap<String, Boolean> =
+        activityRepo.getBoostTxDoesExist(boostTxIds).toImmutableMap()
 
     suspend fun isCpfpChildTransaction(txId: String): Boolean {
         return activityRepo.isCpfpChildTransaction(txId)

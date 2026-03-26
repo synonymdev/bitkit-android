@@ -1,9 +1,16 @@
 package to.bitkit.ui.settings.advanced
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -57,7 +64,7 @@ class AddressViewerViewModel @Inject constructor(
 
                 _uiState.update { currentState ->
                     currentState.copy(
-                        addresses = addresses,
+                        addresses = addresses.toImmutableList(),
                         selectedAddress = addresses.firstOrNull(),
                     )
                 }
@@ -85,7 +92,7 @@ class AddressViewerViewModel @Inject constructor(
                 ).getOrThrow()
 
                 _uiState.update { currentState ->
-                    currentState.copy(addresses = currentState.addresses + newAddresses)
+                    currentState.copy(addresses = (currentState.addresses + newAddresses).toImmutableList())
                 }
                 loadBalancesForAddresses(newAddresses)
             }
@@ -104,7 +111,7 @@ class AddressViewerViewModel @Inject constructor(
                 val addresses = _uiState.value.addresses.map { it.address }
                 val balances = getBalanceForAddresses(addresses)
 
-                _uiState.update { it.copy(balances = balances) }
+                _uiState.update { it.copy(balances = balances.toImmutableMap()) }
             }
 
             _uiState.update { it.copy(isLoadingBalances = false) }
@@ -125,9 +132,9 @@ class AddressViewerViewModel @Inject constructor(
 
                 _uiState.update { currentState ->
                     currentState.copy(
-                        addresses = addresses,
+                        addresses = addresses.toImmutableList(),
                         selectedAddress = addresses.firstOrNull(),
-                        balances = emptyMap(), // Clear balances for new address type
+                        balances = persistentMapOf(), // Clear balances for new address type
                     )
                 }
 
@@ -156,9 +163,9 @@ class AddressViewerViewModel @Inject constructor(
 
                 _uiState.update { currentState ->
                     currentState.copy(
-                        addresses = addresses,
+                        addresses = addresses.toImmutableList(),
                         selectedAddress = addresses.firstOrNull(),
-                        balances = emptyMap(),
+                        balances = persistentMapOf(),
                     )
                 }
                 loadBalancesForAddresses(addresses)
@@ -182,7 +189,7 @@ class AddressViewerViewModel @Inject constructor(
                     updatedBalances[address] = balance
                 }
 
-                currentState.copy(balances = updatedBalances)
+                currentState.copy(balances = updatedBalances.toImmutableMap())
             }
         }
     }
@@ -208,9 +215,10 @@ class AddressViewerViewModel @Inject constructor(
         lightningRepo.getAddressBalance(address).map { it.toLong() }
 }
 
+@Immutable
 data class UiState(
-    val addresses: List<AddressModel> = emptyList(),
-    val balances: Map<String, Long> = emptyMap(),
+    val addresses: ImmutableList<AddressModel> = persistentListOf(),
+    val balances: ImmutableMap<String, Long> = persistentMapOf(),
     val searchText: String = "",
     val selectedAddress: AddressModel? = null,
     val isLoading: Boolean = false,

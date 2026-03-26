@@ -8,6 +8,9 @@ import com.synonym.vssclient.KeyVersion
 import com.synonym.vssclient.LdkNamespace
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,7 +55,7 @@ class VssDebugViewModel @Inject constructor(
             vssBackupClient.listKeys().onSuccess { keys ->
                 Logger.info("VSS keys: ${keys.size}", context = TAG)
                 keys.forEach { Logger.debug("  ${it.key} v${it.version}", context = TAG) }
-                _uiState.update { it.copy(vssKeys = keys) }
+                _uiState.update { it.copy(vssKeys = keys.toImmutableList()) }
                 ToastEventBus.send(
                     type = Toast.ToastType.INFO,
                     title = "Found ${keys.size} VSS key(s)",
@@ -74,7 +77,7 @@ class VssDebugViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             vssBackupClient.deleteAllKeys().onSuccess { deletedCount ->
                 Logger.info("Deleted $deletedCount VSS keys", context = TAG)
-                _uiState.update { it.copy(vssKeys = emptyList()) }
+                _uiState.update { it.copy(vssKeys = persistentListOf()) }
                 ToastEventBus.send(
                     type = Toast.ToastType.INFO,
                     title = "Deleted $deletedCount VSS key(s)",
@@ -99,7 +102,7 @@ class VssDebugViewModel @Inject constructor(
                     if (wasDeleted) {
                         Logger.info("Deleted VSS key: $key", context = TAG)
                         _uiState.update { state ->
-                            state.copy(vssKeys = state.vssKeys.filter { it.key != key })
+                            state.copy(vssKeys = state.vssKeys.filter { it.key != key }.toImmutableList())
                         }
                         ToastEventBus.send(
                             type = Toast.ToastType.INFO,
@@ -130,7 +133,7 @@ class VssDebugViewModel @Inject constructor(
             vssBackupClientLdk.listAllKeysTagged().onSuccess { tagged ->
                 Logger.info("VSS LDK keys: ${tagged.size}", context = TAG)
                 tagged.forEach { Logger.debug("  ${it.second.key} v${it.second.version}", context = TAG) }
-                val items = tagged.map { VssLdkKeyItem(keyVersion = it.second, namespace = it.first) }
+                val items = tagged.map { VssLdkKeyItem(keyVersion = it.second, namespace = it.first) }.toImmutableList()
                 _uiState.update { it.copy(vssLdkKeys = items) }
                 ToastEventBus.send(
                     type = Toast.ToastType.INFO,
@@ -159,7 +162,7 @@ class VssDebugViewModel @Inject constructor(
                             state.copy(
                                 vssLdkKeys = state.vssLdkKeys.filter {
                                     it.keyVersion.key != key || it.namespace != namespace
-                                }
+                                }.toImmutableList()
                             )
                         }
                         ToastEventBus.send(
@@ -229,8 +232,8 @@ class VssDebugViewModel @Inject constructor(
 @Stable
 data class VssDebugUiState(
     val isLoading: Boolean = false,
-    @Stable val vssKeys: List<KeyVersion> = emptyList(),
-    @Stable val vssLdkKeys: List<VssLdkKeyItem> = emptyList(),
+    val vssKeys: ImmutableList<KeyVersion> = persistentListOf(),
+    val vssLdkKeys: ImmutableList<VssLdkKeyItem> = persistentListOf(),
 )
 
 data class VssLdkKeyItem(

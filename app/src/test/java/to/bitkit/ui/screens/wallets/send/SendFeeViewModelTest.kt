@@ -2,6 +2,8 @@ package to.bitkit.ui.screens.wallets.send
 
 import android.content.Context
 import com.synonym.bitkitcore.FeeRates
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
@@ -130,10 +132,10 @@ class SendFeeViewModelTest : BaseUnitTest() {
         ),
     ) = SendUiState(
         amount = amount,
-        selectedUtxos = emptyList(),
+        selectedUtxos = persistentListOf(),
         address = address,
         speed = TransactionSpeed.Medium,
         feeRates = FeeRates(fast = 10u, mid = 5u, slow = 2u),
-        fees = fees,
+        fees = fees.toImmutableMap(),
     )
 }

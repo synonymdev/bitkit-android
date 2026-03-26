@@ -1,8 +1,12 @@
 package to.bitkit.viewmodels
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,12 +35,13 @@ class TagsViewModel @Inject constructor(
     fun loadTagSuggestions() {
         viewModelScope.launch(Dispatchers.IO) {
             val tags = settingsStore.data.first().lastUsedTags
-            _uiState.update { it.copy(tagsSuggestions = tags) }
+            _uiState.update { it.copy(tagsSuggestions = tags.toImmutableList()) }
         }
     }
 }
 
+@Immutable
 data class AddTagUiState(
-    val tagsSuggestions: List<String> = listOf(),
+    val tagsSuggestions: ImmutableList<String> = persistentListOf(),
     val tagInput: String = ""
 )

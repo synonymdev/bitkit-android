@@ -21,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +32,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption
@@ -48,7 +48,7 @@ fun LogsScreen(
     navController: NavController,
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
-    val logs by viewModel.logs.collectAsState()
+    val logs by viewModel.logs.collectAsStateWithLifecycle()
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -125,8 +125,8 @@ fun LogDetailScreen(
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val logs by viewModel.logs.collectAsState()
-    val logContent by viewModel.selectedLogContent.collectAsState()
+    val logs by viewModel.logs.collectAsStateWithLifecycle()
+    val logContent by viewModel.selectedLogContent.collectAsStateWithLifecycle()
     var isLoading by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
 

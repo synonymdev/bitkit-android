@@ -6,6 +6,12 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
@@ -32,19 +38,20 @@ class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
-    private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
+    private val _filteredActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
 
-    private val _lightningActivities = MutableStateFlow<List<Activity>?>(null)
+    private val _lightningActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val lightningActivities = _lightningActivities.asStateFlow()
 
-    private val _onchainActivities = MutableStateFlow<List<Activity>?>(null)
+    private val _onchainActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val onchainActivities = _onchainActivities.asStateFlow()
 
-    private val _latestActivities = MutableStateFlow<List<Activity>?>(null)
+    private val _latestActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val latestActivities = _latestActivities.asStateFlow()
 
-    val availableTags: StateFlow<List<String>> = activityRepo.state.map { it.tags }.stateInScope(emptyList())
+    val availableTags: StateFlow<ImmutableList<String>> =
+        activityRepo.state.map { it.tags }.stateInScope(persistentListOf())
 
     private val _filters = MutableStateFlow(ActivityFilters())
 
@@ -52,7 +59,9 @@ class ActivityListViewModel @Inject constructor(
     val searchText: StateFlow<String> = _filters.map { it.searchText }.stateInScope("")
     val startDate: StateFlow<Long?> = _filters.map { it.startDate }.stateInScope(null)
     val endDate: StateFlow<Long?> = _filters.map { it.endDate }.stateInScope(null)
-    val selectedTags: StateFlow<Set<String>> = _filters.map { it.tags }.stateInScope(emptySet())
+    val selectedTags: StateFlow<ImmutableSet<String>> = _filters.map { it.tags.toImmutableSet() }.stateInScope(
+        persistentSetOf()
+    )
     val selectedTab: StateFlow<ActivityTab> = _filters.map { it.tab }.stateInScope(ActivityTab.ALL)
 
     fun setSearchText(text: String) = _filters.update { it.copy(searchText = text) }
@@ -89,16 +98,16 @@ class ActivityListViewModel @Inject constructor(
         ) { debouncedSearch, filtersWithoutSearch, _ ->
             fetchFilteredActivities(filtersWithoutSearch.copy(searchText = debouncedSearch))
         }.collect { activities ->
-            _filteredActivities.update { activities }
+            _filteredActivities.update { activities?.toImmutableList() }
         }
     }
 
     private suspend fun refreshActivityState() {
         val all = activityRepo.getActivities(filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
         val filtered = filterOutReplacedSentTransactions(all)
-        _latestActivities.update { filtered.take(SIZE_LATEST) }
-        _lightningActivities.update { filtered.filter { it is Activity.Lightning } }
-        _onchainActivities.update { filtered.filter { it is Activity.Onchain } }
+        _latestActivities.update { filtered.take(SIZE_LATEST).toImmutableList() }
+        _lightningActivities.update { filtered.filterIsInstance<Activity.Lightning>().toImmutableList() }
+        _onchainActivities.update { filtered.filterIsInstance<Activity.Onchain>().toImmutableList() }
     }
 
     private suspend fun fetchFilteredActivities(filters: ActivityFilters): List<Activity>? {

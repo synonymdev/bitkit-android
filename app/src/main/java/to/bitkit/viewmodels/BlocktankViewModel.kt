@@ -6,6 +6,8 @@ import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -20,15 +22,15 @@ class BlocktankViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
 ) : ViewModel() {
 
-    val orders: StateFlow<List<IBtOrder>> = blocktankRepo.blocktankState
+    val orders: StateFlow<ImmutableList<IBtOrder>> = blocktankRepo.blocktankState
         .map { it.orders }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
-    val cJitEntries: StateFlow<List<IcJitEntry>> = blocktankRepo.blocktankState
+    val cJitEntries: StateFlow<ImmutableList<IcJitEntry>> = blocktankRepo.blocktankState
         .map { it.cjitEntries }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
     val info: StateFlow<IBtInfo?> = blocktankRepo.blocktankState
         .map { it.info }

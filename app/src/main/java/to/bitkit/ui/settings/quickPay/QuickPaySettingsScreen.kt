@@ -17,6 +17,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
@@ -55,7 +56,7 @@ fun QuickPaySettingsScreenContent(
     onQuickPayAmountChange: (Int) -> Unit = {},
     onBack: () -> Unit = {},
 ) {
-    val sliderSteps = remember { listOf(1, 5, 10, 20, 50) }
+    val sliderSteps = remember { persistentListOf(1, 5, 10, 20, 50) }
 
     ScreenColumn {
         AppTopBar(

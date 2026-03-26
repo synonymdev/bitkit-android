@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -95,7 +96,7 @@ private fun ShowMnemonicContent(
     onContinueClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val mnemonicWords = remember(mnemonic) { mnemonic.split(" ").filter { it.isNotBlank() } }
+    val mnemonicWords = remember(mnemonic) { mnemonic.split(" ").filter { it.isNotBlank() }.toImmutableList() }
     val buttonAlpha by animateFloatAsState(
         targetValue = if (showMnemonic) 0f else 1f,
         animationSpec = tween(durationMillis = 400),

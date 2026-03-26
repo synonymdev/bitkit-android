@@ -13,7 +13,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +40,7 @@ import androidx.navigation.toRoute
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -344,7 +344,7 @@ fun ContentView(
     }
 
     val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
-    val currencies by currencyViewModel.uiState.collectAsState()
+    val currencies by currencyViewModel.uiState.collectAsStateWithLifecycle()
 
     // Keep backups in sync
     LaunchedEffect(backupsViewModel) { backupsViewModel.observeAndSyncBackups() }
@@ -386,7 +386,7 @@ fun ContentView(
                         }
 
                         is Sheet.Receive -> {
-                            val walletState by walletViewModel.walletState.collectAsState()
+                            val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                             ReceiveSheet(
                                 walletState = walletState,
                                 navigateToExternalConnection = {
@@ -662,7 +662,7 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.Funding> {
-                val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsState()
+                val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
 
                 FundingScreen(
@@ -800,7 +800,7 @@ private fun NavGraphBuilder.home(
 
         SavingsWalletScreen(
             isGeoBlocked = isGeoBlocked,
-            onchainActivities = onchainActivities.orEmpty(),
+            onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
@@ -822,7 +822,7 @@ private fun NavGraphBuilder.home(
 
         SpendingWalletScreen(
             channels = lightningState.channels,
-            lightningActivities = lightningActivities.orEmpty(),
+            lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },

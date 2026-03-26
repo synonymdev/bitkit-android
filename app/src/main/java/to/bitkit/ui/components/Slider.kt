@@ -35,6 +35,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -50,7 +52,7 @@ private const val STEP_MARKER_HEIGHT_DP = 16
 @Composable
 fun StepSlider(
     value: Int,
-    steps: List<Int>,
+    steps: ImmutableList<Int>,
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -246,7 +248,7 @@ private fun Preview() {
         Column(modifier = Modifier.padding(32.dp)) {
             StepSlider(
                 value = value,
-                steps = listOf(1, 5, 10, 20, 50),
+                steps = persistentListOf(1, 5, 10, 20, 50),
                 onValueChange = { value = it },
             )
         }
@@ -260,7 +262,7 @@ private fun Preview2() {
         Column(modifier = Modifier.padding(32.dp)) {
             StepSlider(
                 value = 5,
-                steps = listOf(1, 2, 5, 10),
+                steps = persistentListOf(1, 2, 5, 10),
                 onValueChange = {},
             )
         }

@@ -19,6 +19,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.SearchInputIconButton
@@ -33,11 +37,11 @@ fun ActivityListFilter(
     hasDateRangeFilter: Boolean,
     onTagClick: () -> Unit,
     onDateRangeClick: () -> Unit,
-    tabs: List<ActivityTab>,
+    tabs: ImmutableList<ActivityTab>,
     currentTabIndex: Int,
     onTabChange: (ActivityTab) -> Unit,
     modifier: Modifier = Modifier,
-    selectedTags: Set<String> = emptySet(),
+    selectedTags: ImmutableSet<String> = persistentSetOf(),
     onRemoveTag: (String) -> Unit = {},
 ) {
     val focusManager = LocalFocusManager.current
@@ -113,6 +117,8 @@ enum class ActivityTab : TabItem {
         }
 }
 
+private val previewTabs = ActivityTab.entries.toImmutableList()
+
 @Preview
 @Composable
 private fun Preview() {
@@ -124,7 +130,7 @@ private fun Preview() {
             onTagClick = {},
             hasDateRangeFilter = false,
             onDateRangeClick = {},
-            tabs = ActivityTab.entries,
+            tabs = previewTabs,
             currentTabIndex = 0,
             onTabChange = {},
             modifier = Modifier.padding(16.dp)
@@ -143,10 +149,10 @@ private fun PreviewWithTags() {
             onTagClick = {},
             hasDateRangeFilter = false,
             onDateRangeClick = {},
-            tabs = ActivityTab.entries,
+            tabs = previewTabs,
             currentTabIndex = 0,
             onTabChange = {},
-            selectedTags = setOf("Tag1", "Tag2"),
+            selectedTags = persistentSetOf("Tag1", "Tag2"),
             modifier = Modifier.padding(16.dp)
         )
     }

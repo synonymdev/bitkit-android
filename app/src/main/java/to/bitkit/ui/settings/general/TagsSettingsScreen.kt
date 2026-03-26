@@ -14,6 +14,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.settings.SectionHeader
@@ -45,7 +47,7 @@ fun TagsSettingsScreen(
 
 @Composable
 private fun TagsSettingsContent(
-    tags: List<String>,
+    tags: ImmutableList<String>,
     onClickTag: (String) -> Unit = {},
     onBackClick: () -> Unit = {},
 ) {
@@ -86,7 +88,7 @@ private fun TagsSettingsContent(
 private fun Preview() {
     AppThemeSurface {
         TagsSettingsContent(
-            tags = listOf("tag1", "tag2", "tag3"),
+            tags = persistentListOf("tag1", "tag2", "tag3"),
         )
     }
 }

@@ -12,6 +12,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -20,7 +22,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun ActivityListSimple(
-    items: List<Activity>?,
+    items: ImmutableList<Activity>?,
     onAllActivityClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
 ) {
@@ -52,6 +54,18 @@ private fun Preview() {
     AppThemeSurface {
         ActivityListSimple(
             items = previewActivityItems,
+            onAllActivityClick = {},
+            onActivityItemClick = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewEmpty() {
+    AppThemeSurface {
+        ActivityListSimple(
+            items = persistentListOf(),
             onAllActivityClick = {},
             onActivityItemClick = {},
         )

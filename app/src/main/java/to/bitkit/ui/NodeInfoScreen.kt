@@ -32,6 +32,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.bitkitcore.ILspNode
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.BestBlock
@@ -87,10 +89,12 @@ fun NodeInfoScreen(
 
     val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val lightningBalances by viewModel.lightningBalances.collectAsStateWithLifecycle()
     val peers by viewModel.peers.collectAsStateWithLifecycle()
 
     Content(
         lightningState = lightningState,
+        lightningBalances = lightningBalances,
         peers = peers,
         isRefreshing = isRefreshing,
         onBack = navController::popBackStack,
@@ -104,8 +108,9 @@ fun NodeInfoScreen(
 @Composable
 private fun Content(
     lightningState: LightningState,
+    lightningBalances: ImmutableList<LightningBalance> = persistentListOf(),
     isRefreshing: Boolean = false,
-    peers: List<NodePeer> = emptyList(),
+    peers: ImmutableList<NodePeer> = persistentListOf(),
     onBack: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onDisconnectPeer: (PeerDetails) -> Unit = {},
@@ -136,10 +141,9 @@ private fun Content(
                 )
                 lightningState.balances?.let { details ->
                     WalletBalancesSection(balanceDetails = details)
-
-                    if (details.lightningBalances.isNotEmpty()) {
-                        LightningBalancesSection(balances = details.lightningBalances)
-                    }
+                }
+                if (lightningBalances.isNotEmpty()) {
+                    LightningBalancesSection(balances = lightningBalances)
                 }
                 if (lightningState.channels.isNotEmpty()) {
                     ChannelsSection(
@@ -267,7 +271,7 @@ private fun WalletBalancesSection(balanceDetails: BalanceDetails) {
 }
 
 @Composable
-private fun LightningBalancesSection(balances: List<LightningBalance>) {
+private fun LightningBalancesSection(balances: ImmutableList<LightningBalance>) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.lightning__lightning_balances))
         balances.forEach { balance ->
@@ -307,7 +311,7 @@ private fun LightningBalancesSection(balances: List<LightningBalance>) {
 
 @Composable
 private fun ChannelsSection(
-    channels: List<ChannelDetails>,
+    channels: ImmutableList<ChannelDetails>,
     onCopy: (String) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -384,7 +388,7 @@ private fun ChannelsSection(
 
 @Composable
 private fun PeersSection(
-    peers: List<NodePeer>,
+    peers: ImmutableList<NodePeer>,
     onDisconnectPeer: (PeerDetails) -> Unit = {},
     onCopy: (String) -> Unit = {},
 ) {
@@ -467,7 +471,7 @@ private fun ChannelDetailRow(
     }
 }
 
-private fun previewPeers() = listOf(
+private fun previewPeers() = persistentListOf(
     NodePeer(
         peerDetails = Peers.stag,
         lspNode = ILspNode(
@@ -525,8 +529,8 @@ private fun Preview() {
                     latestPathfindingScoresSyncTimestamp = null,
                 ),
                 nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                peers = listOf(Peers.stag),
-                channels = listOf(
+                peers = persistentListOf(Peers.stag),
+                channels = persistentListOf(
                     createChannelDetails().copy(
                         channelId = "abc123def456789012345678901234567890123456789012345678901234567890",
                         channelValueSats = 1000000UL,

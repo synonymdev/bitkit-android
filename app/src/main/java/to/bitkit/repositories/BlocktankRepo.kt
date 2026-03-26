@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.ChannelLiquidityParams
@@ -14,6 +15,9 @@ import com.synonym.bitkitcore.calculateChannelLiquidityOptions
 import com.synonym.bitkitcore.getDefaultLspBalance
 import com.synonym.bitkitcore.giftOrder
 import com.synonym.bitkitcore.giftPay
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -104,7 +108,7 @@ class BlocktankRepo @Inject constructor(
                 .collect { paidOrderIds ->
                     _blocktankState.update { state ->
                         state.copy(
-                            paidOrders = state.orders.filter { order -> order.id in paidOrderIds },
+                            paidOrders = state.orders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
                         )
                     }
                 }
@@ -148,9 +152,9 @@ class BlocktankRepo @Inject constructor(
             val cachedCjitEntries = coreService.blocktank.cjitEntries(refresh = false)
             _blocktankState.update { state ->
                 state.copy(
-                    orders = cachedOrders,
-                    cjitEntries = cachedCjitEntries,
-                    paidOrders = cachedOrders.filter { order -> order.id in paidOrderIds },
+                    orders = cachedOrders.toImmutableList(),
+                    cjitEntries = cachedCjitEntries.toImmutableList(),
+                    paidOrders = cachedOrders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
                 )
             }
 
@@ -159,9 +163,9 @@ class BlocktankRepo @Inject constructor(
             val cjitEntries = coreService.blocktank.cjitEntries(refresh = true)
             _blocktankState.update { state ->
                 state.copy(
-                    orders = orders,
-                    cjitEntries = cjitEntries,
-                    paidOrders = orders.filter { order -> order.id in paidOrderIds },
+                    orders = orders.toImmutableList(),
+                    cjitEntries = cjitEntries.toImmutableList(),
+                    paidOrders = orders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
                 )
             }
 
@@ -287,7 +291,7 @@ class BlocktankRepo @Inject constructor(
                 updatedOrders[index] = order
             }
 
-            _blocktankState.update { state -> state.copy(orders = updatedOrders) }
+            _blocktankState.update { state -> state.copy(orders = updatedOrders.toImmutableList()) }
 
             return@runCatching order
         }.onFailure {
@@ -406,8 +410,8 @@ class BlocktankRepo @Inject constructor(
 
             _blocktankState.update {
                 it.copy(
-                    orders = payload.orders,
-                    cjitEntries = payload.cjitEntries,
+                    orders = payload.orders.toImmutableList(),
+                    cjitEntries = payload.cjitEntries.toImmutableList(),
                     info = payload.info,
                 )
             }
@@ -516,10 +520,11 @@ class BlocktankRepo @Inject constructor(
     }
 }
 
+@Stable
 data class BlocktankState(
-    val orders: List<IBtOrder> = emptyList(),
-    val paidOrders: List<IBtOrder> = emptyList(),
-    val cjitEntries: List<IcJitEntry> = emptyList(),
+    val orders: ImmutableList<IBtOrder> = persistentListOf(),
+    val paidOrders: ImmutableList<IBtOrder> = persistentListOf(),
+    val cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     val info: IBtInfo? = null,
     val minCjitSats: Int? = null,
 )
