@@ -522,6 +522,7 @@
     <string name="settings__advanced_title">Avanzado</string>
     <string name="settings__about_title">Acerca de</string>
     <string name="settings__backup_title">Copia de seguridad o Restaurar</string>
+    <string name="settings__language_system_default">Ajustes del sistema</string>
     <string name="settings__language_title">Idioma</string>
     <string name="settings__support_title">Soporte</string>
     <string name="settings__about__legal">Legal</string>

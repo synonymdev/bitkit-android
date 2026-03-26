@@ -715,6 +715,7 @@
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Seleção aleatória para privacidade</string>
     <string name="settings__cs__srd_title">Single Random Draw</string>
+    <string name="settings__language_system_default">Configurações do sistema</string>
     <string name="settings__language_title">Idioma</string>
     <string name="slashtags__onboarding_profile1_header">Tenha seu próprio\n&lt;accent&gt;perfil&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Configure seu perfil público e seus links, para que seus contatos possam pagá-lo a qualquer hora e em qualquer lugar.</string>

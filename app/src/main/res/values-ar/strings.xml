@@ -649,6 +649,7 @@
     <string name="settings__general__unit_note">نصيحة: بدّل بسرعة بين Bitcoin و {currency} بالنقر على رصيد محفظتك.</string>
     <string name="settings__general__unit_title">الوحدة الافتراضية</string>
     <string name="settings__general_title">عام</string>
+    <string name="settings__language_system_default">إعدادات النظام</string>
     <string name="settings__language_title">اللغة</string>
     <string name="settings__quickpay__intro__description">يجعل Bitkit QuickPay الدفع أسرع بالدفع التلقائي لرموز QR عند مسحها.</string>
     <string name="settings__quickpay__intro__title">مدفوعات\n&lt;accent&gt;سلسة&lt;/accent&gt;</string>

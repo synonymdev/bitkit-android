@@ -649,6 +649,7 @@
     <string name="settings__general__unit_note">Συμβουλή: Εναλλαγή γρήγορα μεταξύ Bitcoin και {currency} πατώντας στο υπόλοιπο του πορτοφολιού σου.</string>
     <string name="settings__general__unit_title">Προεπιλεγμένη μονάδα</string>
     <string name="settings__general_title">Γενικά</string>
+    <string name="settings__language_system_default">Ρυθμίσεις συστήματος</string>
     <string name="settings__language_title">Γλώσσα</string>
     <string name="settings__quickpay__intro__description">Το Bitkit QuickPay κάνει την ολοκλήρωση αγοράς πιο γρήγορη πληρώνοντας αυτόματα κωδικούς QR κατά τη σάρωση.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Απρόσκοπτες&lt;/accent&gt;\nπληρωμές</string>

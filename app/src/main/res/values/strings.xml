@@ -675,6 +675,7 @@
     <string name="settings__general__unit_note">Tip: Quickly toggle between Bitcoin and {currency} by tapping on your wallet balance.</string>
     <string name="settings__general__unit_title">Default Unit</string>
     <string name="settings__general_title">General</string>
+    <string name="settings__language_system_default">System Settings</string>
     <string name="settings__language_title">Language</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay makes checking out faster by automatically paying QR codes when scanned.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Frictionless&lt;/accent&gt;\npayments</string>

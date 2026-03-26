@@ -116,7 +116,9 @@ fun SettingsScreen(
             currencySymbol = currencies.currencySymbol,
             primaryDisplay = currencies.primaryDisplay,
             defaultTransactionSpeed = defaultTransactionSpeed,
-            selectedLanguage = languageUiState.selectedLanguage.displayName,
+            selectedLanguage = languageUiState.selectedLanguage.let {
+                if (it.displayNameResId != null) stringResource(it.displayNameResId) else it.nativeName.orEmpty()
+            },
             showWidgets = showWidgets,
             tagCount = lastUsedTags.size,
             isQuickPayEnabled = isQuickPayEnabled,

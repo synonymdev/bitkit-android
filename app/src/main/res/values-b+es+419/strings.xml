@@ -649,6 +649,7 @@
     <string name="settings__general__unit_note">Truco: Cambia rápidamente entre Bitcoin y {currency} tocando sobre el balance del monedero.</string>
     <string name="settings__general__unit_title">Unidad por defecto</string>
     <string name="settings__general_title">Geral</string>
+    <string name="settings__language_system_default">Ajustes del sistema</string>
     <string name="settings__language_title">Idioma</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay agiliza el proceso de pago mediante el pago automático de los códigos QR al ser escaneados.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Pagos&lt;/accent&gt;\nsin fricción</string>

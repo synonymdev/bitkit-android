@@ -518,6 +518,7 @@
     <string name="settings__dev_disabled_title">Options Dev désactivées</string>
     <string name="settings__dev_disabled_message">Les options pour les développeurs sont désormais désactivées dans l\'ensemble de l\'application.</string>
     <string name="settings__general_title">Général</string>
+    <string name="settings__language_system_default">Paramètres système</string>
     <string name="settings__language_title">Langue</string>
     <string name="settings__security_title">Sécurité et vie privée</string>
     <string name="settings__backup_title">Sauvegarde ou restauration</string>

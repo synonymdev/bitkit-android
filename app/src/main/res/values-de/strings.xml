@@ -523,6 +523,7 @@
     <string name="settings__advanced_title">Fortgeschritten</string>
     <string name="settings__about_title">Über</string>
     <string name="settings__support_title">Support</string>
+    <string name="settings__language_system_default">Systemeinstellungen</string>
     <string name="settings__language_title">Sprache</string>
     <string name="settings__about__title">Über Bitkit</string>
     <string name="settings__about__text">Danke, dass Sie ein verantwortungsvoller Bitcoiner sind.\nÄndern Sie Ihr Portemonnaie, ändern Sie die Welt.\n\nBitkit gibt Ihnen die Schlüssel zu Ihrem Geld, Profil, Kontakten und Webkonten.\n\nBitkit wurde von Synonym Software Ltd. entwickelt.</string>

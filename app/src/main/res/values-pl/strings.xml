@@ -607,6 +607,7 @@
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Losowy wybór dla prywatności</string>
     <string name="settings__cs__srd_title">Single Random Draw</string>
+    <string name="settings__language_system_default">Ustawienia systemowe</string>
     <string name="settings__language_title">Język</string>
     <string name="settings__support__link_error">Nie udało się otworzyć linków pomocy</string>
     <string name="settings__support__title">Wsparcie</string>

@@ -649,6 +649,7 @@
     <string name="settings__general__unit_note">Dica: Alterne rapidamente entre Bitcoin e {currency} tocando no saldo de sua carteira.</string>
     <string name="settings__general__unit_title">Unidade padrão</string>
     <string name="settings__general_title">Geral</string>
+    <string name="settings__language_system_default">Configurações do sistema</string>
     <string name="settings__language_title">Idioma</string>
     <string name="settings__quickpay__intro__description">O Bitkit QuickPay agiliza o check-out pagando automaticamente os códigos QR quando escaneados.</string>
     <string name="settings__quickpay__intro__title">Pagamentos\n&lt;accent&gt;Sem atrito&lt;/accent&gt;</string>
