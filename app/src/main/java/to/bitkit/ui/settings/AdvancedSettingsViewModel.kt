@@ -10,12 +10,14 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
 
 private const val NODE_ID_PREFIX_LENGTH = 5
+private const val ELECTRUM_HOST_PREFIX_LENGTH = 10
 
 @HiltViewModel
 class AdvancedSettingsViewModel @Inject constructor(
@@ -35,9 +37,20 @@ class AdvancedSettingsViewModel @Inject constructor(
         .map { it.nodeId.take(NODE_ID_PREFIX_LENGTH).ifEmpty { "" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
-    val isCustomElectrum = settingsStore.data
-        .map { it.electrumServer != Env.electrumServerUrl }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val electrumHost = settingsStore.data
+        .map {
+            if (it.electrumServer == Env.electrumServerUrl) {
+                ""
+            } else {
+                val host = ElectrumServer.parse(it.electrumServer).host
+                if (host.length > ELECTRUM_HOST_PREFIX_LENGTH) {
+                    "${host.take(ELECTRUM_HOST_PREFIX_LENGTH)}..."
+                } else {
+                    host
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     val coinSelectAuto = settingsStore.data
         .map { it.coinSelectAuto }

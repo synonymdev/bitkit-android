@@ -566,7 +566,6 @@
     <string name="settings__adv__cs_min">Largest First</string>
     <string name="settings__adv__cs_min_description">Sort by and use largest UTXO first. Potentially lower fee, but reveals your largest UTXOs.</string>
     <string name="settings__adv__electrum_auto">Auto</string>
-    <string name="settings__adv__electrum_custom">Custom</string>
     <string name="settings__adv__electrum_server">Electrum Server</string>
     <string name="settings__adv__lightning_connections">Lightning Connections</string>
     <string name="settings__adv__lightning_node">Lightning Node</string>

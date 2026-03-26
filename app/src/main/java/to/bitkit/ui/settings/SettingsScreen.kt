@@ -105,7 +105,7 @@ fun SettingsScreen(
     val selectedAddressTypeName by advancedViewModel.selectedAddressTypeName.collectAsStateWithLifecycle()
     val openChannelCount by advancedViewModel.openChannelCount.collectAsStateWithLifecycle()
     val truncatedNodeId by advancedViewModel.truncatedNodeId.collectAsStateWithLifecycle()
-    val isCustomElectrum by advancedViewModel.isCustomElectrum.collectAsStateWithLifecycle()
+    val electrumHost by advancedViewModel.electrumHost.collectAsStateWithLifecycle()
     val coinSelectAuto by advancedViewModel.coinSelectAuto.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
@@ -140,7 +140,7 @@ fun SettingsScreen(
             coinSelectAuto = coinSelectAuto,
             openChannelCount = openChannelCount,
             truncatedNodeId = truncatedNodeId,
-            isCustomElectrum = isCustomElectrum,
+            electrumHost = electrumHost,
         ),
         onEvent = { event ->
             when (event) {
@@ -552,13 +552,7 @@ private fun AdvancedTabContent(
             title = stringResource(R.string.settings__adv__electrum_server),
             icon = { SettingsIcon(R.drawable.ic_hard_drives) },
             value = SettingsButtonValue.StringValue(
-                stringResource(
-                    if (state.isCustomElectrum) {
-                        R.string.settings__adv__electrum_custom
-                    } else {
-                        R.string.settings__adv__electrum_auto
-                    }
-                )
+                state.electrumHost.ifEmpty { stringResource(R.string.settings__adv__electrum_auto) }
             ),
             onClick = { onEvent(SettingsEvent.ElectrumServerClick) },
             modifier = Modifier.testTag("ElectrumConfig")
@@ -692,5 +686,5 @@ data class AdvancedTabState(
     val coinSelectAuto: Boolean = true,
     val openChannelCount: Int = 0,
     val truncatedNodeId: String = "",
-    val isCustomElectrum: Boolean = false,
+    val electrumHost: String = "",
 )
