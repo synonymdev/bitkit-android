@@ -465,7 +465,7 @@
     <string name="security__mnemonic_load_error">Failed to load mnemonic</string>
     <string name="security__mnemonic_multiple_header">Multiple Devices</string>
     <string name="security__mnemonic_multiple_text">Don\'t use your Bitkit recovery phrase on multiple phones simultaneously, as this can corrupt your data.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Never share&lt;/accent&gt; your recovery phrase with anyone as this may result in the loss of funds.</string>
+    <string name="security__mnemonic_never_share">Make sure no one can see your screen. &lt;accent&gt;Never share your recovery phrase&lt;/accent&gt; with anyone, as it may result in loss of funds.</string>
     <string name="security__mnemonic_phrase">Mnemonic Phrase</string>
     <string name="security__mnemonic_result_header">Successful</string>
     <string name="security__mnemonic_result_text">Make sure you store your recovery phrase in a &lt;accent&gt;secure place&lt;/accent&gt;, as this is the &lt;accent&gt;only way to recover&lt;/accent&gt; your money!</string>

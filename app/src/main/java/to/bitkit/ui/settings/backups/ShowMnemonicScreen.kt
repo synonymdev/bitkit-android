@@ -34,6 +34,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.toImmutableList
@@ -193,8 +195,10 @@ private fun ShowMnemonicContent(
             Spacer(modifier = Modifier.height(32.dp))
 
             BodyS(
-                text = stringResource(R.string.security__mnemonic_never_share).withAccent(accentColor = Colors.Brand),
-                color = Colors.White64,
+                text = stringResource(R.string.security__mnemonic_never_share).withAccent(
+                    defaultColor = Colors.Red,
+                    accentStyle = SpanStyle(color = Colors.Red, fontWeight = FontWeight.Bold),
+                ),
             )
 
             Spacer(modifier = Modifier.weight(1f))
