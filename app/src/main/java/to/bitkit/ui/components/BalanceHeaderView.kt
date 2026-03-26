@@ -121,37 +121,53 @@ fun BalanceHeaderView(
 @Composable
 fun BalanceHeader(
     isBitcoinPrimary: Boolean,
-    smallRowSymbol: String? = null,
     smallRowText: String,
+    largeRowText: String,
+    largeRowSymbol: String,
+    showSymbol: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    smallRowSymbol: String? = null,
     smallRowIsSymbolSuffix: Boolean = false,
     smallRowModifier: Modifier = Modifier,
     largeRowPrefix: String? = null,
-    largeRowText: String,
-    largeRowSymbol: String,
     largeRowIsSymbolSuffix: Boolean = false,
     largeRowModifier: Modifier = Modifier,
-    showSymbol: Boolean,
     hideBalance: Boolean = false,
     isSwipeToHideEnabled: Boolean = false,
     showEyeIcon: Boolean = false,
-    onClick: () -> Unit,
     onToggleHideBalance: () -> Unit = {},
     testTag: String? = null,
-    modifier: Modifier = Modifier,
 ) {
     val smallRowState = remember(
-        isBitcoinPrimary, smallRowSymbol, smallRowText, smallRowIsSymbolSuffix,
+        isBitcoinPrimary,
+        smallRowSymbol,
+        smallRowText,
+        smallRowIsSymbolSuffix,
     ) {
-        SmallRowState(isBitcoinPrimary, smallRowSymbol, smallRowText, smallRowIsSymbolSuffix)
+        SmallRowState(
+            isBitcoinPrimary,
+            smallRowSymbol,
+            smallRowText,
+            smallRowIsSymbolSuffix,
+        )
     }
 
     val largeRowState = remember(
-        isBitcoinPrimary, largeRowPrefix, largeRowText, largeRowSymbol,
-        largeRowIsSymbolSuffix, showSymbol,
+        isBitcoinPrimary,
+        largeRowPrefix,
+        largeRowText,
+        largeRowSymbol,
+        largeRowIsSymbolSuffix,
+        showSymbol,
     ) {
         LargeRowState(
-            isBitcoinPrimary, largeRowPrefix, largeRowText, largeRowSymbol,
-            largeRowIsSymbolSuffix, showSymbol,
+            isBitcoinPrimary,
+            largeRowPrefix,
+            largeRowText,
+            largeRowSymbol,
+            largeRowIsSymbolSuffix,
+            showSymbol,
         )
     }
 

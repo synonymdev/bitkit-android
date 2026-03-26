@@ -103,7 +103,7 @@ object BalanceAnimations {
      * Matches iOS: .move(edge: .bottom) + .opacity + .scale(1.5, anchor: .topLeading)
      * Enter from below, exit to below, with spring physics.
      */
-    val swapSmallRowTransition: ContentTransform = (
+    val swapSmallRowTransition: ContentTransform =
         slideInVertically(
             initialOffsetY = { it },
             animationSpec = swapSpring,
@@ -115,14 +115,13 @@ object BalanceAnimations {
         ) + fadeOut(
             animationSpec = swapFadeSpring,
         )
-    )
 
     /**
      * Swap transition for the large row (bottom).
      * Matches iOS: .move(edge: .top) + .opacity + .scale(0.5, anchor: .topLeading)
      * Enter from above, exit to above, with spring physics.
      */
-    val swapLargeRowTransition: ContentTransform = (
+    val swapLargeRowTransition: ContentTransform =
         slideInVertically(
             initialOffsetY = { -it },
             animationSpec = swapSpring,
@@ -134,7 +133,6 @@ object BalanceAnimations {
         ) + fadeOut(
             animationSpec = swapFadeSpring,
         )
-    )
 
     /**
      * Eye icon transition
