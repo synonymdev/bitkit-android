@@ -22,6 +22,7 @@ import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.components.settings.SettingsSwitchRow
+import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -44,8 +45,14 @@ fun WidgetsSettingsScreen(
         showWidgetTitles = showWidgetTitles,
         onShowWidgetsClick = { settings.setShowWidgets(!showWidgets) },
         onShowWidgetTitlesClick = { settings.setShowWidgetTitles(!showWidgetTitles) },
-        onResetWidgetsClick = { settings.resetWidgets() },
-        onResetSuggestionsClick = { settings.resetDismissedSuggestions() },
+        onResetWidgetsClick = {
+            settings.resetWidgets()
+            navController.navigateToHome()
+        },
+        onResetSuggestionsClick = {
+            settings.resetDismissedSuggestions()
+            navController.navigateToHome()
+        },
     )
 }
 
