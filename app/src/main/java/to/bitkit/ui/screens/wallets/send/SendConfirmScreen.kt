@@ -177,6 +177,7 @@ private fun Content(
     showBiometrics: Boolean,
     modifier: Modifier = Modifier,
     canGoBack: Boolean = true,
+    initialShowDetails: Boolean = false,
     onBack: () -> Unit = {},
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
@@ -207,8 +208,9 @@ private fun Content(
             if (isNodeRunning) {
                 ContentRunning(
                     uiState = uiState,
-                    onEvent = onEvent,
                     isLoading = isLoading,
+                    initialShowDetails = initialShowDetails,
+                    onEvent = onEvent,
                     onClickAddTag = onClickAddTag,
                     onClickTag = onClickTag,
                     onSwipeToConfirm = onSwipeToConfirm,
@@ -255,12 +257,13 @@ fun ContentRunning(
     uiState: SendUiState,
     isLoading: Boolean,
     modifier: Modifier = Modifier,
+    initialShowDetails: Boolean = false,
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
     onClickTag: (String) -> Unit = {},
     onSwipeToConfirm: () -> Unit = {},
 ) {
-    var showDetails by rememberSaveable { mutableStateOf(false) }
+    var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
     var swipeProgress by remember { mutableFloatStateOf(0f) }
 
     val accentColor = when (uiState.payMethod) {
@@ -425,7 +428,10 @@ private fun OnChainDetails(
     onEvent: (SendEvent) -> Unit,
 ) {
     val fee = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         // Row 1: Send from | Send to
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -453,6 +459,7 @@ private fun OnChainDetails(
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
                     modifier = Modifier
+                        .height(28.dp)
                         .clickableAlpha { onEvent(SendEvent.NavToAddress) }
                         .testTag("ReviewUri")
                 )
@@ -538,7 +545,10 @@ private fun LightningDetails(
         else -> uiState.decodedInvoice?.bolt11.orEmpty()
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         // Row 1: Send from | Send to
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -566,6 +576,7 @@ private fun LightningDetails(
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
                     modifier = Modifier
+                        .height(28.dp)
                         .clickableAlpha { onEvent(SendEvent.NavToAddress) }
                         .testTag("ReviewUri")
                 )
@@ -683,6 +694,51 @@ private fun PreviewOnChain() {
                 isNodeRunning = true,
                 isLoading = false,
                 showBiometrics = false,
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "onchain details")
+@Composable
+private fun PreviewOnChainDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = sendUiState().copy(
+                    selectedTags = persistentListOf("car", "house", "uber"),
+                    fee = SendFee.OnChain(1_234),
+                    speed = TransactionSpeed.Medium,
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                initialShowDetails = true,
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "lightning details")
+@Composable
+private fun PreviewLightningDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = sendUiState().copy(
+                    amount = 6_543u,
+                    payMethod = SendMethod.LIGHTNING,
+                    selectedTags = persistentListOf("coffee"),
+                    fee = SendFee.Lightning(43),
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                initialShowDetails = true,
                 modifier = Modifier.sheetHeight(),
             )
         }

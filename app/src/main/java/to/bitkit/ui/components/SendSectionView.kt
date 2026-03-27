@@ -18,6 +18,7 @@ fun SendSectionView(
         Caption13Up(text = caption, color = Colors.White64)
         VerticalSpacer(8.dp)
         content()
+        VerticalSpacer(16.dp)
         HorizontalDivider(modifier = Modifier.fillMaxWidth())
     }
 }
