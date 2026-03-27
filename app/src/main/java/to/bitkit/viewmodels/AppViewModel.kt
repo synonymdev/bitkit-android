@@ -1042,6 +1042,7 @@ class AppViewModel @Inject constructor(
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
+                confirmedWarnings = persistentListOf(),
             )
         }
         updateCanSwitchWallet()
@@ -1119,6 +1120,7 @@ class AppViewModel @Inject constructor(
             it.copy(
                 payMethod = nextMethod,
                 isAmountInputValid = validateAmount(it.amount, nextMethod),
+                confirmedWarnings = persistentListOf(),
             )
         }
         when (nextMethod) {
