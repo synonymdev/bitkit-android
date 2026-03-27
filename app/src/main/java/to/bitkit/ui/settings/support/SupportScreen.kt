@@ -221,11 +221,13 @@ private fun SupportFooter() {
             .fillMaxWidth()
             .clipToBounds()
             .drawBehind {
+                val leftCutY = size.height
+                val rightCutY = 0f
                 val path = Path().apply {
-                    moveTo(size.width, size.height * 0.1f)
-                    lineTo(0f, size.height * 0.65f)
-                    lineTo(0f, size.height)
+                    moveTo(0f, leftCutY)
+                    lineTo(size.width, rightCutY)
                     lineTo(size.width, size.height)
+                    lineTo(0f, size.height)
                     close()
                 }
                 drawPath(path, color = Colors.Brand)
