@@ -99,7 +99,7 @@ private fun ShowPassphraseContent(
             Spacer(modifier = Modifier.height(32.dp))
             BodyS(
                 text = stringResource(R.string.security__pass_never_share).withAccent(
-                    defaultColor = Colors.Red,
+                    defaultColor = Colors.Brand,
                     accentStyle = SpanStyle(color = Colors.Brand, fontWeight = FontWeight.Bold),
                 ),
                 color = Colors.White64,
