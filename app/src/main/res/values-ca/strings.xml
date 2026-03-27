@@ -569,7 +569,6 @@
     <string name="settings__backup__category_widgets">Ginys</string>
     <string name="settings__backup__failed_message">Bitkit no ha pogut fer còpia de seguretat de les dades de la cartera. Reintentant en {interval, plural, one {# minut} other {# minuts}}.</string>
     <string name="settings__backup__failed_title">Error de còpia de seguretat de dades</string>
-    <string name="settings__backup__latest">últimes còpies de seguretat de dades</string>
     <string name="settings__backup__reset">Restablir i restaurar cartera</string>
     <string name="settings__backup__status_failed">Còpia de seguretat fallida: {time}</string>
     <string name="settings__backup__status_running">Executant</string>

@@ -583,7 +583,6 @@
     <string name="settings__backup__category_contacts">Contactos</string>
     <string name="settings__backup__failed_message">Bitkit no pudo hacer una copia de seguridad de los datos del monedero. Reintentando en {interval, plural, one {# minuto} other {# minutos}}.</string>
     <string name="settings__backup__failed_title">Fallo de Copia de Seguridad de Datos</string>
-    <string name="settings__backup__latest">últimas copias de seguridad</string>
     <string name="settings__bg__customize">Personalizar en los Ajustes de Bitkit Android</string>
     <string name="settings__bg__disabled">Los pagos en segundo plano están desactivados porque has denegado las notificaciones.</string>
     <string name="settings__bg__enabled">Los pagos en segundo plano están activados. Puedes recibir fondos incluso cuando la aplicación está cerrada (si tu dispositivo está conectado a internet).</string>

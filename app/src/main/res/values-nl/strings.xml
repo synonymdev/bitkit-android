@@ -569,7 +569,6 @@
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__failed_message">Bitkit kon geen back-up maken van wallet-gegevens. Nieuwe poging over {interval, plural, one {# minuut} other {# minuten}}.</string>
     <string name="settings__backup__failed_title">Gegevensbackup mislukt</string>
-    <string name="settings__backup__latest">Laatste gegevensbackups</string>
     <string name="settings__backup__reset">Wallet resetten en herstellen</string>
     <string name="settings__backup__status_failed">Mislukte backup: {time}</string>
     <string name="settings__backup__status_running">Bezig</string>

@@ -569,7 +569,6 @@
     <string name="settings__backup__category_widgets">Widgety</string>
     <string name="settings__backup__failed_message">Bitkitu se nepodařilo zálohovat data peněženky. Opakovaný pokus za {interval, plural, one {# minute} dalších {# minutes}}.</string>
     <string name="settings__backup__failed_title">Zálohování dat selhalo</string>
-    <string name="settings__backup__latest">nejnovější zálohy dat</string>
     <string name="settings__backup__reset">Resetovat a obnovit peněženku</string>
     <string name="settings__backup__status_failed">Zálohování se nezdařilo: {time}</string>
     <string name="settings__backup__status_running">Probíhá</string>

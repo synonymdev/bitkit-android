@@ -569,7 +569,6 @@
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__failed_message">Το Bitkit απέτυχε να δημιουργήσει αντίγραφο ασφαλείας δεδομένων πορτοφολιού. Νέα προσπάθεια σε {interval, plural, one {# λεπτό} other {# λεπτά}}.</string>
     <string name="settings__backup__failed_title">Αποτυχία αντιγράφου ασφαλείας δεδομένων</string>
-    <string name="settings__backup__latest">τελευταία αντίγραφα ασφαλείας δεδομένων</string>
     <string name="settings__backup__reset">Επαναφορά και ανάκτηση πορτοφολιού</string>
     <string name="settings__backup__status_failed">Αποτυχημένο αντίγραφο: {time}</string>
     <string name="settings__backup__status_running">Εκτελείται</string>

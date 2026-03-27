@@ -583,7 +583,6 @@
     <string name="settings__backup__category_widgets">Виджеты</string>
     <string name="settings__backup__failed_message">Bitkit не удалось создать резервную копию данных кошелька. Повторная попытка через {interval, plural, one {# минуту} few {# минуты} many {# минут} other {# минут}}.</string>
     <string name="settings__backup__failed_title">Ошибка Резервного Копирования</string>
-    <string name="settings__backup__latest">Последние Резервные Копии Данных</string>
     <string name="settings__backup__reset">Сбросить и Восстановить Кошелёк</string>
     <string name="settings__backup__status_failed">Ошибка резервного копирования: {time}</string>
     <string name="settings__backup__status_running">Выполняется</string>

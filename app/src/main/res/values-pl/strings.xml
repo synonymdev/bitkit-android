@@ -576,7 +576,6 @@
     <string name="settings__backup__reset">Resetowanie i przywracanie portfela</string>
     <string name="settings__backup__failed_title">Błąd tworzenia kopii zapasowej danych</string>
     <string name="settings__backup__failed_message">Bitkit nie wykonał kopii zapasowej danych portfela. Ponowna próba za {interval, plural, one {# minute} other {# minutes}}.</string>
-    <string name="settings__backup__latest">ostatnie kopie zapasowe</string>
     <string name="settings__backup__status_failed">Nieudana kopia zapasowa: {time}</string>
     <string name="settings__backup__status_success">Najnowsza kopia zapasowa: {time}</string>
     <string name="settings__backup__category_connections">Połączenia</string>

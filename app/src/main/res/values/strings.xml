@@ -591,7 +591,6 @@
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__failed_message">Bitkit failed to back up wallet data. Retrying in {interval, plural, one {# minute} other {# minutes}}.</string>
     <string name="settings__backup__failed_title">Data Backup Failure</string>
-    <string name="settings__backup__latest">latest data backups</string>
     <string name="settings__backup__data">Data backups</string>
     <string name="settings__backup__reset">Reset wallet</string>
     <string name="settings__backup__status_failed">Failed Backup: {time}</string>

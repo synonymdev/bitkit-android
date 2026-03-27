@@ -575,7 +575,6 @@
     <string name="settings__backup__reset">Reiniciar e restaurar carteira</string>
     <string name="settings__backup__failed_title">Falha no Backup</string>
     <string name="settings__backup__failed_message">A Bitkit falhou ao fazer o backup dos dados da carteira. Tentando novamente em {interval, plural, one {# minuto} other {# minutos}}.</string>
-    <string name="settings__backup__latest">backups recentes</string>
     <string name="settings__backup__status_running">Em execução</string>
     <string name="settings__backup__status_failed">Falha no backup: {time}</string>
     <string name="settings__backup__status_success">Último backup: {time}</string>

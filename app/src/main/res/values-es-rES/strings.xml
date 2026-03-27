@@ -569,7 +569,6 @@
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__failed_message">Bitkit no pudo hacer copia de seguridad de los datos del monedero. Reintentando en {interval, plural, one {# minuto} other {# minutos}}.</string>
     <string name="settings__backup__failed_title">Error en la copia de datos</string>
-    <string name="settings__backup__latest">últimas copias de datos</string>
     <string name="settings__backup__reset">Borrar y restaurar monedero</string>
     <string name="settings__backup__status_failed">Respaldo fallido: {time}</string>
     <string name="settings__backup__status_running">En ejecución</string>

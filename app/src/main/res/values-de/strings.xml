@@ -595,7 +595,6 @@
     <string name="settings__backup__reset">Wallet zurücksetzen</string>
     <string name="settings__backup__failed_title">Backup fehlgeschlagen</string>
     <string name="settings__backup__failed_message">Bitkit konnte die Wallet-Daten nicht sichern. Erneuter Versuch in {interval, plural, one {# Minute} other {# Minuten}}.</string>
-    <string name="settings__backup__latest">Letzte Backups</string>
     <string name="settings__backup__status_failed">Gescheitertes Backup: {time}</string>
     <string name="settings__backup__status_running">Läuft</string>
     <string name="settings__backup__status_success">Letztes Backup: {time}</string>

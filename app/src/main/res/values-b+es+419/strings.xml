@@ -569,7 +569,6 @@
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__failed_message">Bitkit no pudo respaldar los datos de la wallet. Reintentando en {interval, plural, one {# minuto} other {# minutos}}.</string>
     <string name="settings__backup__failed_title">Falla en la copia de seguridad de los datos</string>
-    <string name="settings__backup__latest">últimas copias de seguridad</string>
     <string name="settings__backup__reset">Restablecer y resetear billetera</string>
     <string name="settings__backup__status_failed">Copia de seguridad falló: {time}</string>
     <string name="settings__backup__status_running">Ejecutándose</string>
