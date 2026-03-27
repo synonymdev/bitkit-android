@@ -81,7 +81,7 @@ private fun PinCheckContent(
     onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
     onClickForgotPin: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val isLastAttempt = attemptsRemaining == 1
 

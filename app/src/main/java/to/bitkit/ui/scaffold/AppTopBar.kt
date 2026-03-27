@@ -77,7 +77,7 @@ fun AppTopBar(
 @Composable
 fun BackNavIcon(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     IconButton(
         onClick = rememberDebouncedClick(onClick = onClick),
@@ -93,7 +93,7 @@ fun BackNavIcon(
 
 @Composable
 fun DrawerNavIcon(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val isPreview = LocalInspectionMode.current
     val drawerState = LocalDrawerState.current
@@ -118,7 +118,7 @@ fun DrawerNavIcon(
 @Composable
 fun ScanNavIcon(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     IconButton(
         onClick = rememberDebouncedClick(onClick = onClick),

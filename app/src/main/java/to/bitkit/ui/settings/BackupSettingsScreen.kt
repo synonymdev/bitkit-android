@@ -112,7 +112,7 @@ private fun BackupSettingsScreenContent(
 private fun BackupStatusItem(
     uiState: BackupCategoryUiState,
     onRetryClick: (BackupCategory) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val status = uiState.status
 
@@ -158,7 +158,7 @@ private fun BackupStatusItem(
 private fun BackupStatusIcon(
     status: BackupItemStatus,
     @DrawableRes iconRes: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         contentAlignment = Alignment.Center,

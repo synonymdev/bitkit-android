@@ -16,7 +16,7 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun SettingsIcon(
     @DrawableRes iconRes: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         contentAlignment = Alignment.Center,

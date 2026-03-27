@@ -79,7 +79,7 @@ private fun ConfirmPinContent(
     showError: Boolean,
     onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
