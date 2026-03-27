@@ -829,6 +829,7 @@
     <string name="wallet__drawer__settings">الإعدادات</string>
     <string name="wallet__drawer__shop">تسوّق</string>
     <string name="wallet__drawer__status">حالة التطبيق</string>
+    <string name="wallet__drawer__support">الدعم</string>
     <string name="wallet__drawer__wallet">المحفظة</string>
     <string name="wallet__drawer__widgets">الأدوات</string>
     <string name="wallet__error_invalid_bitcoin_address">عنوان إرسال Bitcoin غير صالح</string>

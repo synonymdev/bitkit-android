@@ -323,7 +323,7 @@
     <string name="onboarding__slide3_text">Swipe to hide your balance, enjoy more private payments, and protect your wallet by enabling security features.</string>
     <string name="onboarding__slide4_header">Your keys,\n&lt;accent&gt;your coins&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Let’s create your wallet. Please be aware that Bitkit is mobile software. &lt;accent&gt;Don’t store all your money in Bitkit.&lt;/accent&gt;</string>
-    <string name="onboarding__tos_checkbox">Terms of use</string>
+    <string name="onboarding__tos_checkbox">Terms of Use</string>
     <string name="onboarding__tos_checkbox_value">By continuing you declare that you have read and accept the terms of use.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;terms of use&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Use Bitkit to pay anyone, anywhere, any time, and spend your bitcoin on the things you value in life.</string>
@@ -548,7 +548,7 @@
     <string name="settings__addr_type__now_using">Now using {type} addresses.</string>
     <string name="settings__addr_type__primary">Primary address type</string>
     <string name="settings__addr_type__settings_updated">Settings updated</string>
-    <string name="settings__addr_type__title">Address type</string>
+    <string name="settings__addr_type__title">Address Type</string>
     <string name="settings__adv__addr_type_currently_selected">Currently selected</string>
     <string name="settings__adv__address_viewer">Address Viewer</string>
     <string name="settings__adv__coin_selection">Coin Selection</string>
@@ -591,7 +591,7 @@
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__failed_message">Bitkit failed to back up wallet data. Retrying in {interval, plural, one {# minute} other {# minutes}}.</string>
     <string name="settings__backup__failed_title">Data Backup Failure</string>
-    <string name="settings__backup__data">Data backups</string>
+    <string name="settings__backup__data">Data Backups</string>
     <string name="settings__backup__reset">Reset wallet</string>
     <string name="settings__backup__status_failed">Failed Backup: {time}</string>
     <string name="settings__backup__status_running">Running</string>
@@ -666,7 +666,7 @@
     <string name="settings__general__speed_title">Transaction Speed</string>
     <string name="settings__general__tags">Tags</string>
     <string name="settings__general__tags_previously">Previously used tags</string>
-    <string name="settings__general__unit">Default unit</string>
+    <string name="settings__general__unit">Default Unit</string>
     <string name="settings__general__unit_bitcoin">Bitcoin</string>
     <string name="settings__general__unit_display">Display amounts in</string>
     <string name="settings__general__unit_note">Tip: Quickly toggle between Bitcoin and {currency} by tapping on your wallet balance.</string>

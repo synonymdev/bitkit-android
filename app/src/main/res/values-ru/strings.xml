@@ -846,6 +846,7 @@
     <string name="wallet__drawer__settings">Настройки</string>
     <string name="wallet__drawer__shop">Магазин</string>
     <string name="wallet__drawer__status">Статус Приложения</string>
+    <string name="wallet__drawer__support">Поддержка</string>
     <string name="wallet__drawer__wallet">Кошелёк</string>
     <string name="wallet__drawer__widgets">Виджеты</string>
     <string name="wallet__error_invalid_bitcoin_address">Недействительный адрес отправки Bitcoin</string>

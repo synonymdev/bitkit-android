@@ -760,6 +760,7 @@
     <string name="wallet__drawer__shop">Sklep</string>
     <string name="wallet__drawer__settings">Ustawienia</string>
     <string name="wallet__drawer__status">Status aplikacji</string>
+    <string name="wallet__drawer__support">Wsparcie</string>
     <string name="wallet__send">Wyślij</string>
     <string name="wallet__receive">Otrzymaj</string>
     <string name="wallet__send_bitcoin">Wyślij Bitcoin</string>

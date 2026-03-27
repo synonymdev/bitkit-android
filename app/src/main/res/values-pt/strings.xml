@@ -727,6 +727,7 @@
     <string name="wallet__drawer__shop">Comprar</string>
     <string name="wallet__drawer__settings">Ajustes</string>
     <string name="wallet__drawer__status">Status do Aplicativo</string>
+    <string name="wallet__drawer__support">Suporte</string>
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Receber</string>
     <string name="wallet__send_bitcoin">Enviar Bitcoin</string>

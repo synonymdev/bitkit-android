@@ -829,6 +829,7 @@
     <string name="wallet__drawer__settings">Configuracions</string>
     <string name="wallet__drawer__shop">Botiga</string>
     <string name="wallet__drawer__status">Estat de l\'aplicació</string>
+    <string name="wallet__drawer__support">Suport</string>
     <string name="wallet__drawer__wallet">Cartera</string>
     <string name="wallet__drawer__widgets">Ginys</string>
     <string name="wallet__error_invalid_bitcoin_address">Adreça d\'enviament de Bitcoin no vàlida</string>

@@ -829,6 +829,7 @@
     <string name="wallet__drawer__settings">Nastavení</string>
     <string name="wallet__drawer__shop">Nakoupit</string>
     <string name="wallet__drawer__status">Stav aplikace</string>
+    <string name="wallet__drawer__support">Podpora</string>
     <string name="wallet__drawer__wallet">Peněženka</string>
     <string name="wallet__drawer__widgets">Widgety</string>
     <string name="wallet__error_invalid_bitcoin_address">Neplatná adresa pro odeslání bitcoinu</string>

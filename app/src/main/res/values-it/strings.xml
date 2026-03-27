@@ -829,6 +829,7 @@
     <string name="wallet__drawer__settings">Impostazioni</string>
     <string name="wallet__drawer__shop">Negozio</string>
     <string name="wallet__drawer__status">Stato dell\'app</string>
+    <string name="wallet__drawer__support">Supporto</string>
     <string name="wallet__drawer__wallet">Wallet</string>
     <string name="wallet__drawer__widgets">Widget</string>
     <string name="wallet__error_invalid_bitcoin_address">Indirizzo bitcoin di invio non valido</string>

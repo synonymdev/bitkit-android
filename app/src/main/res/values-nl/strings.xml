@@ -829,6 +829,7 @@
     <string name="wallet__drawer__settings">Instellingen</string>
     <string name="wallet__drawer__shop">Winkel</string>
     <string name="wallet__drawer__status">App-status</string>
+    <string name="wallet__drawer__support">Ondersteuning</string>
     <string name="wallet__drawer__wallet">Wallet</string>
     <string name="wallet__drawer__widgets">Widgets</string>
     <string name="wallet__error_invalid_bitcoin_address">Ongeldig bitcoin-verzendadres</string>

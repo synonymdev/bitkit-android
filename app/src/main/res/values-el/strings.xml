@@ -829,6 +829,7 @@
     <string name="wallet__drawer__settings">Ρυθμίσεις</string>
     <string name="wallet__drawer__shop">Κατάστημα</string>
     <string name="wallet__drawer__status">Κατάσταση εφαρμογής</string>
+    <string name="wallet__drawer__support">Υποστήριξη</string>
     <string name="wallet__drawer__wallet">Πορτοφόλι</string>
     <string name="wallet__drawer__widgets">Widgets</string>
     <string name="wallet__error_invalid_bitcoin_address">Μη έγκυρη διεύθυνση αποστολής bitcoin</string>
