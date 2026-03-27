@@ -148,7 +148,7 @@ object ResetAndRestoreTestTags {
     const val SCREEN = "restore_screen"
     const val BACKUP_BUTTON = "restore_backup_button"
     const val RESET_BUTTON = "restore_reset_button"
-    const val RESET_DIALOG = "restore_reset_button"
+    const val RESET_DIALOG = "restore_reset_dialog"
 }
 
 @Preview(showSystemUi = true)
