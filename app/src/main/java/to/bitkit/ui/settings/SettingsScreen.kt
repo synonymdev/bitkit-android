@@ -167,7 +167,13 @@ fun SettingsScreen(
                         navController.navigateTo(Routes.ResetAndRestoreSettings)
                     }
                 }
-                SettingsEvent.PinClick -> navController.navigateToPinManagement()
+                SettingsEvent.PinClick -> {
+                    if (isPinEnabled) {
+                        navController.navigateToPinManagement()
+                    } else {
+                        app.showSheet(Sheet.Pin())
+                    }
+                }
                 SettingsEvent.PinForPaymentsClick -> {
                     navController.navigateToAuthCheck(
                         onSuccessActionId = AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS,
