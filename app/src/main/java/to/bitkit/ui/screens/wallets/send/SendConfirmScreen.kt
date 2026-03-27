@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -89,6 +90,8 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
+
+private const val EXPIRY_REFRESH_INTERVAL = 60_000L
 
 @Suppress("MagicNumber")
 @Composable
@@ -432,7 +435,6 @@ private fun OnChainDetails(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        // Row 1: Send from | Send to
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
@@ -466,7 +468,6 @@ private fun OnChainDetails(
             }
         }
 
-        // Row 2: Fee & Speed | Confirming in
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
@@ -532,6 +533,7 @@ private fun OnChainDetails(
     }
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun LightningDetails(
     uiState: SendUiState,
@@ -549,7 +551,6 @@ private fun LightningDetails(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        // Row 1: Send from | Send to
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
@@ -583,7 +584,6 @@ private fun LightningDetails(
             }
         }
 
-        // Row 2: Fee & Speed | Invoice expiration
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
@@ -644,8 +644,15 @@ private fun LightningDetails(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        val invoiceExpiryText = remember(expirySeconds) {
-                            formatInvoiceExpiryRelative(expirySeconds)
+                        val timestampSeconds = uiState.decodedInvoice?.timestampSeconds ?: 0uL
+                        val invoiceExpiryText by produceState("", timestampSeconds, expirySeconds) {
+                            val expiryMoment = timestampSeconds + expirySeconds
+                            while (true) {
+                                val now = System.currentTimeMillis() / 1000
+                                val remaining = (expiryMoment.toLong() - now).coerceAtLeast(0)
+                                value = formatInvoiceExpiryRelative(remaining.toULong())
+                                delay(EXPIRY_REFRESH_INTERVAL)
+                            }
                         }
                         BodySSB(text = invoiceExpiryText)
                     }
@@ -653,7 +660,6 @@ private fun LightningDetails(
             }
         }
 
-        // Optional note
         if (!isLnurlPay && description != null) {
             SendSectionView(caption = stringResource(R.string.wallet__note)) {
                 BodySSB(text = description, maxLines = 1)
