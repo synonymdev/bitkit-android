@@ -255,6 +255,9 @@
     <string name="lightning__wait_text_bottom">Verbinden &amp; synchroniseren...</string>
     <string name="lightning__wait_text_top">Wacht tot Bitkit verbinding maakt met het betaalnetwerk (±10 seconden).</string>
     <string name="lightning__wallet_balances">Wallet-saldi</string>
+    <string name="lightning__conn_onboarding_button">Aan de slag</string>
+    <string name="lightning__conn_onboarding_text">Stel je uitgavenbalans in om te genieten van directe en goedkope transacties met vrienden, familie en winkels.</string>
+    <string name="lightning__conn_onboarding_title">Lightning\n&lt;accent&gt;betalingen&lt;/accent&gt;\ninschakelen</string>
     <string name="migration__description">Even geduld terwijl je oude wallet-gegevens migreren naar deze nieuwe Bitkit-versie. Dit duurt meestal minder dan een minuut.</string>
     <string name="migration__nav_title">Wallet-migratie</string>
     <string name="migration__title">WALLET\n&lt;accent&gt;MIGREREN&lt;/accent&gt;</string>
@@ -513,6 +516,7 @@
     <string name="security__wipe_app">App wissen</string>
     <string name="security__wiped_message">Bitkit is gereset en alle wallet-gegevens zijn verwijderd.</string>
     <string name="security__wiped_title">Wallet-gegevens verwijderd</string>
+    <string name="security__pin_enable_button">PIN inschakelen</string>
     <string name="settings__about__legal">Juridisch</string>
     <string name="settings__about__share">Delen</string>
     <string name="settings__about__shareText">Verander je wallet, verander de wereld. Download Bitkit voor iPhone {appStoreUrl} of Android {playStoreUrl}</string>
@@ -557,6 +561,8 @@
     <string name="settings__adv__section_other">Overig</string>
     <string name="settings__adv__section_payments">Betalingen</string>
     <string name="settings__adv__suggestions_reset">Suggesties resetten</string>
+    <string name="settings__adv__electrum_auto">Auto</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__advanced_title">Geavanceerd</string>
     <string name="settings__backup__category_connection_receipts">Verbindingsbewijzen</string>
     <string name="settings__backup__category_connections">Verbindingen</string>
@@ -574,6 +580,7 @@
     <string name="settings__backup__status_running">Bezig</string>
     <string name="settings__backup__status_success">Laatste backup: {time}</string>
     <string name="settings__backup__wallet">Back-up maken van je wallet</string>
+    <string name="settings__backup__data">Gegevensback-ups</string>
     <string name="settings__bg__customize">Aanpassen in Android Bitkit-instellingen</string>
     <string name="settings__bg__disabled">Achtergrondbetalingen zijn uitgeschakeld omdat je notificaties hebt geweigerd.</string>
     <string name="settings__bg__enabled">Achtergrondbetalingen zijn ingeschakeld. Je kunt geld ontvangen zelfs als de app gesloten is (als je apparaat verbonden is met internet).</string>
@@ -646,6 +653,8 @@
     <string name="settings__general__unit_display">Bedragen weergeven in</string>
     <string name="settings__general__unit_note">Tip: Wissel snel tussen Bitcoin en {currency} door op je wallet-saldo te tikken.</string>
     <string name="settings__general__unit_title">Standaardeenheid</string>
+    <string name="settings__general__section_interface">Interface</string>
+    <string name="settings__general__section_payments">Betalingen</string>
     <string name="settings__general_title">Algemeen</string>
     <string name="settings__language_system_default">Systeeminstellingen</string>
     <string name="settings__language_title">Taal</string>
@@ -671,6 +680,9 @@
     <string name="settings__security__swipe_balance_to_hide">Veeg over saldo om te verbergen</string>
     <string name="settings__security__use_bio">Gebruik {biometryTypeName} in plaats daarvan</string>
     <string name="settings__security__warn_100">Waarschuwen bij verzenden boven $100</string>
+    <string name="settings__security__section_backup">Back-up of reset</string>
+    <string name="settings__security__section_privacy">Privacy</string>
+    <string name="settings__security__section_safety">Veiligheid</string>
     <string name="settings__security_title">Beveiliging en privacy</string>
     <string name="settings__settings">Instellingen</string>
     <string name="settings__status__backup__error">Volledige backup niet voltooid</string>
@@ -712,10 +724,17 @@
     <string name="settings__support__title">Ondersteuning</string>
     <string name="settings__support__title_success">Succesvol verzonden</string>
     <string name="settings__support__title_unsuccess">Verzenden mislukt</string>
+    <string name="settings__support__copyright">Bitkit is gemaakt door Synonym Software, S.A. DE C.V. ©2025. Alle rechten voorbehouden.</string>
     <string name="settings__support_title">Ondersteuning</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Widgettitels tonen</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="settings__widgets__reset_suggestions">Suggestiekaarten resetten</string>
+    <string name="settings__widgets__reset_widgets">Widgets resetten</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">Weet je zeker dat je de widgets wilt resetten? De standaard widgetset met standaardconfiguraties wordt weergegeven.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">Widgets resetten?</string>
+    <string name="settings__widgets__section_display">Weergave</string>
+    <string name="settings__widgets__section_reset">Standaardinstellingen herstellen</string>
     <string name="slashtags__onboarding_profile1_header">Beheer je\n&lt;accent&gt;profiel&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Stel je openbare profiel en links in, zodat je Bitkit-contacten je kunnen bereiken of betalen, altijd en overal.</string>
     <string name="slashtags__profile">Profiel</string>

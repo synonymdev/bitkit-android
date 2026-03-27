@@ -255,6 +255,9 @@
     <string name="lightning__monitor_height">Altura do Arquivo do Monitor de Canal</string>
     <string name="lightning__force_channels_skipped">Algumas conexões não puderam ser fechadas.</string>
     <string name="lightning__transfer_in_progress">TRANSFERÊNCIA EM ANDAMENTO</string>
+    <string name="lightning__conn_onboarding_button">Começar</string>
+    <string name="lightning__conn_onboarding_text">Configure o seu saldo de despesas para desfrutar de transações instantâneas e económicas com amigos, familiares e comerciantes.</string>
+    <string name="lightning__conn_onboarding_title">Ativar\nLightning\n&lt;accent&gt;pagamentos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor aguarde enquanto seus dados da carteira antiga migram para esta nova versão da Bitkit. Isso geralmente leva menos de um minuto.</string>
     <string name="migration__nav_title">Migração da Carteira</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;CARTEIRA&lt;/accent&gt;</string>
@@ -512,6 +515,7 @@
     <string name="security__use_pin">Usar o código PIN</string>
     <string name="security__wiped_title">Dados da Carteira Deletados</string>
     <string name="security__wiped_message">O Bitkit foi redefinido e todos os dados da carteira foram excluídos.</string>
+    <string name="security__pin_enable_button">Ativar PIN</string>
     <string name="settings__settings">Ajustes</string>
     <string name="settings__dev_enabled_title">Modo Desenvolvedor Ativado</string>
     <string name="settings__dev_enabled_message">As opções de desenvolvedor estão agora habilitadas em todo o aplicativo.</string>
@@ -550,9 +554,17 @@
     <string name="settings__general__speed_fee_total_fiat">₿ {feeSats} para uma transação média ({fiatSymbol}{fiatFormatted} )</string>
     <string name="settings__general__tags">Tags</string>
     <string name="settings__general__tags_previously">Tags usadas anteriormente</string>
+    <string name="settings__general__section_interface">Interface</string>
+    <string name="settings__general__section_payments">Pagamentos</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Mostrar Títulos dos Widgets</string>
+    <string name="settings__widgets__reset_suggestions">Repor cartões de sugestões</string>
+    <string name="settings__widgets__reset_widgets">Repor widgets</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">Tem certeza de que deseja repor os widgets? O conjunto padrão de widgets com configurações padrão será exibido.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">Repor widgets?</string>
+    <string name="settings__widgets__section_display">Apresentação</string>
+    <string name="settings__widgets__section_reset">Repor predefinições</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__intro__title">Pagamentos\n&lt;accent&gt;Sem atrito&lt;/accent&gt;</string>
     <string name="settings__quickpay__intro__description">O Bitkit QuickPay agiliza o check-out pagando automaticamente os códigos QR quando escaneados.</string>
@@ -571,6 +583,9 @@
     <string name="settings__security__pin_disabled">Desativado</string>
     <string name="settings__security__use_bio">Usar {biometryTypeName}</string>
     <string name="settings__security__footer">Quando ativado, você poderá usar {biometryTypeName} em vez do PIN para desbloquear ou pagar.</string>
+    <string name="settings__security__section_backup">Cópia de segurança ou repor</string>
+    <string name="settings__security__section_privacy">Privacidade</string>
+    <string name="settings__security__section_safety">Segurança</string>
     <string name="settings__backup__wallet">Faça backup da sua carteira</string>
     <string name="settings__backup__reset">Reiniciar e restaurar carteira</string>
     <string name="settings__backup__failed_title">Falha no Backup</string>
@@ -587,6 +602,7 @@
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_profile">Perfil</string>
     <string name="settings__backup__category_contacts">Contatos</string>
+    <string name="settings__backup__data">Cópias de segurança</string>
     <string name="settings__support__title">Suporte</string>
     <string name="settings__support__text">Precisa de ajuda? Relate seu problema pela Bitkit, visite a central de ajuda, verifique o status ou entre em contato conosco em nossos canais sociais.</string>
     <string name="settings__support__report">Relatar problema</string>
@@ -605,6 +621,7 @@
     <string name="settings__support__text_unsuccess">Algo deu errado ao enviar seu problema ou pergunta. Por favor, tente novamente.</string>
     <string name="settings__support__text_unsuccess_button">Tente novamente</string>
     <string name="settings__support__link_error">Falha ao abrir links de suporte</string>
+    <string name="settings__support__copyright">Bitkit foi criado pela Synonym Software, S.A. DE C.V. ©2025. Todos os direitos reservados.</string>
     <string name="settings__status__title">Status do Aplicativo</string>
     <string name="settings__status__internet__title">Internet</string>
     <string name="settings__status__internet__ready">Conectado</string>
@@ -653,6 +670,8 @@
     <string name="settings__adv__lightning_node">Nó Lightning</string>
     <string name="settings__adv__electrum_server">Servidor Electrum</string>
     <string name="settings__adv__rgs_server">Servidor Rapid-Gossip-Sync</string>
+    <string name="settings__adv__electrum_auto">Auto</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__fee__fast__label">Rápido (mais caro)</string>
     <string name="settings__fee__fast__value">Rápido</string>
     <string name="settings__fee__fast__description">± 10-20 minutos</string>

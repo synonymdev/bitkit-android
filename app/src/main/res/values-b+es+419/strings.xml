@@ -255,6 +255,9 @@
     <string name="lightning__wait_text_bottom">Conectado y sincronizando...</string>
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 seg.).</string>
     <string name="lightning__wallet_balances">Saldos de billetera</string>
+    <string name="lightning__conn_onboarding_button">Comenzar</string>
+    <string name="lightning__conn_onboarding_text">Configure su saldo de gastos para disfrutar de transacciones instantáneas y económicas con amigos, familiares y comerciantes.</string>
+    <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor espera mientras se migran los datos de tu billetera anterior a esta nueva versión de Bitkit. Esto normalmente tarda menos de un minuto.</string>
     <string name="migration__nav_title">Migración de billetera</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;BILLETERA&lt;/accent&gt;</string>
@@ -513,6 +516,7 @@
     <string name="security__wipe_app">Eliminar datos de la app</string>
     <string name="security__wiped_message">Bitkit ha sido reseteado y todos los datos han sido borrados.</string>
     <string name="security__wiped_title">Datos de la billetera borrados</string>
+    <string name="security__pin_enable_button">Habilitar PIN</string>
     <string name="settings__about__legal">Legal</string>
     <string name="settings__about__share">Compartir</string>
     <string name="settings__about__shareText">Cambie su cartera, cambie el mundo. Descargar Bitkit para iPhone {appStoreUrl} o Android {playStoreUrl}</string>
@@ -557,6 +561,8 @@
     <string name="settings__adv__section_other">Otros</string>
     <string name="settings__adv__section_payments">Pagos</string>
     <string name="settings__adv__suggestions_reset">Resetear sugerencias</string>
+    <string name="settings__adv__electrum_auto">Auto</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__advanced_title">Avanzado</string>
     <string name="settings__backup__category_connection_receipts">Recibos de conexión</string>
     <string name="settings__backup__category_connections">Conexiones</string>
@@ -574,6 +580,7 @@
     <string name="settings__backup__status_running">Ejecutándose</string>
     <string name="settings__backup__status_success">Última Copia de Seguridad: {time}</string>
     <string name="settings__backup__wallet">Haga una copia de seguridad de su cartera</string>
+    <string name="settings__backup__data">Copias de seguridad</string>
     <string name="settings__bg__customize">Personalizar en Ajustes de Bitkit en Android</string>
     <string name="settings__bg__disabled">Los pagos en segundo plano están desactivados porque has denegado las notificaciones.</string>
     <string name="settings__bg__enabled">Los pagos en segundo plano están activados. Puedes recibir fondos incluso cuando la app está cerrada (si tu dispositivo está conectado a internet).</string>
@@ -646,6 +653,8 @@
     <string name="settings__general__unit_display">Mostrar importes en</string>
     <string name="settings__general__unit_note">Truco: Cambia rápidamente entre Bitcoin y {currency} tocando sobre el balance del monedero.</string>
     <string name="settings__general__unit_title">Unidad por defecto</string>
+    <string name="settings__general__section_interface">Interfaz</string>
+    <string name="settings__general__section_payments">Pagos</string>
     <string name="settings__general_title">Geral</string>
     <string name="settings__language_system_default">Ajustes del sistema</string>
     <string name="settings__language_title">Idioma</string>
@@ -671,6 +680,9 @@
     <string name="settings__security__swipe_balance_to_hide">Deslizar la balanza para ocultar</string>
     <string name="settings__security__use_bio">Usar {biometryTypeName} en su lugar</string>
     <string name="settings__security__warn_100">Advertir al enviar más de $100 usd</string>
+    <string name="settings__security__section_backup">Respaldar o restablecer</string>
+    <string name="settings__security__section_privacy">Privacidad</string>
+    <string name="settings__security__section_safety">Seguridad</string>
     <string name="settings__security_title">Seguridad y Privacidad</string>
     <string name="settings__settings">Ajustes</string>
     <string name="settings__status__backup__error">No se ha podido completar una copia de seguridad completa</string>
@@ -712,10 +724,17 @@
     <string name="settings__support__title">Soporte</string>
     <string name="settings__support__title_success">Enviado con éxito</string>
     <string name="settings__support__title_unsuccess">Fallo en el envío</string>
+    <string name="settings__support__copyright">Bitkit fue creado por Synonym Software, S.A. DE C.V. ©2025. Todos los derechos reservados.</string>
     <string name="settings__support_title">Soporte</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Mostrar títulos de widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="settings__widgets__reset_suggestions">Restablecer tarjetas de sugerencias</string>
+    <string name="settings__widgets__reset_widgets">Restablecer widgets</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">¿Está seguro de que desea restablecer los widgets? Se mostrará el conjunto de widgets predeterminado con las configuraciones predeterminadas.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">¿Restablecer widgets?</string>
+    <string name="settings__widgets__section_display">Pantalla</string>
+    <string name="settings__widgets__section_reset">Restablecer valores predeterminados</string>
     <string name="slashtags__onboarding_profile1_header">Sea dueño de su\n&lt;accent&gt;perfil&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Configura tu perfil público y tus enlaces para que tus contactos en Bitkit puedan encontrarte o pagarte en cualquier momento y lugar.</string>
     <string name="slashtags__profile">Perfil</string>

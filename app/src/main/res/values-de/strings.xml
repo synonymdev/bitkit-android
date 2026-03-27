@@ -255,6 +255,9 @@
     <string name="lightning__wait_text_top">Bitte warte bis sich Bitkit mit dem Zahlungsnetzwerk verbunden hat (±10 Sekunden).</string>
     <string name="lightning__wait_text_bottom">Verbinden &amp; Synchronisieren…</string>
     <string name="lightning__wallet_balances">Wallet-Guthaben</string>
+    <string name="lightning__conn_onboarding_button">Loslegen</string>
+    <string name="lightning__conn_onboarding_text">Richte dein Ausgabenguthaben ein, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
+    <string name="lightning__conn_onboarding_title">Lightning\n&lt;accent&gt;Zahlungen&lt;/accent&gt;\naktivieren</string>
     <string name="migration__description">Bitte warte, während deine alten Wallet-Daten auf diese neue Bitkit-Version migriert werden. Das dauert normalerweise weniger als eine Minute.</string>
     <string name="migration__nav_title">Wallet-Migration</string>
     <string name="migration__title">WALLET\n&lt;accent&gt;MIGRATION&lt;/accent&gt;</string>
@@ -513,6 +516,7 @@
     <string name="security__use_pin">PIN-Code verwenden</string>
     <string name="security__wiped_title">Wallet</string>
     <string name="security__wiped_message">Bitkit wurde zurückgesetzt und alle Wallet-Daten wurden gelöscht.</string>
+    <string name="security__pin_enable_button">PIN aktivieren</string>
     <string name="settings__settings">Einstellungen</string>
     <string name="settings__dev_enabled_title">Entwickler-Einstellungen aktiviert</string>
     <string name="settings__dev_enabled_message">Entwickler-Einstellungen sind jetzt in der gesamten App aktiviert.</string>
@@ -553,9 +557,17 @@
     <string name="settings__general__speed_fee_total_fiat">₿ {feeSats} für die durschnittliche Transaktion ({fiatSymbol}{fiatFormatted})</string>
     <string name="settings__general__tags">Tags</string>
     <string name="settings__general__tags_previously">Früher verwendete Tags</string>
+    <string name="settings__general__section_interface">Oberfläche</string>
+    <string name="settings__general__section_payments">Zahlungen</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Titel anzeigen</string>
+    <string name="settings__widgets__reset_suggestions">Vorschlagskarten zurücksetzen</string>
+    <string name="settings__widgets__reset_widgets">Widgets zurücksetzen</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">Bist du sicher, dass du die Widgets zurücksetzen möchtest? Die Standard-Widgets mit Standardkonfigurationen werden angezeigt.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">Widgets zurücksetzen?</string>
+    <string name="settings__widgets__section_display">Anzeige</string>
+    <string name="settings__widgets__section_reset">Auf Standard zurücksetzen</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Reibungslos&lt;/accent&gt;\nZahlungen</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay beschleunigt den Bezahlvorgang, indem es QR-Codes beim Scannen automatisch bezahlt.</string>
@@ -591,6 +603,9 @@
     <string name="settings__security__pin_disabled">Deaktiviert</string>
     <string name="settings__security__use_bio">Nutze {biometryTypeName}</string>
     <string name="settings__security__footer">Wenn eingeschaltet, kannst du {biometryTypeName} an Stelle von deinem PIN code verwenden, um dein Wallet zu entsperren oder Zahlungen zu senden.</string>
+    <string name="settings__security__section_backup">Sichern oder zurücksetzen</string>
+    <string name="settings__security__section_privacy">Datenschutz</string>
+    <string name="settings__security__section_safety">Sicherheit</string>
     <string name="settings__backup__wallet">Sichere dein Wallet</string>
     <string name="settings__backup__reset">Wallet zurücksetzen</string>
     <string name="settings__backup__failed_title">Backup fehlgeschlagen</string>
@@ -607,6 +622,7 @@
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_profile">Profil</string>
     <string name="settings__backup__category_contacts">Kontakte</string>
+    <string name="settings__backup__data">Datensicherungen</string>
     <string name="settings__support__title">Support</string>
     <string name="settings__support__link_error">Support-Links konnten nicht geöffnet werden</string>
     <string name="settings__support__text">Brauchst du Hilfe? Melde dein Problem von innerhalb Bitkit, besuche das Hilfezentrum, überprüfe den Status, oder kontaktiere uns auf den sozialen Medien.</string>
@@ -625,6 +641,7 @@
     <string name="settings__support__title_unsuccess">Senden fehlgeschlagen</string>
     <string name="settings__support__text_unsuccess">Es gab ein Problem beim Senden deiner Nachricht. Bitte versuche es erneut.</string>
     <string name="settings__support__text_unsuccess_button">Erneut versuchen</string>
+    <string name="settings__support__copyright">Bitkit wurde von Synonym Software, S.A. DE C.V. ©2025 entwickelt. Alle Rechte vorbehalten.</string>
     <string name="settings__status__title">App Status</string>
     <string name="settings__status__internet__title">Internet</string>
     <string name="settings__status__internet__ready">Verbunden</string>
@@ -673,6 +690,8 @@
     <string name="settings__adv__lightning_node">Lightning Node</string>
     <string name="settings__adv__electrum_server">Electrum-Server</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
+    <string name="settings__adv__electrum_auto">Auto</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__fee__fast__label">Schnell (teurer)</string>
     <string name="settings__fee__fast__value">Schnell</string>
     <string name="settings__fee__fast__description">± 10-20 Minuten</string>

@@ -255,6 +255,9 @@
     <string name="lightning__order_state__inactive">Connexion inactive</string>
     <string name="lightning__wait_text_top">Veuillez attendre que Bitkit se connecte au réseau de paiement (±10 secondes).</string>
     <string name="lightning__wait_text_bottom">Connexion et synchronisation...</string>
+    <string name="lightning__conn_onboarding_button">Commencer</string>
+    <string name="lightning__conn_onboarding_text">Configurez votre solde de dépenses pour profiter de transactions instantanées et peu coûteuses avec vos amis, votre famille et les commerçants.</string>
+    <string name="lightning__conn_onboarding_title">Activer les\n&lt;accent&gt;paiements&lt;/accent&gt;\nLightning</string>
     <string name="migration__description">Veuillez patienter pendant la migration de vos anciennes données vers cette nouvelle version de Bitkit. Cela prend généralement moins d\'une minute.</string>
     <string name="migration__nav_title">Migration du portefeuille</string>
     <string name="migration__title">MIGRATION\n&lt;accent&gt;DU PORTEFEUILLE&lt;/accent&gt;</string>
@@ -513,6 +516,7 @@
     <string name="security__use_pin">Utiliser le code PIN</string>
     <string name="security__wiped_title">Données du wallet supprimées</string>
     <string name="security__wiped_message">Bitkit a été réinitialisé et toutes les données du walet ont été supprimées.</string>
+    <string name="security__pin_enable_button">Activer le PIN</string>
     <string name="settings__settings">Paramètres</string>
     <string name="settings__dev_enabled_title">Options de développement activées</string>
     <string name="settings__dev_enabled_message">Les options pour les développeurs sont désormais activées dans l\'ensemble de l\'application.</string>
@@ -553,9 +557,17 @@
     <string name="settings__general__speed_fee_total_fiat">₿ {feeSats} pour une transaction moyenne ({fiatSymbol}{fiatFormatted} )</string>
     <string name="settings__general__tags">Tags</string>
     <string name="settings__general__tags_previously">Étiquettes précédemment utilisées</string>
+    <string name="settings__general__section_interface">Interface</string>
+    <string name="settings__general__section_payments">Paiements</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Afficher les titres des widgets</string>
+    <string name="settings__widgets__reset_suggestions">Réinitialiser les cartes de suggestions</string>
+    <string name="settings__widgets__reset_widgets">Réinitialiser les widgets</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">Êtes-vous sûr de vouloir réinitialiser les widgets ? L\'ensemble de widgets par défaut avec les configurations par défaut sera affiché.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">Réinitialiser les widgets ?</string>
+    <string name="settings__widgets__section_display">Affichage</string>
+    <string name="settings__widgets__section_reset">Réinitialiser par défaut</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Sans friction&lt;/accent&gt;\npaiements</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay accélère le passage à la caisse en payant automatiquement les QR codes lorsqu\'ils sont scannés.</string>
@@ -574,6 +586,9 @@
     <string name="settings__security__pin_disabled">Désactivé</string>
     <string name="settings__security__use_bio">Utilisez plutôt {biometryTypeName} </string>
     <string name="settings__security__footer">Lorsque cette option est activée, vous pouvez utiliser {biometryTypeName} au lieu de votre code PIN pour déverrouiller votre portefeuille ou envoyer des paiements.</string>
+    <string name="settings__security__section_backup">Sauvegarder ou réinitialiser</string>
+    <string name="settings__security__section_privacy">Confidentialité</string>
+    <string name="settings__security__section_safety">Sécurité</string>
     <string name="settings__backup__wallet">Sauvegardez votre portefeuille</string>
     <string name="settings__backup__reset">Réinitialiser et restaurer le portefeuille</string>
     <string name="settings__backup__failed_title">Échec de la sauvegarde des données</string>
@@ -590,6 +605,7 @@
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_profile">Profil</string>
     <string name="settings__backup__category_contacts">Contacts</string>
+    <string name="settings__backup__data">Sauvegardes des données</string>
     <string name="settings__bg__customize">Personnaliser dans les paramètres Android de Bitkit</string>
     <string name="settings__bg__disabled">Les paiements en arrière-plan sont désactivés car vous avez refusé les notifications.</string>
     <string name="settings__bg__enabled">Les paiements en arrière-plan sont activés. Vous pouvez recevoir des fonds même lorsque l\'application est fermée (si votre appareil est connecté à Internet).</string>
@@ -621,6 +637,7 @@
     <string name="settings__support__text_unsuccess">Un problème s\'est produit lors de l\'envoi de votre problème ou de votre question. Veuillez réessayer.</string>
     <string name="settings__support__text_unsuccess_button">Réessayer</string>
     <string name="settings__support__link_error">Échec de l\'ouverture des liens de support</string>
+    <string name="settings__support__copyright">Bitkit a été conçu par Synonym Software, S.A. DE C.V. ©2025. Tous droits réservés.</string>
     <string name="settings__status__title">Statut de l\'application</string>
     <string name="settings__status__internet__title">Internet</string>
     <string name="settings__status__internet__ready">Connecté</string>
@@ -673,6 +690,8 @@
     <string name="settings__adv__lightning_node">Nœud Lightning</string>
     <string name="settings__adv__electrum_server">Serveur Electrum</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
+    <string name="settings__adv__electrum_auto">Auto</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__fee__fast__label">Rapide (plus cher)</string>
     <string name="settings__fee__fast__value">Rapide</string>
     <string name="settings__fee__fast__description">± 10-20 minutes</string>

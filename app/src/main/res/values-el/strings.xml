@@ -255,6 +255,9 @@
     <string name="lightning__wait_text_bottom">Σύνδεση &amp; Συγχρονισμός...</string>
     <string name="lightning__wait_text_top">Περίμενε το Bitkit να συνδεθεί στο δίκτυο πληρωμών (±10 δευτερόλεπτα).</string>
     <string name="lightning__wallet_balances">Υπόλοιπα πορτοφολιού</string>
+    <string name="lightning__conn_onboarding_button">Ξεκινήστε</string>
+    <string name="lightning__conn_onboarding_text">Ρυθμίστε το υπόλοιπο δαπανών σας για να απολαύσετε άμεσες και φθηνές συναλλαγές με φίλους, οικογένεια και εμπόρους.</string>
+    <string name="lightning__conn_onboarding_title">Ενεργοποίηση\nLightning\n&lt;accent&gt;πληρωμών&lt;/accent&gt;</string>
     <string name="migration__description">Περίμενε όσο τα παλιά δεδομένα του πορτοφολιού μεταφέρονται σε αυτή τη νέα έκδοση του Bitkit. Αυτό συνήθως διαρκεί λιγότερο από ένα λεπτό.</string>
     <string name="migration__nav_title">Μετάβαση πορτοφολιού</string>
     <string name="migration__title">ΜΕΤΑΒΑΣΗ\n&lt;accent&gt;ΠΟΡΤΟΦΟΛΙΟΥ&lt;/accent&gt;</string>
@@ -513,6 +516,7 @@
     <string name="security__wipe_app">Διαγραφή εφαρμογής</string>
     <string name="security__wiped_message">Το Bitkit επαναφέρθηκε και όλα τα δεδομένα πορτοφολιού διαγράφηκαν.</string>
     <string name="security__wiped_title">Δεδομένα πορτοφολιού διαγράφηκαν</string>
+    <string name="security__pin_enable_button">Ενεργοποίηση PIN</string>
     <string name="settings__about__legal">Νομικά</string>
     <string name="settings__about__share">Διαμοιρασμός</string>
     <string name="settings__about__shareText">Άλλαξε το πορτοφόλι σου, άλλαξε τον κόσμο. Κατέβασε το Bitkit για iPhone {appStoreUrl} ή Android {playStoreUrl}</string>
@@ -557,6 +561,8 @@
     <string name="settings__adv__section_other">Άλλα</string>
     <string name="settings__adv__section_payments">Πληρωμές</string>
     <string name="settings__adv__suggestions_reset">Επαναφορά προτάσεων</string>
+    <string name="settings__adv__electrum_auto">Αυτόματο</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__advanced_title">Για προχωρημένους</string>
     <string name="settings__backup__category_connection_receipts">Αποδείξεις συνδέσεων</string>
     <string name="settings__backup__category_connections">Συνδέσεις</string>
@@ -574,6 +580,7 @@
     <string name="settings__backup__status_running">Εκτελείται</string>
     <string name="settings__backup__status_success">Τελευταίο αντίγραφο: {time}</string>
     <string name="settings__backup__wallet">Αντίγραφο ασφαλείας πορτοφολιού</string>
+    <string name="settings__backup__data">Αντίγραφα δεδομένων</string>
     <string name="settings__bg__customize">Προσαρμογή στις ρυθμίσεις Android Bitkit</string>
     <string name="settings__bg__disabled">Οι πληρωμές παρασκηνίου είναι απενεργοποιημένες επειδή αρνήθηκες τις ειδοποιήσεις.</string>
     <string name="settings__bg__enabled">Οι πληρωμές παρασκηνίου είναι ενεργοποιημένες. Μπορείς να λαμβάνεις κεφάλαια ακόμα και όταν η εφαρμογή είναι κλειστή (αν η συσκευή σου είναι συνδεδεμένη στο διαδίκτυο).</string>
@@ -646,6 +653,8 @@
     <string name="settings__general__unit_display">Εμφάνιση ποσών σε</string>
     <string name="settings__general__unit_note">Συμβουλή: Εναλλαγή γρήγορα μεταξύ Bitcoin και {currency} πατώντας στο υπόλοιπο του πορτοφολιού σου.</string>
     <string name="settings__general__unit_title">Προεπιλεγμένη μονάδα</string>
+    <string name="settings__general__section_interface">Διεπαφή</string>
+    <string name="settings__general__section_payments">Πληρωμές</string>
     <string name="settings__general_title">Γενικά</string>
     <string name="settings__language_system_default">Ρυθμίσεις συστήματος</string>
     <string name="settings__language_title">Γλώσσα</string>
@@ -671,6 +680,9 @@
     <string name="settings__security__swipe_balance_to_hide">Σύρε υπόλοιπο για απόκρυψη</string>
     <string name="settings__security__use_bio">Χρήση {biometryTypeName} αντί</string>
     <string name="settings__security__warn_100">Προειδοποίηση όταν στέλνεις πάνω από $100</string>
+    <string name="settings__security__section_backup">Δημιουργία αντιγράφου ή επαναφορά</string>
+    <string name="settings__security__section_privacy">Απόρρητο</string>
+    <string name="settings__security__section_safety">Ασφάλεια</string>
     <string name="settings__security_title">Ασφάλεια και απόρρητο</string>
     <string name="settings__settings">Ρυθμίσεις</string>
     <string name="settings__status__backup__error">Αποτυχία ολοκλήρωσης πλήρους αντιγράφου ασφαλείας</string>
@@ -712,10 +724,17 @@
     <string name="settings__support__title">Υποστήριξη</string>
     <string name="settings__support__title_success">Στάλθηκε επιτυχώς</string>
     <string name="settings__support__title_unsuccess">Αποτυχία αποστολής</string>
+    <string name="settings__support__copyright">Το Bitkit δημιουργήθηκε από τη Synonym Software, S.A. DE C.V. ©2025. Με επιφύλαξη παντός δικαιώματος.</string>
     <string name="settings__support_title">Υποστήριξη</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Εμφάνιση τίτλων Widget</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
+    <string name="settings__widgets__reset_suggestions">Επαναφορά καρτών προτάσεων</string>
+    <string name="settings__widgets__reset_widgets">Επαναφορά widgets</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">Είσαι σίγουρος ότι θέλεις να επαναφέρεις τα widgets; Θα εμφανιστεί το προεπιλεγμένο σετ widgets με τις προεπιλεγμένες ρυθμίσεις.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">Επαναφορά widgets;</string>
+    <string name="settings__widgets__section_display">Εμφάνιση</string>
+    <string name="settings__widgets__section_reset">Επαναφορά προεπιλογών</string>
     <string name="slashtags__onboarding_profile1_header">Κατέχεις το\n&lt;accent&gt;προφίλ σου&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Ρύθμισε το δημόσιο προφίλ και τους συνδέσμους σου, ώστε οι επαφές σου στο Bitkit να μπορούν να επικοινωνήσουν ή να σε πληρώσουν οποτεδήποτε, οπουδήποτε.</string>
     <string name="slashtags__profile">Προφίλ</string>
