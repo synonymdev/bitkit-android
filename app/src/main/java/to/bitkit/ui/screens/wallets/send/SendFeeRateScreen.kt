@@ -120,7 +120,7 @@ private fun Content(
                 sats = estimatedRoutingFee,
                 isSelected = payMethod == SendMethod.LIGHTNING,
                 onClick = { onSelect(FeeRate.INSTANT) },
-                modifier = Modifier.testTag("fee_INSTANT_button"),
+                modifier = Modifier.testTag("fee_INSTANT_button")
             )
         }
 
