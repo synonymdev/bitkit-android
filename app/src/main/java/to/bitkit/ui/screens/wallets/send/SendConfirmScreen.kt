@@ -264,7 +264,7 @@ fun ContentRunning(
     onSwipeToConfirm: () -> Unit = {},
 ) {
     var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
-    var swipeProgress by remember { mutableFloatStateOf(0f) }
+    val swipeProgress = remember { mutableFloatStateOf(0f) }
 
     val accentColor = when (uiState.payMethod) {
         SendMethod.ONCHAIN -> Colors.Brand
@@ -311,7 +311,7 @@ fun ContentRunning(
                     .fillMaxWidth(0.8f)
                     .align(Alignment.CenterHorizontally)
                     .padding(bottom = 16.dp)
-                    .graphicsLayer { rotationZ = swipeProgress * 14f }
+                    .graphicsLayer { rotationZ = swipeProgress.floatValue * 14f }
             )
         }
 
@@ -353,7 +353,7 @@ fun ContentRunning(
             color = accentColor,
             loading = isLoading,
             confirmed = isLoading,
-            onProgressChange = { swipeProgress = it },
+            progress = swipeProgress,
             onConfirm = onSwipeToConfirm,
         )
         VerticalSpacer(16.dp)

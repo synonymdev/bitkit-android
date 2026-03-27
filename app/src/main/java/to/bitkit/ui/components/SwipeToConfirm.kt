@@ -24,12 +24,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -70,7 +70,7 @@ fun SwipeToConfirm(
     endIconTint: Color = Colors.Black,
     loading: Boolean = false,
     confirmed: Boolean = false,
-    onProgressChange: ((Float) -> Unit)? = null,
+    progress: MutableFloatState? = null,
     onConfirm: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -96,11 +96,7 @@ fun SwipeToConfirm(
         )
     }
 
-    LaunchedEffect(onProgressChange) {
-        if (onProgressChange == null) return@LaunchedEffect
-        snapshotFlow { panX.value / maxPanX }
-            .collect { onProgressChange(it.coerceIn(0f, 1f)) }
-    }
+    progress?.floatValue = (panX.value / maxPanX).coerceIn(0f, 1f)
 
     Box(
         modifier = modifier
