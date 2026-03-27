@@ -23,17 +23,21 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.navigateToAuthCheck
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
@@ -44,11 +48,21 @@ fun ResetAndRestoreScreen(
 ) {
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
+    val settings = settingsViewModel ?: return
+    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     var showDialog by remember { mutableStateOf(false) }
 
     Content(
         showConfirmDialog = showDialog,
-        onClickBackup = { app.showSheet(Sheet.Backup()) },
+        onClickBackup = {
+            if (isPinEnabled) {
+                navController.navigateToAuthCheck(
+                    onSuccessActionId = AuthCheckAction.SHOW_BACKUP_SHEET,
+                )
+            } else {
+                app.showSheet(Sheet.Backup())
+            }
+        },
         onClickReset = { showDialog = true },
         onResetConfirm = { wallet.wipeWallet() },
         onResetDismiss = { showDialog = false },
