@@ -450,7 +450,7 @@
     <string name="security__cp_setnew_title">Set New PIN</string>
     <string name="security__cp_text">Enter your &lt;accent>current&lt;/accent> PIN to change it.</string>
     <string name="security__cp_title">Change PIN</string>
-    <string name="security__cp_try_again">Try again, this is not the same PIN.</string>
+    <string name="security__cp_try_again">Not the same PIN. Try again.</string>
     <string name="security__display_seed">Show Seed Phrase</string>
     <string name="security__mnemonic_confirm">Confirm Recovery Phrase</string>
     <string name="security__mnemonic_confirm_tap">Tap the 12 words in the correct order.</string>
@@ -494,7 +494,7 @@
     <string name="security__pin_forgot_text">Forgot your PIN? Reset and recover your Bitkit wallet with your recovery phrase. Set a new PIN after completing recovery.</string>
     <string name="security__pin_forgot_title">Forgot PIN?</string>
     <string name="security__pin_last_attempt">Last attempt. Entering the wrong PIN again will reset your wallet.</string>
-    <string name="security__pin_not_match">Try again, this is not the same PIN.</string>
+    <string name="security__pin_not_match">Not the same PIN. Try again.</string>
     <string name="security__pin_retype_header">Retype 4-Digit PIN</string>
     <string name="security__pin_retype_text">Please retype your 4-digit PIN to complete the setup process.</string>
     <string name="security__pin_security_button">Secure Wallet</string>
