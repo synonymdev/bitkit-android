@@ -105,6 +105,9 @@
     <string name="lightning__closure_reason">Closure reason</string>
     <string name="lightning__conn_button_add">Add Connection</string>
     <string name="lightning__conn_button_export_logs">Export Logs</string>
+    <string name="lightning__conn_onboarding_button">Get Started</string>
+    <string name="lightning__conn_onboarding_text">Set up your spending balance to enjoy instant and cheap transactions with friends, family, and merchants.</string>
+    <string name="lightning__conn_onboarding_title">Enable\nLightning\n&lt;accent&gt;payments&lt;/accent&gt;</string>
     <string name="lightning__conn_closed">Closed connections</string>
     <string name="lightning__conn_closed_hide">Hide Closed &amp; Failed</string>
     <string name="lightning__conn_closed_show">Show Closed &amp; Failed</string>
