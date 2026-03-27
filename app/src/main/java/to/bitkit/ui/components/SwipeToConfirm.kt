@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -96,7 +97,9 @@ fun SwipeToConfirm(
         )
     }
 
-    progress?.floatValue = (panX.value / maxPanX).coerceIn(0f, 1f)
+    SideEffect {
+        progress?.floatValue = (panX.value / maxPanX).coerceIn(0f, 1f)
+    }
 
     Box(
         modifier = modifier
