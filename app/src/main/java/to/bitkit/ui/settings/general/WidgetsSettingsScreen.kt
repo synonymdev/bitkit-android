@@ -22,6 +22,7 @@ import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.components.settings.SettingsSwitchRow
+import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -44,8 +45,14 @@ fun WidgetsSettingsScreen(
         showWidgetTitles = showWidgetTitles,
         onShowWidgetsClick = { settings.setShowWidgets(!showWidgets) },
         onShowWidgetTitlesClick = { settings.setShowWidgetTitles(!showWidgetTitles) },
-        onResetWidgetsClick = { settings.resetWidgets() },
-        onResetSuggestionsClick = { settings.resetDismissedSuggestions() },
+        onResetWidgetsClick = {
+            settings.resetWidgets()
+            navController.navigateToHome()
+        },
+        onResetSuggestionsClick = {
+            settings.resetDismissedSuggestions()
+            navController.navigateToHome()
+        },
     )
 }
 
@@ -71,7 +78,7 @@ private fun WidgetsSettingsContent(
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
         ) {
             // Display section
             SectionHeader(title = stringResource(R.string.settings__widgets__section_display))
@@ -80,11 +87,13 @@ private fun WidgetsSettingsContent(
                 title = stringResource(R.string.settings__widgets__showWidgets),
                 isChecked = showWidgets,
                 onClick = onShowWidgetsClick,
+                modifier = Modifier.testTag("ShowWidgets"),
             )
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__widgets__showWidgetTitles),
                 isChecked = showWidgetTitles,
                 onClick = onShowWidgetTitlesClick,
+                modifier = Modifier.testTag("ShowWidgetTitles"),
             )
 
             // Reset section
@@ -97,13 +106,13 @@ private fun WidgetsSettingsContent(
                 title = stringResource(R.string.settings__widgets__reset_widgets),
                 icon = { SettingsIcon(R.drawable.ic_arrow_counter_clockwise) },
                 onClick = { showResetWidgetsDialog = true },
-                modifier = Modifier.testTag("ResetWidgets"),
+                modifier = Modifier.testTag("ResetWidgets")
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__widgets__reset_suggestions),
                 icon = { SettingsIcon(R.drawable.ic_arrow_counter_clockwise) },
                 onClick = { showResetSuggestionsDialog = true },
-                modifier = Modifier.testTag("ResetSuggestions"),
+                modifier = Modifier.testTag("ResetSuggestions")
             )
         }
 
@@ -117,7 +126,7 @@ private fun WidgetsSettingsContent(
                     showResetWidgetsDialog = false
                 },
                 onDismiss = { showResetWidgetsDialog = false },
-                modifier = Modifier.testTag("reset_widgets_dialog"),
+                modifier = Modifier.testTag("reset_widgets_dialog")
             )
         }
 
@@ -131,7 +140,7 @@ private fun WidgetsSettingsContent(
                     showResetSuggestionsDialog = false
                 },
                 onDismiss = { showResetSuggestionsDialog = false },
-                modifier = Modifier.testTag("reset_suggestions_dialog"),
+                modifier = Modifier.testTag("reset_suggestions_dialog")
             )
         }
     }

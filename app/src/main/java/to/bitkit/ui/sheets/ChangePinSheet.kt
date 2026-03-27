@@ -33,6 +33,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
@@ -168,7 +169,7 @@ private fun ValidateContent(
             .fillMaxWidth()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("ChangePIN"),
+            .testTag("ChangePIN")
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__cp_title),
@@ -180,7 +181,7 @@ private fun ValidateContent(
         BodyM(
             text = stringResource(R.string.security__cp_text).withAccentBoldBright(),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         VerticalSpacer(32.dp)
@@ -193,7 +194,7 @@ private fun ValidateContent(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("LastAttempt"),
+                        .testTag("LastAttempt")
                 )
             } else {
                 BodyS(
@@ -204,7 +205,7 @@ private fun ValidateContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickableAlpha { onClickForgotPin() }
-                        .testTag("AttemptsRemaining"),
+                        .testTag("AttemptsRemaining")
                 )
             }
             VerticalSpacer(16.dp)
@@ -220,7 +221,7 @@ private fun ValidateContent(
             onPress = onKeyPress,
             type = NumberPadType.SIMPLE,
             modifier = Modifier
-                .height(NumberPadHeight),
+                .height(NumberPadHeight)
         )
     }
 }
@@ -236,7 +237,7 @@ private fun NewPinContent(
             .fillMaxWidth()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("ChangePIN2"),
+            .testTag("ChangePIN2")
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__cp_setnew_title),
@@ -248,7 +249,7 @@ private fun NewPinContent(
         BodyM(
             text = stringResource(R.string.security__cp_setnew_text),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         VerticalSpacer(32.dp)
@@ -279,7 +280,7 @@ private fun ConfirmContent(
             .fillMaxWidth()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("ChangePIN2"),
+            .testTag("ChangePIN2")
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__cp_retype_title),
@@ -291,7 +292,7 @@ private fun ConfirmContent(
         BodyM(
             text = stringResource(R.string.security__cp_retype_text),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         VerticalSpacer(32.dp)
@@ -303,7 +304,7 @@ private fun ConfirmContent(
                 color = Colors.Brand,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("WrongPIN"),
+                    .testTag("WrongPIN")
             )
         }
 
@@ -317,7 +318,7 @@ private fun ConfirmContent(
             onPress = onKeyPress,
             type = NumberPadType.SIMPLE,
             modifier = Modifier
-                .height(NumberPadHeight),
+                .height(NumberPadHeight)
         )
     }
 }
@@ -330,7 +331,7 @@ private fun ResultContent(
         modifier = Modifier
             .fillMaxWidth()
             .gradientBackground()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__cp_changed_title)
@@ -341,19 +342,19 @@ private fun ResultContent(
         BodyM(
             text = stringResource(R.string.security__cp_changed_text),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
         ) {
             Image(
                 painter = painterResource(R.drawable.check),
                 contentDescription = null,
-                modifier = Modifier.size(256.dp),
+                modifier = Modifier.size(256.dp)
             )
         }
 
@@ -362,58 +363,66 @@ private fun ResultContent(
             onClick = onOkClick,
             modifier = Modifier
                 .padding(horizontal = 32.dp)
-                .testTag("OK"),
+                .testTag("OK")
         )
 
         VerticalSpacer(16.dp)
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewValidate() {
     AppThemeSurface {
-        ValidateContent(
-            pin = "12",
-            attemptsRemaining = 8,
-            onKeyPress = {},
-            onBackClick = {},
-            onClickForgotPin = {},
-        )
+        BottomSheetPreview {
+            ValidateContent(
+                pin = "12",
+                attemptsRemaining = 8,
+                onKeyPress = {},
+                onBackClick = {},
+                onClickForgotPin = {},
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewNew() {
     AppThemeSurface {
-        NewPinContent(
-            pin = "12",
-            onKeyPress = {},
-            onBackClick = {},
-        )
+        BottomSheetPreview {
+            NewPinContent(
+                pin = "12",
+                onKeyPress = {},
+                onBackClick = {},
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewConfirm() {
     AppThemeSurface {
-        ConfirmContent(
-            pin = "12",
-            showError = false,
-            onKeyPress = {},
-            onBackClick = {},
-        )
+        BottomSheetPreview {
+            ConfirmContent(
+                pin = "12",
+                showError = false,
+                onKeyPress = {},
+                onBackClick = {},
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewResult() {
     AppThemeSurface {
-        ResultContent(
-            onOkClick = {},
-        )
+        BottomSheetPreview {
+            ResultContent(
+                onOkClick = {},
+            )
+        }
     }
 }

@@ -109,6 +109,9 @@
     <string name="lightning__closure_reason">Closure reason</string>
     <string name="lightning__conn_button_add">Add Connection</string>
     <string name="lightning__conn_button_export_logs">Export Logs</string>
+    <string name="lightning__conn_onboarding_button">Get Started</string>
+    <string name="lightning__conn_onboarding_text">Set up your spending balance to enjoy instant and cheap transactions with friends, family, and merchants.</string>
+    <string name="lightning__conn_onboarding_title">Enable\nLightning\n&lt;accent&gt;payments&lt;/accent&gt;</string>
     <string name="lightning__conn_closed">Closed connections</string>
     <string name="lightning__conn_closed_hide">Hide Closed &amp; Failed</string>
     <string name="lightning__conn_closed_show">Show Closed &amp; Failed</string>
@@ -327,7 +330,7 @@
     <string name="onboarding__slide3_text">Swipe to hide your balance, enjoy more private payments, and protect your wallet by enabling security features.</string>
     <string name="onboarding__slide4_header">Your keys,\n&lt;accent&gt;your coins&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Let’s create your wallet. Please be aware that Bitkit is mobile software. &lt;accent&gt;Don’t store all your money in Bitkit.&lt;/accent&gt;</string>
-    <string name="onboarding__tos_checkbox">Terms of use</string>
+    <string name="onboarding__tos_checkbox">Terms of Use</string>
     <string name="onboarding__tos_checkbox_value">By continuing you declare that you have read and accept the terms of use.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;terms of use&lt;/accent&gt;</string>
     <string name="onboarding__welcome_text">Use Bitkit to pay anyone, anywhere, any time, and spend your bitcoin on the things you value in life.</string>
@@ -454,7 +457,7 @@
     <string name="security__cp_setnew_title">Set New PIN</string>
     <string name="security__cp_text">Enter your &lt;accent>current&lt;/accent> PIN to change it.</string>
     <string name="security__cp_title">Change PIN</string>
-    <string name="security__cp_try_again">Try again, this is not the same PIN.</string>
+    <string name="security__cp_try_again">Not the same PIN. Try again.</string>
     <string name="security__display_seed">Show Seed Phrase</string>
     <string name="security__mnemonic_confirm">Confirm Recovery Phrase</string>
     <string name="security__mnemonic_confirm_tap">Tap the 12 words in the correct order.</string>
@@ -469,7 +472,8 @@
     <string name="security__mnemonic_load_error">Failed to load mnemonic</string>
     <string name="security__mnemonic_multiple_header">Multiple Devices</string>
     <string name="security__mnemonic_multiple_text">Don\'t use your Bitkit recovery phrase on multiple phones simultaneously, as this can corrupt your data.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Never share&lt;/accent&gt; your recovery phrase with anyone as this may result in the loss of funds.</string>
+    <string name="security__mnemonic_never_share">Make sure no one can see your screen. &lt;accent&gt;Never share your recovery phrase&lt;/accent&gt; with anyone, as it may result in loss of funds.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit cannot access your funds and cannot help recover them&lt;/accent&gt; if you lose your recovery phrase. Keep it safe!</string>
     <string name="security__mnemonic_phrase">Mnemonic Phrase</string>
     <string name="security__mnemonic_result_header">Successful</string>
     <string name="security__mnemonic_result_text">Make sure you store your recovery phrase in a &lt;accent&gt;secure place&lt;/accent&gt;, as this is the &lt;accent&gt;only way to recover&lt;/accent&gt; your money!</string>
@@ -480,7 +484,7 @@
     <string name="security__pass">passphrase</string>
     <string name="security__pass_confirm">Confirm Passphrase</string>
     <string name="security__pass_confirm_text">Enter the passphrase you added while setting up and creating your wallet.</string>
-    <string name="security__pass_never_share">&lt;accent&gt;Never share&lt;/accent&gt; your passphrase with anyone as this may result in the loss of funds.</string>
+    <string name="security__pass_never_share">&lt;accent&gt;Never share your passphrase&lt;/accent&gt; with anyone, as it may result in loss of funds. Keep it secret!</string>
     <string name="security__pass_recovery">&lt;accent&gt;Passphrase:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">You added a passphrase to your recovery phrase during wallet setup.</string>
     <string name="security__pass_your">Your Passphrase</string>
@@ -497,7 +501,7 @@
     <string name="security__pin_forgot_text">Forgot your PIN? Reset and recover your Bitkit wallet with your recovery phrase. Set a new PIN after completing recovery.</string>
     <string name="security__pin_forgot_title">Forgot PIN?</string>
     <string name="security__pin_last_attempt">Last attempt. Entering the wrong PIN again will reset your wallet.</string>
-    <string name="security__pin_not_match">Try again, this is not the same PIN.</string>
+    <string name="security__pin_not_match">Not the same PIN. Try again.</string>
     <string name="security__pin_retype_header">Retype 4-Digit PIN</string>
     <string name="security__pin_retype_text">Please retype your 4-digit PIN to complete the setup process.</string>
     <string name="security__pin_security_button">Secure Wallet</string>
@@ -551,7 +555,7 @@
     <string name="settings__addr_type__now_using">Now using {type} addresses.</string>
     <string name="settings__addr_type__primary">Primary address type</string>
     <string name="settings__addr_type__settings_updated">Settings updated</string>
-    <string name="settings__addr_type__title">Address type</string>
+    <string name="settings__addr_type__title">Address Type</string>
     <string name="settings__adv__addr_type_currently_selected">Currently selected</string>
     <string name="settings__adv__address_viewer">Address Viewer</string>
     <string name="settings__adv__coin_selection">Coin Selection</string>
@@ -570,7 +574,6 @@
     <string name="settings__adv__cs_min">Largest First</string>
     <string name="settings__adv__cs_min_description">Sort by and use largest UTXO first. Potentially lower fee, but reveals your largest UTXOs.</string>
     <string name="settings__adv__electrum_auto">Auto</string>
-    <string name="settings__adv__electrum_custom">Custom</string>
     <string name="settings__adv__electrum_server">Electrum Server</string>
     <string name="settings__adv__lightning_connections">Lightning Connections</string>
     <string name="settings__adv__lightning_node">Lightning Node</string>
@@ -595,15 +598,12 @@
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__failed_message">Bitkit failed to back up wallet data. Retrying in {interval, plural, one {# minute} other {# minutes}}.</string>
     <string name="settings__backup__failed_title">Data Backup Failure</string>
-    <string name="settings__backup__latest">latest data backups</string>
-    <string name="settings__backup__data">Data backups</string>
+    <string name="settings__backup__data">Data Backups</string>
     <string name="settings__backup__reset">Reset wallet</string>
     <string name="settings__backup__status_failed">Failed Backup: {time}</string>
     <string name="settings__backup__status_running">Running</string>
     <string name="settings__backup__status_success">Latest Backup: {time}</string>
-    <string name="settings__backup__title">Back Up Or Restore</string>
     <string name="settings__backup__wallet">Back up your wallet</string>
-    <string name="settings__backup_title">Back up or Restore</string>
     <string name="settings__bg__customize">Customize in Android Bitkit Settings</string>
     <string name="settings__bg__disabled">Background payments are disabled, because you have denied notifications.</string>
     <string name="settings__bg__enabled">Background payments are enabled. You can receive funds even when the app is closed (if your device is connected to the internet).</string>
@@ -656,7 +656,7 @@
     <string name="settings__fee__slow__label">Slow (cheaper)</string>
     <string name="settings__fee__slow__value">Slow </string>
     <string name="settings__general__currency_footer">Prices powered by Bitfinex &amp; CoinGecko.</string>
-    <string name="settings__general__currency_local">Local currency</string>
+    <string name="settings__general__currency_local">Local Currency</string>
     <string name="settings__general__currency_local_title">Local Currency</string>
     <string name="settings__general__currency_most_used">Most Used</string>
     <string name="settings__general__currency_other">Other Currencies</string>
@@ -673,12 +673,13 @@
     <string name="settings__general__speed_title">Transaction Speed</string>
     <string name="settings__general__tags">Tags</string>
     <string name="settings__general__tags_previously">Previously used tags</string>
-    <string name="settings__general__unit">Default unit</string>
+    <string name="settings__general__unit">Default Unit</string>
     <string name="settings__general__unit_bitcoin">Bitcoin</string>
     <string name="settings__general__unit_display">Display amounts in</string>
     <string name="settings__general__unit_note">Tip: Quickly toggle between Bitcoin and {currency} by tapping on your wallet balance.</string>
     <string name="settings__general__unit_title">Default Unit</string>
     <string name="settings__general_title">General</string>
+    <string name="settings__language_system_default">System Settings</string>
     <string name="settings__language_title">Language</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay makes checking out faster by automatically paying QR codes when scanned.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Frictionless&lt;/accent&gt;\npayments</string>

@@ -266,7 +266,7 @@ private fun DrawerItem(
     label: String,
     @DrawableRes iconRes: Int,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -316,7 +316,7 @@ private fun Preview() {
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
                 hasSeenWidgetsIntro = false,
                 hasSeenShopIntro = false,
-                modifier = Modifier.align(Alignment.TopEnd),
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }

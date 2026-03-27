@@ -48,7 +48,7 @@ fun PinChooseScreen(
         BodyM(
             text = stringResource(R.string.security__pin_choose_text),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -78,7 +78,7 @@ fun PinChooseScreen(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {

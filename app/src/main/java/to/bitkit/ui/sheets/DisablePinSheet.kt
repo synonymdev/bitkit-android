@@ -23,6 +23,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
@@ -82,7 +83,7 @@ private fun Content(
             .sheetHeight(SheetSize.MEDIUM)
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("DisablePIN"),
+            .testTag("DisablePIN")
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__pin_disable_button),
@@ -94,7 +95,7 @@ private fun Content(
         BodyM(
             text = stringResource(R.string.security__pin_disable_text).withAccentBoldBright(),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         VerticalSpacer(32.dp)
@@ -107,7 +108,7 @@ private fun Content(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("LastAttempt"),
+                        .testTag("LastAttempt")
                 )
             } else {
                 BodyS(
@@ -118,7 +119,7 @@ private fun Content(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickableAlpha { onClickForgotPin() }
-                        .testTag("AttemptsRemaining"),
+                        .testTag("AttemptsRemaining")
                 )
             }
             VerticalSpacer(16.dp)
@@ -139,16 +140,18 @@ private fun Content(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content(
-            pin = "12",
-            attemptsRemaining = 8,
-            onKeyPress = {},
-            onBackClick = {},
-            onClickForgotPin = {},
-        )
+        BottomSheetPreview {
+            Content(
+                pin = "12",
+                attemptsRemaining = 8,
+                onKeyPress = {},
+                onBackClick = {},
+                onClickForgotPin = {},
+            )
+        }
     }
 }

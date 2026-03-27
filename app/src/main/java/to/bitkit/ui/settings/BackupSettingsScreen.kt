@@ -34,9 +34,7 @@ import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.ui.backupsViewModel
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
-import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -85,26 +83,18 @@ private fun BackupSettingsScreenContent(
         ) {
             VerticalSpacer(16.dp)
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Caption13Up(
-                    text = stringResource(R.string.settings__backup__latest),
-                    color = Colors.White64,
+            @Suppress("KotlinConstantConditions", "SimplifyBooleanWithConstants")
+            if (Env.isE2eTest && allSynced) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_check_circle),
+                    contentDescription = null,
+                    tint = Colors.Green,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .size(16.dp)
+                        .testTag("AllSynced")
                 )
-                FillWidth()
-                @Suppress("KotlinConstantConditions", "SimplifyBooleanWithConstants")
-                if (Env.isE2eTest && allSynced) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_check_circle),
-                        contentDescription = null,
-                        tint = Colors.Green,
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(16.dp)
-                            .testTag("AllSynced")
-                    )
-                }
             }
-            VerticalSpacer(12.dp)
 
             uiState.categories.map { categoryUiState ->
                 BackupStatusItem(

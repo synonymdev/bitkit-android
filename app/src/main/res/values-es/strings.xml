@@ -255,6 +255,9 @@
     <string name="lightning__order_state__open">Conexión abierta</string>
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 segundos).</string>
     <string name="lightning__wait_text_bottom">Conectando y Sincronizando...</string>
+    <string name="lightning__conn_onboarding_button">Comenzar</string>
+    <string name="lightning__conn_onboarding_text">Configura tu saldo de gastos para disfrutar de transacciones instantáneas y económicas con amigos, familiares y comerciantes.</string>
+    <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor espera mientras los datos de tu antiguo monedero migran a esta nueva versión de Bitkit. Esto normalmente tarda menos de un minuto.</string>
     <string name="migration__nav_title">Migración del Monedero</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;MONEDERO&lt;/accent&gt;</string>
@@ -436,7 +439,8 @@
     <string name="security__mnemonic_your">Su frase de recuperación</string>
     <string name="security__mnemonic_use">Utilice las 12 palabras siguientes para recuperar su dinero más adelante.</string>
     <string name="security__mnemonic_reveal">Toque para revelar</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Nunca compartas&lt;/accent&gt; tu frase de recuperación con nadie, ya que esto podría desembocar en la pérdida de fondos.</string>
+    <string name="security__mnemonic_never_share">Asegúrate de que nadie pueda ver tu pantalla. &lt;accent&gt;Nunca compartas tu frase de recuperación&lt;/accent&gt; con nadie, ya que podría resultar en la pérdida de fondos.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit no puede acceder a tus fondos ni ayudarte a recuperarlos&lt;/accent&gt; si pierdes tu frase de recuperación. ¡Guárdala en un lugar seguro!</string>
     <string name="security__mnemonic_confirm">Confirmar frase de recuperación</string>
     <string name="security__mnemonic_confirm_tap">Pulse las 12 palabras en el orden correcto.</string>
     <string name="security__mnemonic_copied">Frase mnemotécnica copiada al portapapeles</string>
@@ -512,6 +516,7 @@
     <string name="security__use_pin">Utilizar código PIN</string>
     <string name="security__wiped_title">Datos de Monedero Borrados</string>
     <string name="security__wiped_message">Bitkit ha sido restaurado y todos los datos de monedero han sido borrados.</string>
+    <string name="security__pin_enable_button">Habilitar PIN</string>
     <string name="settings__settings">Ajustes</string>
     <string name="settings__dev_enabled_title">Opciones de desarrollo activadas</string>
     <string name="settings__dev_disabled_message">Las opciones de desarrollo están ahora desactivadas en toda la aplicación.</string>
@@ -521,7 +526,7 @@
     <string name="settings__security_title">Seguridad y Privacidad</string>
     <string name="settings__advanced_title">Avanzado</string>
     <string name="settings__about_title">Acerca de</string>
-    <string name="settings__backup_title">Copia de seguridad o Restaurar</string>
+    <string name="settings__language_system_default">Ajustes del sistema</string>
     <string name="settings__language_title">Idioma</string>
     <string name="settings__support_title">Soporte</string>
     <string name="settings__about__legal">Legal</string>
@@ -552,9 +557,17 @@
     <string name="settings__general__speed_fee_total_fiat">₿ {feeSats} para la transacción típica ({fiatSymbol}{fiatFormatted})</string>
     <string name="settings__general__tags">Etiquetas</string>
     <string name="settings__general__tags_previously">Etiquetas utilizadas anteriormente</string>
+    <string name="settings__general__section_interface">Interfaz</string>
+    <string name="settings__general__section_payments">Pagos</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
     <string name="settings__widgets__showWidgetTitles">Mostrar Títulos de Widgets</string>
+    <string name="settings__widgets__reset_suggestions">Restablecer tarjetas de sugerencias</string>
+    <string name="settings__widgets__reset_widgets">Restablecer widgets</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">¿Estás seguro de que deseas restablecer los widgets? Se mostrará el conjunto de widgets predeterminado con las configuraciones predeterminadas.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">¿Restablecer widgets?</string>
+    <string name="settings__widgets__section_display">Pantalla</string>
+    <string name="settings__widgets__section_reset">Restablecer valores predeterminados</string>
     <string name="settings__security__swipe_balance_to_hide">Desliza el saldo para ocultar</string>
     <string name="settings__security__hide_balance_on_open">Ocultar saldo al abrir</string>
     <string name="settings__security__clipboard">Leer portapapeles para facilitar uso</string>
@@ -566,6 +579,9 @@
     <string name="settings__security__pin_disabled">Desactivado</string>
     <string name="settings__security__footer">Cuando está activado, puedes usar {biometryTypeName} en lugar de tu código PIN para desbloquear tu monedero o enviar pagos.</string>
     <string name="settings__security__use_bio">Usar {biometryTypeName} en su lugar</string>
+    <string name="settings__security__section_backup">Respaldar o restablecer</string>
+    <string name="settings__security__section_privacy">Privacidad</string>
+    <string name="settings__security__section_safety">Seguridad</string>
     <string name="settings__backup__wallet">Respalda tu monedero</string>
     <string name="settings__backup__reset">Borrar y restaurar monedero</string>
     <string name="settings__backup__status_failed">Respaldo fallido: {time}</string>
@@ -582,8 +598,7 @@
     <string name="settings__backup__category_contacts">Contactos</string>
     <string name="settings__backup__failed_message">Bitkit no pudo hacer una copia de seguridad de los datos del monedero. Reintentando en {interval, plural, one {# minuto} other {# minutos}}.</string>
     <string name="settings__backup__failed_title">Fallo de Copia de Seguridad de Datos</string>
-    <string name="settings__backup__latest">últimas copias de seguridad</string>
-    <string name="settings__backup__title">Copia de Seguridad o Restaurar</string>
+    <string name="settings__backup__data">Copias de seguridad</string>
     <string name="settings__bg__customize">Personalizar en los Ajustes de Bitkit Android</string>
     <string name="settings__bg__disabled">Los pagos en segundo plano están desactivados porque has denegado las notificaciones.</string>
     <string name="settings__bg__enabled">Los pagos en segundo plano están activados. Puedes recibir fondos incluso cuando la aplicación está cerrada (si tu dispositivo está conectado a internet).</string>
@@ -626,6 +641,7 @@
     <string name="settings__support__link_error">Error al abrir enlaces de soporte</string>
     <string name="settings__support__placeholder_address">satoshi@satoshi.com</string>
     <string name="settings__support__title_unsuccess">Error al Enviar</string>
+    <string name="settings__support__copyright">Bitkit fue creado por Synonym Software, S.A. DE C.V. ©2025. Todos los derechos reservados.</string>
     <string name="settings__status__title">Estado de la App</string>
     <string name="settings__status__internet__title">Internet</string>
     <string name="settings__status__internet__ready">Conectado</string>
@@ -674,6 +690,8 @@
     <string name="settings__adv__lightning_node">Nodo Lightning</string>
     <string name="settings__adv__electrum_server">Servidor Electrum</string>
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
+    <string name="settings__adv__electrum_auto">Auto</string>
+    <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__fee__fast__label">Rápido (más caro)</string>
     <string name="settings__fee__fast__value">Rápido</string>
     <string name="settings__fee__fast__description">± 10-20 minutos</string>
@@ -760,6 +778,7 @@
     <string name="wallet__drawer__settings">Ajustes</string>
     <string name="wallet__drawer__shop">Tienda</string>
     <string name="wallet__drawer__status">Estado de la App</string>
+    <string name="wallet__drawer__support">Soporte</string>
     <string name="wallet__drawer__wallet">Monedero</string>
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Recibir</string>

@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -30,6 +34,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -40,10 +45,20 @@ fun PinManagementScreen(
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
+    val currentSheet by app.currentSheet.collectAsStateWithLifecycle()
+    var pinSheetWasShown by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentSheet) {
+        if (currentSheet is Sheet.Pin || currentSheet is Sheet.ChangePin || currentSheet is Sheet.DisablePin) {
+            pinSheetWasShown = true
+        } else if (pinSheetWasShown && currentSheet == null) {
+            navController.popBackStack()
+        }
+    }
 
     Content(
         isPinEnabled = isPinEnabled,
-        onEnablePinClick = { app.showSheet(Sheet.Pin()) },
+        onEnablePinClick = { app.showSheet(Sheet.Pin(PinRoute.Choose)) },
         onChangePinClick = { app.showSheet(Sheet.ChangePin) },
         onDisablePinClick = { app.showSheet(Sheet.DisablePin) },
         onBackClick = { navController.popBackStack() },
@@ -71,7 +86,7 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
             BodyM(
                 text = stringResource(
@@ -97,35 +112,35 @@ private fun Content(
                         painterResource(R.drawable.shield)
                     },
                     contentDescription = null,
-                    modifier = Modifier.size(256.dp),
+                    modifier = Modifier.size(256.dp)
                 )
             }
 
             if (isPinEnabled) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     SecondaryButton(
                         text = stringResource(R.string.settings__security__pin_change),
                         onClick = onChangePinClick,
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("ChangePIN"),
+                            .testTag("ChangePIN")
                     )
                     PrimaryButton(
                         text = stringResource(R.string.security__pin_disable_button),
                         onClick = onDisablePinClick,
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("DisablePin"),
+                            .testTag("DisablePin")
                     )
                 }
             } else {
                 PrimaryButton(
                     text = stringResource(R.string.security__pin_enable_button),
                     onClick = onEnablePinClick,
-                    modifier = Modifier.testTag("EnablePin"),
+                    modifier = Modifier.testTag("EnablePin")
                 )
             }
 

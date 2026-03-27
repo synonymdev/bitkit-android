@@ -97,7 +97,7 @@ private fun ConfirmPinContent(
         BodyM(
             text = stringResource(R.string.security__pin_retype_text),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -130,7 +130,7 @@ private fun ConfirmPinContent(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -143,7 +143,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewRetry() {
     AppThemeSurface {

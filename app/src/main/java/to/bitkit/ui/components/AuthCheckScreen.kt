@@ -6,7 +6,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.navigateTo
 import to.bitkit.ui.settingsViewModel
 
 @Composable
@@ -43,10 +42,9 @@ fun AuthCheckScreen(
                     navController.popBackStack()
                 }
 
-                AuthCheckAction.NAV_TO_RESET -> {
-                    navController.navigateTo(Routes.ResetAndRestoreSettings) {
-                        popUpTo(Routes.BackupSettings)
-                    }
+                AuthCheckAction.SHOW_BACKUP_SHEET -> {
+                    navController.popBackStack()
+                    app.showSheet(Sheet.Backup())
                 }
             }
         },
@@ -58,5 +56,5 @@ object AuthCheckAction {
     const val TOGGLE_BIOMETRICS = "TOGGLE_BIOMETRICS"
     const val TOGGLE_PIN_FOR_PAYMENTS = "TOGGLE_PIN_FOR_PAYMENTS"
     const val DISABLE_PIN = "DISABLE_PIN"
-    const val NAV_TO_RESET = "NAV_TO_RESET"
+    const val SHOW_BACKUP_SHEET = "SHOW_BACKUP_SHEET"
 }

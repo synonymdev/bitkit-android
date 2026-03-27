@@ -22,13 +22,13 @@ fun SettingsIcon(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(32.dp)
-            .background(color = Colors.Black, shape = CircleShape),
+            .background(color = Colors.Black, shape = CircleShape)
     ) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = null,
             tint = Colors.Brand,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(16.dp)
         )
     }
 }

@@ -1,35 +1,38 @@
 package to.bitkit.models
 
+import androidx.annotation.StringRes
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import java.util.Locale
 
 @Serializable
 enum class Language(
-    val displayName: String,
+    @StringRes val displayNameResId: Int? = null,
+    val nativeName: String? = null,
     val languageCode: String,
     val countryCode: String? = null,
     val isSystemDefault: Boolean = false,
 ) {
     SYSTEM_DEFAULT(
-        displayName = "System Settings",
+        displayNameResId = R.string.settings__language_system_default,
         languageCode = "system",
         countryCode = null,
         isSystemDefault = true
     ),
-    ARABIC("العربية", "ar"),
-    CATALAN("Català", "ca"),
-    CZECH("Čeština", "cs"),
-    DUTCH("Nederlands", "nl"),
-    ENGLISH("English", "en", "US"),
-    FRENCH("Français", "fr", "FR"),
-    GERMAN("Deutsch", "de"),
-    GREEK("Ελληνικά", "el"),
-    ITALIAN("Italiano", "it"),
-    POLISH("Polski", "pl"),
-    PORTUGUESE("Português", "pt", "BR"),
-    RUSSIAN("Русский", "ru"),
-    SPANISH("Español", "es", "ES"),
-    SPANISH_LATIN_AMERICA("Español (Latinoamérica)", "es", "419");
+    ARABIC(nativeName = "العربية", languageCode = "ar"),
+    CATALAN(nativeName = "Català", languageCode = "ca"),
+    CZECH(nativeName = "Čeština", languageCode = "cs"),
+    DUTCH(nativeName = "Nederlands", languageCode = "nl"),
+    ENGLISH(nativeName = "English", languageCode = "en", countryCode = "US"),
+    FRENCH(nativeName = "Français", languageCode = "fr", countryCode = "FR"),
+    GERMAN(nativeName = "Deutsch", languageCode = "de"),
+    GREEK(nativeName = "Ελληνικά", languageCode = "el"),
+    ITALIAN(nativeName = "Italiano", languageCode = "it"),
+    POLISH(nativeName = "Polski", languageCode = "pl"),
+    PORTUGUESE(nativeName = "Português", languageCode = "pt", countryCode = "BR"),
+    RUSSIAN(nativeName = "Русский", languageCode = "ru"),
+    SPANISH(nativeName = "Español", languageCode = "es", countryCode = "ES"),
+    SPANISH_LATIN_AMERICA(nativeName = "Español (Latinoamérica)", languageCode = "es", countryCode = "419");
 
     companion object {
         fun fromLanguageCode(languageCode: String, countryCode: String? = null): Language? {
