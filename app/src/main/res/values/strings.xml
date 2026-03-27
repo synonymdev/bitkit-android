@@ -41,10 +41,10 @@
     <string name="common__delete_yes">Yes, Delete</string>
     <string name="common__dialog_cancel">No, Cancel</string>
     <string name="common__edit">Edit</string>
-    <string name="common__hide_details">Hide Details</string>
     <string name="common__empty">Empty</string>
     <string name="common__error">Error</string>
     <string name="common__error_body">Unknown error</string>
+    <string name="common__hide_details">Hide Details</string>
     <string name="common__later">Later</string>
     <string name="common__learn_more">Learn More</string>
     <string name="common__max">Max</string>
@@ -955,7 +955,6 @@
     <string name="wallet__send_error_create_tx">Unable to broadcast the transaction. Please try again.</string>
     <string name="wallet__send_error_tx_failed">Transaction Failed</string>
     <string name="wallet__send_fee_and_speed">Speed and fee</string>
-    <string name="wallet__send_from">Send from</string>
     <string name="wallet__send_fee_custom">Set Custom Fee</string>
     <string name="wallet__send_fee_error">Fee Invalid</string>
     <string name="wallet__send_fee_error_max">Unable to increase the fee any further. Otherwise, it will exceed half the current input balance.</string>
@@ -963,6 +962,7 @@
     <string name="wallet__send_fee_speed">Speed</string>
     <string name="wallet__send_fee_total">₿ {feeSats} for this transaction</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} for this transaction ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_from">Send from</string>
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Invoice expiration</string>
     <string name="wallet__send_max">MAX</string>
