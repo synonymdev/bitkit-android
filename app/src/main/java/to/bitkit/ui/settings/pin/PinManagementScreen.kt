@@ -30,6 +30,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -43,7 +44,7 @@ fun PinManagementScreen(
 
     Content(
         isPinEnabled = isPinEnabled,
-        onEnablePinClick = { app.showSheet(Sheet.Pin()) },
+        onEnablePinClick = { app.showSheet(Sheet.Pin(PinRoute.Choose)) },
         onChangePinClick = { app.showSheet(Sheet.ChangePin) },
         onDisablePinClick = { app.showSheet(Sheet.DisablePin) },
         onBackClick = { navController.popBackStack() },
