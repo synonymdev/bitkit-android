@@ -931,6 +931,7 @@ class AppViewModel @Inject constructor(
                     payMethod = SendMethod.LIGHTNING,
                 )
             }
+            updateCanSwitchWallet()
             return
         }
 
@@ -1043,6 +1044,7 @@ class AppViewModel @Inject constructor(
                 isAmountInputValid = validateAmount(amount),
             )
         }
+        updateCanSwitchWallet()
     }
 
     private fun onCommentChange(comment: String) {
@@ -1089,6 +1091,20 @@ class AppViewModel @Inject constructor(
             refreshOnchainSendIfNeeded()
             setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
         }
+    }
+
+    private fun updateCanSwitchWallet() {
+        val state = _sendUiState.value
+        if (!state.isUnified) {
+            _sendUiState.update { it.copy(canSwitchWallet = false) }
+            return
+        }
+        val amount = state.amount
+        val balance = walletRepo.balanceState.value
+        val canSwitch = amount >= Defaults.dustLimit.toULong() &&
+            amount <= balance.maxSendOnchainSats &&
+            amount <= balance.maxSendLightningSats
+        _sendUiState.update { it.copy(canSwitchWallet = canSwitch) }
     }
 
     private suspend fun onPaymentMethodSwitch() {
@@ -2493,6 +2509,7 @@ data class SendUiState(
     val amount: ULong = 0u,
     val isAmountInputValid: Boolean = false,
     val isUnified: Boolean = false,
+    val canSwitchWallet: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,

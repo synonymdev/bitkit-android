@@ -444,8 +444,8 @@ private fun OnChainDetails(
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__savings__title),
                     color = Colors.Brand,
-                    enabled = uiState.isUnified,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.isUnified },
+                    enabled = uiState.canSwitchWallet,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -561,8 +561,8 @@ private fun LightningDetails(
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
-                    enabled = uiState.isUnified,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.isUnified },
+                    enabled = uiState.canSwitchWallet,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -592,7 +592,7 @@ private fun LightningDetails(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .let { if (uiState.isUnified) it.clickableAlpha { onEvent(SendEvent.SpeedAndFee) } else it }
+                    .let { if (uiState.canSwitchWallet) it.clickableAlpha { onEvent(SendEvent.SpeedAndFee) } else it }
             ) {
                 SendSectionView(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(
@@ -619,7 +619,7 @@ private fun LightningDetails(
                                     overflow = TextOverflow.MiddleEllipsis,
                                 )
                             } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
-                        if (uiState.isUnified) {
+                        if (uiState.canSwitchWallet) {
                             Icon(
                                 painterResource(R.drawable.ic_pencil_simple),
                                 contentDescription = null,
