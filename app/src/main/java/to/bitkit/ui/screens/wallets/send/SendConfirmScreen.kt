@@ -433,7 +433,7 @@ private fun OnChainDetails(
     val fee = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -441,7 +441,7 @@ private fun OnChainDetails(
         ) {
             SendSectionView(
                 caption = stringResource(R.string.wallet__send_from),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             ) {
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__savings__title),
@@ -454,7 +454,7 @@ private fun OnChainDetails(
             }
             SendSectionView(
                 caption = stringResource(R.string.wallet__send_to),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             ) {
                 BodySSB(
                     text = uiState.address,
@@ -514,7 +514,7 @@ private fun OnChainDetails(
             }
             SendSectionView(
                 caption = stringResource(R.string.wallet__send_confirming_in),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -549,7 +549,7 @@ private fun LightningDetails(
 
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -557,7 +557,7 @@ private fun LightningDetails(
         ) {
             SendSectionView(
                 caption = stringResource(R.string.wallet__send_from),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             ) {
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__spending__title),
@@ -570,7 +570,7 @@ private fun LightningDetails(
             }
             SendSectionView(
                 caption = stringResource(R.string.wallet__send_to),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             ) {
                 BodySSB(
                     text = destination,
