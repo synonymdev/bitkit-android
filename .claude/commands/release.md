@@ -53,6 +53,19 @@ If "Previous tag": ask `"Which tag?"` with a text input (default: `v{oldVersionN
 
 If "master" or if the release is minor/major: `{baseRef} = master`.
 
+### 2c. Finalize Changelog
+
+Read `CHANGELOG.md` and check whether `## [Unreleased]` has any entries beneath it.
+
+**If entries exist:**
+1. Replace `## [Unreleased]` with `## [{newVersionName}] - {YYYY-MM-DD}` (today's date)
+2. Insert a fresh empty `## [Unreleased]` section above the new version heading
+3. Update the compare link references at the bottom of the file:
+   - Change `[Unreleased]` link to compare from `v{newVersionName}...HEAD`
+   - Add a new `[{newVersionName}]` link comparing `v{oldVersionName}...v{newVersionName}`
+
+**If no entries:** Print `⚠ CHANGELOG.md has no unreleased entries — continuing without changelog update.` and proceed.
+
 ### 3. Create Release Branch & Bump Version
 
 ```bash
@@ -78,7 +91,7 @@ Edit `app/build.gradle.kts`:
 - Change `versionName = "{old}"` to `versionName = "{newVersionName}"`
 
 ```bash
-git add app/build.gradle.kts
+git add app/build.gradle.kts CHANGELOG.md
 git commit -m "chore: version {newVersionName}"
 git push -u origin release-{newVersionName}
 ```
@@ -131,13 +144,13 @@ gh release create v{newVersionName} \
 
 ### 6. Generate Store Release Notes
 
-Fetch the auto-generated release notes from the draft release:
+Read the `## [{newVersionName}]` section from `CHANGELOG.md` as the primary source for release content. If that section is empty or was not created in Step 2c, fall back to fetching auto-generated release notes:
 
 ```bash
 gh release view v{newVersionName} --json body --jq .body
 ```
 
-Using those notes as context, write a concise user-facing summary of the release (2-3 sentences max, no commit hashes or PR numbers, written for end users not developers). Focus on new features and important bug fixes. Omit chores, maintenance, refactoring, CI changes, and test coverage improvements — these are not relevant to Play Store users. Translate the summary into 5 languages.
+Using the changelog entries (or auto-generated notes as fallback) as context, write a concise user-facing summary of the release (2-3 sentences max, no commit hashes or PR numbers, written for end users not developers). Focus on new features and important bug fixes. Omit chores, maintenance, refactoring, CI changes, and test coverage improvements — these are not relevant to Play Store users. Translate the summary into 5 languages.
 
 Create `.ai/` directory if it doesn't exist. Save to `.ai/release-notes-{newVersionName}.md`:
 

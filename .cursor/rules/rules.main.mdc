@@ -62,6 +62,16 @@ alwaysApply: true
 
 ---
 
+## Changelog rules:
+- add an entry under `## [Unreleased]` in `CHANGELOG.md` for `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
+- use standard Keep a Changelog categories: `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`
+- append `(#PR_NUMBER)` at the end of each changelog entry when the PR number is known
+- place new entries at the bottom of their category section
+- never modify released version sections — only edit `## [Unreleased]`
+- create category headings on demand (don't add empty stubs)
+
+---
+
 ## Rules for Android Unit tests and Instrumentation tests:
 - run unit tests for specific files like this: `./gradlew :app:testDevDebugUnitTest --tests "to.bitkit.repositories.LightningRepoTest"`
 - write unit tests in the same style and using same libraries as: `CurrencyRepoTest`, `LightningRepoTest`, `WalletRepoTest`
