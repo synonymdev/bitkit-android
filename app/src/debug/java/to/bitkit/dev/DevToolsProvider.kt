@@ -74,7 +74,10 @@ private sealed interface DevCommand {
         override suspend fun execute(deps: DevToolsProvider.Dependencies) =
             deps.lightningRepo().createInvoice(args.amount, args.description).fold(
                 onSuccess = { DevResult.Invoice(it) },
-                onFailure = { DevResult.Error(it.message) },
+                onFailure = {
+                    Logger.error("Failed to create invoice", it, context = TAG)
+                    DevResult.Error(it.message)
+                },
             )
     }
 }
