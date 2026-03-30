@@ -359,6 +359,8 @@ fun ContentRunning(
                     )
                 },
                 fullWidth = false,
+                color = Colors.White06,
+                enableGradient = false,
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .testTag("SendConfirmToggleDetails")
