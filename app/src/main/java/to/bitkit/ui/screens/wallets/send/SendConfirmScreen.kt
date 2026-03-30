@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -690,9 +691,11 @@ private fun LightningDetails(
             }
         }
 
-        if (!isLnurlPay && description != null) {
+        if (!isLnurlPay && !description.isNullOrEmpty()) {
             SendSectionView(caption = stringResource(R.string.wallet__note)) {
-                BodySSB(text = description, maxLines = 1)
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    BodySSB(text = description, maxLines = 1)
+                }
             }
         }
     }
