@@ -2,6 +2,20 @@
 
 A Claude Code plugin that gives Claude knowledge of the full Blocktank LSP API, enabling it to autonomously create channels, fund them, mine blocks, pay invoices, and close channels during Blocktank LSP testing.
 
+## Setup
+
+Enable the plugin in `.claude/settings.local.json`:
+
+```json
+{
+  "enabledPlugins": {
+    "blocktank-api@blocktank-api": true
+  }
+}
+```
+
+Then restart Claude Code. After restart the `/lsp` skill will be available.
+
 ## Usage
 
 Once installed, the skill auto-triggers when you mention things like:
