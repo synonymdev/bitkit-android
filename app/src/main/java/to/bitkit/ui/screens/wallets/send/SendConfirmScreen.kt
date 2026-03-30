@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +32,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -80,6 +84,7 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -392,39 +397,62 @@ private fun TagsSection(
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
 ) {
-    Spacer(modifier = Modifier.height(16.dp))
-    Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-    Spacer(modifier = Modifier.height(8.dp))
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
-    ) {
-        uiState.selectedTags.map { tagText ->
-            TagButton(
-                text = tagText,
-                displayIconClose = true,
-                onClick = { onClickTag(tagText) },
+    SendSectionView(caption = stringResource(R.string.wallet__tags)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            uiState.selectedTags.map { tagText ->
+                TagButton(
+                    text = tagText,
+                    displayIconClose = true,
+                    onClick = { onClickTag(tagText) },
+                )
+            }
+            AddTagButton(
+                onClick = onClickAddTag,
+                modifier = Modifier.testTag("TagsAddSend")
             )
         }
     }
-    PrimaryButton(
-        text = stringResource(R.string.wallet__tags_add),
-        size = ButtonSize.Small,
-        onClick = onClickAddTag,
-        icon = {
-            Icon(
-                painter = painterResource(R.drawable.ic_tag),
-                contentDescription = stringResource(R.string.wallet__tags_add),
-                tint = Colors.Brand,
-            )
-        },
-        fullWidth = false,
-        modifier = Modifier.testTag("TagsAddSend")
-    )
-    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+}
+
+@Composable
+private fun AddTagButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = AppShapes.small
+    val cornerRadius = 8.dp
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier
+            .clip(shape)
+            .drawBehind {
+                drawRoundRect(
+                    color = Colors.White32,
+                    style = Stroke(
+                        width = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
+                    ),
+                    cornerRadius = CornerRadius(cornerRadius.toPx()),
+                )
+            }
+            .clickableAlpha(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        BodySSB(
+            text = stringResource(R.string.wallet__tags_add_button),
+            color = Colors.White64,
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_plus),
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(16.dp)
+        )
+    }
 }
 
 @Composable
