@@ -1,0 +1,21 @@
+# Local build configuration
+local.properties
+
+# Signing credentials
+keystore.*
+*.keystore
+
+# Firebase
+google-services.json
+
+# Claude Code local settings
+*.local.*
+
+# Tooling
+tools/fcm-tester/service-account.json
+
+# JetBrains IDEs (Android Studio, IDEA)
+.idea
+
+# AI agents local memory caches
+.ai
