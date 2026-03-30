@@ -158,15 +158,7 @@ fun SettingsScreen(
                         navController.navigateTo(Routes.BackgroundPaymentsIntro)
                     }
                 }
-                SettingsEvent.BackupWalletClick -> {
-                    if (isPinEnabled) {
-                        navController.navigateToAuthCheck(
-                            onSuccessActionId = AuthCheckAction.SHOW_BACKUP_SHEET,
-                        )
-                    } else {
-                        app.showSheet(Sheet.Backup())
-                    }
-                }
+                SettingsEvent.BackupWalletClick -> app.showSheet(Sheet.Backup())
                 SettingsEvent.DataBackupsClick -> navController.navigateTo(Routes.BackupSettings)
                 SettingsEvent.ResetWalletClick ->
                     navController.navigateTo(Routes.ResetAndRestoreSettings)

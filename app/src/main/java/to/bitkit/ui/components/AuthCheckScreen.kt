@@ -41,11 +41,6 @@ fun AuthCheckScreen(
                     app.removePin()
                     navController.popBackStack()
                 }
-
-                AuthCheckAction.SHOW_BACKUP_SHEET -> {
-                    navController.popBackStack()
-                    app.showSheet(Sheet.Backup())
-                }
             }
         },
         onBack = { navController.popBackStack() },
@@ -56,5 +51,4 @@ object AuthCheckAction {
     const val TOGGLE_BIOMETRICS = "TOGGLE_BIOMETRICS"
     const val TOGGLE_PIN_FOR_PAYMENTS = "TOGGLE_PIN_FOR_PAYMENTS"
     const val DISABLE_PIN = "DISABLE_PIN"
-    const val SHOW_BACKUP_SHEET = "SHOW_BACKUP_SHEET"
 }
