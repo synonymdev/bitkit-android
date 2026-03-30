@@ -592,8 +592,8 @@ private fun LightningDetails(
     val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
     val description = uiState.decodedInvoice?.description
-    val destination = when {
-        isLnurlPay -> (uiState.lnurl as LnurlParams.LnurlPay).data.uri
+    val destination = when (val lnurl = uiState.lnurl) {
+        is LnurlParams.LnurlPay -> lnurl.data.uri
         else -> uiState.decodedInvoice?.bolt11.orEmpty()
     }
 
