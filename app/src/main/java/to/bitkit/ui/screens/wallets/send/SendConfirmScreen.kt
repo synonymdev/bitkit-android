@@ -302,16 +302,25 @@ fun ContentRunning(
 
         if (showDetails) {
             when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> OnChainDetails(uiState = uiState, onEvent = onEvent)
-                SendMethod.LIGHTNING -> LightningDetails(uiState = uiState, onEvent = onEvent)
+                SendMethod.ONCHAIN -> {
+                    OnChainDetails(uiState = uiState, onEvent = onEvent)
+                    VerticalSpacer(16.dp)
+                    TagsSection(uiState, onClickTag, onClickAddTag)
+                }
+                SendMethod.LIGHTNING -> {
+                    LightningDetails(
+                        uiState = uiState,
+                        onEvent = onEvent,
+                        onClickTag = onClickTag,
+                        onClickAddTag = onClickAddTag,
+                    )
+                }
             }
 
             if (uiState.lnurl is LnurlParams.LnurlPay) {
                 if (uiState.lnurl.data.commentAllowed()) {
                     LnurlCommentSection(uiState, onEvent)
                 }
-            } else {
-                TagsSection(uiState, onClickTag, onClickAddTag)
             }
         } else {
             Image(
@@ -398,7 +407,20 @@ private fun TagsSection(
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
 ) {
-    SendSectionView(caption = stringResource(R.string.wallet__tags)) {
+    TagsSectionContent(uiState = uiState, onClickTag = onClickTag, onClickAddTag = onClickAddTag)
+}
+
+@Composable
+private fun TagsSectionContent(
+    uiState: SendUiState,
+    onClickTag: (String) -> Unit,
+    onClickAddTag: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SendSectionView(
+        caption = stringResource(R.string.wallet__tags),
+        modifier = modifier
+    ) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -569,6 +591,8 @@ private fun OnChainDetails(
 private fun LightningDetails(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
+    onClickTag: (String) -> Unit,
+    onClickAddTag: () -> Unit,
 ) {
     val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
@@ -697,6 +721,14 @@ private fun LightningDetails(
                     BodySSB(text = description, maxLines = 1)
                 }
             }
+        }
+
+        if (!isLnurlPay) {
+            TagsSectionContent(
+                uiState = uiState,
+                onClickTag = onClickTag,
+                onClickAddTag = onClickAddTag,
+            )
         }
     }
 }
