@@ -632,7 +632,7 @@ private fun LightningDetails(
             if (!isLnurlPay && expirySeconds != null) {
                 SendSectionView(
                     caption = stringResource(R.string.wallet__send_invoice_expiration),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
