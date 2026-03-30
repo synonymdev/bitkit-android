@@ -91,10 +91,13 @@ Edit `app/build.gradle.kts`:
 - Change `versionName = "{old}"` to `versionName = "{newVersionName}"`
 
 ```bash
-git add app/build.gradle.kts CHANGELOG.md
+git add app/build.gradle.kts
+# Only stage CHANGELOG.md if step 2c modified it (i.e. unreleased entries were found)
 git commit -m "chore: version {newVersionName}"
 git push -u origin release-{newVersionName}
 ```
+
+If step 2c updated `CHANGELOG.md`, also `git add CHANGELOG.md` before the commit.
 
 ### 4. Create Version Bump PR
 
