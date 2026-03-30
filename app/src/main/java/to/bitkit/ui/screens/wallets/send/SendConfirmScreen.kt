@@ -276,6 +276,7 @@ fun ContentRunning(
 ) {
     var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
+    val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
 
     val accentColor = when (uiState.payMethod) {
         SendMethod.ONCHAIN -> Colors.Brand
@@ -300,7 +301,9 @@ fun ContentRunning(
 
         VerticalSpacer(44.dp)
 
-        if (showDetails) {
+        if (isLnurlPay) {
+            LnurlPayDetails(uiState = uiState, onEvent = onEvent)
+        } else if (showDetails) {
             when (uiState.payMethod) {
                 SendMethod.ONCHAIN -> {
                     OnChainDetails(uiState = uiState, onEvent = onEvent)
@@ -316,12 +319,6 @@ fun ContentRunning(
                     )
                 }
             }
-
-            if (uiState.lnurl is LnurlParams.LnurlPay) {
-                if (uiState.lnurl.data.commentAllowed()) {
-                    LnurlCommentSection(uiState, onEvent)
-                }
-            }
         } else {
             Image(
                 painter = painterResource(R.drawable.coin_stack_4),
@@ -335,36 +332,38 @@ fun ContentRunning(
             )
         }
 
-        VerticalSpacer(16.dp)
+        if (!isLnurlPay) {
+            VerticalSpacer(16.dp)
 
-        PrimaryButton(
-            text = stringResource(
-                if (showDetails) R.string.common__hide_details else R.string.common__show_details
-            ),
-            size = ButtonSize.Small,
-            onClick = { showDetails = !showDetails },
-            icon = {
-                Icon(
-                    painter = painterResource(
-                        if (showDetails) {
-                            R.drawable.ic_eye_slash
-                        } else {
-                            when (uiState.payMethod) {
-                                SendMethod.ONCHAIN -> R.drawable.ic_speed_normal
-                                SendMethod.LIGHTNING -> R.drawable.ic_lightning
+            PrimaryButton(
+                text = stringResource(
+                    if (showDetails) R.string.common__hide_details else R.string.common__show_details
+                ),
+                size = ButtonSize.Small,
+                onClick = { showDetails = !showDetails },
+                icon = {
+                    Icon(
+                        painter = painterResource(
+                            if (showDetails) {
+                                R.drawable.ic_eye_slash
+                            } else {
+                                when (uiState.payMethod) {
+                                    SendMethod.ONCHAIN -> R.drawable.ic_speed_normal
+                                    SendMethod.LIGHTNING -> R.drawable.ic_lightning
+                                }
                             }
-                        }
-                    ),
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(16.dp)
-                )
-            },
-            fullWidth = false,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .testTag("SendConfirmToggleDetails")
-        )
+                        ),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                fullWidth = false,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .testTag("SendConfirmToggleDetails")
+            )
+        }
 
         FillHeight(min = 16.dp)
 
@@ -733,6 +732,61 @@ private fun LightningDetails(
     }
 }
 
+@Composable
+private fun LnurlPayDetails(
+    uiState: SendUiState,
+    onEvent: (SendEvent) -> Unit,
+) {
+    val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay ?: return
+    Column(modifier = Modifier.fillMaxWidth()) {
+        SendSectionView(caption = stringResource(R.string.wallet__send_invoice)) {
+            BodySSB(
+                text = lnurlPay.data.uri,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                modifier = Modifier
+                    .height(28.dp)
+                    .clickableAlpha { onEvent(SendEvent.NavToAddress) }
+                    .testTag("ReviewUri")
+            )
+        }
+
+        VerticalSpacer(16.dp)
+
+        SendSectionView(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_lightning),
+                    contentDescription = null,
+                    tint = Colors.Purple,
+                    modifier = Modifier.size(16.dp)
+                )
+                (uiState.fee as? SendFee.Lightning)?.value
+                    ?.takeIf { it > 0 }
+                    ?.let { feeSat ->
+                        val feeText = let {
+                            val prefix = stringResource(R.string.fee__instant__title)
+                            val value = rememberMoneyText(feeSat, showSymbol = true)
+                            "$prefix (± $value)"
+                        }
+                        BodySSB(
+                            text = feeText.withAccent(accentColor = Colors.White),
+                            maxLines = 1,
+                            overflow = TextOverflow.MiddleEllipsis,
+                        )
+                    } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
+            }
+        }
+
+        if (lnurlPay.data.commentAllowed()) {
+            LnurlCommentSection(uiState, onEvent)
+        }
+    }
+}
+
 @Suppress("SpellCheckingInspection")
 private fun sendUiState() = SendUiState(
     amount = 2_345u,
@@ -904,6 +958,40 @@ private fun PreviewLnurl() {
                 isLoading = false,
                 showBiometrics = false,
                 modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "lnurl details")
+@Composable
+private fun PreviewLnurlDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = sendUiState().copy(
+                    amount = 5_000u,
+                    payMethod = SendMethod.LIGHTNING,
+                    fee = SendFee.Lightning(12),
+                    lnurl = LnurlParams.LnurlPay(
+                        data = LnurlPayData(
+                            uri = "veryLongLnurlPayUri12345677890123456789012345678901234567890",
+                            callback = "",
+                            metadataStr = "",
+                            commentAllowed = 255u,
+                            minSendable = 1000u,
+                            maxSendable = 1000_000u,
+                            allowsNostr = false,
+                            nostrPubkey = null,
+                        ),
+                    ),
+                    comment = "Thanks for the coffee!",
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                modifier = Modifier.sheetHeight()
             )
         }
     }
