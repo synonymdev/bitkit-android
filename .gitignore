@@ -11,6 +11,7 @@
 local.properties
 # AI
 .ai
+.claude/worktrees
 *.local.*
 !*.local.template*
 # Secrets
