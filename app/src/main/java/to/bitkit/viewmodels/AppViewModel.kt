@@ -1102,7 +1102,7 @@ class AppViewModel @Inject constructor(
         }
         val amount = state.amount
         val balance = walletRepo.balanceState.value
-        val canSwitch = amount >= Defaults.dustLimit.toULong() &&
+        val canSwitch = amount > Defaults.dustLimit.toULong() &&
             amount <= balance.maxSendOnchainSats &&
             amount <= balance.maxSendLightningSats
         _sendUiState.update { it.copy(canSwitchWallet = canSwitch) }
