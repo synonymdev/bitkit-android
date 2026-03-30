@@ -32,9 +32,9 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.SPENDING -> {
-            // Lightning only: prefer CJIT > bolt11
+            // Lightning only: prefer CJIT > bolt11, empty when node is not running
             cjitInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
-                ?: bolt11
+                ?: bolt11.takeIf { isNodeRunning }.orEmpty()
         }
     }
 }

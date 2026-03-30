@@ -9,5 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fix crash when returning app to foreground on Receive screen
+- Show loading state on Spending tab when node is not running
 
 [Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...HEAD
