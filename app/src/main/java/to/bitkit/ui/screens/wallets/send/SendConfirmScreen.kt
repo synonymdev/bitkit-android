@@ -94,6 +94,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val SWIPE_ROTATION_DEGREES = 14f
+private const val IMAGE_FILL_PERCENTAGE = 0.8f
 
 @Suppress("MagicNumber")
 @Composable
@@ -312,7 +313,7 @@ fun ContentRunning(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .fillMaxWidth(0.8f)
+                    .fillMaxWidth(IMAGE_FILL_PERCENTAGE)
                     .align(Alignment.CenterHorizontally)
                     .padding(bottom = 16.dp)
                     .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
