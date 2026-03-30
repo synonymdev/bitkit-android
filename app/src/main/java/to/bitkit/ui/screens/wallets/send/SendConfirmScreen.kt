@@ -92,6 +92,7 @@ import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 
 private const val EXPIRY_REFRESH_INTERVAL = 60_000L
+private const val SWIPE_ROTATION_DEGREES = 14f
 
 @Suppress("MagicNumber")
 @Composable
@@ -254,7 +255,6 @@ private fun Content(
     }
 }
 
-@Suppress("MagicNumber")
 @Composable
 fun ContentRunning(
     uiState: SendUiState,
@@ -314,7 +314,7 @@ fun ContentRunning(
                     .fillMaxWidth(0.8f)
                     .align(Alignment.CenterHorizontally)
                     .padding(bottom = 16.dp)
-                    .graphicsLayer { rotationZ = swipeProgress.floatValue * 14f }
+                    .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
             )
         }
 
