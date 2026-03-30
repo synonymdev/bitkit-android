@@ -7,4 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix crash when returning app to foreground on Receive screen
+
 [Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...HEAD
