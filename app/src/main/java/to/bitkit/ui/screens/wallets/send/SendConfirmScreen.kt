@@ -90,8 +90,9 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
+import kotlin.time.Duration.Companion.seconds
 
-private const val EXPIRY_REFRESH_INTERVAL = 60_000L
+private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val SWIPE_ROTATION_DEGREES = 14f
 
 @Suppress("MagicNumber")
@@ -722,7 +723,7 @@ private fun PreviewOnChainDetails() {
                 isLoading = false,
                 showBiometrics = false,
                 initialShowDetails = true,
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -745,7 +746,7 @@ private fun PreviewLightningDetails() {
                 isLoading = false,
                 showBiometrics = false,
                 initialShowDetails = true,
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }

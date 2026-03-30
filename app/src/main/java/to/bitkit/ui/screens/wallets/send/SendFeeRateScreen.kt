@@ -264,7 +264,7 @@ private fun PreviewWithInstant() {
                 isUnified = true,
                 payMethod = SendMethod.LIGHTNING,
                 estimatedRoutingFee = 43L,
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
