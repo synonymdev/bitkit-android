@@ -1143,6 +1143,7 @@ class AppViewModel @Inject constructor(
                     payMethod = SendMethod.LIGHTNING,
                     fee = SendFee.Lightning(0),
                     isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
+                    confirmedWarnings = persistentListOf(),
                 )
             }
             estimateLightningRoutingFeesIfNeeded()
