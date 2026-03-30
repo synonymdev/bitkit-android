@@ -475,11 +475,12 @@ private fun AddTagButton(
 private fun OnChainDetails(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val fee = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -586,6 +587,7 @@ private fun LightningDetails(
     onEvent: (SendEvent) -> Unit,
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
@@ -597,7 +599,7 @@ private fun LightningDetails(
 
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -730,9 +732,10 @@ private fun LightningDetails(
 private fun LnurlPayDetails(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay ?: return
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         SendSectionView(caption = stringResource(R.string.wallet__send_invoice)) {
             BodySSB(
                 text = lnurlPay.data.uri,
