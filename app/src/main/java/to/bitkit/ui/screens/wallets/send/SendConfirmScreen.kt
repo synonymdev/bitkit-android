@@ -310,6 +310,7 @@ fun ContentRunning(
                     VerticalSpacer(16.dp)
                     TagsSection(uiState, onClickTag, onClickAddTag)
                 }
+
                 SendMethod.LIGHTNING -> {
                     LightningDetails(
                         uiState = uiState,
@@ -404,15 +405,6 @@ private fun LnurlCommentSection(
 
 @Composable
 private fun TagsSection(
-    uiState: SendUiState,
-    onClickTag: (String) -> Unit,
-    onClickAddTag: () -> Unit,
-) {
-    TagsSectionContent(uiState = uiState, onClickTag = onClickTag, onClickAddTag = onClickAddTag)
-}
-
-@Composable
-private fun TagsSectionContent(
     uiState: SendUiState,
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
@@ -725,7 +717,7 @@ private fun LightningDetails(
         }
 
         if (!isLnurlPay) {
-            TagsSectionContent(
+            TagsSection(
                 uiState = uiState,
                 onClickTag = onClickTag,
                 onClickAddTag = onClickAddTag,
