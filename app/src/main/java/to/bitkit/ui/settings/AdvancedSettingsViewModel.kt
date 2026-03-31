@@ -17,7 +17,7 @@ import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
 
 private const val NODE_ID_PREFIX_LENGTH = 5
-private const val ELECTRUM_HOST_PREFIX_LENGTH = 10
+private const val ELECTRUM_HOST_PREFIX_LENGTH = 5
 
 @HiltViewModel
 class AdvancedSettingsViewModel @Inject constructor(
@@ -43,6 +43,7 @@ class AdvancedSettingsViewModel @Inject constructor(
                 ""
             } else {
                 val host = ElectrumServer.parse(it.electrumServer).host
+                    .substringAfter("://")
                 if (host.length > ELECTRUM_HOST_PREFIX_LENGTH) {
                     "${host.take(ELECTRUM_HOST_PREFIX_LENGTH)}..."
                 } else {
