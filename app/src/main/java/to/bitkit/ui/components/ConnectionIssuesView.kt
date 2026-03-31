@@ -46,7 +46,6 @@ fun ConnectionIssuesView(
         SheetTopBar(titleText = titleText)
 
         Box(
-            contentAlignment = Alignment.BottomCenter,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -57,7 +56,9 @@ fun ConnectionIssuesView(
                 painter = painterResource(R.drawable.phone),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.size(311.dp),
+                modifier = Modifier
+                    .size(311.dp)
+                    .align(Alignment.CenterStart),
             )
 
             DashedRingsLayer(outerOnly = false)
@@ -109,7 +110,7 @@ private val innerRings = listOf(
 private fun DashedRingsLayer(outerOnly: Boolean, modifier: Modifier = Modifier) {
     val rings = if (outerOnly) listOf(outerRing) else innerRings
     Canvas(modifier = modifier.fillMaxSize()) {
-        val center = Offset(size.width * 0.35f, size.height * 0.55f)
+        val center = Offset(size.width * 0.25f, size.height * 0.40f)
         rings.forEach { ring -> drawDashedRing(ring, center) }
     }
 }
