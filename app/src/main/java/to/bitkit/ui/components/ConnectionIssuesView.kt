@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -97,13 +98,13 @@ fun ConnectionIssuesView(
 
 private val outerRing = DashedRingSpec(
     radiusFraction = 0.60f,
-    color = Colors.White.copy(alpha = 0.08f),
+    color = Colors.Yellow.copy(alpha = 0.08f),
 )
 
 private val innerRings = listOf(
     DashedRingSpec(radiusFraction = 0.15f, color = Colors.Yellow.copy(alpha = 0.4f)),
     DashedRingSpec(radiusFraction = 0.30f, color = Colors.Yellow.copy(alpha = 0.25f)),
-    DashedRingSpec(radiusFraction = 0.45f, color = Colors.Brand.copy(alpha = 0.15f)),
+    DashedRingSpec(radiusFraction = 0.45f, color = Colors.Yellow.copy(alpha = 0.15f)),
 )
 
 @Composable
@@ -111,6 +112,20 @@ private fun DashedRingsLayer(outerOnly: Boolean, modifier: Modifier = Modifier) 
     val rings = if (outerOnly) listOf(outerRing) else innerRings
     Canvas(modifier = modifier.fillMaxSize()) {
         val center = Offset(size.width * 0.25f, size.height * 0.40f)
+
+        if (outerOnly) {
+            val fadeRadius = size.minDimension * 0.45f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Colors.White.copy(alpha = 0.06f), Color.Transparent),
+                    center = center,
+                    radius = fadeRadius,
+                ),
+                radius = fadeRadius,
+                center = center,
+            )
+        }
+
         rings.forEach { ring -> drawDashedRing(ring, center) }
     }
 }
