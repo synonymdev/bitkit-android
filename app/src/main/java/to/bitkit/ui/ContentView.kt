@@ -48,6 +48,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.WidgetType
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.DrawerMenu
@@ -380,12 +381,14 @@ fun ContentView(
 
                         is Sheet.Receive -> {
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
+                            val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                             ReceiveSheet(
                                 walletState = walletState,
+                                isOffline = connectivityState != ConnectivityState.CONNECTED,
                                 navigateToExternalConnection = {
                                     navController.navigateTo(ExternalConnection())
                                     appViewModel.hideSheet()
-                                }
+                                },
                             )
                         }
 
