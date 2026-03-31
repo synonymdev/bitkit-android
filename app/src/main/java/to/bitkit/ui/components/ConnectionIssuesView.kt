@@ -95,7 +95,6 @@ fun ConnectionIssuesView(
     }
 }
 
-
 private val outerRing = DashedRingSpec(
     radiusFraction = 0.60f,
     color = Colors.Yellow.copy(alpha = 0.08f),
