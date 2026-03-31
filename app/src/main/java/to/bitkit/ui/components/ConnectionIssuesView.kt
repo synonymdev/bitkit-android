@@ -47,6 +47,7 @@ fun ConnectionIssuesView(
         SheetTopBar(titleText = titleText)
 
         Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -59,7 +60,7 @@ fun ConnectionIssuesView(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .size(311.dp)
-                    .align(Alignment.CenterStart),
+                    .align(Alignment.Center),
             )
 
             DashedRingsLayer(outerOnly = false)
@@ -95,44 +96,28 @@ fun ConnectionIssuesView(
     }
 }
 
-private val outerRing = DashedRingSpec(
-    radiusFraction = 0.60f,
-    color = Colors.Yellow.copy(alpha = 0.08f),
-)
-
-private val innerRings = listOf(
-    DashedRingSpec(radiusFraction = 0.15f, color = Colors.Yellow.copy(alpha = 0.4f)),
-    DashedRingSpec(radiusFraction = 0.30f, color = Colors.Yellow.copy(alpha = 0.25f)),
-    DashedRingSpec(radiusFraction = 0.45f, color = Colors.Yellow.copy(alpha = 0.15f)),
-)
+private val outerRingRadii = listOf(200f)
+private val innerRingRadii = listOf(150f, 100f, 50f)
 
 @Composable
 private fun DashedRingsLayer(outerOnly: Boolean, modifier: Modifier = Modifier) {
-    val rings = if (outerOnly) listOf(outerRing) else innerRings
+    val radii = if (outerOnly) outerRingRadii else innerRingRadii
     Canvas(modifier = modifier.fillMaxSize()) {
         val center = Offset(size.width * 0.25f, size.height * 0.40f)
-
-        if (outerOnly) {
-            val fadeRadius = size.minDimension * 0.45f
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Colors.White.copy(alpha = 0.06f), Color.Transparent),
-                    center = center,
-                    radius = fadeRadius,
-                ),
-                radius = fadeRadius,
-                center = center,
-            )
-        }
-
-        rings.forEach { ring -> drawDashedRing(ring, center) }
+        radii.forEach { radiusDp -> drawDashedGradientRing(radiusDp, center) }
     }
 }
 
-private fun DrawScope.drawDashedRing(ring: DashedRingSpec, center: Offset) {
+private fun DrawScope.drawDashedGradientRing(radiusDp: Float, center: Offset) {
+    val radius = radiusDp.dp.toPx()
+    val brush = Brush.linearGradient(
+        colors = listOf(Color.Black, Colors.Yellow),
+        start = Offset(center.x - radius, center.y - radius),
+        end = Offset(center.x + radius, center.y + radius),
+    )
     drawCircle(
-        color = ring.color,
-        radius = size.minDimension * ring.radiusFraction,
+        brush = brush,
+        radius = radius,
         center = center,
         style = Stroke(
             width = 1.dp.toPx(),
@@ -142,11 +127,6 @@ private fun DrawScope.drawDashedRing(ring: DashedRingSpec, center: Offset) {
         ),
     )
 }
-
-private data class DashedRingSpec(
-    val radiusFraction: Float,
-    val color: Color,
-)
 
 @Preview(showSystemUi = true)
 @Composable
