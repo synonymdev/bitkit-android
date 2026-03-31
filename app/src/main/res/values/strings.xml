@@ -350,6 +350,8 @@
     <string name="other__connection_back_title">Internet Connection Restored</string>
     <string name="other__connection_issue">Internet Connectivity Issues</string>
     <string name="other__connection_issue_explain">It appears you’re disconnected, trying to reconnect...</string>
+    <string name="other__connection_issues_explain">It appears you\’re disconnected. Please check your connection. Bitkit will try to reconnect every few seconds.</string>
+    <string name="other__connection_issues_title"><![CDATA[<accent>Connection</accent>\nIssues]]></string>
     <string name="other__gift__claiming__text">Claiming your Bitkit gift code...</string>
     <string name="other__gift__claiming__title">Claiming Gift</string>
     <string name="other__gift__error__text">Bitkit couldn\'t claim the funds. Please try again later or contact us.</string>
