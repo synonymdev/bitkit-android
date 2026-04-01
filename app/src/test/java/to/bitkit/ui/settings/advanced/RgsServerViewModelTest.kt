@@ -14,11 +14,13 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.test.BaseUnitTest
+import kotlinx.coroutines.withTimeout
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RgsServerViewModelTest : BaseUnitTest() {
@@ -245,5 +247,49 @@ class RgsServerViewModelTest : BaseUnitTest() {
             assertTrue(loadingState.isLoading)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `setRgsUrl does not hang on long urls with special characters`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        withTimeout(2.seconds) {
+            sut.setRgsUrl("https://rapidsync.lightningdevkit/snapshot/" + "a".repeat(100) + "!")
+        }
+
+        assertFalse(sut.uiState.value.canConnect)
+    }
+
+    @Test
+    fun `setRgsUrl does not hang on url that caused ANR`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        withTimeout(2.seconds) {
+            sut.setRgsUrl("https://rapidsync.lightningdevkit/snapshot")
+        }
+
+        assertTrue(sut.uiState.value.canConnect)
+    }
+
+    @Test
+    fun `setRgsUrl accepts valid rgs url with path`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        sut.setRgsUrl("https://rgs.blocktank.to/snapshot")
+
+        assertFalse(sut.uiState.value.canConnect)
+    }
+
+    @Test
+    fun `setRgsUrl accepts ip address url`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        sut.setRgsUrl("https://192.168.1.1:8080/snapshot")
+
+        assertTrue(sut.uiState.value.canConnect)
     }
 }

@@ -16,6 +16,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.repositories.LightningRepo
+import java.net.URI
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,13 +27,11 @@ class RgsServerViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
-        private val URL_PATTERN = Regex(
-            "^(https?://)?" + // protocol
-                "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
-                "((\\d{1,3}\\.){3}\\d{1,3}))" + // IP (v4) address
-                "(:\\d+)?(/[-a-z\\d%_.~+]*)*", // port and path
-            RegexOption.IGNORE_CASE
+        private val HOSTNAME_PATTERN = Regex(
+            "^([a-z\\d]([a-z\\d-]*[a-z\\d])*\\.)+[a-z]{2,}|(\\d{1,3}\\.){3}\\d{1,3}$",
+            RegexOption.IGNORE_CASE,
         )
+        private val PATH_PATTERN = Regex("^(/[a-zA-Z\\d_.~%+-]*)*$")
     }
 
     private val _uiState = MutableStateFlow(RgsServerUiState())
@@ -121,12 +120,25 @@ class RgsServerViewModel @Inject constructor(
     }
 
     private fun isValidURL(data: String): Boolean {
-        // Allow localhost in development mode
-        if (Env.isDebug && data.contains("localhost")) {
-            return true
+        val normalized = if (!data.startsWith("http://") && !data.startsWith("https://")) {
+            "https://$data"
+        } else {
+            data
         }
 
-        return URL_PATTERN.matches(data)
+        return try {
+            val uri = URI(normalized)
+            val hostname = uri.host ?: return false
+
+            if (Env.isDebug && hostname == "localhost") return true
+
+            if (!HOSTNAME_PATTERN.matches(hostname)) return false
+
+            val path = uri.path.orEmpty()
+            path.isEmpty() || PATH_PATTERN.matches(path)
+        } catch (_: Throwable) {
+            false
+        }
     }
 }
 
