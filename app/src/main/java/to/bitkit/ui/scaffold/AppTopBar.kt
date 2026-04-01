@@ -30,6 +30,7 @@ import to.bitkit.ui.LocalDrawerState
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +39,7 @@ fun AppTopBar(
     onBackClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     @DrawableRes icon: Int? = null,
-    actions: @Composable (RowScope.() -> Unit) = {},
+    actions: @Composable (RowScope.() -> Unit) = {}
 ) {
     CenterAlignedTopAppBar(
         navigationIcon = {
@@ -69,7 +70,7 @@ fun AppTopBar(
             containerColor = Color.Transparent,
             scrolledContainerColor = Color.Transparent,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -107,6 +108,7 @@ fun DrawerNavIcon(
             Icon(
                 painter = painterResource(id = R.drawable.ic_list),
                 contentDescription = stringResource(R.string.settings__settings),
+                tint = Colors.White,
                 modifier = Modifier.size(24.dp)
             )
         }
