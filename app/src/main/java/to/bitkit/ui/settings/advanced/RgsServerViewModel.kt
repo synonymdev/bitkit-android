@@ -73,26 +73,24 @@ class RgsServerViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(bgDispatcher) {
-            runCatching {
-                lightningRepo.restartWithRgsServer(url)
-                    .onSuccess {
-                        _uiState.update {
-                            val newState = it.copy(
-                                isLoading = false,
-                                connectionResult = Result.success(Unit),
-                            )
-                            computeState(newState)
-                        }
+            lightningRepo.restartWithRgsServer(url)
+                .onSuccess {
+                    _uiState.update {
+                        val newState = it.copy(
+                            isLoading = false,
+                            connectionResult = Result.success(Unit),
+                        )
+                        computeState(newState)
                     }
-                    .onFailure { error -> throw error }
-            }.onFailure { e ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        connectionResult = Result.failure(e),
-                    )
                 }
-            }
+                .onFailure { e ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            connectionResult = Result.failure(e),
+                        )
+                    }
+                }
         }
     }
 
