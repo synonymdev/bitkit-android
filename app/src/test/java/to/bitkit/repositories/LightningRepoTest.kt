@@ -51,6 +51,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.UrlValidator
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -72,6 +73,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
+    private val urlValidator = UrlValidator { Result.success(Unit) }
 
     @Before
     fun setUp() = runBlocking {
@@ -94,6 +96,7 @@ class LightningRepoTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
         )
     }
 
@@ -536,6 +539,38 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sut.restartWithRgsServer("https://bad.rgs/snapshot")
 
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restartWithRgsServer should fail when url is unreachable`() = test {
+        val failingValidator = UrlValidator { Result.failure(Exception("DNS resolution failed")) }
+        val sutWithFailingValidator = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            lspNotificationsService = lspNotificationsService,
+            firebaseMessaging = firebaseMessaging,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = failingValidator,
+        )
+        sutWithFailingValidator.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.sync()).thenReturn(Unit)
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+        sutWithFailingValidator.start()
+
+        val result = sutWithFailingValidator.restartWithRgsServer("https://rapidsync.lightningdevkit/snapshot")
+
+        assertTrue(result.isFailure)
+        assertEquals("DNS resolution failed", result.exceptionOrNull()?.message)
     }
 
     @Test
