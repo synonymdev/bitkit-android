@@ -45,13 +45,10 @@ fun PinManagementScreen(
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
-    val currentSheet by app.currentSheet.collectAsStateWithLifecycle()
-    var pinSheetWasShown by remember { mutableStateOf(false) }
+    val initialPinState = remember { isPinEnabled }
 
-    LaunchedEffect(currentSheet) {
-        if (currentSheet is Sheet.Pin || currentSheet is Sheet.ChangePin || currentSheet is Sheet.DisablePin) {
-            pinSheetWasShown = true
-        } else if (pinSheetWasShown && currentSheet == null) {
+    LaunchedEffect(isPinEnabled) {
+        if (isPinEnabled != initialPinState) {
             navController.popBackStack()
         }
     }
