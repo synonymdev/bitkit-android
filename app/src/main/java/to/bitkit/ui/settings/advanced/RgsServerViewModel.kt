@@ -83,11 +83,11 @@ class RgsServerViewModel @Inject constructor(
                         computeState(newState)
                     }
                 }
-                .onFailure { e ->
+                .onFailure { error ->
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            connectionResult = Result.failure(e),
+                            connectionResult = Result.failure(error),
                         )
                     }
                 }
