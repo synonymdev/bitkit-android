@@ -25,6 +25,16 @@ class RgsServerViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
+    companion object {
+        private val URL_PATTERN = Regex(
+            "^(https?://)?" + // protocol
+                "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
+                "((\\d{1,3}\\.){3}\\d{1,3}))" + // IP (v4) address
+                "(:\\d+)?(/[-a-z\\d%_.~+]*)*", // port and path
+            RegexOption.IGNORE_CASE
+        )
+    }
+
     private val _uiState = MutableStateFlow(RgsServerUiState())
     val uiState: StateFlow<RgsServerUiState> = _uiState.asStateFlow()
 
@@ -117,16 +127,6 @@ class RgsServerViewModel @Inject constructor(
         }
 
         return URL_PATTERN.matches(data)
-    }
-
-    companion object {
-        private val URL_PATTERN = Regex(
-            "^(https?://)?" + // protocol
-                "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
-                "((\\d{1,3}\\.){3}\\d{1,3}))" + // IP (v4) address
-                "(:\\d+)?(/[-a-z\\d%_.~+]*)*", // port and path
-            RegexOption.IGNORE_CASE
-        )
     }
 }
 
