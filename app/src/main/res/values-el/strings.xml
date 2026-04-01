@@ -945,7 +945,7 @@
     <string name="wallet__send_max_spending__title">Αποθεματικό υπόλοιπο</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Πληρωμή\n&lt;accent&gt;τιμολογίου...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Έλεγχος &amp; αποστολή</string>
+    <string name="wallet__send_review">Επιβεβαίωση</string>
     <string name="wallet__send_sent">Τα Bitcoin στάλθηκαν</string>
     <string name="wallet__send_swipe">Σύρε για πληρωμή</string>
     <string name="wallet__send_to">Προς</string>

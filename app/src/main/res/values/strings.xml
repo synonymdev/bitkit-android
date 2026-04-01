@@ -962,7 +962,7 @@
     <string name="wallet__send_fee_speed">Speed</string>
     <string name="wallet__send_fee_total">₿ {feeSats} for this transaction</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} for this transaction ({fiatSymbol}{fiatFormatted})</string>
-    <string name="wallet__send_from">Send from</string>
+    <string name="wallet__send_from">From</string>
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Invoice expiration</string>
     <string name="wallet__send_max">MAX</string>
@@ -972,7 +972,7 @@
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Review &amp; Send</string>
+    <string name="wallet__send_review">Confirm</string>
     <string name="wallet__send_sent">Bitcoin Sent</string>
     <string name="wallet__send_swipe">Swipe To Pay</string>
     <string name="wallet__send_to">To</string>
