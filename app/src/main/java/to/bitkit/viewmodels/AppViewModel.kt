@@ -787,7 +787,16 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
-                    SendEvent.SpeedAndFee -> setSendEffect(SendEffect.NavigateToFee)
+                    SendEvent.SpeedAndFee -> {
+                        if (_sendUiState.value.fees.isEmpty()) {
+                            viewModelScope.launch {
+                                refreshFeeEstimates()
+                                setSendEffect(SendEffect.NavigateToFee)
+                            }
+                        } else {
+                            setSendEffect(SendEffect.NavigateToFee)
+                        }
+                    }
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
