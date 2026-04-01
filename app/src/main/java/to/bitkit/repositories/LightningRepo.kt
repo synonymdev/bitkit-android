@@ -617,26 +617,31 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun restartWithRgsServer(newRgsUrl: String): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Changing ldk-node RGS server to: '$newRgsUrl'", context = TAG)
+        runCatching {
+            Logger.info("Changing ldk-node RGS server to: '$newRgsUrl'", context = TAG)
 
-        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-        stop().onFailure {
-            Logger.error("Failed to stop node during RGS server change", it, context = TAG)
-            return@withContext Result.failure(it)
-        }
+            waitForNodeToStop().onFailure { return@runCatching Result.failure(it) }
+            stop().onFailure {
+                Logger.error("Failed to stop node during RGS server change", it, context = TAG)
+                return@runCatching Result.failure(it)
+            }
 
-        Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+            Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
 
-        start(
-            shouldRetry = false,
-            customRgsServerUrl = newRgsUrl,
-        ).onFailure {
-            Logger.warn("Failed ldk-node config change, attempting recovery…", context = TAG)
-            restartWithPreviousConfig()
-        }.onSuccess {
-            settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
+            start(
+                shouldRetry = false,
+                customRgsServerUrl = newRgsUrl,
+            ).onFailure {
+                Logger.warn("Failed ldk-node config change, attempting recovery…", context = TAG)
+                restartWithPreviousConfig()
+            }.onSuccess {
+                settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
 
-            Logger.info("Successfully changed RGS server", context = TAG)
+                Logger.info("Successfully changed RGS server", context = TAG)
+            }
+        }.getOrElse {
+            Logger.error("Unexpected error during RGS server change", it, context = TAG)
+            Result.failure(it)
         }
     }
 

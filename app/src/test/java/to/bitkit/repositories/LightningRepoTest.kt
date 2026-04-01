@@ -499,6 +499,46 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restartWithRgsServer should setup with new rgs server`() = test {
+        startNodeForTesting()
+        val customRgsUrl = "https://rgs.example.com/snapshot"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        val result = sut.restartWithRgsServer(customRgsUrl)
+
+        assertTrue(result.isSuccess)
+        val inOrder = inOrder(lightningService)
+        inOrder.verify(lightningService).stop()
+        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).start(anyOrNull(), any())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithRgsServer should handle stop failure`() = test {
+        startNodeForTesting()
+        whenever(lightningService.stop()).thenThrow(RuntimeException("Stop failed"))
+
+        val result = sut.restartWithRgsServer("https://rgs.example.com/snapshot")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restartWithRgsServer should handle start failure and recover`() = test {
+        startNodeForTesting()
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull()))
+            .thenThrow(RuntimeException("Failed to start node"))
+
+        val result = sut.restartWithRgsServer("https://bad.rgs/snapshot")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
     fun `getFeeRateForSpeed should use provided feeRates`() = test {
         val mockFeeRates = mock<FeeRates>()
         whenever(mockFeeRates.mid).thenReturn(20u)
