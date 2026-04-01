@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.advanced
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -72,24 +73,26 @@ class RgsServerViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.restartWithRgsServer(url)
-                .onSuccess {
-                    _uiState.update {
-                        val newState = it.copy(
-                            isLoading = false,
-                            connectionResult = Result.success(Unit),
-                        )
-                        computeState(newState)
+            runCatching {
+                lightningRepo.restartWithRgsServer(url)
+                    .onSuccess {
+                        _uiState.update {
+                            val newState = it.copy(
+                                isLoading = false,
+                                connectionResult = Result.success(Unit),
+                            )
+                            computeState(newState)
+                        }
                     }
+                    .onFailure { error -> throw error }
+            }.onFailure { e ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        connectionResult = Result.failure(e),
+                    )
                 }
-                .onFailure { error ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            connectionResult = Result.failure(error),
-                        )
-                    }
-                }
+            }
         }
     }
 
@@ -127,6 +130,7 @@ class RgsServerViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class RgsServerUiState(
     val connectedRgsUrl: String? = null,
     val rgsUrl: String = "",
