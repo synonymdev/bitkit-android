@@ -135,7 +135,7 @@ class RgsServerViewModel @Inject constructor(
             data
         }
 
-        return try {
+        return runCatching {
             val uri = URI(normalized)
             val hostname = uri.host ?: return false
 
@@ -145,9 +145,7 @@ class RgsServerViewModel @Inject constructor(
 
             val path = uri.path.orEmpty()
             path.isEmpty() || PATH_PATTERN.matches(path)
-        } catch (_: Throwable) {
-            false
-        }
+        }.getOrDefault(false)
     }
 }
 
