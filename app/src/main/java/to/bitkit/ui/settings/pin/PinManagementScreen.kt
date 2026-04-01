@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -45,13 +43,10 @@ fun PinManagementScreen(
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
-    val currentSheet by app.currentSheet.collectAsStateWithLifecycle()
-    var pinSheetWasShown by remember { mutableStateOf(false) }
+    val initialPinState = remember { isPinEnabled }
 
-    LaunchedEffect(currentSheet) {
-        if (currentSheet is Sheet.Pin || currentSheet is Sheet.ChangePin || currentSheet is Sheet.DisablePin) {
-            pinSheetWasShown = true
-        } else if (pinSheetWasShown && currentSheet == null) {
+    LaunchedEffect(isPinEnabled) {
+        if (isPinEnabled != initialPinState) {
             navController.popBackStack()
         }
     }

@@ -7,13 +7,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,7 +59,6 @@ import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
@@ -137,7 +143,12 @@ private fun Content(
 ) {
     val appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
-    ScreenColumn {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+    ) {
         AppTopBar(
             titleText = stringResource(R.string.settings__support_title),
             onBackClick = onBack,
@@ -244,7 +255,7 @@ private fun SupportFooter() {
         )
     }
 
-    // Solid orange background for bottom content
+    // Solid orange background for bottom content (extends behind nav bar)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -268,6 +279,14 @@ private fun SupportFooter() {
 
         VerticalSpacer(32.dp)
     }
+
+    // Brand-colored spacer that fills the nav bar inset area
+    Spacer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Colors.Brand)
+            .windowInsetsBottomHeight(WindowInsets.navigationBars)
+    )
 }
 
 @Composable
