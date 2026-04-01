@@ -145,6 +145,12 @@ fun ReceiveQrScreen(
         mutableStateOf(initialTab ?: ReceiveTab.SAVINGS)
     }
 
+    LaunchedEffect(visibleTabs) {
+        if (selectedTab !in visibleTabs) {
+            selectedTab = visibleTabs.first()
+        }
+    }
+
     LaunchedEffect(lazyListState, visibleTabs.size) {
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()

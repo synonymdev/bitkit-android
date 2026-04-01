@@ -39,8 +39,9 @@ fun <T : TabItem> CustomTabRowWithSpacing(
             horizontalArrangement = Arrangement.SpaceEvenly,
             modifier = Modifier.fillMaxWidth()
         ) {
+            val safeIndex = currentTabIndex.coerceIn(0, tabs.lastIndex)
             tabs.forEachIndexed { index, tab ->
-                val isSelected = tabs[currentTabIndex] == tab
+                val isSelected = tabs[safeIndex] == tab
 
                 Column(
                     modifier = Modifier.weight(1f)
