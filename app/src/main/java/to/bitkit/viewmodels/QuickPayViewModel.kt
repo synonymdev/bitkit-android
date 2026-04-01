@@ -39,10 +39,12 @@ class QuickPayViewModel @Inject constructor(
 
     fun pay(data: QuickPayData) {
         viewModelScope.launch {
-            val (bolt11, amount) = when (data) {
+            val (bolt11, amount, displaySats) = when (data) {
                 is QuickPayData.Bolt11 -> {
                     Logger.info("QuickPay: processing bolt11 invoice")
-                    data.bolt11 to data.sats
+                    // Pass null amount so LDK uses the invoice's native msat precision
+                    // (avoids truncation to whole sats). data.sats is only for display.
+                    Triple(data.bolt11, null, data.sats)
                 }
 
                 is QuickPayData.LnurlPay -> {
@@ -54,7 +56,7 @@ class QuickPayViewModel @Inject constructor(
                             }
                             return@launch
                         }
-                    invoice.bolt11 to data.sats
+                    Triple(invoice.bolt11, data.sats, data.sats)
                 }
             }
 
@@ -65,7 +67,7 @@ class QuickPayViewModel @Inject constructor(
                         it.copy(
                             result = QuickPayResult.Success(
                                 paymentHash = paymentHash,
-                                amountWithFee = amount.toLong() // TODO GET FEE WHEN AVAILABLE
+                                amountWithFee = displaySats.toLong() // TODO GET FEE WHEN AVAILABLE
                             )
                         )
                     }
@@ -77,7 +79,7 @@ class QuickPayViewModel @Inject constructor(
                             it.copy(
                                 result = QuickPayResult.Pending(
                                     paymentHash = error.paymentHash,
-                                    amount = amount.toLong(),
+                                    amount = displaySats.toLong(),
                                 )
                             )
                         }

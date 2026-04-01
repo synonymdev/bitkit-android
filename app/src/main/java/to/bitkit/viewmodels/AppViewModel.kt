@@ -1756,8 +1756,11 @@ class AppViewModel @Inject constructor(
                 val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
                 val bolt11 = decodedInvoice.bolt11
 
-                // Determine if we should override amount
-                val paymentAmount = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
+                // When the invoice has a built-in amount, pass null so LDK uses the
+                // invoice's native msat precision (avoids truncation to whole sats).
+                val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
+                // For display/UI purposes, use the invoice amount (in sats) when available.
+                val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount ?: 0uL
 
                 val tags = _sendUiState.value.selectedTags
                 var createdMetadataPaymentId: String? = null
@@ -1785,14 +1788,14 @@ class AppViewModel @Inject constructor(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.SENT,
                             paymentHashOrTxId = actualPaymentHash,
-                            sats = paymentAmount.toLong(), // TODO Add fee when available
+                            sats = displayAmountSats.toLong(), // TODO Add fee when available
                         ),
                     )
                 }.onFailure {
                     if (it is PaymentPendingException) {
                         Logger.info("Lightning payment pending", context = TAG)
                         pendingPaymentRepo.track(it.paymentHash)
-                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, paymentAmount.toLong()))
+                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, displayAmountSats.toLong()))
                         return@onFailure
                     }
                     // Delete pre-activity metadata on failure
