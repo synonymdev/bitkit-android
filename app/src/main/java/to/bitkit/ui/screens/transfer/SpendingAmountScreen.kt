@@ -71,7 +71,7 @@ fun SpendingAmountScreen(
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isOffline) {
         viewModel.updateLimits()
     }
 
