@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -21,6 +22,7 @@ import com.synonym.bitkitcore.onchainBroadcastRawTx
 import com.synonym.bitkitcore.onchainComposeTransaction
 import com.synonym.bitkitcore.onchainGetAccountInfo
 import com.synonym.bitkitcore.onchainGetAddressInfo
+import com.synonym.bitkitcore.onchainGetTransactionHistory
 import com.synonym.bitkitcore.trezorClearCredentials
 import com.synonym.bitkitcore.trezorConnect
 import com.synonym.bitkitcore.trezorDisconnect
@@ -205,6 +207,22 @@ class TrezorService @Inject constructor(
     suspend fun broadcastRawTx(serializedTx: String, electrumUrl: String): String {
         return ServiceQueue.CORE.background {
             onchainBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
+        }
+    }
+
+    suspend fun getTransactionHistory(
+        extendedKey: String,
+        electrumUrl: String,
+        network: BitkitCoreNetwork?,
+        scriptType: AccountType? = null,
+    ): TransactionHistoryResult {
+        return ServiceQueue.CORE.background {
+            onchainGetTransactionHistory(
+                extendedKey = extendedKey,
+                electrumUrl = electrumUrl,
+                network = network,
+                scriptType = scriptType,
+            )
         }
     }
 

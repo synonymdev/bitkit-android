@@ -151,6 +151,8 @@ private fun TrezorScreenContent(
             onBroadcast = viewModel::broadcastSignedTx,
             onBackToForm = viewModel::backToComposeForm,
             onResetSend = viewModel::resetSendFlow,
+            onTxHistoryInputChange = viewModel::setTxHistoryInput,
+            onLookupTxHistory = viewModel::lookupTransactionHistory,
             permissionsGranted = permissionsState.allPermissionsGranted,
         )
     }
@@ -187,6 +189,8 @@ private fun Content(
     onBroadcast: () -> Unit = {},
     onBackToForm: () -> Unit = {},
     onResetSend: () -> Unit = {},
+    onTxHistoryInputChange: (String) -> Unit = {},
+    onLookupTxHistory: () -> Unit = {},
     permissionsGranted: Boolean = true,
 ) {
     Column(
@@ -389,6 +393,14 @@ private fun Content(
                     onBroadcast = onBroadcast,
                     onBackToForm = onBackToForm,
                     onResetSend = onResetSend,
+                )
+
+                // Transaction History (always visible, no device needed)
+                VerticalSpacer(32.dp)
+                TransactionHistorySection(
+                    uiState = uiState,
+                    onInputChange = onTxHistoryInputChange,
+                    onLookup = onLookupTxHistory,
                 )
 
                 // Debug Log Window
