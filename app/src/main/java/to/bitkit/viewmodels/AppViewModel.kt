@@ -1756,10 +1756,7 @@ class AppViewModel @Inject constructor(
                 val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
                 val bolt11 = decodedInvoice.bolt11
 
-                // When the invoice has a built-in amount, pass null so LDK uses the
-                // invoice's native msat precision (avoids truncation to whole sats).
                 val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
-                // For display/UI purposes, use the invoice amount (in sats) when available.
                 val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount ?: 0uL
 
                 val tags = _sendUiState.value.selectedTags

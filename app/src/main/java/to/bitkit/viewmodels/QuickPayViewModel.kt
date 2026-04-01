@@ -42,8 +42,6 @@ class QuickPayViewModel @Inject constructor(
             val (bolt11, amount, displaySats) = when (data) {
                 is QuickPayData.Bolt11 -> {
                     Logger.info("QuickPay: processing bolt11 invoice")
-                    // Pass null amount so LDK uses the invoice's native msat precision
-                    // (avoids truncation to whole sats). data.sats is only for display.
                     Triple(data.bolt11, null, data.sats)
                 }
 
