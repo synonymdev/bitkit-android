@@ -12,13 +12,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WidgetsStore
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
+    private val widgetsStore: WidgetsStore,
+    private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
     fun reset() = viewModelScope.launch { settingsStore.reset() }
 
@@ -166,6 +170,19 @@ class SettingsViewModel @Inject constructor(
     fun setShowWidgetTitles(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(showWidgetTitles = value) }
+        }
+    }
+
+    fun resetDismissedSuggestions() {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }
+        }
+    }
+
+    fun resetWidgets() {
+        viewModelScope.launch {
+            widgetsStore.reset()
+            widgetsRepo.refreshEnabledWidgets()
         }
     }
 

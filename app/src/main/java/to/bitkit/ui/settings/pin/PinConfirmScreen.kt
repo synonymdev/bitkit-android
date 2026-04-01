@@ -1,7 +1,6 @@
 package to.bitkit.ui.settings.pin
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -98,7 +97,7 @@ private fun ConfirmPinContent(
         BodyM(
             text = stringResource(R.string.security__pin_retype_text),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -127,12 +126,11 @@ private fun ConfirmPinContent(
             type = NumberPadType.SIMPLE,
             modifier = Modifier
                 .height(350.dp)
-                .background(Colors.Black)
         )
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -145,7 +143,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewRetry() {
     AppThemeSurface {
