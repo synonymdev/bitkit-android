@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -119,7 +120,7 @@ fun SpendingAmountScreen(
         ) {
             ConnectionIssuesView(
                 titleText = stringResource(R.string.lightning__transfer__nav_title),
-                includeStatusBarPadding = true,
+                modifier = Modifier.statusBarsPadding(),
             )
         }
     }

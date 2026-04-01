@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,13 +35,11 @@ import to.bitkit.ui.utils.withAccent
 fun ConnectionIssuesView(
     titleText: String,
     modifier: Modifier = Modifier,
-    includeStatusBarPadding: Boolean = false,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .gradientBackground()
-            .then(if (includeStatusBarPadding) Modifier.statusBarsPadding() else Modifier)
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
             .testTag("ConnectionIssueView"),
