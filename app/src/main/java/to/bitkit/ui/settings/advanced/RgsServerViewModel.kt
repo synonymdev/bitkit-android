@@ -111,20 +111,22 @@ class RgsServerViewModel @Inject constructor(
     }
 
     private fun isValidURL(data: String): Boolean {
-        val pattern = Regex(
+        // Allow localhost in development mode
+        if (Env.isDebug && data.contains("localhost")) {
+            return true
+        }
+
+        return URL_PATTERN.matches(data)
+    }
+
+    companion object {
+        private val URL_PATTERN = Regex(
             "^(https?://)?" + // protocol
                 "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
                 "((\\d{1,3}\\.){3}\\d{1,3}))" + // IP (v4) address
                 "(:\\d+)?(/[-a-z\\d%_.~+]*)*", // port and path
             RegexOption.IGNORE_CASE
         )
-
-        // Allow localhost in development mode
-        if (Env.isDebug && data.contains("localhost")) {
-            return true
-        }
-
-        return pattern.matches(data)
     }
 }
 
