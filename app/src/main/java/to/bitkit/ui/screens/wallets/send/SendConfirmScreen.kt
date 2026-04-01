@@ -265,7 +265,7 @@ private fun Content(
 }
 
 @Composable
-fun ContentRunning(
+private fun ContentRunning(
     uiState: SendUiState,
     isLoading: Boolean,
     modifier: Modifier = Modifier,
