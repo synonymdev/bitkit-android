@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +20,7 @@ import to.bitkit.env.Env
 import to.bitkit.repositories.LightningRepo
 import java.net.URI
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class RgsServerViewModel @Inject constructor(
@@ -32,10 +35,13 @@ class RgsServerViewModel @Inject constructor(
             RegexOption.IGNORE_CASE,
         )
         private val PATH_PATTERN = Regex("^(/[a-zA-Z\\d_.~%+-]*)*$")
+        private val VALIDATION_DEBOUNCE = 1.seconds
     }
 
     private val _uiState = MutableStateFlow(RgsServerUiState())
     val uiState: StateFlow<RgsServerUiState> = _uiState.asStateFlow()
+
+    private var validationJob: Job? = null
 
     init {
         observeState()
@@ -57,17 +63,20 @@ class RgsServerViewModel @Inject constructor(
     }
 
     fun setRgsUrl(url: String) {
-        _uiState.update {
-            val newState = it.copy(rgsUrl = url.trim())
-            computeState(newState)
-        }
+        _uiState.update { it.copy(rgsUrl = url.trim()) }
+        debounceValidation()
     }
 
     fun resetToDefault() {
-        val defaultUrl = Env.ldkRgsServerUrl ?: ""
-        _uiState.update {
-            val newState = it.copy(rgsUrl = defaultUrl)
-            computeState(newState)
+        _uiState.update { it.copy(rgsUrl = Env.ldkRgsServerUrl ?: "") }
+        debounceValidation()
+    }
+
+    private fun debounceValidation() {
+        validationJob?.cancel()
+        validationJob = viewModelScope.launch(bgDispatcher) {
+            delay(VALIDATION_DEBOUNCE)
+            _uiState.update { computeState(it) }
         }
     }
 

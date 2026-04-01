@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
@@ -14,7 +15,6 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.test.BaseUnitTest
-import kotlinx.coroutines.withTimeout
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -64,6 +64,7 @@ class RgsServerViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         sut.setRgsUrl("https://other.server.com/snapshot")
+        advanceUntilIdle()
 
         val state = sut.uiState.value
         assertEquals("https://other.server.com/snapshot", state.rgsUrl)
@@ -226,6 +227,7 @@ class RgsServerViewModelTest : BaseUnitTest() {
         sut.setRgsUrl("https://custom.server.com/snapshot")
 
         sut.resetToDefault()
+        advanceUntilIdle()
 
         val state = sut.uiState.value
         assertFalse(state.canReset)
@@ -239,6 +241,7 @@ class RgsServerViewModelTest : BaseUnitTest() {
         sut = createSut()
         advanceUntilIdle()
         sut.setRgsUrl(newUrl)
+        advanceUntilIdle()
 
         sut.uiState.test {
             skipItems(1)
@@ -256,6 +259,7 @@ class RgsServerViewModelTest : BaseUnitTest() {
 
         withTimeout(2.seconds) {
             sut.setRgsUrl("https://rapidsync.lightningdevkit/snapshot/" + "a".repeat(100) + "!")
+            advanceUntilIdle()
         }
 
         assertFalse(sut.uiState.value.canConnect)
@@ -268,6 +272,7 @@ class RgsServerViewModelTest : BaseUnitTest() {
 
         withTimeout(2.seconds) {
             sut.setRgsUrl("https://rapidsync.lightningdevkit/snapshot")
+            advanceUntilIdle()
         }
 
         assertTrue(sut.uiState.value.canConnect)
@@ -289,6 +294,7 @@ class RgsServerViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         sut.setRgsUrl("https://192.168.1.1:8080/snapshot")
+        advanceUntilIdle()
 
         assertTrue(sut.uiState.value.canConnect)
     }
