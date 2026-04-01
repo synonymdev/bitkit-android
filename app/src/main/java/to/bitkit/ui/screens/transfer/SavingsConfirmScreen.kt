@@ -1,6 +1,10 @@
 package to.bitkit.ui.screens.transfer
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +34,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.filterOpen
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.PrimaryButton
@@ -46,6 +51,7 @@ import to.bitkit.ui.walletViewModel
 
 @Composable
 fun SavingsConfirmScreen(
+    isOffline: Boolean,
     onConfirm: () -> Unit,
     onAdvancedClick: () -> Unit,
     onBackClick: () -> Unit,
@@ -70,19 +76,31 @@ fun SavingsConfirmScreen(
 
     val amount = channels.sumOf { it.amountOnClose }
 
-    SavingsConfirmContent(
-        amount = amount,
-        hasMultiple = hasMultiple,
-        hasSelected = hasSelected,
-        onBackClick = onBackClick,
-        onAmountClick = { currency.switchUnit() },
-        onAdvancedClick = onAdvancedClick,
-        onSelectAllClick = { transfer.setSelectedChannelIds(emptySet()) },
-        onConfirm = {
-            transfer.onTransferToSavingsConfirm(channels)
-            onConfirm()
-        },
-    )
+    Box {
+        SavingsConfirmContent(
+            amount = amount,
+            hasMultiple = hasMultiple,
+            hasSelected = hasSelected,
+            onBackClick = onBackClick,
+            onAmountClick = { currency.switchUnit() },
+            onAdvancedClick = onAdvancedClick,
+            onSelectAllClick = { transfer.setSelectedChannelIds(emptySet()) },
+            onConfirm = {
+                transfer.onTransferToSavingsConfirm(channels)
+                onConfirm()
+            },
+        )
+        AnimatedVisibility(
+            visible = isOffline,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            ConnectionIssuesView(
+                titleText = stringResource(R.string.lightning__transfer__nav_title),
+                includeStatusBarPadding = true,
+            )
+        }
+    }
 }
 
 @Suppress("MagicNumber")

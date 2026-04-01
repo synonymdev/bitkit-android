@@ -577,7 +577,9 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SavingsConfirmScreen(
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onConfirm = { navController.navigateTo(Routes.SavingsProgress) },
                     onAdvancedClick = { navController.navigateTo(Routes.SavingsAdvanced) },
                     onBackClick = { navController.popBackStack() },
@@ -608,8 +610,10 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingAmount> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
@@ -617,14 +621,16 @@ private fun RootNavHost(
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
                             title = title,
-                            description = description
+                            description = description,
                         )
                     },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingConfirmScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                     onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },

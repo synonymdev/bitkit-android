@@ -1,5 +1,8 @@
 package to.bitkit.ui.screens.transfer
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +48,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.ChannelStatusUi
+import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
 import to.bitkit.ui.components.FillHeight
@@ -68,6 +72,7 @@ import to.bitkit.viewmodels.TransferViewModel
 @Composable
 fun SpendingConfirmScreen(
     viewModel: TransferViewModel,
+    isOffline: Boolean,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
@@ -91,21 +96,33 @@ fun SpendingConfirmScreen(
         onPermissionChange = { granted ->
             settingsViewModel.setNotificationPreference(granted)
         },
-        showPermissionDialog = false
+        showPermissionDialog = false,
     )
 
-    Content(
-        onBackClick = onBackClick,
-        onLearnMoreClick = onLearnMoreClick,
-        onAdvancedClick = onAdvancedClick,
-        onConfirm = onConfirm,
-        onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
-        onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
-        order = order,
-        hasNotificationPermission = notificationsGranted,
-        onSwitchClick = { context.openNotificationSettings() },
-        isAdvanced = isAdvanced,
-    )
+    Box {
+        Content(
+            onBackClick = onBackClick,
+            onLearnMoreClick = onLearnMoreClick,
+            onAdvancedClick = onAdvancedClick,
+            onConfirm = onConfirm,
+            onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
+            onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
+            order = order,
+            hasNotificationPermission = notificationsGranted,
+            onSwitchClick = { context.openNotificationSettings() },
+            isAdvanced = isAdvanced,
+        )
+        AnimatedVisibility(
+            visible = isOffline,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            ConnectionIssuesView(
+                titleText = stringResource(R.string.lightning__transfer__nav_title),
+                includeStatusBarPadding = true,
+            )
+        }
+    }
 }
 
 @Suppress("MagicNumber")
