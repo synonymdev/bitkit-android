@@ -787,7 +787,16 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
-                    SendEvent.SpeedAndFee -> setSendEffect(SendEffect.NavigateToFee)
+                    SendEvent.SpeedAndFee -> {
+                        if (_sendUiState.value.fees.isEmpty()) {
+                            viewModelScope.launch {
+                                refreshFeeEstimates()
+                                setSendEffect(SendEffect.NavigateToFee)
+                            }
+                        } else {
+                            setSendEffect(SendEffect.NavigateToFee)
+                        }
+                    }
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
@@ -1185,6 +1194,7 @@ class AppViewModel @Inject constructor(
         refreshOnchainSendIfNeeded()
         estimateLightningRoutingFeesIfNeeded()
         _sendUiState.update { it.copy(isLoading = false) }
+        updateCanSwitchWallet()
 
         setSendEffect(SendEffect.NavigateToConfirm)
     }
@@ -1330,6 +1340,7 @@ class AppViewModel @Inject constructor(
                 payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
             )
         }
+        updateCanSwitchWallet()
 
         val lnAmountSats = lnInvoice?.amountSatoshis ?: 0u
         if (lnAmountSats > 0u) {

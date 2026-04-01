@@ -186,6 +186,8 @@ private fun ValidateContent(
 
         VerticalSpacer(32.dp)
 
+        FillHeight()
+
         AnimatedVisibility(visible = attemptsRemaining < Env.PIN_ATTEMPTS) {
             if (isLastAttempt) {
                 BodyS(
@@ -208,14 +210,13 @@ private fun ValidateContent(
                         .testTag("AttemptsRemaining")
                 )
             }
-            VerticalSpacer(16.dp)
         }
 
-        FillHeight()
+        VerticalSpacer(16.dp)
 
         PinDots(pin = pin)
 
-        VerticalSpacer(32.dp)
+        FillHeight()
 
         NumberPad(
             onPress = onKeyPress,
@@ -257,7 +258,7 @@ private fun NewPinContent(
 
         PinDots(pin = pin)
 
-        VerticalSpacer(32.dp)
+        FillHeight()
 
         NumberPad(
             onPress = onKeyPress,
@@ -297,6 +298,8 @@ private fun ConfirmContent(
 
         VerticalSpacer(32.dp)
 
+        FillHeight()
+
         AnimatedVisibility(visible = showError) {
             BodyS(
                 text = stringResource(R.string.security__cp_try_again),
@@ -308,11 +311,11 @@ private fun ConfirmContent(
             )
         }
 
-        FillHeight()
+        VerticalSpacer(16.dp)
 
         PinDots(pin = pin)
 
-        VerticalSpacer(32.dp)
+        FillHeight()
 
         NumberPad(
             onPress = onKeyPress,
@@ -381,6 +384,37 @@ private fun PreviewValidate() {
                 onKeyPress = {},
                 onBackClick = {},
                 onClickForgotPin = {},
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewValidateError() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            ValidateContent(
+                pin = "12",
+                attemptsRemaining = 3,
+                onKeyPress = {},
+                onBackClick = {},
+                onClickForgotPin = {},
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewConfirmError() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            ConfirmContent(
+                pin = "12",
+                showError = true,
+                onKeyPress = {},
+                onBackClick = {},
             )
         }
     }

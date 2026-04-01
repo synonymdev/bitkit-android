@@ -945,7 +945,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagant\n&lt;accent&gt;factura...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Revisar i enviar</string>
+    <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_sent">Bitcoin enviat</string>
     <string name="wallet__send_swipe">Desplaça per pagar</string>
     <string name="wallet__send_to">A</string>

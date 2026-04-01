@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -264,7 +265,7 @@ private fun Content(
 }
 
 @Composable
-fun ContentRunning(
+private fun ContentRunning(
     uiState: SendUiState,
     isLoading: Boolean,
     modifier: Modifier = Modifier,
@@ -447,7 +448,7 @@ private fun AddTagButton(
             .clip(shape)
             .drawBehind {
                 drawRoundRect(
-                    color = Colors.White32,
+                    color = Colors.White64,
                     style = Stroke(
                         width = 1.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
@@ -509,6 +510,7 @@ private fun OnChainDetails(
                     overflow = TextOverflow.MiddleEllipsis,
                     modifier = Modifier
                         .height(28.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
                         .clickableAlpha { onEvent(SendEvent.NavToAddress) }
                         .testTag("ReviewUri")
                 )
@@ -628,6 +630,7 @@ private fun LightningDetails(
                     overflow = TextOverflow.MiddleEllipsis,
                     modifier = Modifier
                         .height(28.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
                         .clickableAlpha { onEvent(SendEvent.NavToAddress) }
                         .testTag("ReviewUri")
                 )
@@ -743,6 +746,7 @@ private fun LnurlPayDetails(
                 overflow = TextOverflow.MiddleEllipsis,
                 modifier = Modifier
                     .height(28.dp)
+                    .wrapContentHeight(Alignment.CenterVertically)
                     .clickableAlpha { onEvent(SendEvent.NavToAddress) }
                     .testTag("ReviewUri")
             )

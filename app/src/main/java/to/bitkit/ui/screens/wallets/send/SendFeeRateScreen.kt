@@ -67,7 +67,7 @@ fun SendFeeRateScreen(
 
     Content(
         uiState = uiState,
-        isUnified = sendUiState.isUnified,
+        isUnified = sendUiState.canSwitchWallet,
         payMethod = sendUiState.payMethod,
         estimatedRoutingFee = sendUiState.estimatedRoutingFee.toLong(),
         onBack = onBack,
