@@ -52,27 +52,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private lateinit var sut: AppViewModel
 
-    private val context: Context = mock()
-    private val lightningRepo: LightningRepo = mock()
-    private val walletRepo: WalletRepo = mock()
-    private val settingsStore: SettingsStore = mock()
-    private val currencyRepo: CurrencyRepo = mock()
-    private val connectivityRepo: ConnectivityRepo = mock()
-    private val healthRepo: HealthRepo = mock()
-    private val pendingPaymentRepo: PendingPaymentRepo = mock()
-    private val backupRepo: BackupRepo = mock()
-    private val activityRepo: ActivityRepo = mock()
-    private val preActivityMetadataRepo: PreActivityMetadataRepo = mock()
-    private val blocktankRepo: BlocktankRepo = mock()
-    private val appUpdaterService: AppUpdaterService = mock()
-    private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler = mock()
-    private val cacheStore: CacheStore = mock()
-    private val transferRepo: TransferRepo = mock()
-    private val migrationService: MigrationService = mock()
-    private val coreService: CoreService = mock()
-    private val keychain: Keychain = mock()
-    private val widgetsRepo: WidgetsRepo = mock()
-    private val formatMoneyValue: FormatMoneyValue = mock()
+    private val context = mock<Context>()
+    private val lightningRepo = mock<LightningRepo>()
+    private val walletRepo = mock<WalletRepo>()
+    private val settingsStore = mock<SettingsStore>()
+    private val currencyRepo = mock<CurrencyRepo>()
+    private val connectivityRepo = mock<ConnectivityRepo>()
+    private val healthRepo = mock<HealthRepo>()
+    private val pendingPaymentRepo = mock<PendingPaymentRepo>()
+    private val backupRepo = mock<BackupRepo>()
+    private val activityRepo = mock<ActivityRepo>()
+    private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
+    private val blocktankRepo = mock<BlocktankRepo>()
+    private val appUpdaterService = mock<AppUpdaterService>()
+    private val notifyPaymentReceivedHandler = mock<NotifyPaymentReceivedHandler>()
+    private val cacheStore = mock<CacheStore>()
+    private val transferRepo = mock<TransferRepo>()
+    private val migrationService = mock<MigrationService>()
+    private val coreService = mock<CoreService>()
+    private val keychain = mock<Keychain>()
+    private val widgetsRepo = mock<WidgetsRepo>()
+    private val formatMoneyValue = mock<FormatMoneyValue>()
 
     private val balanceState = MutableStateFlow(BalanceState())
 
@@ -136,8 +136,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             widgetsRepo = widgetsRepo,
         )
     }
-
-    // -- updateCanSwitchWallet --
 
     @Test
     fun `canSwitchWallet is false when not unified`() = test {
@@ -203,8 +201,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(sut.sendUiState.value.canSwitchWallet)
     }
 
-    // -- onPaymentMethodSwitch --
-
     @Test
     fun `switch from lightning to onchain resets confirmedWarnings`() = test {
         balanceState.value = BalanceState(
@@ -251,8 +247,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(before, sut.sendUiState.value.payMethod)
     }
 
-    // -- onAmountChange --
-
     @Test
     fun `amount change clears confirmedWarnings`() = test {
         setUnifiedState(amount = 1000u)
@@ -267,8 +261,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.confirmedWarnings.isEmpty())
     }
 
-    // -- refreshFeeEstimates --
-
     @Test
     fun `refreshFeeEstimates preserves lightning fee when payMethod is LIGHTNING`() = test {
         val lightningFee = SendFee.Lightning(42)
@@ -281,8 +273,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val currentFee = sut.sendUiState.value.fee
         assertEquals(lightningFee, currentFee)
     }
-
-    // -- lastLightningFee --
 
     @Test
     fun `lastLightningFee persists after switching to onchain`() = test {
@@ -309,8 +299,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `lastLightningFee is zero initially`() = test {
         assertEquals(0L, sut.sendUiState.value.lastLightningFee)
     }
-
-    // -- helpers --
 
     @Suppress("UNCHECKED_CAST")
     private fun setSendState(state: SendUiState) {

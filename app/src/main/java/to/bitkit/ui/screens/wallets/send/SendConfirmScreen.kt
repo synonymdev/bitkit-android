@@ -73,7 +73,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.SendSectionView
+import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TagButton
@@ -411,7 +411,7 @@ private fun TagsSection(
     onClickAddTag: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SendSectionView(
+    SendCell(
         caption = stringResource(R.string.wallet__tags),
         modifier = modifier
     ) {
@@ -487,7 +487,7 @@ private fun OnChainDetails(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
         ) {
-            SendSectionView(
+            SendCell(
                 caption = stringResource(R.string.wallet__send_from),
                 modifier = Modifier.weight(1f)
             ) {
@@ -500,7 +500,7 @@ private fun OnChainDetails(
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
             }
-            SendSectionView(
+            SendCell(
                 caption = stringResource(R.string.wallet__send_to),
                 modifier = Modifier.weight(1f)
             ) {
@@ -527,7 +527,7 @@ private fun OnChainDetails(
                     .fillMaxHeight()
                     .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
             ) {
-                SendSectionView(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
+                SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -561,7 +561,7 @@ private fun OnChainDetails(
                     }
                 }
             }
-            SendSectionView(
+            SendCell(
                 caption = stringResource(R.string.wallet__send_confirming_in),
                 modifier = Modifier.weight(1f)
             ) {
@@ -607,7 +607,7 @@ private fun LightningDetails(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.height(IntrinsicSize.Min)
         ) {
-            SendSectionView(
+            SendCell(
                 caption = stringResource(R.string.wallet__send_from),
                 modifier = Modifier.weight(1f)
             ) {
@@ -620,7 +620,7 @@ private fun LightningDetails(
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
             }
-            SendSectionView(
+            SendCell(
                 caption = stringResource(R.string.wallet__send_to),
                 modifier = Modifier.weight(1f)
             ) {
@@ -647,7 +647,7 @@ private fun LightningDetails(
                     .fillMaxHeight()
                     .let { if (uiState.canSwitchWallet) it.clickableAlpha { onEvent(SendEvent.SpeedAndFee) } else it }
             ) {
-                SendSectionView(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
+                SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -683,7 +683,7 @@ private fun LightningDetails(
                 }
             }
             if (!isLnurlPay && expirySeconds != null) {
-                SendSectionView(
+                SendCell(
                     caption = stringResource(R.string.wallet__send_invoice_expiration),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -714,7 +714,7 @@ private fun LightningDetails(
         }
 
         if (!isLnurlPay && !description.isNullOrEmpty()) {
-            SendSectionView(caption = stringResource(R.string.wallet__note)) {
+            SendCell(caption = stringResource(R.string.wallet__note)) {
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     BodySSB(text = description, maxLines = 1)
                 }
@@ -739,7 +739,7 @@ private fun LnurlPayDetails(
 ) {
     val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay ?: return
     Column(modifier = modifier.fillMaxWidth()) {
-        SendSectionView(caption = stringResource(R.string.wallet__send_invoice)) {
+        SendCell(caption = stringResource(R.string.wallet__send_invoice)) {
             BodySSB(
                 text = lnurlPay.data.uri,
                 maxLines = 1,
@@ -754,7 +754,7 @@ private fun LnurlPayDetails(
 
         VerticalSpacer(16.dp)
 
-        SendSectionView(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
+        SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
