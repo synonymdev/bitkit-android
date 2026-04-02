@@ -126,7 +126,7 @@ fun SpendingWalletScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_transfer),
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(16.dp)
                             )
                         },
                         modifier = Modifier.testTag("TransferFromSavings")
