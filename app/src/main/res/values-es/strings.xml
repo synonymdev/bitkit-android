@@ -796,7 +796,7 @@
     <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_available_spending">Disponible (para gasto)</string>
     <string name="wallet__send_available_savings">Disponible (ahorro)</string>
-    <string name="wallet__send_review">Revisar y enviar</string>
+    <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_confirming_in">Confirmando en</string>
     <string name="wallet__send_invoice_expiration">Expiración de la factura</string>
     <string name="wallet__send_swipe">Deslizar para pagar</string>
