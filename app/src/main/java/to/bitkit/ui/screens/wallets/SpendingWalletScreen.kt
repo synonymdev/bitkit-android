@@ -117,7 +117,7 @@ fun SpendingWalletScreen(
                 }
 
                 if (canTransferFromSavings) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
 
                     SecondaryButton(
                         onClick = onTransferFromSavingsClick,
