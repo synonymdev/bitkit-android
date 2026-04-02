@@ -52,7 +52,7 @@ class AppLocaleManager @Inject constructor(
 
     fun getSupportedLanguages(): List<Language> {
         return Language.entries.sortedWith(
-            compareBy<Language> { !it.isSystemDefault }.thenBy { it.displayName }
+            compareBy<Language> { !it.isSystemDefault }.thenBy { it.nativeName }
         )
     }
 }

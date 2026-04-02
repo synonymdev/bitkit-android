@@ -68,9 +68,14 @@ private fun Content(
             Text13Up("Interface Language", color = Colors.White64, modifier = Modifier.padding(vertical = 16.dp))
 
             LazyColumn {
-                items(uiState.languages, { item -> item.displayName }) { item ->
+                items(uiState.languages, { it.languageCode + it.countryCode }) { item ->
+                    val title = if (item.displayNameResId != null) {
+                        stringResource(item.displayNameResId)
+                    } else {
+                        item.nativeName.orEmpty()
+                    }
                     SettingsButtonRow(
-                        title = item.displayName,
+                        title = title,
                         value = SettingsButtonValue.BooleanValue(item == uiState.selectedLanguage),
                         onClick = { onClickLanguage(item) }
                     )

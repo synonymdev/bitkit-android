@@ -1,8 +1,6 @@
 package to.bitkit.ui.settings.general
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -18,10 +16,12 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.components.settings.SettingsIcon
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -73,7 +73,7 @@ fun DefaultUnitSettingsScreenContent(
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__unit_bitcoin),
-                iconRes = R.drawable.ic_unit_bitcoin,
+                icon = { SettingsIcon(R.drawable.ic_bitcoin_modern) },
                 value = SettingsButtonValue.BooleanValue(primaryDisplay == PrimaryDisplay.BITCOIN),
                 onClick = { onPrimaryUnitClick(PrimaryDisplay.BITCOIN) },
                 modifier = Modifier.testTag(stringResource(R.string.settings__general__unit_bitcoin))
@@ -81,7 +81,7 @@ fun DefaultUnitSettingsScreenContent(
 
             SettingsButtonRow(
                 title = selectedCurrency,
-                iconRes = R.drawable.ic_unit_fiat,
+                icon = { SettingsIcon(R.drawable.ic_unit_fiat) },
                 value = SettingsButtonValue.BooleanValue(primaryDisplay == PrimaryDisplay.FIAT),
                 onClick = { onPrimaryUnitClick(PrimaryDisplay.FIAT) },
                 modifier = Modifier.testTag(selectedCurrency)
@@ -106,7 +106,7 @@ fun DefaultUnitSettingsScreenContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
