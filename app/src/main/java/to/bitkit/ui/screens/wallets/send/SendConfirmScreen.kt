@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,15 +16,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -30,6 +34,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -49,9 +60,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ext.DatePattern
 import to.bitkit.ext.commentAllowed
-import to.bitkit.ext.formatted
+import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.components.BalanceHeaderView
@@ -61,7 +71,9 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TagButton
@@ -74,6 +86,7 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -84,7 +97,11 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
-import java.time.Instant
+import kotlin.time.Duration.Companion.seconds
+
+private val EXPIRY_REFRESH_INTERVAL = 60.seconds
+private const val SWIPE_ROTATION_DEGREES = 14f
+private const val IMAGE_FILL_PERCENTAGE = 0.8f
 
 @Suppress("MagicNumber")
 @Composable
@@ -173,6 +190,7 @@ private fun Content(
     showBiometrics: Boolean,
     modifier: Modifier = Modifier,
     canGoBack: Boolean = true,
+    initialShowDetails: Boolean = false,
     onBack: () -> Unit = {},
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
@@ -203,8 +221,9 @@ private fun Content(
             if (isNodeRunning) {
                 ContentRunning(
                     uiState = uiState,
-                    onEvent = onEvent,
                     isLoading = isLoading,
+                    initialShowDetails = initialShowDetails,
+                    onEvent = onEvent,
                     onClickAddTag = onClickAddTag,
                     onClickTag = onClickTag,
                     onSwipeToConfirm = onSwipeToConfirm,
@@ -246,15 +265,25 @@ private fun Content(
 }
 
 @Composable
-fun ContentRunning(
+private fun ContentRunning(
     uiState: SendUiState,
-    onEvent: (SendEvent) -> Unit,
     isLoading: Boolean,
-    onClickAddTag: () -> Unit,
-    onClickTag: (String) -> Unit,
-    onSwipeToConfirm: () -> Unit,
     modifier: Modifier = Modifier,
+    initialShowDetails: Boolean = false,
+    onEvent: (SendEvent) -> Unit = {},
+    onClickAddTag: () -> Unit = {},
+    onClickTag: (String) -> Unit = {},
+    onSwipeToConfirm: () -> Unit = {},
 ) {
+    var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
+    val swipeProgress = remember { mutableFloatStateOf(0f) }
+    val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+
+    val accentColor = when (uiState.payMethod) {
+        SendMethod.ONCHAIN -> Colors.Brand
+        SendMethod.LIGHTNING -> Colors.Purple
+    }
+
     Column(
         modifier = modifier
             .padding(horizontal = 16.dp)
@@ -271,32 +300,83 @@ fun ContentRunning(
                 .testTag("ReviewAmount")
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(44.dp)
 
-        when (uiState.payMethod) {
-            SendMethod.ONCHAIN -> OnChainDescription(uiState = uiState, onEvent = onEvent)
-            SendMethod.LIGHTNING -> LightningDescription(uiState = uiState, onEvent = onEvent)
-        }
+        if (isLnurlPay) {
+            LnurlPayDetails(uiState = uiState, onEvent = onEvent)
+        } else if (showDetails) {
+            when (uiState.payMethod) {
+                SendMethod.ONCHAIN -> {
+                    OnChainDetails(uiState = uiState, onEvent = onEvent)
+                    VerticalSpacer(16.dp)
+                    TagsSection(uiState, onClickTag, onClickAddTag)
+                }
 
-        if (uiState.lnurl is LnurlParams.LnurlPay) {
-            if (uiState.lnurl.data.commentAllowed()) {
-                LnurlCommentSection(uiState, onEvent)
+                SendMethod.LIGHTNING -> {
+                    LightningDetails(
+                        uiState = uiState,
+                        onEvent = onEvent,
+                        onClickTag = onClickTag,
+                        onClickAddTag = onClickAddTag,
+                    )
+                }
             }
         } else {
-            TagsSection(uiState, onClickTag, onClickAddTag)
+            Image(
+                painter = painterResource(R.drawable.coin_stack_4),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth(IMAGE_FILL_PERCENTAGE)
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 16.dp)
+                    .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
+            )
         }
 
-        FillHeight()
-        VerticalSpacer(16.dp)
+        if (!isLnurlPay) {
+            VerticalSpacer(16.dp)
+
+            PrimaryButton(
+                text = stringResource(
+                    if (showDetails) R.string.common__hide_details else R.string.common__show_details
+                ),
+                size = ButtonSize.Small,
+                onClick = { showDetails = !showDetails },
+                icon = {
+                    Icon(
+                        painter = painterResource(
+                            if (showDetails) {
+                                R.drawable.ic_eye_slash
+                            } else {
+                                when (uiState.payMethod) {
+                                    SendMethod.ONCHAIN -> R.drawable.ic_speed_normal
+                                    SendMethod.LIGHTNING -> R.drawable.ic_lightning
+                                }
+                            }
+                        ),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                fullWidth = false,
+                color = Colors.White06,
+                enableGradient = false,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .testTag("SendConfirmToggleDetails")
+            )
+        }
+
+        FillHeight(min = 16.dp)
 
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
-            color = when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> Colors.Brand
-                SendMethod.LIGHTNING -> Colors.Purple
-            },
+            color = accentColor,
             loading = isLoading,
             confirmed = isLoading,
+            progress = swipeProgress,
             onConfirm = onSwipeToConfirm,
         )
         VerticalSpacer(16.dp)
@@ -329,60 +409,113 @@ private fun TagsSection(
     uiState: SendUiState,
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Spacer(modifier = Modifier.height(16.dp))
-    Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-    Spacer(modifier = Modifier.height(8.dp))
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
+    SendCell(
+        caption = stringResource(R.string.wallet__tags),
+        modifier = modifier
     ) {
-        uiState.selectedTags.map { tagText ->
-            TagButton(
-                text = tagText,
-                displayIconClose = true,
-                onClick = { onClickTag(tagText) },
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            uiState.selectedTags.map { tagText ->
+                TagButton(
+                    text = tagText,
+                    displayIconClose = true,
+                    onClick = { onClickTag(tagText) },
+                )
+            }
+            AddTagButton(
+                onClick = onClickAddTag,
+                modifier = Modifier.testTag("TagsAddSend")
             )
         }
     }
-    PrimaryButton(
-        text = stringResource(R.string.wallet__tags_add),
-        size = ButtonSize.Small,
-        onClick = onClickAddTag,
-        icon = {
-            Icon(
-                painter = painterResource(R.drawable.ic_tag),
-                contentDescription = stringResource(R.string.wallet__tags_add),
-                tint = Colors.Brand,
-            )
-        },
-        fullWidth = false,
-        modifier = Modifier.testTag("TagsAddSend")
-    )
-    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 }
 
 @Composable
-private fun OnChainDescription(
+private fun AddTagButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = AppShapes.small
+    val cornerRadius = 8.dp
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier
+            .clip(shape)
+            .drawBehind {
+                drawRoundRect(
+                    color = Colors.White64,
+                    style = Stroke(
+                        width = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
+                    ),
+                    cornerRadius = CornerRadius(cornerRadius.toPx()),
+                )
+            }
+            .clickableAlpha(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        BodySSB(
+            text = stringResource(R.string.wallet__tags_add_button),
+            color = Colors.White,
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_plus),
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun OnChainDetails(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val fee by remember(uiState.speed) { mutableStateOf(FeeRate.fromSpeed(uiState.speed)) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Caption13Up(text = stringResource(R.string.wallet__send_to), color = Colors.White64)
-        Spacer(modifier = Modifier.height(8.dp))
-        BodySSB(
-            text = uiState.address,
-            maxLines = 1,
-            overflow = TextOverflow.MiddleEllipsis,
-            modifier = Modifier
-                .clickableAlpha { onEvent(SendEvent.NavToAddress) }
-                .testTag("ReviewUri")
-        )
-        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+    val fee = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            SendCell(
+                caption = stringResource(R.string.wallet__send_from),
+                modifier = Modifier.weight(1f)
+            ) {
+                NumberPadActionButton(
+                    text = stringResource(R.string.wallet__savings__title),
+                    color = Colors.Brand,
+                    enabled = uiState.canSwitchWallet,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
+                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                    modifier = Modifier.testTag("SendConfirmAssetButton")
+                )
+            }
+            SendCell(
+                caption = stringResource(R.string.wallet__send_to),
+                modifier = Modifier.weight(1f)
+            ) {
+                BodySSB(
+                    text = uiState.address,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    modifier = Modifier
+                        .height(28.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .clickableAlpha { onEvent(SendEvent.NavToAddress) }
+                        .testTag("ReviewUri")
+                )
+            }
+        }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -390,17 +523,11 @@ private fun OnChainDescription(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxHeight()
                     .weight(1f)
+                    .fillMaxHeight()
+                    .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
-                ) {
-                    VerticalSpacer(16.dp)
-                    Caption13Up(stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
-                    VerticalSpacer(8.dp)
+                SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -432,74 +559,83 @@ private fun OnChainDescription(
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    FillHeight()
-                    VerticalSpacer(16.dp)
                 }
-                HorizontalDivider()
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f)
+            SendCell(
+                caption = stringResource(R.string.wallet__send_confirming_in),
+                modifier = Modifier.weight(1f)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    VerticalSpacer(16.dp)
-                    Caption13Up(text = stringResource(R.string.wallet__send_confirming_in), color = Colors.White64)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_clock),
-                            contentDescription = null,
-                            tint = Colors.Brand,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        BodySSB(stringResource(fee.description))
-                    }
-                    FillHeight()
-                    VerticalSpacer(16.dp)
+                    Icon(
+                        painterResource(R.drawable.ic_clock),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    BodySSB(stringResource(fee.description))
                 }
-                HorizontalDivider()
             }
         }
     }
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
-private fun LightningDescription(
+private fun LightningDetails(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
+    onClickTag: (String) -> Unit,
+    onClickAddTag: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
     val description = uiState.decodedInvoice?.description
+    val destination = when (val lnurl = uiState.lnurl) {
+        is LnurlParams.LnurlPay -> lnurl.data.uri
+        else -> uiState.decodedInvoice?.bolt11.orEmpty()
+    }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Caption13Up(
-            text = stringResource(R.string.wallet__send_invoice),
-            color = Colors.White64,
-        )
-        val destination = when {
-            isLnurlPay -> uiState.lnurl.data.uri
-            else -> uiState.decodedInvoice?.bolt11.orEmpty()
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            SendCell(
+                caption = stringResource(R.string.wallet__send_from),
+                modifier = Modifier.weight(1f)
+            ) {
+                NumberPadActionButton(
+                    text = stringResource(R.string.wallet__spending__title),
+                    color = Colors.Purple,
+                    enabled = uiState.canSwitchWallet,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
+                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                    modifier = Modifier.testTag("SendConfirmAssetButton")
+                )
+            }
+            SendCell(
+                caption = stringResource(R.string.wallet__send_to),
+                modifier = Modifier.weight(1f)
+            ) {
+                BodySSB(
+                    text = destination,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    modifier = Modifier
+                        .height(28.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .clickableAlpha { onEvent(SendEvent.NavToAddress) }
+                        .testTag("ReviewUri")
+                )
+            }
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        BodySSB(
-            text = destination,
-            maxLines = 1,
-            overflow = TextOverflow.MiddleEllipsis,
-            modifier = Modifier
-                .clickableAlpha { onEvent(SendEvent.NavToAddress) }
-                .testTag("ReviewUri")
-        )
-        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -507,52 +643,50 @@ private fun LightningDescription(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxHeight()
                     .weight(1f)
+                    .fillMaxHeight()
+                    .let { if (uiState.canSwitchWallet) it.clickableAlpha { onEvent(SendEvent.SpeedAndFee) } else it }
             ) {
-                VerticalSpacer(16.dp)
-                Caption13Up(text = stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        painterResource(R.drawable.ic_lightning),
-                        contentDescription = null,
-                        tint = Colors.Purple,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    (uiState.fee as? SendFee.Lightning)?.value
-                        ?.takeIf { it > 0 }
-                        ?.let { feeSat ->
-                            val feeText = let {
-                                val prefix = stringResource(R.string.fee__instant__title)
-                                val value = rememberMoneyText(feeSat, showSymbol = true)
-                                "$prefix (± $value)"
-                            }
-                            BodySSB(
-                                text = feeText.withAccent(accentColor = Colors.White),
-                                maxLines = 1,
-                                overflow = TextOverflow.MiddleEllipsis,
+                SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_lightning),
+                            contentDescription = null,
+                            tint = Colors.Purple,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        (uiState.fee as? SendFee.Lightning)?.value
+                            ?.takeIf { it > 0 }
+                            ?.let { feeSat ->
+                                val feeText = let {
+                                    val prefix = stringResource(R.string.fee__instant__title)
+                                    val value = rememberMoneyText(feeSat, showSymbol = true)
+                                    "$prefix (± $value)"
+                                }
+                                BodySSB(
+                                    text = feeText.withAccent(accentColor = Colors.White),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.MiddleEllipsis,
+                                )
+                            } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
+                        if (uiState.canSwitchWallet) {
+                            Icon(
+                                painterResource(R.drawable.ic_pencil_simple),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
                             )
-                        } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.weight(1f))
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
             if (!isLnurlPay && expirySeconds != null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .padding(top = 16.dp)
+                SendCell(
+                    caption = stringResource(R.string.wallet__send_invoice_expiration),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__send_invoice_expiration),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -563,24 +697,93 @@ private fun LightningDescription(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        val invoiceExpiryTimestamp = Instant.now().plusSeconds(expirySeconds.toLong())
-                            .formatted(DatePattern.INVOICE_EXPIRY)
-
-                        BodySSB(text = invoiceExpiryTimestamp)
+                        val timestampSeconds = uiState.decodedInvoice?.timestampSeconds ?: 0uL
+                        val invoiceExpiryText by produceState("", timestampSeconds, expirySeconds) {
+                            val expiryMoment = timestampSeconds + expirySeconds
+                            while (true) {
+                                val now = System.currentTimeMillis() / 1000
+                                val remaining = (expiryMoment.toLong() - now).coerceAtLeast(0)
+                                value = formatInvoiceExpiryRelative(remaining.toULong())
+                                delay(EXPIRY_REFRESH_INTERVAL)
+                            }
+                        }
+                        BodySSB(text = invoiceExpiryText)
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                 }
             }
         }
 
-        if (!isLnurlPay && description != null) {
-            Column {
-                Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
-                Spacer(modifier = Modifier.height(8.dp))
-                BodySSB(text = description)
-                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+        if (!isLnurlPay && !description.isNullOrEmpty()) {
+            SendCell(caption = stringResource(R.string.wallet__note)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    BodySSB(text = description, maxLines = 1)
+                }
             }
+        }
+
+        if (!isLnurlPay) {
+            TagsSection(
+                uiState = uiState,
+                onClickTag = onClickTag,
+                onClickAddTag = onClickAddTag,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LnurlPayDetails(
+    uiState: SendUiState,
+    onEvent: (SendEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay ?: return
+    Column(modifier = modifier.fillMaxWidth()) {
+        SendCell(caption = stringResource(R.string.wallet__send_invoice)) {
+            BodySSB(
+                text = lnurlPay.data.uri,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                modifier = Modifier
+                    .height(28.dp)
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .clickableAlpha { onEvent(SendEvent.NavToAddress) }
+                    .testTag("ReviewUri")
+            )
+        }
+
+        VerticalSpacer(16.dp)
+
+        SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_lightning),
+                    contentDescription = null,
+                    tint = Colors.Purple,
+                    modifier = Modifier.size(16.dp)
+                )
+                (uiState.fee as? SendFee.Lightning)?.value
+                    ?.takeIf { it > 0 }
+                    ?.let { feeSat ->
+                        val feeText = let {
+                            val prefix = stringResource(R.string.fee__instant__title)
+                            val value = rememberMoneyText(feeSat, showSymbol = true)
+                            "$prefix (± $value)"
+                        }
+                        BodySSB(
+                            text = feeText.withAccent(accentColor = Colors.White),
+                            maxLines = 1,
+                            overflow = TextOverflow.MiddleEllipsis,
+                        )
+                    } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
+            }
+        }
+
+        if (lnurlPay.data.commentAllowed()) {
+            LnurlCommentSection(uiState, onEvent)
         }
     }
 }
@@ -618,6 +821,51 @@ private fun PreviewOnChain() {
                 isLoading = false,
                 showBiometrics = false,
                 modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "onchain details")
+@Composable
+private fun PreviewOnChainDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = sendUiState().copy(
+                    selectedTags = persistentListOf("car", "house", "uber"),
+                    fee = SendFee.OnChain(1_234),
+                    speed = TransactionSpeed.Medium,
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                initialShowDetails = true,
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "lightning details")
+@Composable
+private fun PreviewLightningDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = sendUiState().copy(
+                    amount = 6_543u,
+                    payMethod = SendMethod.LIGHTNING,
+                    selectedTags = persistentListOf("coffee"),
+                    fee = SendFee.Lightning(43),
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                initialShowDetails = true,
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -711,6 +959,40 @@ private fun PreviewLnurl() {
                 isLoading = false,
                 showBiometrics = false,
                 modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "lnurl details")
+@Composable
+private fun PreviewLnurlDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = sendUiState().copy(
+                    amount = 5_000u,
+                    payMethod = SendMethod.LIGHTNING,
+                    fee = SendFee.Lightning(12),
+                    lnurl = LnurlParams.LnurlPay(
+                        data = LnurlPayData(
+                            uri = "veryLongLnurlPayUri12345677890123456789012345678901234567890",
+                            callback = "",
+                            metadataStr = "",
+                            commentAllowed = 255u,
+                            minSendable = 1000u,
+                            maxSendable = 1000_000u,
+                            allowsNostr = false,
+                            nostrPubkey = null,
+                        ),
+                    ),
+                    comment = "Thanks for the coffee!",
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                modifier = Modifier.sheetHeight()
             )
         }
     }

@@ -765,7 +765,7 @@
     <string name="wallet__send_available_savings">Disponível (poupança)</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_max_spending__description">O valor máximo utilizável é um pouco menor devido a um saldo de reserva obrigatório.</string>
-    <string name="wallet__send_review">Revisar e Enviar</string>
+    <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_confirming_in">Confirmando em</string>
     <string name="wallet__send_invoice_expiration">Vencimento do invoice</string>
     <string name="wallet__send_swipe">Deslize para Pagar</string>

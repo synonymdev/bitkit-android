@@ -944,7 +944,7 @@
     <string name="wallet__send_max_spending__title">Zůstatek rezervy</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Placení\n&lt;accent&gt;faktury...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Zkontrolovat a odeslat</string>
+    <string name="wallet__send_review">Potvrdit</string>
     <string name="wallet__send_sent">bitcoin odeslán</string>
     <string name="wallet__send_swipe">Zaplatit přejetím prstem</string>
     <string name="wallet__send_to">Komu</string>

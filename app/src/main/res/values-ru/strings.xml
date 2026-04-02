@@ -972,7 +972,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Оплата
 &lt;accent&gt;счёта...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Проверить и Отправить</string>
+    <string name="wallet__send_review">Подтвердить</string>
     <string name="wallet__send_sent">Биткоины отправлены</string>
     <string name="wallet__send_swipe">Отправить</string>
     <string name="wallet__send_to">Кому</string>

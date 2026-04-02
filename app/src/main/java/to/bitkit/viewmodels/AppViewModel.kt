@@ -787,7 +787,16 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
-                    SendEvent.SpeedAndFee -> setSendEffect(SendEffect.NavigateToFee)
+                    SendEvent.SpeedAndFee -> {
+                        if (_sendUiState.value.fees.isEmpty()) {
+                            viewModelScope.launch {
+                                refreshFeeEstimates()
+                                setSendEffect(SendEffect.NavigateToFee)
+                            }
+                        } else {
+                            setSendEffect(SendEffect.NavigateToFee)
+                        }
+                    }
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
@@ -931,6 +940,7 @@ class AppViewModel @Inject constructor(
                     payMethod = SendMethod.LIGHTNING,
                 )
             }
+            updateCanSwitchWallet()
             return
         }
 
@@ -1041,8 +1051,10 @@ class AppViewModel @Inject constructor(
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
+                confirmedWarnings = persistentListOf(),
             )
         }
+        updateCanSwitchWallet()
     }
 
     private fun onCommentChange(comment: String) {
@@ -1080,26 +1092,71 @@ class AppViewModel @Inject constructor(
             }
             _sendUiState.update {
                 it.copy(
+                    payMethod = SendMethod.ONCHAIN,
                     speed = speed,
                     fee = SendFee.OnChain(fee),
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
                 )
             }
+            updateCanSwitchWallet()
             refreshOnchainSendIfNeeded()
             setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
         }
     }
 
+    private fun updateCanSwitchWallet() {
+        val state = _sendUiState.value
+        if (!state.isUnified) {
+            _sendUiState.update { it.copy(canSwitchWallet = false) }
+            return
+        }
+        val amount = state.amount
+        val balance = walletRepo.balanceState.value
+        val canSwitch = amount > Defaults.dustLimit.toULong() &&
+            amount <= balance.maxSendOnchainSats &&
+            amount <= balance.maxSendLightningSats
+        _sendUiState.update { it.copy(canSwitchWallet = canSwitch) }
+    }
+
     private suspend fun onPaymentMethodSwitch() {
-        val nextPaymentMethod = when (_sendUiState.value.payMethod) {
+        val current = _sendUiState.value
+        if (!current.isUnified) return
+
+        val nextMethod = when (current.payMethod) {
             SendMethod.ONCHAIN -> SendMethod.LIGHTNING
             SendMethod.LIGHTNING -> SendMethod.ONCHAIN
         }
         _sendUiState.update {
             it.copy(
-                payMethod = nextPaymentMethod,
-                isAmountInputValid = validateAmount(it.amount, nextPaymentMethod),
+                payMethod = nextMethod,
+                isAmountInputValid = validateAmount(it.amount, nextMethod),
+                confirmedWarnings = persistentListOf(),
             )
+        }
+        when (nextMethod) {
+            SendMethod.ONCHAIN -> {
+                val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
+                _sendUiState.update { it.copy(speed = defaultSpeed) }
+                refreshFeeEstimates()
+            }
+            SendMethod.LIGHTNING -> {
+                _sendUiState.update { it.copy(fee = SendFee.Lightning(0)) }
+                estimateLightningRoutingFeesIfNeeded()
+            }
+        }
+    }
+
+    fun switchToLightning() {
+        viewModelScope.launch {
+            _sendUiState.update {
+                it.copy(
+                    payMethod = SendMethod.LIGHTNING,
+                    fee = SendFee.Lightning(0),
+                    isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
+                    confirmedWarnings = persistentListOf(),
+                )
+            }
+            estimateLightningRoutingFeesIfNeeded()
         }
     }
 
@@ -1138,6 +1195,7 @@ class AppViewModel @Inject constructor(
         refreshOnchainSendIfNeeded()
         estimateLightningRoutingFeesIfNeeded()
         _sendUiState.update { it.copy(isLoading = false) }
+        updateCanSwitchWallet()
 
         setSendEffect(SendEffect.NavigateToConfirm)
     }
@@ -1283,6 +1341,7 @@ class AppViewModel @Inject constructor(
                 payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
             )
         }
+        updateCanSwitchWallet()
 
         val lnAmountSats = lnInvoice?.amountSatoshis ?: 0u
         if (lnAmountSats > 0u) {
@@ -1295,6 +1354,7 @@ class AppViewModel @Inject constructor(
             if (quickPayHandled) return
 
             refreshOnchainSendIfNeeded()
+            estimateLightningRoutingFeesIfNeeded()
             if (isMainScanner) {
                 showSheet(Sheet.Send(SendRoute.Confirm))
             } else {
@@ -2019,7 +2079,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 fees = feesMap.toImmutableMap(),
-                fee = SendFee.OnChain(currentFee),
+                fee = if (it.payMethod == SendMethod.ONCHAIN) SendFee.OnChain(currentFee) else it.fee,
             )
         }
     }
@@ -2038,7 +2098,8 @@ class AppViewModel @Inject constructor(
         feeResult.onSuccess { fee ->
             _sendUiState.update {
                 it.copy(
-                    fee = SendFee.Lightning(fee.toLong())
+                    fee = SendFee.Lightning(fee.toLong()),
+                    lastLightningFee = fee.toLong(),
                 )
             }
         }
@@ -2465,6 +2526,7 @@ data class SendUiState(
     val amount: ULong = 0u,
     val isAmountInputValid: Boolean = false,
     val isUnified: Boolean = false,
+    val canSwitchWallet: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,
@@ -2480,6 +2542,7 @@ data class SendUiState(
     val fee: SendFee? = null,
     val fees: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val estimatedRoutingFee: ULong = 0uL,
+    val lastLightningFee: Long = 0L,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
