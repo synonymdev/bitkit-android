@@ -69,7 +69,7 @@ fun SendFeeRateScreen(
         uiState = uiState,
         isUnified = sendUiState.canSwitchWallet,
         payMethod = sendUiState.payMethod,
-        estimatedRoutingFee = sendUiState.estimatedRoutingFee.toLong(),
+        estimatedRoutingFee = sendUiState.lastLightningFee,
         onBack = onBack,
         onContinue = onContinue,
         onSelect = {

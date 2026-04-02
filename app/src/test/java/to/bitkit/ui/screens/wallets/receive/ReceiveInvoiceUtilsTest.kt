@@ -200,7 +200,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab SPENDING returns bolt11 when node not running even with CJIT`() {
+    fun `getInvoiceForTab SPENDING returns empty when node not running even with CJIT`() {
         val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
 
         val result = getInvoiceForTab(
@@ -212,7 +212,23 @@ class ReceiveInvoiceUtilsTest {
             onchainAddress = testAddress
         )
 
-        assertEquals(testBolt11, result)
+        assertEquals("", result)
+    }
+
+    @Test
+    fun `getInvoiceForTab SPENDING returns empty when node not running and no CJIT`() {
+        val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
+
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.SPENDING,
+            bip21 = bip21,
+            bolt11 = testBolt11,
+            cjitInvoice = null,
+            isNodeRunning = false,
+            onchainAddress = testAddress
+        )
+
+        assertEquals("", result)
     }
 
     @Test

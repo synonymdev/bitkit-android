@@ -20,7 +20,7 @@ enum class FeeRate(
         description = R.string.fee__instant__description,
         shortDescription = R.string.fee__instant__shortDescription,
         color = Colors.Purple,
-        icon = R.drawable.ic_lightning,
+        icon = R.drawable.ic_speed_fast,
     ),
     FAST(
         title = R.string.fee__fast__title,

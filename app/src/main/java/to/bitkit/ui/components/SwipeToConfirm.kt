@@ -63,6 +63,7 @@ private val Padding = 8.dp
 
 @Composable
 fun SwipeToConfirm(
+    onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
     text: String = stringResource(R.string.other__swipe),
     color: Color = Colors.Brand,
@@ -72,7 +73,6 @@ fun SwipeToConfirm(
     loading: Boolean = false,
     confirmed: Boolean = false,
     progress: MutableFloatState? = null,
-    onConfirm: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val trailColor = remember(color) { color.copy(alpha = 0.24f) }
