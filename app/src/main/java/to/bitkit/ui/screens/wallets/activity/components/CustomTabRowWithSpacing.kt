@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.wallets.activity.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -40,8 +39,9 @@ fun <T : TabItem> CustomTabRowWithSpacing(
             horizontalArrangement = Arrangement.SpaceEvenly,
             modifier = Modifier.fillMaxWidth()
         ) {
+            val safeIndex = currentTabIndex.coerceIn(0, tabs.lastIndex)
             tabs.forEachIndexed { index, tab ->
-                val isSelected = tabs[currentTabIndex] == tab
+                val isSelected = tabs[safeIndex] == tab
 
                 Column(
                     modifier = Modifier.weight(1f)
@@ -62,19 +62,10 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                         )
                     }
 
-                    val animatedAlpha by animateFloatAsState(
-                        targetValue = if (isSelected) 1f else 0.2f,
-                        animationSpec = tween(
-                            durationMillis = 250,
-                            easing = FastOutSlowInEasing
-                        ),
-                        label = "indicatorAlpha",
-                    )
-
                     val animatedColor by animateColorAsState(
-                        targetValue = if (isSelected) selectedColor else Colors.White,
+                        targetValue = if (isSelected) selectedColor else Colors.White50,
                         animationSpec = tween(
-                            durationMillis = 250,
+                            durationMillis = 200,
                             easing = FastOutSlowInEasing
                         ),
                         label = "indicatorColor",
@@ -83,9 +74,8 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp)
-                            .height(3.dp)
-                            .background(animatedColor.copy(alpha = animatedAlpha))
+                            .height(2.dp)
+                            .background(animatedColor)
                     )
                 }
 
