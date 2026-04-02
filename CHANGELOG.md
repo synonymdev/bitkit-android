@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fix unified invoices only showing savings option after reconnecting from offline #878
+- Fix connectivity toasts never appearing due to incorrect state flag #878
+- Fix transfer to savings failing when peer not yet reconnected after internet toggle #878
 - Fix ANR on RGS server settings screen caused by catastrophic regex backtracking #880
 - Fix crash when returning app to foreground on Receive screen #875
 - Show loading state on Spending tab when node is not running #875
 
 ### Added
+- Connection issues overlay view across Send, Receive, and Transfer flows #878
 - Show/hide details toggle on send confirmation screen with coin-stack animation #863
 - "Send from" payment method switcher (Savings/Spending) for unified BIP21 payments #863
 - "Instant" Lightning option on fee rate selection screen for unified payments #863
