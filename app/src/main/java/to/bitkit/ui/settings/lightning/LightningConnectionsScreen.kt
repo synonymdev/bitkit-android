@@ -1,7 +1,9 @@
 package to.bitkit.ui.settings.lightning
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,9 +49,11 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
@@ -66,6 +70,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareZipFile
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 private const val CLOSED_CHANNEL_ALPHA = 0.64f
 
@@ -73,8 +78,6 @@ object LightningConnectionsTestTags {
     const val SCREEN = "lightning_connections_screen"
     const val ADD_CONNECTION_BUTTON = "add_connection_button"
     const val EXPORT_LOGS_BUTTON = "export_logs_button"
-    const val SHOW_CLOSED_BUTTON = "show_closed_button"
-    const val CHANNEL_ITEM_PREFIX = "channel_item"
 }
 
 @Composable
@@ -105,6 +108,7 @@ fun LightningConnectionsScreen(
     )
 }
 
+@Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Content(
@@ -146,103 +150,127 @@ private fun Content(
             onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize()
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                VerticalSpacer(16.dp)
-                LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
-                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+            val isEmpty = uiState.openChannels.isEmpty() &&
+                uiState.pendingConnections.isEmpty() &&
+                uiState.closedChannels.isEmpty()
 
-                // Pending Channels Section
-                if (uiState.pendingConnections.isNotEmpty()) {
-                    VerticalSpacer(16.dp)
-                    Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
-                    ChannelList(
-                        status = ChannelStatusUi.PENDING,
-                        channels = uiState.pendingConnections,
-                        onClickChannel = onClickChannel,
-                    )
-                }
-
-                // Open Channels Section
-                if (uiState.openChannels.isNotEmpty()) {
-                    VerticalSpacer(16.dp)
-                    Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
-                    ChannelList(
-                        status = ChannelStatusUi.OPEN,
-                        channels = uiState.openChannels,
-                        onClickChannel = onClickChannel,
-                    )
-                }
-
-                // Closed & Failed Channels Section
-                AnimatedVisibility(visible = showClosed && uiState.failedOrders.isNotEmpty()) {
-                    Column {
-                        VerticalSpacer(16.dp)
-                        Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
-                        ChannelList(
-                            status = ChannelStatusUi.CLOSED,
-                            channels = uiState.failedOrders,
-                            onClickChannel = onClickChannel,
-                        )
-                    }
-                }
-
-                // Closed Channels Section
-                AnimatedVisibility(visible = showClosed && uiState.closedChannels.isNotEmpty()) {
-                    Column {
-                        VerticalSpacer(16.dp)
-                        Caption13Up(stringResource(R.string.lightning__conn_closed), color = Colors.White64)
-                        ChannelList(
-                            status = ChannelStatusUi.CLOSED,
-                            channels = uiState.closedChannels,
-                            onClickChannel = onClickChannel,
-                        )
-                    }
-                }
-
-                // Show/Hide Closed Channels Button
-                if (uiState.failedOrders.isNotEmpty() || uiState.closedChannels.isNotEmpty()) {
-                    VerticalSpacer(16.dp)
-                    TertiaryButton(
-                        text = stringResource(
-                            when (showClosed) {
-                                true -> R.string.lightning__conn_closed_hide
-                                else -> R.string.lightning__conn_closed_show
-                            }
-                        ),
-                        onClick = { showClosed = !showClosed },
-                        modifier = Modifier
-                            .wrapContentWidth()
-                            .testTag("ChannelsClosed")
-                    )
-                }
-
-                // Bottom Section
-                FillHeight()
-                VerticalSpacer(16.dp)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+            if (isEmpty) {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxSize()
                 ) {
+                    VerticalSpacer(16.dp)
+                    LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
+                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+                    EmptyStateContent(modifier = Modifier.weight(1f))
+
+                    PrimaryButton(
+                        text = stringResource(R.string.lightning__conn_onboarding_button),
+                        onClick = onClickAddConnection,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(LightningConnectionsTestTags.ADD_CONNECTION_BUTTON)
+                    )
+                    VerticalSpacer(16.dp)
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    VerticalSpacer(16.dp)
+                    LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
+                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+                    // Pending Channels Section
+                    if (uiState.pendingConnections.isNotEmpty()) {
+                        VerticalSpacer(16.dp)
+                        Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
+                        ChannelList(
+                            status = ChannelStatusUi.PENDING,
+                            channels = uiState.pendingConnections,
+                            onClickChannel = onClickChannel,
+                        )
+                    }
+
+                    // Open Channels Section
+                    if (uiState.openChannels.isNotEmpty()) {
+                        VerticalSpacer(16.dp)
+                        Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
+                        ChannelList(
+                            status = ChannelStatusUi.OPEN,
+                            channels = uiState.openChannels,
+                            onClickChannel = onClickChannel,
+                        )
+                    }
+
+                    // Closed & Failed Channels Section
+                    AnimatedVisibility(visible = showClosed && uiState.failedOrders.isNotEmpty()) {
+                        Column {
+                            VerticalSpacer(16.dp)
+                            Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
+                            ChannelList(
+                                status = ChannelStatusUi.CLOSED,
+                                channels = uiState.failedOrders,
+                                onClickChannel = onClickChannel,
+                            )
+                        }
+                    }
+
+                    // Closed Channels Section
+                    AnimatedVisibility(visible = showClosed && uiState.closedChannels.isNotEmpty()) {
+                        Column {
+                            VerticalSpacer(16.dp)
+                            Caption13Up(stringResource(R.string.lightning__conn_closed), color = Colors.White64)
+                            ChannelList(
+                                status = ChannelStatusUi.CLOSED,
+                                channels = uiState.closedChannels,
+                                onClickChannel = onClickChannel,
+                            )
+                        }
+                    }
+
+                    // Show/Hide Closed Channels Button
+                    if (uiState.failedOrders.isNotEmpty() || uiState.closedChannels.isNotEmpty()) {
+                        VerticalSpacer(16.dp)
+                        TertiaryButton(
+                            text = stringResource(
+                                when (showClosed) {
+                                    true -> R.string.lightning__conn_closed_hide
+                                    else -> R.string.lightning__conn_closed_show
+                                }
+                            ),
+                            onClick = { showClosed = !showClosed },
+                            modifier = Modifier
+                                .wrapContentWidth()
+                                .testTag("ChannelsClosed")
+                        )
+                    }
+
+                    // Bottom Section
+                    FillHeight()
+                    VerticalSpacer(16.dp)
                     SecondaryButton(
                         text = stringResource(R.string.lightning__conn_button_export_logs),
                         onClick = onClickExportLogs,
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .testTag(LightningConnectionsTestTags.EXPORT_LOGS_BUTTON)
                     )
+                    VerticalSpacer(16.dp)
                     PrimaryButton(
                         text = stringResource(R.string.lightning__conn_button_add),
                         onClick = onClickAddConnection,
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .testTag(LightningConnectionsTestTags.ADD_CONNECTION_BUTTON)
                     )
+                    VerticalSpacer(16.dp)
                 }
-                VerticalSpacer(16.dp)
             }
         }
     }
@@ -351,6 +379,38 @@ private fun ChannelItem(
         )
         VerticalSpacer(16.dp)
         HorizontalDivider()
+    }
+}
+
+@Composable
+private fun EmptyStateContent(modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.lightning),
+                contentDescription = null,
+                modifier = Modifier.size(256.dp)
+            )
+        }
+
+        Display(
+            text = stringResource(R.string.lightning__conn_onboarding_title)
+                .withAccent(accentColor = Colors.Purple),
+        )
+
+        VerticalSpacer(14.dp)
+
+        BodyM(
+            text = stringResource(R.string.lightning__conn_onboarding_text),
+            color = Colors.White64,
+        )
+
+        VerticalSpacer(32.dp)
     }
 }
 

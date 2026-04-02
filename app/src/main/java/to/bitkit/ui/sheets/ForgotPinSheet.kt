@@ -35,6 +35,7 @@ fun ForgotPinSheet(
 ) {
     BottomSheet(onDismissRequest = onDismiss) {
         Content(
+            onBackClick = onDismiss,
             onResetClick = {
                 onDismiss()
                 onResetClick()
@@ -45,6 +46,7 @@ fun ForgotPinSheet(
 
 @Composable
 private fun Content(
+    onBackClick: (() -> Unit)? = null,
     onResetClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -56,7 +58,10 @@ private fun Content(
             .gradientBackground()
             .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar(stringResource(R.string.security__pin_forgot_title))
+        SheetTopBar(
+            titleText = stringResource(R.string.security__pin_forgot_title),
+            onBack = onBackClick,
+        )
         VerticalSpacer(16.dp)
 
         BodyM(
@@ -88,6 +93,7 @@ private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
+                onBackClick = {},
                 onResetClick = {},
             )
         }
