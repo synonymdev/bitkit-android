@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Rozpocznij</string>
     <string name="lightning__funding__nav_title">Saldo wydatków</string>
     <string name="lightning__funding__title">Zasil swoje &lt;accent&gt;saldo wydatków&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Możesz użyć oszczędności zgromadzonych w Twoim portfelu Bitkit lub wysłać bitcoiny z innego portfela.</string>
+    <string name="lightning__funding__text">Najłatwiejszą opcją jest użycie oszczędności Bitkit lub wysłanie bitcoinów z innego portfela.</string>
     <string name="lightning__funding__text_blocked">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się z innymi węzłami.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się bezpośrednio z innymi węzłami.</string>
     <string name="lightning__funding__button1">Prześlij z Oszczędności</string>
     <string name="lightning__funding__button2">Użyj innego portfela</string>
-    <string name="lightning__funding__button3">Zaawansowane</string>
     <string name="lightning__funding_advanced__nav_title">Saldo do wydawania</string>
     <string name="lightning__funding_advanced__title">&lt;accent&gt;Ustawienia&lt;/accent&gt; zaawansowane</string>
     <string name="lightning__funding_advanced__text">Zeskanuj kod QR, aby odebrać swój kanał LNURL od innego LSP, lub wybierz ręczną konfigurację.</string>

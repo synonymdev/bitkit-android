@@ -146,9 +146,8 @@
     <string name="lightning__force_title">Forceer\n&lt;accent&gt;overboeking&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Overboeken van spaargeld</string>
     <string name="lightning__funding__button2">Andere wallet gebruiken</string>
-    <string name="lightning__funding__button3">Geavanceerd</string>
     <string name="lightning__funding__nav_title">Bestedingssaldo</string>
-    <string name="lightning__funding__text">Je kunt je Bitkit spaargeld gebruiken of bitcoin versturen vanaf een andere wallet.</string>
+    <string name="lightning__funding__text">De makkelijkste optie is om je Bitkit-spaargeld te gebruiken of bitcoin te versturen vanuit een andere wallet.</string>
     <string name="lightning__funding__text_blocked">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__title">Vul je &lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>

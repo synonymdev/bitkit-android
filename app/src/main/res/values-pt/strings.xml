@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Começar</string>
     <string name="lightning__funding__nav_title">Saldo de Gastos</string>
     <string name="lightning__funding__title">Transfira para seu &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Use seu saldo de poupança ou receba bitcoin de outra carteira.</string>
+    <string name="lightning__funding__text">A forma mais fácil é usar as suas poupanças Bitkit ou enviar bitcoin de uma carteira diferente.</string>
     <string name="lightning__funding__text_blocked">Bitkit não fornece serviços de Lightning no seu paús atualmente, mas você ainda pode se conectar diretamente a outros nodes</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit não fornece serviços de Lightning no seu paús atualmente, mas você ainda pode se conectar diretamente a outros nodes</string>
     <string name="lightning__funding__button1">Transferir do Saldo de Poupança</string>
     <string name="lightning__funding__button2">Transferir de Outra Carteira</string>
-    <string name="lightning__funding__button3">Avançado</string>
     <string name="lightning__funding_advanced__nav_title">Saldo de Gastos</string>
     <string name="lightning__funding_advanced__title">&lt;accent&gt;Configuração&lt;/accent&gt; avançada</string>
     <string name="lightning__funding_advanced__text">Escaneie um QR para reivindicar seu canal LNURL de outro LSP ou escolha o setup manual.</string>

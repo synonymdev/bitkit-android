@@ -670,7 +670,7 @@ private fun RootNavHost(
                             appViewModel.showSheet(Sheet.Receive)
                         }
                     },
-                    onAdvanced = { navController.navigateTo(Routes.FundingAdvanced) },
+                    onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                     isGeoBlocked = isGeoBlocked,
                 )

@@ -146,9 +146,8 @@
     <string name="lightning__force_title">Forçar\n&lt;accent&gt;transferència&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Transferir des d\'estalvis</string>
     <string name="lightning__funding__button2">Utilitza un altre moneder</string>
-    <string name="lightning__funding__button3">Avançat</string>
     <string name="lightning__funding__nav_title">Balanç de despesa</string>
-    <string name="lightning__funding__text">Pots utilitzar els teus estalvis de Bitkit o enviar bitcoin des d\'una altra cartera.</string>
+    <string name="lightning__funding__text">La forma més fàcil és utilitzar els teus estalvis de Bitkit o enviar bitcoin des d\'una altra cartera.</string>
     <string name="lightning__funding__text_blocked">Bitkit no ofereix serveis Lightning al teu país, però encara pots connectar-te a altres nodes directament.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit no ofereix serveis Lightning al teu país, però encara pots connectar-te a altres nodes directament.</string>
     <string name="lightning__funding__title">Finança el teu &lt;accent&gt;saldo de despesa&lt;/accent&gt;</string>

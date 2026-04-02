@@ -146,9 +146,8 @@
     <string name="lightning__force_title">Trasferimento\n&lt;accent&gt;forzoso&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Trasferimento da risparmio</string>
     <string name="lightning__funding__button2">Usa un altro portafoglio</string>
-    <string name="lightning__funding__button3">Avanzate</string>
     <string name="lightning__funding__nav_title">Conto di Spesa</string>
-    <string name="lightning__funding__text">Puoi utilizzare i tuoi risparmi Bitkit o inviare bitcoin da un portafoglio diverso.</string>
+    <string name="lightning__funding__text">Il modo più semplice è usare i tuoi risparmi Bitkit o inviare bitcoin da un portafoglio diverso.</string>
     <string name="lightning__funding__text_blocked">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__title">Manda fondi al tuo &lt;accent&gt;conto di spesa&lt;/accent&gt;</string>

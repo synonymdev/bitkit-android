@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Los geht\'s</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Du kannst dein Bitkit-Sparkonto verwenden oder Bitcoin aus einer anderen Wallet senden.</string>
+    <string name="lightning__funding__text">Am einfachsten ist es, deine Bitkit-Ersparnisse zu verwenden oder Bitcoin von einer anderen Wallet zu senden.</string>
     <string name="lightning__funding__text_blocked">Bitkit bietet derzeit keine Lightning-Dienste in deinem Land an,  aber du kannst dich trotzdem direkt mit anderen Knotenpunkten verbinden.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit bietet derzeit keine Lightning-Dienste in deinem Land an,  aber du kannst dich trotzdem direkt mit anderen Knotenpunkten verbinden.</string>
     <string name="lightning__funding__button1">Von Sparkonto übertragen</string>
     <string name="lightning__funding__button2">Anderes Wallet verwenden</string>
-    <string name="lightning__funding__button3">Fortgeschritten</string>
     <string name="lightning__funding_advanced__nav_title">Ausgabenkonto</string>
     <string name="lightning__funding_advanced__title">Fortgeschrittene&lt;accent&gt;setup&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__text">Scannen Sie einen QR-Code, um Ihren LNURL-Kanal von einem anderen LSP zu beanspruchen, oder wählen Sie die manuelle Einrichtung.</string>

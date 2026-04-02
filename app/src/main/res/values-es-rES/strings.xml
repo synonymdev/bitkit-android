@@ -146,9 +146,8 @@
     <string name="lightning__force_title">Forzar\n&lt;accent&gt;Transferencia&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Transferir desde Ahorros</string>
     <string name="lightning__funding__button2">Usar Otro Monedero</string>
-    <string name="lightning__funding__button3">Avanzado</string>
     <string name="lightning__funding__nav_title">Saldo de gastos</string>
-    <string name="lightning__funding__text">Puede usar sus ahorros en Bitkit o enviar bitcoin desde un monedero diferente.</string>
+    <string name="lightning__funding__text">La forma más fácil es usar sus ahorros en Bitkit o enviar bitcoin desde un monedero diferente.</string>
     <string name="lightning__funding__text_blocked">Bitkit actualmente no ofrece servicios Lightning en tu país, pero aún puedes conectarte directamente a otros nodos.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit actualmente no ofrece servicios Lightning en tu país, pero aún puedes conectarte directamente a otros nodos.</string>
     <string name="lightning__funding__title">Rellene su &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>

@@ -40,7 +40,7 @@ fun FundingScreen(
     isGeoBlocked: Boolean,
     onTransfer: () -> Unit = {},
     onFund: () -> Unit = {},
-    onAdvanced: () -> Unit = {},
+    onManual: () -> Unit = {},
     onBackClick: () -> Unit = {},
 ) {
     val balances = LocalBalances.current
@@ -106,11 +106,12 @@ fun FundingScreen(
                     modifier = Modifier.testTag("FundReceive")
                 )
                 RectangleButton(
-                    label = stringResource(R.string.lightning__funding__button3),
-                    icon = R.drawable.ic_share_purple,
+                    label = stringResource(R.string.lightning__funding_advanced__button2),
+                    icon = R.drawable.ic_pencil_full,
                     iconTint = Colors.Purple,
-                    onClick = onAdvanced,
-                    modifier = Modifier.testTag("FundCustom")
+                    iconSize = 13.37.dp,
+                    onClick = onManual,
+                    modifier = Modifier.testTag("FundManual")
                 )
             }
         }

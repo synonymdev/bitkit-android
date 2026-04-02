@@ -146,9 +146,8 @@
     <string name="lightning__force_title">Forzar\n&lt;accent&gt;Transferencia&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Transferir desde Ahorros</string>
     <string name="lightning__funding__button2">Usar Otra Billetera</string>
-    <string name="lightning__funding__button3">Avanzado</string>
     <string name="lightning__funding__nav_title">Saldo de gastos</string>
-    <string name="lightning__funding__text">Puedes usar tu balance de ahorros en Bitkit o enviar fondos desde otra cartera.</string>
+    <string name="lightning__funding__text">La forma más fácil es usar tus ahorros de Bitkit o enviar bitcoin desde una billetera diferente.</string>
     <string name="lightning__funding__text_blocked">Bitkit no tiene soporte Lightning en tu región, pero puedes usar nodos externos manualmente.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit no tiene soporte Lightning en tu región, pero puedes usar nodos externos manualmente.</string>
     <string name="lightning__funding__title">Fondee su &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>

@@ -146,9 +146,8 @@
     <string name="lightning__force_title">Vynutit\n&lt;accent&gt;Převod&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Převod z úspor</string>
     <string name="lightning__funding__button2">Použijte jinou peněženku</string>
-    <string name="lightning__funding__button3">Pokročilé</string>
     <string name="lightning__funding__nav_title">Dostupný zůstatek</string>
-    <string name="lightning__funding__text">Můžete použít své úspory na BitKitu nebo poslat bitcoin z jiné peněženky.</string>
+    <string name="lightning__funding__text">Nejjednodušší možností je použít úspory z Bitkitu nebo poslat bitcoin z jiné peněženky.</string>
     <string name="lightning__funding__text_blocked">Bitkit v současné době neposkytuje služby lightning ve vaší zemi, ale stále se můžete připojit k jiným uzlům přímo.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit v současné době neposkytuje služby lightning ve vaší zemi, ale stále se můžete připojit k jiným uzlům přímo.</string>
     <string name="lightning__funding__title">Navyšte svůj &lt;accent&gt;disponibilní zůstatek&lt;/accent&gt;</string>

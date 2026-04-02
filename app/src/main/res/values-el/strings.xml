@@ -146,9 +146,8 @@
     <string name="lightning__force_title">Αναγκαστική\n&lt;accent&gt;μεταφορά&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Μεταφορά από αποταμιεύσεις</string>
     <string name="lightning__funding__button2">Χρήση άλλου πορτοφολιού</string>
-    <string name="lightning__funding__button3">Για προχωρημένους</string>
     <string name="lightning__funding__nav_title">Υπόλοιπο δαπανών</string>
-    <string name="lightning__funding__text">Μπορείς να χρησιμοποιήσεις τις αποταμιεύσεις του Bitkit ή να στείλεις bitcoin από διαφορετικό πορτοφόλι.</string>
+    <string name="lightning__funding__text">Ο ευκολότερος τρόπος είναι να χρησιμοποιήσεις τις αποταμιεύσεις Bitkit ή να στείλεις bitcoin από διαφορετικό πορτοφόλι.</string>
     <string name="lightning__funding__text_blocked">Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς απευθείας σε άλλους κόμβους.</string>
     <string name="lightning__funding__text_blocked_cjit">Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς απευθείας σε άλλους κόμβους.</string>
     <string name="lightning__funding__title">Χρηματοδότησε το &lt;accent&gt;υπόλοιπο δαπανών&lt;/accent&gt;</string>

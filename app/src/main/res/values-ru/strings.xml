@@ -154,9 +154,8 @@
     <string name="lightning__force_title">Принудительный\n&lt;accent&gt;Перевод&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Перевести из Сбережений</string>
     <string name="lightning__funding__button2">Использовать Другой Кошелёк</string>
-    <string name="lightning__funding__button3">Дополнительно</string>
     <string name="lightning__funding__nav_title">Баланс Расходов</string>
-    <string name="lightning__funding__text">Вы можете использовать свои сбережения Bitkit или отправить биткойны из другого кошелька.</string>
+    <string name="lightning__funding__text">Самый простой вариант — использовать ваши сбережения Bitkit или отправить биткоин с другого кошелька.</string>
     <string name="lightning__funding__text_blocked">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__title">Пополните свой &lt;accent&gt;Баланс Расходов&lt;/accent&gt;</string>
