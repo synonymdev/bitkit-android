@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -117,7 +118,7 @@ private class OuterGlowNode(
     var glowRadius: Dp,
     var cornerRadius: Dp,
 ) : DrawModifierNode, Modifier.Node() {
-    override fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.draw() {
+    override fun ContentDrawScope.draw() {
         val glowRadiusPx = glowRadius.toPx()
         val cornerRadiusPx = cornerRadius.toPx()
 

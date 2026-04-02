@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -96,7 +98,10 @@ private fun ShowPassphraseContent(
 
             Spacer(modifier = Modifier.height(32.dp))
             BodyS(
-                text = stringResource(R.string.security__pass_never_share).withAccent(accentColor = Colors.Brand),
+                text = stringResource(R.string.security__pass_never_share).withAccent(
+                    defaultColor = Colors.Brand,
+                    accentStyle = SpanStyle(color = Colors.Brand, fontWeight = FontWeight.Bold),
+                ),
                 color = Colors.White64,
             )
 
