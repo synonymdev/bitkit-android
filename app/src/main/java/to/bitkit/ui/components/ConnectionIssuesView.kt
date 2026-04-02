@@ -70,7 +70,7 @@ fun ConnectionIssuesView(
         Display(
             text = stringResource(R.string.other__connection_issues_title)
                 .withAccent(accentColor = Colors.Yellow),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
 
         VerticalSpacer(8.dp)
