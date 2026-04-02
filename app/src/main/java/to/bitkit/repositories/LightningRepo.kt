@@ -621,7 +621,10 @@ class LightningRepo @Inject constructor(
     suspend fun restartWithRgsServer(newRgsUrl: String): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node RGS server to: '$newRgsUrl'", context = TAG)
 
-        validateRgsUrl(newRgsUrl).onFailure { return@withContext Result.failure(it) }
+        validateRgsUrl(newRgsUrl).onFailure {
+            Logger.warn("RGS server unreachable at '$newRgsUrl'", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
 
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
         stop().onFailure {
@@ -647,9 +650,7 @@ class LightningRepo @Inject constructor(
     private suspend fun validateRgsUrl(url: String): Result<Unit> = withContext(bgDispatcher) {
         val initialTimestamp = 0
         val testUrl = "${url.trimEnd('/')}/$initialTimestamp"
-        urlValidator.validate(testUrl).onFailure {
-            Logger.warn("RGS server unreachable at '$testUrl'", it, context = TAG)
-        }
+        urlValidator.validate(testUrl)
     }
 
     suspend fun getBalanceForAddressType(addressType: AddressType): Result<ULong> = withContext(bgDispatcher) {
