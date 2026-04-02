@@ -4,6 +4,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class CalculatorValues(
-    val btcValue: String = "",
+    val btcValue: String = "10000",
     val fiatValue: String = "",
 )
