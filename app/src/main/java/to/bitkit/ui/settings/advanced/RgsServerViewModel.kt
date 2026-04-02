@@ -91,7 +91,7 @@ class RgsServerViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.restartWithRgsServer(url)
+            lightningRepo.restartWithRgsServer(normalizeUrl(url))
                 .onSuccess {
                     _uiState.update {
                         val newState = it.copy(
@@ -128,15 +128,12 @@ class RgsServerViewModel @Inject constructor(
         )
     }
 
-    private fun isValidURL(data: String): Boolean {
-        val normalized = if (!data.startsWith("http://") && !data.startsWith("https://")) {
-            "https://$data"
-        } else {
-            data
-        }
+    private fun normalizeUrl(url: String): String =
+        if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
 
+    private fun isValidURL(data: String): Boolean {
         return runCatching {
-            val uri = URI(normalized)
+            val uri = URI(normalizeUrl(data))
             val hostname = uri.host ?: return false
 
             if (Env.isDebug && hostname == "localhost") return true
