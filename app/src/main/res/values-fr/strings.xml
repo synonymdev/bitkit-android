@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Coller l\'URI du nœud</string>
     <string name="lightning__external_manual__scan">Scanner QR</string>
     <string name="lightning__external_amount__title">Dépenses \n&lt;accent&gt;solde&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Connexion \n&lt;accent&gt;initiée&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Ouverture\n&lt;accent&gt;du canal&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Solde de dépenses</string>
     <string name="lightning__external_success__text">La connexion Lightning est initiée. Vous pourrez utiliser votre compte courant dans &lt;accent&gt;±30 minutes&lt;/accent&gt; (en fonction de la configuration du nœud).</string>
     <string name="lightning__error_channel_purchase">Échec de la configuration des paiements instantanés</string>
     <string name="lightning__error_channel_setup_msg">Une erreur s\'est produite lors de l\'établissement de votre solde du compte courant. {raw}</string>

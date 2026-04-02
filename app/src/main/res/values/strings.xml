@@ -136,8 +136,9 @@
     <string name="lightning__external_manual__scan">Scan QR</string>
     <string name="lightning__external_manual__text">You can use an external node to manually open a Lightning connection. Enter the node details to continue.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Manual setup&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Spending Balance</string>
     <string name="lightning__external_success__text">Lightning connection initiated. You will be able to use your spending balance in &lt;accent&gt;±30 minutes&lt;/accent&gt; (depends on node configuration).</string>
-    <string name="lightning__external_success__title">Connection\n&lt;accent&gt;initiated&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Channel\n&lt;accent&gt;opening&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Fee rate</string>
     <string name="lightning__fee_rate_update_time">Fee Rate Cache Update Time</string>
     <string name="lightning__fees">Fees</string>
