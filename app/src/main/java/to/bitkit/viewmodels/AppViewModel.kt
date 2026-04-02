@@ -2078,7 +2078,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 fees = feesMap.toImmutableMap(),
-                fee = SendFee.OnChain(currentFee),
+                fee = if (it.payMethod == SendMethod.ONCHAIN) SendFee.OnChain(currentFee) else it.fee,
             )
         }
     }
