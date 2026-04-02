@@ -44,6 +44,7 @@
     <string name="common__empty">Empty</string>
     <string name="common__error">Error</string>
     <string name="common__error_body">Unknown error</string>
+    <string name="common__hide_details">Hide Details</string>
     <string name="common__later">Later</string>
     <string name="common__learn_more">Learn More</string>
     <string name="common__max">Max</string>
@@ -60,6 +61,7 @@
     <string name="common__save">Save</string>
     <string name="common__search">Search</string>
     <string name="common__share">Share</string>
+    <string name="common__show_details">Show Details</string>
     <string name="common__skip">Skip</string>
     <string name="common__success">Success</string>
     <string name="common__try_again">Try Again</string>
@@ -73,6 +75,8 @@
     <string name="fee__fast__description">±10-20 minutes</string>
     <string name="fee__fast__shortDescription">±10m</string>
     <string name="fee__fast__title">Fast</string>
+    <string name="fee__instant__description">±1-5 seconds</string>
+    <string name="fee__instant__shortDescription">Instant</string>
     <string name="fee__instant__title">Instant</string>
     <string name="fee__minimum__description">+2 hours</string>
     <string name="fee__minimum__shortDescription">+2h</string>
@@ -959,6 +963,7 @@
     <string name="wallet__send_fee_speed">Speed</string>
     <string name="wallet__send_fee_total">₿ {feeSats} for this transaction</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} for this transaction ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_from">From</string>
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Invoice expiration</string>
     <string name="wallet__send_max">MAX</string>
@@ -968,7 +973,7 @@
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Review &amp; Send</string>
+    <string name="wallet__send_review">Confirm</string>
     <string name="wallet__send_sent">Bitcoin Sent</string>
     <string name="wallet__send_swipe">Swipe To Pay</string>
     <string name="wallet__send_to">To</string>

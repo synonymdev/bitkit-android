@@ -800,7 +800,7 @@
     <string name="wallet__send_available_savings">Dostępne (oszczędności)</string>
     <string name="wallet__send_max_spending__title">Saldo rezerwy</string>
     <string name="wallet__send_max_spending__description">Maksymalna kwota do wydania jest nieco niższa ze względu na wymagane saldo rezerwowe.</string>
-    <string name="wallet__send_review">Przejrzyj i wyślij</string>
+    <string name="wallet__send_review">Potwierdź</string>
     <string name="wallet__send_confirming_in">Potwierdzenie w ciągu</string>
     <string name="wallet__send_invoice_expiration">Termin faktury</string>
     <string name="wallet__send_swipe">Przesuń, aby zapłacić</string>
