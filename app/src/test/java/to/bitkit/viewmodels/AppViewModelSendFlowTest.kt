@@ -13,7 +13,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
@@ -93,17 +92,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(timedSheetManager.currentSheet).thenReturn(MutableStateFlow(null))
         whenever(migrationService.isShowingMigrationLoading).thenReturn(MutableStateFlow(false))
-        wheneverBlocking { migrationService.needsPostMigrationSync() }.thenReturn(false)
-        wheneverBlocking { migrationService.isMigrationChecked() }.thenReturn(true)
-        wheneverBlocking { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
-        wheneverBlocking { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
-        wheneverBlocking { currencyRepo.convertSatsToFiat(any(), anyOrNull()) }
+        whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
+        whenever { migrationService.isMigrationChecked() }.thenReturn(true)
+        whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
+        whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
+        whenever { currencyRepo.convertSatsToFiat(any(), anyOrNull()) }
             .thenReturn(Result.failure(Exception("not mocked")))
-        wheneverBlocking { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(100uL))
-        wheneverBlocking { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
-        wheneverBlocking { lightningRepo.canSend(any(), any()) }.thenReturn(true)
+        whenever { lightningRepo.canSend(any(), any()) }.thenReturn(true)
 
         sut = AppViewModel(
             connectivityRepo = connectivityRepo,
