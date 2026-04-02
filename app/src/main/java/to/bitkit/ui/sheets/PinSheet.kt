@@ -49,7 +49,7 @@ fun PinSheet(
                     onPinChosen = { pin ->
                         navController.navigateTo(PinRoute.Confirm(pin))
                     },
-                    onBack = { navController.popBackStack() },
+                    onBack = { if (!navController.popBackStack()) onDismiss() },
                 )
             }
             composableWithDefaultTransitions<PinRoute.Confirm> {
