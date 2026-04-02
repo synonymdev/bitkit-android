@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -199,6 +200,24 @@ class TrezorRepo @Inject constructor(
         }.onFailure { e ->
             Logger.error("Trezor getPublicKey failed", e, context = TAG)
             _state.update { it.copy(error = e.message) }
+        }
+    }
+
+    suspend fun getTransactionHistory(
+        extendedKey: String,
+        network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
+        scriptType: AccountType? = null,
+    ): Result<TransactionHistoryResult> = withContext(ioDispatcher) {
+        runCatching {
+            trezorService.getTransactionHistory(
+                extendedKey = extendedKey,
+                electrumUrl = electrumUrlForNetwork(network),
+                network = network,
+                scriptType = scriptType,
+            )
+        }.onFailure {
+            Logger.error("Failed to get Trezor transaction history", it, context = TAG)
+            _state.update { s -> s.copy(error = it.message) }
         }
     }
 

@@ -6,13 +6,17 @@ import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.SingleAddressInfoResult
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
+import com.synonym.bitkitcore.TxDirection
+import com.synonym.bitkitcore.WalletBalance
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
@@ -221,6 +225,65 @@ internal object TrezorPreviewData {
         selectedNetwork = BitkitCoreNetwork.REGTEST,
         sendStep = SendStep.SIGNED,
         signedTxResult = sampleSignedTx,
+    )
+
+    val sampleWalletBalance = WalletBalance(
+        confirmed = 150_000uL,
+        immature = 0uL,
+        trustedPending = 5_000uL,
+        untrustedPending = 0uL,
+        spendable = 155_000uL,
+        total = 155_000uL,
+    )
+
+    val sampleHistoryTransactions = listOf(
+        HistoryTransaction(
+            txid = SAMPLE_TXID,
+            received = 100_000uL,
+            sent = 0uL,
+            net = 100_000L,
+            fee = null,
+            direction = TxDirection.RECEIVED,
+            blockHeight = 849_990u,
+            timestamp = 1_700_000_000uL,
+            confirmations = 10u,
+        ),
+        HistoryTransaction(
+            txid = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+            received = 0uL,
+            sent = 50_000uL,
+            net = -50_000L,
+            fee = 1_200uL,
+            direction = TxDirection.SENT,
+            blockHeight = 849_995u,
+            timestamp = 1_700_100_000uL,
+            confirmations = 5u,
+        ),
+        HistoryTransaction(
+            txid = "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+            received = 5_000uL,
+            sent = 5_000uL,
+            net = 0L,
+            fee = 500uL,
+            direction = TxDirection.SELF_TRANSFER,
+            blockHeight = null,
+            timestamp = null,
+            confirmations = 0u,
+        ),
+    )
+
+    val sampleTransactionHistoryResult = TransactionHistoryResult(
+        transactions = sampleHistoryTransactions,
+        balance = sampleWalletBalance,
+        txCount = 3u,
+        blockHeight = 850_000u,
+        accountType = AccountType.NATIVE_SEGWIT,
+    )
+
+    val uiStateWithTxHistory = TrezorUiState(
+        selectedNetwork = BitkitCoreNetwork.REGTEST,
+        txHistoryInput = SAMPLE_XPUB,
+        txHistoryResult = sampleTransactionHistoryResult,
     )
 
     val uiStateBroadcast = TrezorUiState(

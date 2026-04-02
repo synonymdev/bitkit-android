@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.SingleAddressInfoResult
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignedTx
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -531,6 +532,35 @@ class TrezorViewModel @Inject constructor(
         }
     }
 
+    fun setTxHistoryInput(input: String) {
+        _uiState.update { it.copy(txHistoryInput = input) }
+    }
+
+    fun lookupTransactionHistory() {
+        viewModelScope.launch(bgDispatcher) {
+            val input = _uiState.value.txHistoryInput.trim()
+            if (input.isBlank()) {
+                ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter an xpub")
+                return@launch
+            }
+            _uiState.update { it.copy(isLoadingTxHistory = true, txHistoryResult = null) }
+
+            val network = _uiState.value.selectedNetwork
+            trezorRepo.getTransactionHistory(extendedKey = input, network = network)
+                .onSuccess { result ->
+                    _uiState.update { it.copy(isLoadingTxHistory = false, txHistoryResult = result) }
+                    ToastEventBus.send(
+                        type = Toast.ToastType.INFO,
+                        title = "Found ${result.txCount} transaction${if (result.txCount != 1u) "s" else ""}"
+                    )
+                }
+                .onFailure {
+                    _uiState.update { it.copy(isLoadingTxHistory = false) }
+                    ToastEventBus.send(it)
+                }
+        }
+    }
+
     fun clearError() {
         trezorRepo.clearError()
     }
@@ -592,6 +622,9 @@ data class TrezorUiState(
     val coinSelection: CoinSelection = CoinSelection.BRANCH_AND_BOUND,
     val isBroadcasting: Boolean = false,
     val broadcastTxid: String? = null,
+    val txHistoryInput: String = "",
+    val isLoadingTxHistory: Boolean = false,
+    val txHistoryResult: TransactionHistoryResult? = null,
 )
 
 enum class SendStep { FORM, REVIEW, SIGNED }
