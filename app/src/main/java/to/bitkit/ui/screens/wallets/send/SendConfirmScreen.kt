@@ -461,7 +461,7 @@ private fun AddTagButton(
     ) {
         BodySSB(
             text = stringResource(R.string.wallet__tags_add_button),
-            color = Colors.White64,
+            color = Colors.White,
         )
         Icon(
             painter = painterResource(R.drawable.ic_plus),
