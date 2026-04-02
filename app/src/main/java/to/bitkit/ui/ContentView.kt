@@ -815,6 +815,7 @@ private fun NavGraphBuilder.home(
     }
     composableWithDefaultTransitions<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
@@ -829,6 +830,13 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsIntro()
                 } else {
                     navController.navigateToTransferSavingsAvailability()
+                }
+            },
+            onTransferFromSavingsClick = {
+                if (!hasSeenSpendingIntro) {
+                    navController.navigateToTransferSpendingIntro()
+                } else {
+                    navController.navigateToTransferSpendingAmount()
                 }
             },
             onBackClick = { navController.popBackStack() },
