@@ -79,6 +79,7 @@ import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.UrlValidator
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -105,6 +106,7 @@ class LightningRepo @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
+    private val urlValidator: UrlValidator,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -619,6 +621,11 @@ class LightningRepo @Inject constructor(
     suspend fun restartWithRgsServer(newRgsUrl: String): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node RGS server to: '$newRgsUrl'", context = TAG)
 
+        validateRgsUrl(newRgsUrl).onFailure {
+            Logger.warn("RGS server unreachable at '$newRgsUrl'", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
         stop().onFailure {
             Logger.error("Failed to stop node during RGS server change", it, context = TAG)
@@ -638,6 +645,12 @@ class LightningRepo @Inject constructor(
 
             Logger.info("Successfully changed RGS server", context = TAG)
         }
+    }
+
+    private suspend fun validateRgsUrl(url: String): Result<Unit> = withContext(bgDispatcher) {
+        val initialTimestamp = 0
+        val testUrl = "${url.trimEnd('/')}/$initialTimestamp"
+        urlValidator.validate(testUrl)
     }
 
     suspend fun getBalanceForAddressType(addressType: AddressType): Result<ULong> = withContext(bgDispatcher) {
