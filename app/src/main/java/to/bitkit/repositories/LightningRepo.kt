@@ -1186,17 +1186,24 @@ class LightningRepo @Inject constructor(
             return@withContext false
         }
         if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
-            val cached = cacheStore.data.first().balance
-            val maxSend = cached?.maxSendLightningSats ?: 0u
-            val totalLn = cached?.totalLightningSats ?: 0u
-            return@withContext amountSats <= maxOf(maxSend, totalLn)
+            return@withContext amountSats <= cachedLightningBalance()
         }
         if (lightningService.channels == null) {
             withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
                 _lightningState.first { lightningService.channels != null }
             }
         }
-        return@withContext lightningService.canSend(amountSats)
+        if (lightningService.canSend(amountSats)) return@withContext true
+        val channelsLoading = lightningService.channels?.none { it.isUsable } == true
+        if (fallbackToCachedBalance && channelsLoading) {
+            return@withContext amountSats <= cachedLightningBalance()
+        }
+        return@withContext false
+    }
+
+    private suspend fun cachedLightningBalance(): ULong {
+        val cached = cacheStore.data.first().balance
+        return maxOf(cached?.maxSendLightningSats ?: 0u, cached?.totalLightningSats ?: 0u)
     }
 
     fun getNodeId(): String? =
