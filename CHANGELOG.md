@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix crash when returning app to foreground on Receive screen #875
+- Show loading state on Spending tab when node is not running #875
+
 ### Added
 - Show/hide details toggle on send confirmation screen with coin-stack animation #863
 - "Send from" payment method switcher (Savings/Spending) for unified BIP21 payments #863
