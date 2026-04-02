@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Show loading state on Spending tab when node is not running #875
 
 ### Added
-- Transfer from Savings button on empty Spending screen when savings balance exists
+- Transfer from Savings button on empty Spending screen when savings balance exists #882
 - Connection issues overlay with connectivity fixes across Send, Receive, and Transfer flows #878
 - Lightning Connections empty state with onboarding screen #857
 - Unified PIN management screen (enable/disable/change in one place) #857
