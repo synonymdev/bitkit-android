@@ -96,7 +96,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
-        whenever { currencyRepo.convertSatsToFiat(any(), anyOrNull()) }
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
         whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(100uL))
