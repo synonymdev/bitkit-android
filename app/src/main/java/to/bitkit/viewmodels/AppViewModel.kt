@@ -1353,6 +1353,7 @@ class AppViewModel @Inject constructor(
             if (quickPayHandled) return
 
             refreshOnchainSendIfNeeded()
+            estimateLightningRoutingFeesIfNeeded()
             if (isMainScanner) {
                 showSheet(Sheet.Send(SendRoute.Confirm))
             } else {
