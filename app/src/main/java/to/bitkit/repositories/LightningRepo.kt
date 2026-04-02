@@ -1186,7 +1186,10 @@ class LightningRepo @Inject constructor(
             return@withContext false
         }
         if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
-            return@withContext amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
+            val cached = cacheStore.data.first().balance
+            val maxSend = cached?.maxSendLightningSats ?: 0u
+            val totalLn = cached?.totalLightningSats ?: 0u
+            return@withContext amountSats <= maxOf(maxSend, totalLn)
         }
         if (lightningService.channels == null) {
             withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
