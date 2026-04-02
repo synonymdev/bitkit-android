@@ -109,6 +109,8 @@
     <string name="lightning__external_manual__paste">Pegar URI del nodo</string>
     <string name="lightning__external_manual__text">Puedes usar un nodo externo para abrir manualmente una conexión Lightning. Introduce los datos del nodo para continuar.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Configuración manual&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo de gasto</string>
+    <string name="lightning__external_success__text">Conexión Lightning iniciada. Podrá usar su balance para pagar en &lt;accent&gt;±30 minutos&lt;/accent&gt; (depende de la configuración del nodo).</string>
     <string name="lightning__external_success__title">Apertura\n&lt;accent&gt;de canal&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Tasa de comisión</string>
     <string name="lightning__fee_rate_update_time">Hora de actualización de caché de comisiones</string>
@@ -201,8 +203,6 @@
     <string name="lightning__external_manual__host">Servidor</string>
     <string name="lightning__external_manual__port">Puerto</string>
     <string name="lightning__external_manual__scan">Escanear QR</string>
-    <string name="lightning__external_success__nav_title">Saldo de gasto</string>
-    <string name="lightning__external_success__text">Conexión Lightning iniciada. Podrá usar su balance para pagar en &lt;accent&gt;±30 minutos&lt;/accent&gt; (depende de la configuración del nodo).</string>
     <string name="lightning__error_channel_purchase">Error en la Configuración de Pago Instántaneo</string>
     <string name="lightning__spending">Gasto</string>
     <string name="lightning__savings">Ahorro</string>
