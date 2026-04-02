@@ -47,7 +47,6 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 
@@ -70,7 +69,7 @@ fun SendFeeRateScreen(
         uiState = uiState,
         isUnified = sendUiState.canSwitchWallet,
         payMethod = sendUiState.payMethod,
-        estimatedRoutingFee = (sendUiState.fee as? SendFee.Lightning)?.value ?: 0L,
+        estimatedRoutingFee = sendUiState.lastLightningFee,
         onBack = onBack,
         onContinue = onContinue,
         onSelect = {

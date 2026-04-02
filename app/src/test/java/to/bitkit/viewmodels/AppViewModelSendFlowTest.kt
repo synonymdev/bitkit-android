@@ -283,6 +283,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(lightningFee, currentFee)
     }
 
+    // -- lastLightningFee --
+
+    @Test
+    fun `lastLightningFee persists after switching to onchain`() = test {
+        balanceState.value = BalanceState(
+            maxSendOnchainSats = 100_000u,
+            maxSendLightningSats = 100_000u,
+        )
+        setUnifiedState(
+            amount = 1000u,
+            payMethod = SendMethod.LIGHTNING,
+            fee = SendFee.Lightning(42),
+            lastLightningFee = 42L,
+        )
+        advanceUntilIdle()
+
+        sut.setTransactionSpeed(TransactionSpeed.Medium)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(42L, sut.sendUiState.value.lastLightningFee)
+    }
+
+    @Test
+    fun `lastLightningFee is zero initially`() = test {
+        assertEquals(0L, sut.sendUiState.value.lastLightningFee)
+    }
+
     // -- helpers --
 
     @Suppress("UNCHECKED_CAST")
@@ -296,6 +324,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         amount: ULong = 0u,
         payMethod: SendMethod = SendMethod.LIGHTNING,
         fee: SendFee? = null,
+        lastLightningFee: Long = 0L,
     ) {
         setSendState(
             SendUiState(
@@ -304,6 +333,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 isUnified = true,
                 payMethod = payMethod,
                 fee = fee,
+                lastLightningFee = lastLightningFee,
                 confirmedWarnings = persistentListOf(),
                 speed = TransactionSpeed.Medium,
             )

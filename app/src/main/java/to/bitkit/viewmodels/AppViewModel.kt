@@ -1098,6 +1098,7 @@ class AppViewModel @Inject constructor(
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
                 )
             }
+            updateCanSwitchWallet()
             refreshOnchainSendIfNeeded()
             setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
         }
@@ -2097,7 +2098,8 @@ class AppViewModel @Inject constructor(
         feeResult.onSuccess { fee ->
             _sendUiState.update {
                 it.copy(
-                    fee = SendFee.Lightning(fee.toLong())
+                    fee = SendFee.Lightning(fee.toLong()),
+                    lastLightningFee = fee.toLong(),
                 )
             }
         }
@@ -2540,6 +2542,7 @@ data class SendUiState(
     val fee: SendFee? = null,
     val fees: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val estimatedRoutingFee: ULong = 0uL,
+    val lastLightningFee: Long = 0L,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
