@@ -45,6 +45,7 @@ fun ConnectionIssuesView(
             .testTag("ConnectionIssueView"),
     ) {
         SheetTopBar(titleText = titleText)
+        VerticalSpacer(24.dp)
 
         Box(
             contentAlignment = Alignment.Center,
