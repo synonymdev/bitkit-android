@@ -75,7 +75,7 @@
     <string name="fee__fast__description">±10-20 minutes</string>
     <string name="fee__fast__shortDescription">±10m</string>
     <string name="fee__fast__title">Fast</string>
-    <string name="fee__instant__description">Lightning Network</string>
+    <string name="fee__instant__description">±1-5 seconds</string>
     <string name="fee__instant__shortDescription">Instant</string>
     <string name="fee__instant__title">Instant</string>
     <string name="fee__minimum__description">+2 hours</string>
