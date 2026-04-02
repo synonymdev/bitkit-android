@@ -137,8 +137,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
     }
 
-    // -- updateCanSwitchWallet --
-
     @Test
     fun `canSwitchWallet is false when not unified`() = test {
         sut.setSendEvent(SendEvent.AmountChange(1000u))
@@ -203,8 +201,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(sut.sendUiState.value.canSwitchWallet)
     }
 
-    // -- onPaymentMethodSwitch --
-
     @Test
     fun `switch from lightning to onchain resets confirmedWarnings`() = test {
         balanceState.value = BalanceState(
@@ -251,8 +247,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(before, sut.sendUiState.value.payMethod)
     }
 
-    // -- onAmountChange --
-
     @Test
     fun `amount change clears confirmedWarnings`() = test {
         setUnifiedState(amount = 1000u)
@@ -267,8 +261,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.confirmedWarnings.isEmpty())
     }
 
-    // -- refreshFeeEstimates --
-
     @Test
     fun `refreshFeeEstimates preserves lightning fee when payMethod is LIGHTNING`() = test {
         val lightningFee = SendFee.Lightning(42)
@@ -281,8 +273,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val currentFee = sut.sendUiState.value.fee
         assertEquals(lightningFee, currentFee)
     }
-
-    // -- lastLightningFee --
 
     @Test
     fun `lastLightningFee persists after switching to onchain`() = test {
@@ -309,8 +299,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `lastLightningFee is zero initially`() = test {
         assertEquals(0L, sut.sendUiState.value.lastLightningFee)
     }
-
-    // -- helpers --
 
     @Suppress("UNCHECKED_CAST")
     private fun setSendState(state: SendUiState) {
