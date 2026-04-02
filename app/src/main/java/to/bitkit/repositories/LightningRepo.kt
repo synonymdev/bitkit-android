@@ -1196,7 +1196,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun awaitPeerConnected(timeout: Duration = 30.seconds) = withContext(bgDispatcher) {
         if (lightningService.peers?.any { it.isConnected } == true) return@withContext
-        Logger.debug("Waiting for peer to reconnect (timeout=$timeout)...", context = TAG)
+        Logger.debug("Waiting for peer to reconnect (timeout='$timeout')...", context = TAG)
         withTimeoutOrNull(timeout) {
             while (lightningService.peers?.any { it.isConnected } != true) {
                 delay(1.seconds)

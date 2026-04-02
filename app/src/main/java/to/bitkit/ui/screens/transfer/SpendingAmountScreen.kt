@@ -120,7 +120,7 @@ fun SpendingAmountScreen(
         ) {
             ConnectionIssuesView(
                 titleText = stringResource(R.string.lightning__transfer__nav_title),
-                modifier = Modifier.statusBarsPadding(),
+                modifier = Modifier.statusBarsPadding()
             )
         }
     }
