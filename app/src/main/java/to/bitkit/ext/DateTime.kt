@@ -109,6 +109,34 @@ fun Long.toRelativeTimeString(
     }
 }
 
+fun formatInvoiceExpiryRelative(
+    expirySeconds: ULong,
+    locale: Locale = Locale.getDefault(),
+): String {
+    val seconds = expirySeconds.toLong()
+    if (seconds <= 0) return ""
+
+    val uLocale = ULocale.forLocale(locale)
+    val numberFormat = NumberFormat.getNumberInstance(uLocale)?.apply { maximumFractionDigits = 0 }
+    val formatter = RelativeDateTimeFormatter.getInstance(
+        uLocale,
+        numberFormat,
+        RelativeDateTimeFormatter.Style.LONG,
+        DisplayContext.CAPITALIZATION_FOR_MIDDLE_OF_SENTENCE,
+    ) ?: return ""
+
+    val minutes = seconds / Factor.SECONDS_TO_MINUTES.toLong()
+    val hours = minutes / Factor.MINUTES_TO_HOURS.toLong()
+    val days = hours / Factor.HOURS_TO_DAYS.toLong()
+
+    return when {
+        minutes < 1 -> formatter.format(seconds.toDouble(), Direction.NEXT, RelativeUnit.SECONDS)
+        hours < 1 -> formatter.format(minutes.toDouble(), Direction.NEXT, RelativeUnit.MINUTES)
+        days < 1 -> formatter.format(hours.toDouble(), Direction.NEXT, RelativeUnit.HOURS)
+        else -> formatter.format(days.toDouble(), Direction.NEXT, RelativeUnit.DAYS)
+    }
+}
+
 fun getDaysInMonth(month: LocalDate): List<LocalDate?> {
     val firstDayOfMonth = LocalDate(month.year, month.month, Constants.FIRST_DAY_OF_MONTH)
     val daysInMonth = month.month.toJavaMonth().length(isLeapYear(month.year))

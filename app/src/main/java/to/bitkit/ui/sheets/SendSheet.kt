@@ -164,6 +164,10 @@ fun SendSheet(
                         onBack = { navController.popBackStack() },
                         onContinue = { navController.popBackStack() },
                         onSelect = { speed -> appViewModel.onSelectSpeed(speed) },
+                        onSelectInstant = {
+                            appViewModel.switchToLightning()
+                            navController.popBackStack()
+                        },
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.FeeCustom> {

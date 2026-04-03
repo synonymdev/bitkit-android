@@ -125,6 +125,7 @@ data class SettingsData(
     val backupWarningIgnoredMillis: Long = 0,
     val notificationsIgnoredMillis: Long = 0,
     val balanceWarningTimes: Int = 0,
+    val widgetsOnboardingHintDismissed: Boolean = false,
     val coinSelectAuto: Boolean = true,
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val electrumServer: String = Env.electrumServerUrl,

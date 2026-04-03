@@ -49,6 +49,10 @@ import to.bitkit.ui.theme.Colors
 private val iconToTextGap = 4.dp
 private val iconSize = 20.dp
 
+const val TAB_BAR_HEIGHT = 56
+const val TAB_BAR_PADDING_BOTTOM = 8
+private const val GRADIENT_HEIGHT = 134
+
 private val buttonLeftShape = RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50)
 private val buttonRightShape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50)
 
@@ -61,132 +65,149 @@ fun BoxScope.TabBar(
     onScanClick: () -> Unit = {},
 ) {
     Box(
-        contentAlignment = Alignment.Center,
         modifier = modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 16.dp)
-            .navigationBarsPadding()
     ) {
-        Row(
-            modifier = Modifier.primaryButtonStyle(
-                isEnabled = true,
-                shape = MaterialTheme.shapes.large,
-            )
-        ) {
-            // Send Button
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(60.dp)
-                    .clip(buttonLeftShape)
-                    .clickableAlpha(ripple = true) { onSendClick() }
-                    .testTag("Send")
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowUpward,
-                        contentDescription = stringResource(R.string.wallet__send),
-                        modifier = Modifier.size(iconSize)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(GRADIENT_HEIGHT.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Colors.Black),
                     )
-                    Spacer(Modifier.width(iconToTextGap))
-                    BodySSB(text = stringResource(R.string.wallet__send))
-                }
-            }
-
-            // Receive Button
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(60.dp)
-                    .clip(buttonRightShape)
-                    .clickableAlpha(ripple = true) { onReceiveClick() }
-                    .testTag("Receive")
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowDownward,
-                        contentDescription = stringResource(R.string.wallet__receive),
-                        modifier = Modifier.size(iconSize)
-                    )
-                    Spacer(Modifier.width(iconToTextGap))
-                    BodySSB(text = stringResource(R.string.wallet__receive))
-                }
-            }
-        }
-
-        // Scan button
+                )
+        )
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(64.dp)
-                // Shadow 1: gray2 shadow with radius 0 at y=-1 (top highlight)
-                .drawWithContent {
-                    // Draw a prominent top highlight
-                    drawCircle(
-                        color = Colors.Gray2,
-                        radius = size.width / 2,
-                        center = Offset(size.width / 2, size.height / 2 - 1.5.dp.toPx()),
-                        alpha = 0.6f
-                    )
-                    drawContent()
-                }
-                // Shadow 2: black 25% opacity, radius 25, y offset 20
-                .shadow(
-                    elevation = 25.dp,
-                    shape = CircleShape,
-                    ambientColor = Colors.Black25,
-                    spotColor = Colors.Black25
-                )
-                .clip(CircleShape)
-                .background(Colors.Gray7)
-                // Overlay: Circle strokeBorder with linear gradient mask (iOS: .mask)
-                .drawWithContent {
-                    drawContent()
-
-                    // The mask gradient goes from black (visible) at top to clear (invisible) at bottom
-                    val borderWidth = 2.dp.toPx()
-
-                    // Create vertical gradient mask (black to clear)
-                    val maskGradient = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White, // Top: full opacity (shows border)
-                            Color.Transparent // Bottom: transparent (hides border)
-                        ),
-                        startY = 0f,
-                        endY = size.height
-                    )
-
-                    // Draw solid black circular border first, then apply gradient as alpha mask
-                    drawCircle(
-                        color = Color.Black,
-                        radius = (size.width - borderWidth) / 2,
-                        center = Offset(size.width / 2, size.height / 2),
-                        style = Stroke(width = borderWidth),
-                        alpha = 1f
-                    )
-
-                    // Apply gradient mask by drawing gradient as overlay with BlendMode
-                    drawCircle(
-                        brush = maskGradient,
-                        radius = (size.width - borderWidth) / 2,
-                        center = Offset(size.width / 2, size.height / 2),
-                        style = Stroke(width = borderWidth),
-                        blendMode = BlendMode.DstIn
-                    )
-                }
-                .clickableAlpha(ripple = true) { onScanClick() }
-                .testTag("Scan")
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = TAB_BAR_PADDING_BOTTOM.dp)
+                .navigationBarsPadding()
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_scan),
-                contentDescription = stringResource(R.string.wallet__recipient_scan),
-                tint = Colors.Gray1,
-                modifier = Modifier.size(22.dp)
-            )
+            Row(
+                modifier = Modifier.primaryButtonStyle(
+                    isEnabled = true,
+                    shape = MaterialTheme.shapes.large,
+                )
+            ) {
+                // Send Button
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(TAB_BAR_HEIGHT.dp)
+                        .clip(buttonLeftShape)
+                        .clickableAlpha(ripple = true) { onSendClick() }
+                        .testTag("Send")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowUpward,
+                            contentDescription = stringResource(R.string.wallet__send),
+                            modifier = Modifier.size(iconSize)
+                        )
+                        Spacer(Modifier.width(iconToTextGap))
+                        BodySSB(text = stringResource(R.string.wallet__send))
+                    }
+                }
+
+                // Receive Button
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(TAB_BAR_HEIGHT.dp)
+                        .clip(buttonRightShape)
+                        .clickableAlpha(ripple = true) { onReceiveClick() }
+                        .testTag("Receive")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDownward,
+                            contentDescription = stringResource(R.string.wallet__receive),
+                            modifier = Modifier.size(iconSize)
+                        )
+                        Spacer(Modifier.width(iconToTextGap))
+                        BodySSB(text = stringResource(R.string.wallet__receive))
+                    }
+                }
+            }
+
+            // Scan button
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(64.dp)
+                    // Shadow 1: gray2 shadow with radius 0 at y=-1 (top highlight)
+                    .drawWithContent {
+                        // Draw a prominent top highlight
+                        drawCircle(
+                            color = Colors.Gray2,
+                            radius = size.width / 2,
+                            center = Offset(size.width / 2, size.height / 2 - 1.5.dp.toPx()),
+                            alpha = 0.6f
+                        )
+                        drawContent()
+                    }
+                    // Shadow 2: black 25% opacity, radius 25, y offset 20
+                    .shadow(
+                        elevation = 25.dp,
+                        shape = CircleShape,
+                        ambientColor = Colors.Black25,
+                        spotColor = Colors.Black25
+                    )
+                    .clip(CircleShape)
+                    .background(Colors.Gray7)
+                    // Overlay: Circle strokeBorder with linear gradient mask (iOS: .mask)
+                    .drawWithContent {
+                        drawContent()
+
+                        // The mask gradient goes from black (visible) at top to clear (invisible) at bottom
+                        val borderWidth = 2.dp.toPx()
+
+                        // Create vertical gradient mask (black to clear)
+                        val maskGradient = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White, // Top: full opacity (shows border)
+                                Color.Transparent // Bottom: transparent (hides border)
+                            ),
+                            startY = 0f,
+                            endY = size.height
+                        )
+
+                        // Draw solid black circular border first, then apply gradient as alpha mask
+                        drawCircle(
+                            color = Color.Black,
+                            radius = (size.width - borderWidth) / 2,
+                            center = Offset(size.width / 2, size.height / 2),
+                            style = Stroke(width = borderWidth),
+                            alpha = 1f
+                        )
+
+                        // Apply gradient mask by drawing gradient as overlay with BlendMode
+                        drawCircle(
+                            brush = maskGradient,
+                            radius = (size.width - borderWidth) / 2,
+                            center = Offset(size.width / 2, size.height / 2),
+                            style = Stroke(width = borderWidth),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
+                    .clickableAlpha(ripple = true) { onScanClick() }
+                    .testTag("Scan")
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_scan),
+                    contentDescription = stringResource(R.string.wallet__recipient_scan),
+                    tint = Colors.Gray1,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
     }
 }

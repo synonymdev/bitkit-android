@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.compose.runtime.Stable
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
@@ -10,6 +11,9 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createChannelRequestUrl
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
 import com.synonym.bitkitcore.lnurlAuth
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -75,6 +79,7 @@ import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.UrlValidator
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -101,6 +106,7 @@ class LightningRepo @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
+    private val urlValidator: UrlValidator,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -615,6 +621,11 @@ class LightningRepo @Inject constructor(
     suspend fun restartWithRgsServer(newRgsUrl: String): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node RGS server to: '$newRgsUrl'", context = TAG)
 
+        validateRgsUrl(newRgsUrl).onFailure {
+            Logger.warn("RGS server unreachable at '$newRgsUrl'", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
         stop().onFailure {
             Logger.error("Failed to stop node during RGS server change", it, context = TAG)
@@ -634,6 +645,12 @@ class LightningRepo @Inject constructor(
 
             Logger.info("Successfully changed RGS server", context = TAG)
         }
+    }
+
+    private suspend fun validateRgsUrl(url: String): Result<Unit> = withContext(bgDispatcher) {
+        val initialTimestamp = 0
+        val testUrl = "${url.trimEnd('/')}/$initialTimestamp"
+        urlValidator.validate(testUrl)
     }
 
     suspend fun getBalanceForAddressType(addressType: AddressType): Result<ULong> = withContext(bgDispatcher) {
@@ -1170,8 +1187,8 @@ class LightningRepo @Inject constructor(
             it.copy(
                 nodeId = getNodeId().orEmpty(),
                 nodeStatus = getStatus(),
-                peers = getPeers().orEmpty(),
-                channels = getChannels().orEmpty(),
+                peers = getPeers().orEmpty().toImmutableList(),
+                channels = getChannels().orEmpty().toImmutableList(),
                 balances = getBalances(),
             )
         }
@@ -1388,12 +1405,13 @@ class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node t
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
 
+@Stable
 data class LightningState(
     val nodeId: String = "",
     val nodeStatus: NodeStatus? = null,
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
-    val peers: List<PeerDetails> = emptyList(),
-    val channels: List<ChannelDetails> = emptyList(),
+    val peers: ImmutableList<PeerDetails> = persistentListOf(),
+    val channels: ImmutableList<ChannelDetails> = persistentListOf(),
     val balances: BalanceDetails? = null,
     val isSyncingWallet: Boolean = false,
     val isGeoBlocked: Boolean = false,

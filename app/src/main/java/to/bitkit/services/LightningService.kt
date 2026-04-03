@@ -138,7 +138,7 @@ class LightningService @Inject constructor(
         )
     }
 
-    @Suppress("ForbiddenComment")
+    @Suppress("ForbiddenComment", "LongMethod")
     private suspend fun build(
         walletIndex: Int,
         customServerUrl: String?,
@@ -186,11 +186,29 @@ class LightningService @Inject constructor(
                 "Building node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'",
                 context = TAG,
             )
-            if (lnurlAuthServerUrl.isNotEmpty()) {
-                builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
-            } else {
-                builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
+
+            fun buildNode() = runCatching {
+                if (lnurlAuthServerUrl.isNotEmpty()) {
+                    builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
+                } else {
+                    builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
+                }
             }
+
+            buildNode().recoverCatching { error ->
+                if (error !is BuildException.DangerousValue) throw error
+                Logger.warn(
+                    "Retrying build failed with 'DangerousValue' using 'setAcceptStaleChannelMonitors' for recovery.",
+                    error,
+                    context = TAG,
+                )
+                builder.setAcceptStaleChannelMonitors(true)
+                buildNode()
+                    .onFailure {
+                        Logger.error("Failed recovery retry using 'setAcceptStaleChannelMonitors'.", it, context = TAG)
+                    }
+                    .getOrThrow()
+            }.getOrThrow()
         } catch (e: BuildException) {
             throw LdkError(e)
         } finally {
@@ -226,6 +244,7 @@ class LightningService @Inject constructor(
                     lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
                     feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
+                connectionTimeoutSecs = Env.walletSyncTimeoutSecs,
             ),
         )
     }

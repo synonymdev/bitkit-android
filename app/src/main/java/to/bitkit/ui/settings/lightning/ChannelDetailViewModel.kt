@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.lightning
 
 import android.content.Context
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -11,6 +12,8 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -200,10 +203,11 @@ class ChannelDetailViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class ChannelDetailUiState(
     val channelLoadState: ChannelLoadState = ChannelLoadState.Loading,
-    val paidOrders: List<IBtOrder> = emptyList(),
-    val cjitEntries: List<IcJitEntry> = emptyList(),
+    val paidOrders: ImmutableList<IBtOrder> = persistentListOf(),
+    val cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     val txTime: ULong? = null,
     val isRefreshing: Boolean = false,
     val isClosedChannel: Boolean = false,

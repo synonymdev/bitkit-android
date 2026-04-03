@@ -26,13 +26,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun ProgressSteps(
-    steps: List<String>,
+    steps: ImmutableList<String>,
     activeStepIndex: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -113,7 +115,7 @@ fun ProgressSteps(
 @Composable
 private fun ProgressStepsPreview() {
     AppThemeSurface {
-        val steps = listOf(
+        val steps = persistentListOf(
             "Step 1",
             "Step 2",
             "Step 3",

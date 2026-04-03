@@ -23,6 +23,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +63,8 @@ private val Padding = 8.dp
 
 @Composable
 fun SwipeToConfirm(
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
     text: String = stringResource(R.string.other__swipe),
     color: Color = Colors.Brand,
     icon: ImageVector = Icons.AutoMirrored.Default.ArrowForward,
@@ -68,8 +72,7 @@ fun SwipeToConfirm(
     endIconTint: Color = Colors.Black,
     loading: Boolean = false,
     confirmed: Boolean = false,
-    onConfirm: () -> Unit,
-    modifier: Modifier = Modifier,
+    progress: MutableFloatState? = null,
 ) {
     val scope = rememberCoroutineScope()
     val trailColor = remember(color) { color.copy(alpha = 0.24f) }
@@ -92,6 +95,10 @@ fun SwipeToConfirm(
             targetValue = if (confirmed) maxPanX else 0f,
             animationSpec = spring()
         )
+    }
+
+    SideEffect {
+        progress?.floatValue = (panX.value / maxPanX).coerceIn(0f, 1f)
     }
 
     Box(

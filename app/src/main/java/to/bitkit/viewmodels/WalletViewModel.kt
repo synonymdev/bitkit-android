@@ -306,7 +306,7 @@ class WalletViewModel @Inject constructor(
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
                 }
-                checkForOrphanedChannelMonitorRecovery()
+                // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
                 Logger.error("Node startup error", it, context = TAG)
@@ -325,53 +325,6 @@ class WalletViewModel @Inject constructor(
             }.onFailure {
                 Logger.error("Failed to connect migration peer: $uri", it, context = TAG)
             }
-        }
-    }
-
-    private suspend fun checkForOrphanedChannelMonitorRecovery() {
-        if (migrationService.isChannelRecoveryChecked()) return
-
-        Logger.info("Running one-time channel monitor recovery check", context = TAG)
-
-        val allMonitorsRetrieved = runCatching {
-            val allRetrieved = migrationService.fetchRNRemoteLdkData()
-            // don't overwrite channel manager, we only need the monitors for the sweep
-            val channelMigration = buildChannelMigrationIfAvailable()?.let {
-                ChannelDataMigration(channelManager = null, channelMonitors = it.channelMonitors)
-            }
-
-            if (channelMigration == null) {
-                Logger.info("No channel monitors found on RN backup", context = TAG)
-                return@runCatching allRetrieved
-            }
-
-            Logger.info(
-                "Found ${channelMigration.channelMonitors.size} monitors on RN backup, attempting recovery",
-                context = TAG,
-            )
-
-            lightningRepo.stop().onFailure {
-                Logger.error("Failed to stop node for channel recovery", it, context = TAG)
-            }
-            delay(CHANNEL_RECOVERY_RESTART_DELAY_MS)
-            lightningRepo.start(channelMigration = channelMigration, shouldRetry = false)
-                .onSuccess {
-                    migrationService.consumePendingChannelMigration()
-                    walletRepo.syncNodeAndWallet()
-                    walletRepo.syncBalances()
-                    Logger.info("Channel monitor recovery complete", context = TAG)
-                }
-                .onFailure {
-                    Logger.error("Failed to restart node after channel recovery", it, context = TAG)
-                }
-
-            allRetrieved
-        }.getOrDefault(false)
-
-        if (allMonitorsRetrieved) {
-            migrationService.markChannelRecoveryChecked()
-        } else {
-            Logger.warn("Some monitors failed to download, will retry on next startup", context = TAG)
         }
     }
 
@@ -444,6 +397,7 @@ class WalletViewModel @Inject constructor(
 
     fun refreshReceiveState() = viewModelScope.launch {
         launch { blocktankRepo.refreshInfo() }
+        lightningRepo.syncState()
         lightningRepo.updateGeoBlockState()
         walletRepo.refreshBip21()
     }

@@ -55,8 +55,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 178
-        versionName = "2.1.0"
+        versionCode = 180
+        versionName = "2.1.2"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -225,6 +225,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.biometric)
     implementation(libs.zxing)
     implementation(libs.barcode.scanning)

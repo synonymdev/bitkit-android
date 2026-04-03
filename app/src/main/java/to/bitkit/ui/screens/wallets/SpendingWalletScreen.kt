@@ -26,6 +26,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
@@ -41,14 +43,15 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.utils.previewLightningActivityItems
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun SpendingWalletScreen(
-    channels: List<ChannelDetails>,
-    lightningActivities: List<Activity>,
+    channels: ImmutableList<ChannelDetails>,
+    lightningActivities: ImmutableList<Activity>,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
@@ -71,6 +74,7 @@ fun SpendingWalletScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Colors.Black)
+            .blockPointerInputPassthrough()
     ) {
         Image(
             painter = painterResource(id = R.drawable.coin_stack_x_2),
@@ -153,7 +157,7 @@ private fun Preview() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = listOf(createChannelDetails()),
+                channels = persistentListOf(createChannelDetails()),
                 lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
@@ -173,7 +177,7 @@ private fun PreviewTransfer() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = listOf(createChannelDetails()),
+                channels = persistentListOf(createChannelDetails()),
                 lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
@@ -196,8 +200,8 @@ private fun PreviewNoActivity() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = listOf(createChannelDetails()),
-                lightningActivities = emptyList(),
+                channels = persistentListOf(createChannelDetails()),
+                lightningActivities = persistentListOf(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
@@ -216,8 +220,8 @@ private fun PreviewEmpty() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = emptyList(),
-                lightningActivities = emptyList(),
+                channels = persistentListOf(),
+                lightningActivities = persistentListOf(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},

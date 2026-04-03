@@ -48,6 +48,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -106,7 +108,7 @@ fun ReceiveQrScreen(
                 add(ReceiveTab.AUTO)
             }
             add(ReceiveTab.SPENDING)
-        }
+        }.toImmutableList()
     }
 
     val invoicesByTab = remember(
@@ -141,6 +143,12 @@ fun ReceiveQrScreen(
     // Calculate current tab based on scroll position for smooth indicator and color updates
     var selectedTab by remember {
         mutableStateOf(initialTab ?: ReceiveTab.SAVINGS)
+    }
+
+    LaunchedEffect(visibleTabs) {
+        if (selectedTab !in visibleTabs) {
+            selectedTab = visibleTabs.first()
+        }
     }
 
     LaunchedEffect(lazyListState, visibleTabs.size) {
@@ -657,7 +665,7 @@ private fun PreviewSavingsMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = emptyList()
+                    channels = persistentListOf()
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -729,7 +737,7 @@ private fun PreviewAutoMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel),
+                    channels = persistentListOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -796,7 +804,7 @@ private fun PreviewSpendingMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel),
+                    channels = persistentListOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),

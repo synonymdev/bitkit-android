@@ -192,8 +192,9 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
 - ALWAYS use `remember` for expensive Compose computations
-- ALWAYS add modifiers to the last place in the argument list when calling composable functions
-- NEVER add parameters with default values BEFORE the `modifier` parameter in composable functions - modifier must be the FIRST optional parameter
+- ALWAYS declare `modifier: Modifier = Modifier,` as the FIRST optional parameter in composable declarations
+- ALWAYS pass `modifier = ...` as the LAST argument in composable calls
+- ALWAYS add trailing commas in multi-line declarations; NEVER add a trailing comma to `modifier = ...` at call sites
 - ALWAYS use `navController.navigateTo(route)` for simple navigation; NEVER use raw `navController.navigate(route)` — `navigateTo` prevents duplicate destinations
 - ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
@@ -232,6 +233,20 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS prefer `when (subject)` with Kotlin guard conditions (`if`) over condition-based `when {}` with `is` type checks, e.g. `when (event) { is Foo if event.x == y -> ... }` instead of `when { event is Foo && event.x == y -> ... }`
 - ALWAYS prefer `sealed interface` over `sealed class` when no shared state or constructor is needed
 - NEVER duplicate error logging in `.onFailure {}` if the called method already logs the same error internally
+- ALWAYS use `ImmutableList`/`ImmutableMap`/`ImmutableSet` instead of `List`/`Map`/`Set` for composable function parameters and UiState data class fields
+- ALWAYS annotate UiState data classes with `@Immutable`; use `@Stable` instead when any field holds a non-immutable type (e.g. `Throwable`, external library types from `bitkitcore`/`ldknode`/`vssclient`, or types containing plain `List`/`Map`/`Set`)
+- ALWAYS use `.toImmutableList()`, `.toImmutableMap()`, `.toImmutableSet()` when producing collections for UI state
+- ALWAYS use `persistentListOf()`, `persistentMapOf()`, `persistentSetOf()` for default values in UiState fields
+
+### Changelog
+
+- ALWAYS add exactly ONE entry per PR under `## [Unreleased]` in `CHANGELOG.md` for `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
+- NEVER add multiple changelog lines for the same PR — summarize all changes in a single concise entry
+- USE standard Keep a Changelog categories: `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`
+- ALWAYS append `#PR_NUMBER` at the end of each changelog entry when the PR number is known
+- ALWAYS place new entries at the top of their category section (newest first)
+- NEVER modify released version sections — only edit `## [Unreleased]`
+- ALWAYS create category headings on demand (don't add empty stubs)
 
 ### Device Debugging (adb)
 

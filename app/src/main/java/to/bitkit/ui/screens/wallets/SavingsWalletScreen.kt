@@ -26,6 +26,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.BalanceState
 import to.bitkit.ui.LocalBalances
@@ -39,6 +41,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.utils.previewOnchainActivityItems
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -46,7 +49,7 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun SavingsWalletScreen(
     isGeoBlocked: Boolean,
-    onchainActivities: List<Activity>,
+    onchainActivities: ImmutableList<Activity>,
     onAllActivityButtonClick: () -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
@@ -69,6 +72,7 @@ fun SavingsWalletScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Colors.Black)
+            .blockPointerInputPassthrough()
     ) {
         Image(
             painter = painterResource(id = R.drawable.piggybank),
@@ -197,7 +201,7 @@ private fun PreviewNoActivity() {
         Box {
             SavingsWalletScreen(
                 isGeoBlocked = false,
-                onchainActivities = emptyList(),
+                onchainActivities = persistentListOf(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
@@ -237,7 +241,7 @@ private fun PreviewEmpty() {
         Box {
             SavingsWalletScreen(
                 isGeoBlocked = false,
-                onchainActivities = emptyList(),
+                onchainActivities = persistentListOf(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},

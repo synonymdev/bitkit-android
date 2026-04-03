@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import androidx.annotation.VisibleForTesting
+import androidx.compose.runtime.Immutable
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
@@ -11,6 +12,9 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -600,7 +604,7 @@ class ActivityRepo @Inject constructor(
         runCatching {
             coreService.activity.allPossibleTags()
         }.onSuccess { tags ->
-            _state.update { it.copy(tags = tags) }
+            _state.update { it.copy(tags = tags.toImmutableList()) }
         }.onFailure {
             Logger.error("getAllAvailableTags error", it, context = TAG)
         }
@@ -677,6 +681,7 @@ class ActivityRepo @Inject constructor(
     }
 }
 
+@Immutable
 data class ActivityState(
-    val tags: List<String> = emptyList(),
+    val tags: ImmutableList<String> = persistentListOf(),
 )

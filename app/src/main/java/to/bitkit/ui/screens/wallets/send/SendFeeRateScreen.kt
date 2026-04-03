@@ -24,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PrimaryDisplay
@@ -46,15 +47,17 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 
 @Composable
 fun SendFeeRateScreen(
     sendUiState: SendUiState,
+    viewModel: SendFeeViewModel,
     onBack: () -> Unit,
     onContinue: () -> Unit,
     onSelect: (TransactionSpeed) -> Unit,
-    viewModel: SendFeeViewModel,
+    onSelectInstant: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -64,9 +67,14 @@ fun SendFeeRateScreen(
 
     Content(
         uiState = uiState,
+        isUnified = sendUiState.canSwitchWallet,
+        payMethod = sendUiState.payMethod,
+        estimatedRoutingFee = sendUiState.lastLightningFee,
         onBack = onBack,
         onContinue = onContinue,
-        onSelect = { onSelect(it.toSpeed()) },
+        onSelect = {
+            if (it == FeeRate.INSTANT) onSelectInstant() else onSelect(it.toSpeed())
+        },
     )
 }
 
@@ -74,6 +82,9 @@ fun SendFeeRateScreen(
 private fun Content(
     uiState: SendFeeUiState,
     modifier: Modifier = Modifier,
+    isUnified: Boolean = false,
+    payMethod: SendMethod = SendMethod.ONCHAIN,
+    estimatedRoutingFee: Long = 0L,
     onBack: () -> Unit = {},
     onContinue: () -> Unit = {},
     onSelect: (FeeRate) -> Unit = {},
@@ -102,11 +113,22 @@ private fun Content(
             title = stringResource(R.string.wallet__send_fee_and_speed),
             modifier = Modifier.padding(horizontal = 16.dp)
         )
+
+        if (isUnified) {
+            FeeItem(
+                feeRate = FeeRate.INSTANT,
+                sats = estimatedRoutingFee,
+                isSelected = payMethod == SendMethod.LIGHTNING,
+                onClick = { onSelect(FeeRate.INSTANT) },
+                modifier = Modifier.testTag("fee_INSTANT_button")
+            )
+        }
+
         uiState.fees.map { (feeRate, sats) ->
             FeeItem(
                 feeRate = feeRate,
                 sats = sats,
-                isSelected = uiState.selected == feeRate,
+                isSelected = uiState.selected == feeRate && payMethod == SendMethod.ONCHAIN,
                 isDisabled = feeRate in uiState.disabledRates,
                 onClick = { if (feeRate !in uiState.disabledRates) onSelect(feeRate) },
                 modifier = Modifier.testTag("fee_${feeRate.name}_button"),
@@ -187,7 +209,7 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 uiState = SendFeeUiState(
-                    fees = mapOf(
+                    fees = persistentMapOf(
                         FeeRate.FAST to 4000L,
                         FeeRate.NORMAL to 3000L,
                         FeeRate.SLOW to 2000L,
@@ -209,7 +231,7 @@ private fun PreviewCustom() {
         BottomSheetPreview {
             Content(
                 uiState = SendFeeUiState(
-                    fees = mapOf(
+                    fees = persistentMapOf(
                         FeeRate.FAST to 4000L,
                         FeeRate.NORMAL to 3000L,
                         FeeRate.SLOW to 2000L,
@@ -218,6 +240,31 @@ private fun PreviewCustom() {
                     selected = FeeRate.CUSTOM,
                 ),
                 modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithInstant() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = SendFeeUiState(
+                    fees = persistentMapOf(
+                        FeeRate.FAST to 4000L,
+                        FeeRate.NORMAL to 3000L,
+                        FeeRate.SLOW to 2000L,
+                        FeeRate.CUSTOM to 0L,
+                    ),
+                    selected = FeeRate.NORMAL,
+                ),
+                isUnified = true,
+                payMethod = SendMethod.LIGHTNING,
+                estimatedRoutingFee = 43L,
+                modifier = Modifier.sheetHeight()
             )
         }
     }

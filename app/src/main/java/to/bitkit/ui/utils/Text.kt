@@ -15,6 +15,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.formatPlural
@@ -158,7 +160,7 @@ enum class BlockExplorerType { ADDRESS, TX }
  * ```
  */
 @Composable
-fun localizedPlural(@StringRes id: Int, argMap: Map<Any, Any>): String {
+fun localizedPlural(@StringRes id: Int, argMap: ImmutableMap<Any, Any>): String {
     val resources = LocalContext.current.resources
 
     return remember(id, argMap) {
@@ -172,7 +174,10 @@ fun localizedPlural(@StringRes id: Int, argMap: Map<Any, Any>): String {
 private fun PreviewLocalizedPlural() {
     AppThemeSurface {
         Text(
-            localizedPlural(R.string.settings__addr__spend_number, mapOf("fundsToSpend" to "1234", "count" to 2))
+            localizedPlural(
+                R.string.settings__addr__spend_number,
+                persistentMapOf("fundsToSpend" to "1234", "count" to 2),
+            )
         )
     }
 }

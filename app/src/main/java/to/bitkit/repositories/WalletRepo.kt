@@ -1,8 +1,12 @@
 package to.bitkit.repositories
 
+import androidx.compose.runtime.Immutable
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -434,7 +438,7 @@ class WalletRepo @Inject constructor(
         _walletState.update {
             it.copy(
                 bip21 = "",
-                selectedTags = if (clearTags) emptyList() else it.selectedTags,
+                selectedTags = if (clearTags) persistentListOf() else it.selectedTags,
                 bip21AmountSats = null,
                 bip21Description = "",
             )
@@ -474,7 +478,7 @@ class WalletRepo @Inject constructor(
         preActivityMetadataRepo.addPreActivityMetadataTags(paymentId, listOf(newTag)).onSuccess {
             _walletState.update {
                 it.copy(
-                    selectedTags = (it.selectedTags + newTag).distinct()
+                    selectedTags = (it.selectedTags + newTag).distinct().toImmutableList()
                 )
             }
             settingsStore.addLastUsedTag(newTag)
@@ -495,7 +499,7 @@ class WalletRepo @Inject constructor(
             .onSuccess {
                 _walletState.update {
                     it.copy(
-                        selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+                        selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }.toImmutableList()
                     )
                 }
             }.onFailure {
@@ -508,7 +512,7 @@ class WalletRepo @Inject constructor(
         if (paymentId == null || paymentId.isEmpty()) return@withContext
 
         preActivityMetadataRepo.resetPreActivityMetadataTags(paymentId).onSuccess {
-            _walletState.update { it.copy(selectedTags = emptyList()) }
+            _walletState.update { it.copy(selectedTags = persistentListOf()) }
         }.onFailure {
             Logger.error("Failed to reset tags for pre-activity metadata", it, context = TAG)
         }
@@ -588,13 +592,14 @@ class WalletRepo @Inject constructor(
     }
 }
 
+@Immutable
 data class WalletState(
     val onchainAddress: String = "",
     val bolt11: String = "",
     val bip21: String = "",
     val bip21AmountSats: ULong? = null,
     val bip21Description: String = "",
-    val selectedTags: List<String> = listOf(),
+    val selectedTags: ImmutableList<String> = persistentListOf(),
     val walletExists: Boolean = false,
 )
 

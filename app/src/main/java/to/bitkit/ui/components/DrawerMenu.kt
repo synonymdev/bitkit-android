@@ -220,6 +220,16 @@ private fun Menu(
         )
 
         DrawerItem(
+            label = stringResource(R.string.wallet__drawer__support),
+            iconRes = R.drawable.ic_chats_circle,
+            onClick = {
+                rootNavController.navigateIfNotCurrent(Routes.Support)
+                scope.launch { drawerState.close() }
+            },
+            modifier = Modifier.testTag("DrawerSupport")
+        )
+
+        DrawerItem(
             label = stringResource(R.string.wallet__drawer__settings),
             iconRes = R.drawable.ic_settings,
             onClick = {
@@ -276,7 +286,7 @@ private fun DrawerItem(
     label: String,
     @DrawableRes iconRes: Int,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -326,7 +336,7 @@ private fun Preview() {
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
                 hasSeenWidgetsIntro = false,
                 hasSeenShopIntro = false,
-                modifier = Modifier.align(Alignment.TopEnd),
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }

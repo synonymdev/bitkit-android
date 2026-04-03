@@ -49,6 +49,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is BuildException.InvalidAnnouncementAddresses -> "Invalid announcement addresses"
                 is BuildException.InvalidNodeAlias -> "Invalid node alias"
                 is BuildException.NetworkMismatch -> "Network mismatch"
+                is BuildException.DangerousValue -> "Dangerous value"
                 else -> exception.message
             }?.let { "LDK Build error: $it" }
         }

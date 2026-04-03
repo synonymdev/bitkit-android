@@ -3,6 +3,8 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -10,8 +12,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WidgetsStore
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
@@ -19,6 +23,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val pubkyRepo: PubkyRepo,
+    private val widgetsStore: WidgetsStore,
+    private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
     fun reset() = viewModelScope.launch { settingsStore.reset() }
 
@@ -33,6 +39,7 @@ class SettingsViewModel @Inject constructor(
             settingsStore.update { it.copy(notificationsGranted = granted) }
         }
     }
+
     val showNotificationDetails = settingsStore.data.map { it.showNotificationDetails }
         .asStateFlow(initialValue = false)
 
@@ -179,8 +186,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val lastUsedTags = settingsStore.data.map { it.lastUsedTags }
-        .asStateFlow(initialValue = emptyList())
+    fun resetDismissedSuggestions() {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }
+        }
+    }
+
+    fun resetWidgets() {
+        viewModelScope.launch {
+            widgetsStore.reset()
+            widgetsRepo.refreshEnabledWidgets()
+        }
+    }
+
+    val lastUsedTags = settingsStore.data.map { it.lastUsedTags.toImmutableList() }
+        .asStateFlow(initialValue = persistentListOf())
 
     fun deleteLastUsedTag(tag: String) {
         viewModelScope.launch {

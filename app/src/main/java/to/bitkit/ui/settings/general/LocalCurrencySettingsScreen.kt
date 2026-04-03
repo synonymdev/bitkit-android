@@ -16,6 +16,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.models.FxRate
 import to.bitkit.repositories.CurrencyState
@@ -60,7 +62,7 @@ fun LocalCurrencySettingsScreen(
         derivedStateOf {
             mostUsedCurrenciesList.mapNotNull { currency ->
                 filteredRates.find { it.quote == currency }
-            }
+            }.toImmutableList()
         }
     }
 
@@ -68,6 +70,7 @@ fun LocalCurrencySettingsScreen(
         derivedStateOf {
             filteredRates.filter { it.quote !in mostUsedCurrenciesList }
                 .sortedBy { it.quote }
+                .toImmutableList()
         }
     }
 
@@ -86,8 +89,8 @@ fun LocalCurrencySettingsScreen(
 fun LocalCurrencySettingsContent(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
-    mostUsedRates: List<FxRate>,
-    otherCurrencies: List<FxRate>,
+    mostUsedRates: ImmutableList<FxRate>,
+    otherCurrencies: ImmutableList<FxRate>,
     selectedCurrency: String,
     onCurrencyClick: (String) -> Unit,
     onBackClick: () -> Unit,
@@ -184,7 +187,7 @@ private fun Preview() {
             currencyFlag = "🇬🇧",
             lastUpdatedAt = 1234567890L,
         ),
-    )
+    ).toImmutableList()
 
     val otherCurrencies = listOf(
         FxRate(
@@ -209,7 +212,7 @@ private fun Preview() {
             currencyFlag = "🇨🇦",
             lastUpdatedAt = 1234567890L,
         ),
-    )
+    ).toImmutableList()
 
     AppThemeSurface {
         LocalCurrencySettingsContent(

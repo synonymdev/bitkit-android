@@ -25,6 +25,12 @@ import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.validateBitcoinAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -111,6 +117,7 @@ import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -172,6 +179,7 @@ class AppViewModel @Inject constructor(
     private val quickPaySheet: QuickPayTimedSheet,
     private val highBalanceSheet: HighBalanceTimedSheet,
     private val formatMoneyValue: FormatMoneyValue,
+    private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -244,7 +252,7 @@ class AppViewModel @Inject constructor(
     fun addTagToSelected(newTag: String) {
         _sendUiState.update {
             it.copy(
-                selectedTags = (it.selectedTags + newTag).distinct()
+                selectedTags = (it.selectedTags + newTag).distinct().toImmutableList()
             )
         }
         viewModelScope.launch {
@@ -255,7 +263,7 @@ class AppViewModel @Inject constructor(
     fun removeTag(tag: String) {
         _sendUiState.update {
             it.copy(
-                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }.toImmutableList()
             )
         }
     }
@@ -275,6 +283,9 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             lightningRepo.updateGeoBlockState()
+        }
+        viewModelScope.launch {
+            widgetsRepo.refreshEnabledWidgets()
         }
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
@@ -778,7 +789,16 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
-                    SendEvent.SpeedAndFee -> setSendEffect(SendEffect.NavigateToFee)
+                    SendEvent.SpeedAndFee -> {
+                        if (_sendUiState.value.fees.isEmpty()) {
+                            viewModelScope.launch {
+                                refreshFeeEstimates()
+                                setSendEffect(SendEffect.NavigateToFee)
+                            }
+                        } else {
+                            setSendEffect(SendEffect.NavigateToFee)
+                        }
+                    }
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
@@ -922,6 +942,7 @@ class AppViewModel @Inject constructor(
                     payMethod = SendMethod.LIGHTNING,
                 )
             }
+            updateCanSwitchWallet()
             return
         }
 
@@ -1032,8 +1053,10 @@ class AppViewModel @Inject constructor(
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
+                confirmedWarnings = persistentListOf(),
             )
         }
+        updateCanSwitchWallet()
     }
 
     private fun onCommentChange(comment: String) {
@@ -1071,26 +1094,71 @@ class AppViewModel @Inject constructor(
             }
             _sendUiState.update {
                 it.copy(
+                    payMethod = SendMethod.ONCHAIN,
                     speed = speed,
                     fee = SendFee.OnChain(fee),
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
                 )
             }
+            updateCanSwitchWallet()
             refreshOnchainSendIfNeeded()
             setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
         }
     }
 
+    private fun updateCanSwitchWallet() {
+        val state = _sendUiState.value
+        if (!state.isUnified) {
+            _sendUiState.update { it.copy(canSwitchWallet = false) }
+            return
+        }
+        val amount = state.amount
+        val balance = walletRepo.balanceState.value
+        val canSwitch = amount > Defaults.dustLimit.toULong() &&
+            amount <= balance.maxSendOnchainSats &&
+            amount <= balance.maxSendLightningSats
+        _sendUiState.update { it.copy(canSwitchWallet = canSwitch) }
+    }
+
     private suspend fun onPaymentMethodSwitch() {
-        val nextPaymentMethod = when (_sendUiState.value.payMethod) {
+        val current = _sendUiState.value
+        if (!current.isUnified) return
+
+        val nextMethod = when (current.payMethod) {
             SendMethod.ONCHAIN -> SendMethod.LIGHTNING
             SendMethod.LIGHTNING -> SendMethod.ONCHAIN
         }
         _sendUiState.update {
             it.copy(
-                payMethod = nextPaymentMethod,
-                isAmountInputValid = validateAmount(it.amount, nextPaymentMethod),
+                payMethod = nextMethod,
+                isAmountInputValid = validateAmount(it.amount, nextMethod),
+                confirmedWarnings = persistentListOf(),
             )
+        }
+        when (nextMethod) {
+            SendMethod.ONCHAIN -> {
+                val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
+                _sendUiState.update { it.copy(speed = defaultSpeed) }
+                refreshFeeEstimates()
+            }
+            SendMethod.LIGHTNING -> {
+                _sendUiState.update { it.copy(fee = SendFee.Lightning(0)) }
+                estimateLightningRoutingFeesIfNeeded()
+            }
+        }
+    }
+
+    fun switchToLightning() {
+        viewModelScope.launch {
+            _sendUiState.update {
+                it.copy(
+                    payMethod = SendMethod.LIGHTNING,
+                    fee = SendFee.Lightning(0),
+                    isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
+                    confirmedWarnings = persistentListOf(),
+                )
+            }
+            estimateLightningRoutingFeesIfNeeded()
         }
     }
 
@@ -1129,13 +1197,14 @@ class AppViewModel @Inject constructor(
         refreshOnchainSendIfNeeded()
         estimateLightningRoutingFeesIfNeeded()
         _sendUiState.update { it.copy(isLoading = false) }
+        updateCanSwitchWallet()
 
         setSendEffect(SendEffect.NavigateToConfirm)
     }
 
     private suspend fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
         _sendUiState.update {
-            it.copy(selectedUtxos = utxos)
+            it.copy(selectedUtxos = utxos.toImmutableList())
         }
         refreshFeeEstimates()
         setSendEffect(SendEffect.NavigateToConfirm)
@@ -1148,18 +1217,29 @@ class AppViewModel @Inject constructor(
         if (amount == 0uL) return false
 
         return when (payMethod) {
-            SendMethod.LIGHTNING -> when (val lnurl = _sendUiState.value.lnurl) {
-                null -> lightningRepo.canSend(amount)
-                is LnurlParams.LnurlWithdraw -> amount < lnurl.data.maxWithdrawableSat()
-                is LnurlParams.LnurlPay -> {
-                    val maxSat = lnurl.data.maxSendableSat()
-
-                    amount <= maxSat && lightningRepo.canSend(amount)
+            SendMethod.LIGHTNING -> {
+                val maxSendable = maxSendableLightningSats()
+                when (val lnurl = _sendUiState.value.lnurl) {
+                    null -> amount <= maxSendable && lightningRepo.canSend(amount)
+                    is LnurlParams.LnurlWithdraw -> amount < lnurl.data.maxWithdrawableSat()
+                    is LnurlParams.LnurlPay -> {
+                        val maxSat = lnurl.data.maxSendableSat()
+                        amount <= maxSat && amount <= maxSendable && lightningRepo.canSend(amount)
+                    }
                 }
             }
 
-            SendMethod.ONCHAIN -> amount > Defaults.dustLimit.toULong()
+            SendMethod.ONCHAIN -> {
+                val maxSendable = walletRepo.balanceState.value.maxSendOnchainSats
+                amount > Defaults.dustLimit.toULong() && amount <= maxSendable
+            }
         }
+    }
+
+    private fun maxSendableLightningSats(): ULong {
+        val max = walletRepo.balanceState.value.maxSendLightningSats
+        val fee = _sendUiState.value.estimatedRoutingFee
+        return max.safe() - fee.safe()
     }
 
     private fun onPasteClick() {
@@ -1263,6 +1343,7 @@ class AppViewModel @Inject constructor(
                 payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
             )
         }
+        updateCanSwitchWallet()
 
         val lnAmountSats = lnInvoice?.amountSatoshis ?: 0u
         if (lnAmountSats > 0u) {
@@ -1275,6 +1356,7 @@ class AppViewModel @Inject constructor(
             if (quickPayHandled) return
 
             refreshOnchainSendIfNeeded()
+            estimateLightningRoutingFeesIfNeeded()
             if (isMainScanner) {
                 showSheet(Sheet.Send(SendRoute.Confirm))
             } else {
@@ -1960,7 +2042,7 @@ class AppViewModel @Inject constructor(
                         )
                     }
                     .onSuccess { utxos ->
-                        _sendUiState.update { it.copy(selectedUtxos = utxos) }
+                        _sendUiState.update { it.copy(selectedUtxos = utxos?.toImmutableList()) }
                     }
             }
             refreshFeeEstimates()
@@ -1998,8 +2080,8 @@ class AppViewModel @Inject constructor(
 
         _sendUiState.update {
             it.copy(
-                fees = feesMap,
-                fee = SendFee.OnChain(currentFee),
+                fees = feesMap.toImmutableMap(),
+                fee = if (it.payMethod == SendMethod.ONCHAIN) SendFee.OnChain(currentFee) else it.fee,
             )
         }
     }
@@ -2018,7 +2100,8 @@ class AppViewModel @Inject constructor(
         feeResult.onSuccess { fee ->
             _sendUiState.update {
                 it.copy(
-                    fee = SendFee.Lightning(fee.toLong())
+                    fee = SendFee.Lightning(fee.toLong()),
+                    lastLightningFee = fee.toLong(),
                 )
             }
         }
@@ -2315,7 +2398,7 @@ class AppViewModel @Inject constructor(
             _sendUiState.update {
                 it.copy(
                     showSanityWarningDialog = null,
-                    confirmedWarnings = it.confirmedWarnings + warning
+                    confirmedWarnings = (it.confirmedWarnings + warning).toImmutableList()
                 )
             }
         }
@@ -2385,6 +2468,8 @@ class AppViewModel @Inject constructor(
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
 
     private suspend fun checkCriticalAppUpdate() = withContext(bgDispatcher) {
+        if (Env.isDebug) return@withContext
+
         delay(SCREEN_TRANSITION_DELAY)
 
         runCatching {
@@ -2434,6 +2519,7 @@ class AppViewModel @Inject constructor(
 }
 
 // region send contract
+@Stable
 data class SendUiState(
     val address: String = "",
     val bolt11: String? = null,
@@ -2442,21 +2528,23 @@ data class SendUiState(
     val amount: ULong = 0u,
     val isAmountInputValid: Boolean = false,
     val isUnified: Boolean = false,
+    val canSwitchWallet: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
-    val selectedTags: List<String> = listOf(),
+    val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,
     val showSanityWarningDialog: SanityWarning? = null,
-    val confirmedWarnings: List<SanityWarning> = listOf(),
+    val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
     val shouldConfirmPay: Boolean = false,
-    val selectedUtxos: List<SpendableUtxo>? = null,
+    val selectedUtxos: ImmutableList<SpendableUtxo>? = null,
     val lnurl: LnurlParams? = null,
     val isLoading: Boolean = false,
     val speed: TransactionSpeed = TransactionSpeed.default(),
     val comment: String = "",
     val feeRates: FeeRates? = null,
     val fee: SendFee? = null,
-    val fees: Map<FeeRate, Long> = emptyMap(),
+    val fees: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val estimatedRoutingFee: ULong = 0uL,
+    val lastLightningFee: Long = 0L,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {

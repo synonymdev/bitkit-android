@@ -40,6 +40,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WalletState
@@ -153,7 +155,7 @@ fun EditInvoiceContent(
     noteText: String,
     isSoftKeyboardVisible: Boolean,
     keyboardVisible: Boolean,
-    tags: List<String>,
+    tags: ImmutableList<String>,
     onBack: () -> Unit,
     onContinueKeyboard: () -> Unit,
     onClickBalance: () -> Unit,
@@ -361,7 +363,7 @@ private fun Preview() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf(),
+                tags = persistentListOf(),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,
@@ -385,7 +387,7 @@ private fun PreviewWithTags() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf("Team", "Dinner", "Home", "Work"),
+                tags = persistentListOf("Team", "Dinner", "Home", "Work"),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,
@@ -409,7 +411,7 @@ private fun PreviewWithKeyboard() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf("Team", "Dinner", "Home"),
+                tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,
@@ -433,7 +435,7 @@ private fun PreviewSmallScreen() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf("Team", "Dinner", "Home"),
+                tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,

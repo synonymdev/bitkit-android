@@ -34,8 +34,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -95,7 +98,7 @@ private fun ShowMnemonicContent(
     onContinueClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val mnemonicWords = remember(mnemonic) { mnemonic.split(" ").filter { it.isNotBlank() } }
+    val mnemonicWords = remember(mnemonic) { mnemonic.split(" ").filter { it.isNotBlank() }.toImmutableList() }
     val buttonAlpha by animateFloatAsState(
         targetValue = if (showMnemonic) 0f else 1f,
         animationSpec = tween(durationMillis = 400),
@@ -191,10 +194,23 @@ private fun ShowMnemonicContent(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            BodyS(
-                text = stringResource(R.string.security__mnemonic_never_share).withAccent(accentColor = Colors.Brand),
-                color = Colors.White64,
-            )
+            AnimatedContent(
+                targetState = showMnemonic,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "warningText"
+            ) { revealed ->
+                val warningText = stringResource(
+                    if (revealed) {
+                        R.string.security__mnemonic_no_access
+                    } else {
+                        R.string.security__mnemonic_never_share
+                    }
+                ).withAccent(
+                    defaultColor = Colors.Brand,
+                    accentStyle = SpanStyle(color = Colors.Brand, fontWeight = FontWeight.Bold),
+                )
+                BodyS(text = warningText)
+            }
 
             Spacer(modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.height(24.dp))

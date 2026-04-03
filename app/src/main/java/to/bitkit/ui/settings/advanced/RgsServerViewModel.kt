@@ -1,9 +1,12 @@
 package to.bitkit.ui.settings.advanced
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,7 +18,9 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.repositories.LightningRepo
+import java.net.URI
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class RgsServerViewModel @Inject constructor(
@@ -24,8 +29,19 @@ class RgsServerViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
+    companion object {
+        private val HOSTNAME_PATTERN = Regex(
+            "^([a-z\\d]([a-z\\d-]*[a-z\\d])*\\.)+[a-z]{2,}|(\\d{1,3}\\.){3}\\d{1,3}$",
+            RegexOption.IGNORE_CASE,
+        )
+        private val PATH_PATTERN = Regex("^(/[a-zA-Z\\d_.~%+-]*)*$")
+        private val VALIDATION_DEBOUNCE = 1.seconds
+    }
+
     private val _uiState = MutableStateFlow(RgsServerUiState())
     val uiState: StateFlow<RgsServerUiState> = _uiState.asStateFlow()
+
+    private var validationJob: Job? = null
 
     init {
         observeState()
@@ -47,17 +63,20 @@ class RgsServerViewModel @Inject constructor(
     }
 
     fun setRgsUrl(url: String) {
-        _uiState.update {
-            val newState = it.copy(rgsUrl = url.trim())
-            computeState(newState)
-        }
+        _uiState.update { it.copy(rgsUrl = url.trim()) }
+        debounceValidation()
     }
 
     fun resetToDefault() {
-        val defaultUrl = Env.ldkRgsServerUrl ?: ""
-        _uiState.update {
-            val newState = it.copy(rgsUrl = defaultUrl)
-            computeState(newState)
+        _uiState.update { it.copy(rgsUrl = Env.ldkRgsServerUrl ?: "") }
+        debounceValidation()
+    }
+
+    private fun debounceValidation() {
+        validationJob?.cancel()
+        validationJob = viewModelScope.launch(bgDispatcher) {
+            delay(VALIDATION_DEBOUNCE)
+            _uiState.update { computeState(it) }
         }
     }
 
@@ -72,7 +91,7 @@ class RgsServerViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.restartWithRgsServer(url)
+            lightningRepo.restartWithRgsServer(normalizeUrl(url))
                 .onSuccess {
                     _uiState.update {
                         val newState = it.copy(
@@ -109,24 +128,25 @@ class RgsServerViewModel @Inject constructor(
         )
     }
 
+    private fun normalizeUrl(url: String): String =
+        if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
+
     private fun isValidURL(data: String): Boolean {
-        val pattern = Regex(
-            "^(https?://)?" + // protocol
-                "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
-                "((\\d{1,3}\\.){3}\\d{1,3}))" + // IP (v4) address
-                "(:\\d+)?(/[-a-z\\d%_.~+]*)*", // port and path
-            RegexOption.IGNORE_CASE
-        )
+        return runCatching {
+            val uri = URI(normalizeUrl(data))
+            val hostname = uri.host ?: return false
 
-        // Allow localhost in development mode
-        if (Env.isDebug && data.contains("localhost")) {
-            return true
-        }
+            if (Env.isDebug && hostname == "localhost") return true
 
-        return pattern.matches(data)
+            if (!HOSTNAME_PATTERN.matches(hostname)) return false
+
+            val path = uri.path.orEmpty()
+            path.isEmpty() || PATH_PATTERN.matches(path)
+        }.getOrDefault(false)
     }
 }
 
+@Stable
 data class RgsServerUiState(
     val connectedRgsUrl: String? = null,
     val rgsUrl: String = "",
