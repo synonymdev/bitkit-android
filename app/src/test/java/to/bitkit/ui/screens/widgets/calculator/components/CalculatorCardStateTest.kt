@@ -69,4 +69,24 @@ class CalculatorCardStateTest {
         assertEquals("C", "CHF".toCalculatorDisplaySymbol())
         assertEquals("X", " XDR ".toCalculatorDisplaySymbol())
     }
+
+    @Test
+    fun `sanitizeIntegerInput strips non-digit characters`() {
+        assertEquals("088800000000", sanitizeIntegerInput("0888,,,,,,,.00000000"))
+        assertEquals("12345", sanitizeIntegerInput("12,345"))
+        assertEquals("100", sanitizeIntegerInput("1.0.0"))
+        assertEquals("", sanitizeIntegerInput(".,,,"))
+        assertEquals("42", sanitizeIntegerInput("42"))
+    }
+
+    @Test
+    fun `sanitizeDecimalInput allows single dot and digits only`() {
+        assertEquals("12.34", sanitizeDecimalInput("12.34"))
+        assertEquals("12.34", sanitizeDecimalInput("12.3.4"))
+        assertEquals("0.", sanitizeDecimalInput("0."))
+        assertEquals(".5", sanitizeDecimalInput(".5"))
+        assertEquals("1234", sanitizeDecimalInput("1,234"))
+        assertEquals("", sanitizeDecimalInput(",,,"))
+        assertEquals("100.00", sanitizeDecimalInput("1,00.00"))
+    }
 }

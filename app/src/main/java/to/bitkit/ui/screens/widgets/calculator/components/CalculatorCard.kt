@@ -88,12 +88,17 @@ fun CalculatorCard(
         showWidgetTitle = showWidgetTitle,
         btcPrimaryDisplayUnit = currencyUiState.displayUnit,
         btcValue = displayedBtcValue,
-        onBtcChange = { newValue ->
-            btcValue = newValue
+        onBtcChange = { rawValue ->
+            val sanitized = if (currencyUiState.displayUnit.isModern()) {
+                sanitizeIntegerInput(rawValue)
+            } else {
+                sanitizeDecimalInput(rawValue)
+            }
+            btcValue = sanitized
             val convertedFiat = CalculatorFormatter.convertBtcToFiat(
                 btcValue = btcValue,
                 displayUnit = currencyUiState.displayUnit,
-                currencyViewModel = currencyViewModel
+                currencyViewModel = currencyViewModel,
             )
             fiatValue = convertedFiat.orEmpty()
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
@@ -101,12 +106,13 @@ fun CalculatorCard(
         fiatSymbol = currencyUiState.currencySymbol,
         fiatName = currencyUiState.selectedCurrency,
         fiatValue = displayedFiatValue,
-        onFiatChange = { newValue ->
-            fiatValue = newValue
+        onFiatChange = { rawValue ->
+            val sanitized = sanitizeDecimalInput(rawValue)
+            fiatValue = sanitized
             btcValue = CalculatorFormatter.convertFiatToBtc(
                 fiatValue = fiatValue,
                 displayUnit = currencyUiState.displayUnit,
-                currencyViewModel = currencyViewModel
+                currencyViewModel = currencyViewModel,
             )
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         }
@@ -146,6 +152,7 @@ fun CalculatorCardContent(
                 onValueChange = onBtcChange,
                 currencySymbol = BITCOIN_SYMBOL,
                 currencyName = stringResource(R.string.settings__general__unit_bitcoin),
+                keyboardType = if (btcPrimaryDisplayUnit.isModern()) KeyboardType.Number else KeyboardType.Decimal,
                 visualTransformation = BitcoinVisualTransformation(btcPrimaryDisplayUnit),
                 modifier = Modifier.fillMaxWidth()
             )

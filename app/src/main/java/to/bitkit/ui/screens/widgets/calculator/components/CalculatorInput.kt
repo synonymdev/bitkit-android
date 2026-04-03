@@ -63,6 +63,17 @@ fun CalculatorInput(
     )
 }
 
+internal fun sanitizeIntegerInput(raw: String): String =
+    raw.filter { it.isDigit() }
+
+internal fun sanitizeDecimalInput(raw: String): String {
+    val filtered = raw.filter { it.isDigit() || it == '.' }
+    val dotIndex = filtered.indexOf('.')
+    if (dotIndex == -1) return filtered
+    return filtered.substring(0, dotIndex + 1) +
+        filtered.substring(dotIndex + 1).replace(".", "")
+}
+
 internal fun String.toCalculatorDisplaySymbol(): String {
     val symbol = trim()
     return if (symbol.length >= 3) {
