@@ -122,7 +122,7 @@ fun CalculatorCard(
                 currencyViewModel = currencyViewModel,
             )
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
-        }
+        },
     )
 }
 
