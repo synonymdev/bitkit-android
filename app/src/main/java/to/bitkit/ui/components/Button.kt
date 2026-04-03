@@ -22,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.shared.modifiers.alphaFeedback
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.glassBlur
 import to.bitkit.ui.shared.util.primaryButtonStyle
@@ -242,15 +242,17 @@ fun TertiaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
-    val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
-    TextButton(
-        onClick = rememberDebouncedClick(onClick = onClick),
-        enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.tertiaryColors,
-        contentPadding = contentPadding,
+    val contentColor = if (enabled && !isLoading) Colors.White80 else Colors.White32
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
+            .clickableAlpha(
+                enabled = enabled && !isLoading,
+                onClick = onClick,
+            ),
     ) {
         if (isLoading) {
             CircularProgressIndicator(
@@ -279,6 +281,8 @@ fun TertiaryButton(
                 text?.let {
                     Text(
                         text = text,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = contentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
