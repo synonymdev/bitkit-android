@@ -6,7 +6,6 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.SATS_GROUPING_SEPARATOR
-import to.bitkit.models.formatToModernDisplay
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -16,10 +15,10 @@ class BitcoinVisualTransformation(
 ) : VisualTransformation {
 
     override fun filter(text: AnnotatedString): TransformedText {
-        val originalText = text.text
+        val originalText = sanitizeInput(text.text)
 
         if (originalText.isEmpty()) {
-            return TransformedText(text, OffsetMapping.Identity)
+            return TransformedText(AnnotatedString(""), OffsetMapping.Identity)
         }
 
         val formattedText = when (displayUnit) {
@@ -35,21 +34,51 @@ class BitcoinVisualTransformation(
         )
     }
 
+    private fun sanitizeInput(text: String): String = when (displayUnit) {
+        BitcoinDisplayUnit.MODERN -> text.filter { it.isDigit() }
+        BitcoinDisplayUnit.CLASSIC -> sanitizeClassicInput(text)
+    }
+
+    private fun sanitizeClassicInput(text: String): String {
+        val filtered = text.filter { it.isDigit() || it == '.' }
+        val dotIndex = filtered.indexOf('.')
+        if (dotIndex == -1) {
+            return filtered
+        }
+        return filtered.substring(0, dotIndex + 1) +
+            filtered.substring(dotIndex + 1).replace(".", "")
+    }
+
     private fun formatModernDisplay(text: String): String {
-        val longValue = text.replace("$SATS_GROUPING_SEPARATOR", "").toLongOrNull() ?: return text
-        return longValue.formatToModernDisplay()
+        val digits = text.replace("$SATS_GROUPING_SEPARATOR", "")
+        if (digits.isEmpty()) {
+            return ""
+        }
+        val normalizedDigits = digits.trimStart('0').ifEmpty { "0" }
+        return normalizedDigits.reversed().chunked(3).joinToString(" ").reversed()
     }
 
     private fun formatClassicDisplay(text: String): String {
         val cleanText = text.replace(" ", "").replace(",", "")
-        val doubleValue = cleanText.toDoubleOrNull() ?: return text
+        if (cleanText.isEmpty() || cleanText == ".") {
+            return cleanText
+        }
+
+        val endsWithDecimal = cleanText.endsWith(".")
+        val textToFormat = if (endsWithDecimal) cleanText.dropLast(1) else cleanText
+        if (textToFormat.isEmpty()) {
+            return cleanText
+        }
+
+        val doubleValue = textToFormat.toDoubleOrNull() ?: return cleanText
 
         val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
             groupingSeparator = ' '
             decimalSeparator = '.'
         }
         val formatter = DecimalFormat("#,##0.########", formatSymbols)
-        return formatter.format(doubleValue)
+        val formatted = formatter.format(doubleValue)
+        return if (endsWithDecimal) "$formatted." else formatted
     }
 
     private fun createOffsetMapping(original: String, transformed: String): OffsetMapping {

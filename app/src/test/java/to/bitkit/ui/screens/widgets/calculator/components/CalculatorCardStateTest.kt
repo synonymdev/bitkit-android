@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.widgets.calculator.components
 
 import org.junit.Test
+import to.bitkit.models.BitcoinDisplayUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -13,6 +14,7 @@ class CalculatorCardStateTest {
             storedBtcValue = "10000",
             storedFiatValue = "",
             currentFiatValue = "",
+            displayUnit = BitcoinDisplayUnit.MODERN,
         )
 
         assertTrue(result)
@@ -24,6 +26,7 @@ class CalculatorCardStateTest {
             storedBtcValue = "10000",
             storedFiatValue = "6.25",
             currentFiatValue = "",
+            displayUnit = BitcoinDisplayUnit.MODERN,
         )
 
         assertFalse(result)
@@ -35,6 +38,7 @@ class CalculatorCardStateTest {
             storedBtcValue = "10000",
             storedFiatValue = "",
             currentFiatValue = "1.23",
+            displayUnit = BitcoinDisplayUnit.MODERN,
         )
 
         assertFalse(result)
@@ -46,6 +50,7 @@ class CalculatorCardStateTest {
             storedBtcValue = "",
             storedFiatValue = "",
             currentFiatValue = "",
+            displayUnit = BitcoinDisplayUnit.MODERN,
         )
 
         assertFalse(result)
@@ -57,6 +62,19 @@ class CalculatorCardStateTest {
             storedBtcValue = "0",
             storedFiatValue = "",
             currentFiatValue = "",
+            displayUnit = BitcoinDisplayUnit.MODERN,
+        )
+
+        assertFalse(result)
+    }
+
+    @Test
+    fun `shouldHydrateFiatFromStoredBtc returns false when classic btc is zero`() {
+        val result = shouldHydrateFiatFromStoredBtc(
+            storedBtcValue = "0.00000000",
+            storedFiatValue = "",
+            currentFiatValue = "",
+            displayUnit = BitcoinDisplayUnit.CLASSIC,
         )
 
         assertFalse(result)

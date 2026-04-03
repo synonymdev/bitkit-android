@@ -44,6 +44,7 @@ import to.bitkit.ui.utils.visualTransformation.BitcoinVisualTransformation
 import to.bitkit.ui.utils.visualTransformation.CalculatorFormatter
 import to.bitkit.ui.utils.visualTransformation.MonetaryVisualTransformation
 import to.bitkit.viewmodels.CurrencyViewModel
+import java.math.BigDecimal
 
 @Composable
 fun CalculatorCard(
@@ -65,7 +66,13 @@ fun CalculatorCard(
         currencyUiState.displayUnit,
         currencyUiState.selectedCurrency,
     ) {
-        if (!shouldHydrateFiatFromStoredBtc(calculatorValues.btcValue, calculatorValues.fiatValue, fiatValue)) {
+        if (!shouldHydrateFiatFromStoredBtc(
+                storedBtcValue = calculatorValues.btcValue,
+                storedFiatValue = calculatorValues.fiatValue,
+                currentFiatValue = fiatValue,
+                displayUnit = currencyUiState.displayUnit,
+            )
+        ) {
             return@LaunchedEffect
         }
         val convertedFiat = CalculatorFormatter.convertBtcToFiat(
@@ -177,17 +184,26 @@ internal fun shouldHydrateFiatFromStoredBtc(
     storedBtcValue: String,
     storedFiatValue: String,
     currentFiatValue: String,
+    displayUnit: BitcoinDisplayUnit,
 ): Boolean {
     if (storedBtcValue.isEmpty()) {
         return false
     }
-    if (storedBtcValue == "0") {
+    if (isZeroBtcValue(storedBtcValue, displayUnit)) {
         return false
     }
     if (storedFiatValue.isNotEmpty()) {
         return false
     }
     return currentFiatValue.isEmpty()
+}
+
+internal fun isZeroBtcValue(
+    btcValue: String,
+    displayUnit: BitcoinDisplayUnit,
+): Boolean = when (displayUnit) {
+    BitcoinDisplayUnit.MODERN -> btcValue == "0"
+    BitcoinDisplayUnit.CLASSIC -> btcValue.toBigDecimalOrNull()?.compareTo(BigDecimal.ZERO) == 0
 }
 
 @Composable
