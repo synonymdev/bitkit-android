@@ -1527,7 +1527,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val displayAmount = if (isFixed) data.minWithdrawableSat() else minWithdrawable
+        val displayAmount = minWithdrawable
 
         _sendUiState.update {
             it.copy(

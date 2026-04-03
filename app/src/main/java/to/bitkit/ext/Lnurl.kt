@@ -57,10 +57,3 @@ fun LnurlWithdrawData.isFixedAmount(): Boolean {
     val min = minWithdrawable ?: 0u
     return min == maxWithdrawable || (min > 0u && minWithdrawableSat() > maxWithdrawableSat())
 }
-
-/**
- * The amount in whole sats to use when creating a withdraw invoice for a fixed-amount request.
- *
- * Uses floor division so the invoice amount never exceeds `maxWithdrawable` in msats.
- */
-fun LnurlWithdrawData.fixedWithdrawAmountSat(): ULong = maxWithdrawable / MSATS_PER_SAT

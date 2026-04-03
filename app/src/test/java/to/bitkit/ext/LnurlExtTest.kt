@@ -119,11 +119,6 @@ class LnurlExtTest : BaseUnitTest() {
         assertEquals(false, data.isFixedAmount())
     }
 
-    @Test
-    fun `fixedWithdrawAmountSat floors to avoid exceeding max`() {
-        val data = withdrawData(minWithdrawable = 500_500u, maxWithdrawable = 500_500u)
-        assertEquals(500u, data.fixedWithdrawAmountSat())
-    }
 
     private fun lnurlPayData(
         minSendable: ULong = 1_000u,
