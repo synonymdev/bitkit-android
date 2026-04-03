@@ -47,7 +47,7 @@ class QuickPayViewModel @Inject constructor(
 
                 is QuickPayData.LnurlPay -> {
                     Logger.info("QuickPay: fetching LNURL Pay invoice from callback")
-                    val invoice = lightningRepo.fetchLnurlInvoice(callbackUrl = data.callback, amountSats = data.sats)
+                    val invoice = lightningRepo.fetchLnurlInvoice(callbackUrl = data.callback, amountMsats = data.amountMsats)
                         .getOrElse { error ->
                             _uiState.update {
                                 it.copy(result = QuickPayResult.Error(error.message.orEmpty()))

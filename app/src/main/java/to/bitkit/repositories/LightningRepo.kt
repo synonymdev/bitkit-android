@@ -900,17 +900,17 @@ class LightningRepo @Inject constructor(
     @Suppress("ForbiddenComment")
     suspend fun fetchLnurlInvoice(
         callbackUrl: String,
-        amountSats: ULong,
+        amountMsats: ULong,
         comment: String? = null,
     ): Result<LightningInvoice> {
         return runCatching {
             // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
-            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).getOrThrow().pr
+            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountMsats, comment).getOrThrow().pr
             val decoded = (coreService.decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
             Logger.error(
-                "fetchLnurlInvoice error, url: $callbackUrl, amount: $amountSats, comment: $comment",
+                "fetchLnurlInvoice error, url: $callbackUrl, amountMsats: $amountMsats, comment: $comment",
                 it,
                 context = TAG,
             )
