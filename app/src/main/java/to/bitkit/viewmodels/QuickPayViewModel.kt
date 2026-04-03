@@ -57,7 +57,7 @@ class QuickPayViewModel @Inject constructor(
                             }
                             return@launch
                         }
-                    Triple(invoice.bolt11, data.sats, data.sats)
+                    Triple(invoice.bolt11, null, data.sats)
                 }
             }
 

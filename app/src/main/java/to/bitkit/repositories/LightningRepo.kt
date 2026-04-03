@@ -910,7 +910,7 @@ class LightningRepo @Inject constructor(
             return@runCatching decoded
         }.onFailure {
             Logger.error(
-                "fetchLnurlInvoice error, url: $callbackUrl, amountMsats: $amountMsats, comment: $comment",
+                "fetchLnurlInvoice error, url: '$callbackUrl', amountMsats: '$amountMsats', comment: '$comment'",
                 it,
                 context = TAG,
             )

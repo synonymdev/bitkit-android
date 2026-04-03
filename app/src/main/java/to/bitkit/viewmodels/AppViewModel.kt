@@ -1491,7 +1491,7 @@ class AppViewModel @Inject constructor(
         }
 
         if (isFixed) {
-            Logger.info("Found fixed amount $displaySats sats in lnurlPay, proceeding with payment", context = TAG)
+            Logger.info("Found fixed amount '$displaySats' sats in lnurlPay, proceeding with payment", context = TAG)
 
             val quickPayHandled = handleQuickPayIfApplicable(amountSats = displaySats, lnurlPay = data)
             if (quickPayHandled) return
