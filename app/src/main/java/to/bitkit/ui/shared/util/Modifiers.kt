@@ -258,49 +258,49 @@ fun Modifier.primaryButtonStyle(
         )
         // Step 2: Clip to shape first
         .clip(shape)
-        // Step 3: Apply gradient background with border overlay
-        .then(
+        // Step 3: Apply background with optional gradient and shine
+        .drawWithContent {
             if (isEnabled) {
-                Modifier.drawWithContent {
-                    // Draw the main background filling entire button
-                    val baseColor = primaryColor ?: Colors.Gray5
-                    if (enableGradient) {
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(baseColor, Colors.Gray6),
-                                startY = 0f,
-                                endY = size.height,
-                            ),
-                            topLeft = Offset.Zero,
-                            size = size,
-                        )
-                    } else {
-                        drawRect(
-                            color = baseColor,
-                            topLeft = Offset.Zero,
-                            size = size,
-                        )
-                    }
-
-                    // Draw top shine highlight following the rounded contour
-                    val outline = shape.createOutline(size, layoutDirection, this)
-                    val shinePath = Path()
-                    shinePath.addOutline(outline)
-                    drawPath(
-                        path = shinePath,
+                val baseColor = primaryColor ?: Colors.Gray5
+                if (enableGradient) {
+                    drawRect(
                         brush = Brush.verticalGradient(
-                            colors = listOf(Colors.White10, Color.Transparent),
+                            colors = listOf(baseColor, Colors.Gray6),
                             startY = 0f,
-                            endY = size.height * 0.15f,
+                            endY = size.height,
                         ),
-                        style = Stroke(width = 1.dp.toPx()),
+                        topLeft = Offset.Zero,
+                        size = size,
                     )
-
-                    // Draw the actual button content on top
-                    drawContent()
+                } else {
+                    drawRect(
+                        color = baseColor,
+                        topLeft = Offset.Zero,
+                        size = size,
+                    )
                 }
+
+                // Draw top shine highlight following the rounded contour
+                val outline = shape.createOutline(size, layoutDirection, this)
+                val shinePath = Path()
+                shinePath.addOutline(outline)
+                drawPath(
+                    path = shinePath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Colors.White10, Color.Transparent),
+                        startY = 0f,
+                        endY = size.height * 0.15f,
+                    ),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
             } else {
-                Modifier.background(Colors.White06)
+                drawRect(
+                    color = Colors.White06,
+                    topLeft = Offset.Zero,
+                    size = size,
+                )
             }
-        )
+
+            drawContent()
+        }
 }
