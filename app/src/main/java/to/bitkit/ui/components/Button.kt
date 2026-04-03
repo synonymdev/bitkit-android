@@ -52,11 +52,6 @@ enum class ButtonSize {
             Small -> 40.dp
             Large -> 56.dp
         }
-    val horizontalPadding: Dp
-        get() = when (this) {
-            Small -> 16.dp
-            Large -> 24.dp
-        }
     val primaryHorizontalPadding: Dp
         get() = when (this) {
             Small -> 16.dp
@@ -87,6 +82,11 @@ enum class ButtonSize {
             Small -> 5.dp
             Large -> 8.dp
         }
+
+    fun secondaryBorder(enabled: Boolean): BorderStroke = when (this) {
+        Large -> BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
+        Small -> BorderStroke(1.dp, if (enabled) Colors.White16 else Color.Transparent)
+    }
 }
 
 @Composable
@@ -162,11 +162,6 @@ fun PrimaryButton(
     }
 }
 
-private fun secondaryBorder(size: ButtonSize, enabled: Boolean) = when (size) {
-    ButtonSize.Large -> BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
-    ButtonSize.Small -> BorderStroke(1.dp, if (enabled) Colors.White16 else Color.Transparent)
-}
-
 @Composable
 fun SecondaryButton(
     text: String?,
@@ -179,7 +174,7 @@ fun SecondaryButton(
     fullWidth: Boolean = true,
 ) {
     val contentPadding = PaddingValues(horizontal = size.secondaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
-    val border = secondaryBorder(size, enabled)
+    val border = size.secondaryBorder(enabled)
     val contentColor = when (size) {
         ButtonSize.Large -> Colors.White80
         ButtonSize.Small -> Colors.White64
@@ -245,7 +240,7 @@ fun TertiaryButton(
     val contentColor = if (enabled && !isLoading) Colors.White80 else Colors.White32
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
@@ -261,32 +256,27 @@ fun TertiaryButton(
                 modifier = Modifier.size(size.height / 2)
             )
         } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (icon != null) {
-                    Box(
-                        modifier = if (enabled) {
-                            Modifier
-                        } else {
-                            Modifier.graphicsLayer {
-                                colorFilter = ColorFilter.tint(Colors.White32)
-                            }
+            if (icon != null) {
+                Box(
+                    modifier = if (enabled) {
+                        Modifier
+                    } else {
+                        Modifier.graphicsLayer {
+                            colorFilter = ColorFilter.tint(Colors.White32)
                         }
-                    ) {
-                        icon()
                     }
+                ) {
+                    icon()
                 }
-                text?.let {
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = contentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            }
+            text?.let {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
