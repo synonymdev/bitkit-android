@@ -154,6 +154,86 @@ private class OuterGlowNode(
     }
 }
 
+fun Modifier.glassBlur(
+    blurRadius: Dp = 8.dp,
+    tintColor: Color = Color.White,
+    tintAlpha: Float = 0.05f,
+    cornerRadius: Dp = 64.dp,
+): Modifier = this.then(
+    GlassBlurElement(
+        blurRadius = blurRadius,
+        tintColor = tintColor,
+        tintAlpha = tintAlpha,
+        cornerRadius = cornerRadius,
+    )
+)
+
+private data class GlassBlurElement(
+    val blurRadius: Dp,
+    val tintColor: Color,
+    val tintAlpha: Float,
+    val cornerRadius: Dp,
+) : ModifierNodeElement<GlassBlurNode>() {
+    override fun create(): GlassBlurNode = GlassBlurNode(
+        blurRadius = blurRadius,
+        tintColor = tintColor,
+        tintAlpha = tintAlpha,
+        cornerRadius = cornerRadius,
+    )
+
+    override fun update(node: GlassBlurNode) {
+        node.blurRadius = blurRadius
+        node.tintColor = tintColor
+        node.tintAlpha = tintAlpha
+        node.cornerRadius = cornerRadius
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "glassBlur"
+        properties["blurRadius"] = blurRadius
+        properties["tintColor"] = tintColor
+        properties["tintAlpha"] = tintAlpha
+        properties["cornerRadius"] = cornerRadius
+    }
+}
+
+private class GlassBlurNode(
+    var blurRadius: Dp,
+    var tintColor: Color,
+    var tintAlpha: Float,
+    var cornerRadius: Dp,
+) : DrawModifierNode, Modifier.Node() {
+    override fun ContentDrawScope.draw() {
+        val blurRadiusPx = blurRadius.toPx()
+        val cornerRadiusPx = cornerRadius.toPx()
+
+        drawIntoCanvas { canvas ->
+            val paint = Paint().apply {
+                isAntiAlias = true
+            }
+
+            val frameworkPaint = paint.asFrameworkPaint()
+            frameworkPaint.color = tintColor.copy(alpha = tintAlpha).toArgb()
+            frameworkPaint.maskFilter = android.graphics.BlurMaskFilter(
+                blurRadiusPx,
+                android.graphics.BlurMaskFilter.Blur.NORMAL,
+            )
+
+            canvas.drawRoundRect(
+                left = 0f,
+                top = 0f,
+                right = size.width,
+                bottom = size.height,
+                radiusX = cornerRadiusPx,
+                radiusY = cornerRadiusPx,
+                paint = paint,
+            )
+        }
+
+        drawContent()
+    }
+}
+
 fun Modifier.primaryButtonStyle(
     isEnabled: Boolean,
     shape: Shape,
