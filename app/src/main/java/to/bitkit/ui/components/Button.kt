@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -127,8 +126,7 @@ fun PrimaryButton(
             .alphaFeedback(enabled = enabled && !isLoading)
     ) {
         if (isLoading) {
-            CircularProgressIndicator(
-                color = Colors.White32,
+            GradientCircularProgressIndicator(
                 strokeWidth = 2.dp,
                 modifier = Modifier.size(size.height / 2)
             )
@@ -191,8 +189,7 @@ fun SecondaryButton(
             .glassBlur(blurRadius = size.secondaryBlurRadius)
     ) {
         if (isLoading) {
-            CircularProgressIndicator(
-                color = Colors.White32,
+            GradientCircularProgressIndicator(
                 strokeWidth = 2.dp,
                 modifier = Modifier.size(size.height / 2)
             )
@@ -250,8 +247,7 @@ fun TertiaryButton(
             ),
     ) {
         if (isLoading) {
-            CircularProgressIndicator(
-                color = Colors.White32,
+            GradientCircularProgressIndicator(
                 strokeWidth = 2.dp,
                 modifier = Modifier.size(size.height / 2)
             )
