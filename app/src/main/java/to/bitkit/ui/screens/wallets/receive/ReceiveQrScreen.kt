@@ -56,7 +56,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
-import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningState
@@ -269,6 +268,7 @@ fun ReceiveQrScreen(
                                         walletState.bip21,
                                         walletState.onchainAddress,
                                     )
+
                                     else -> invoice
                                 }
 
