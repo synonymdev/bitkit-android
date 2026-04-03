@@ -66,6 +66,7 @@ object AppButtonDefaults {
     val secondaryColors: ButtonColors
         @Composable
         get() = ButtonDefaults.outlinedButtonColors(
+            containerColor = Colors.White.copy(alpha = 0.01f),
             contentColor = Colors.White80,
             disabledContentColor = Colors.White32,
         )

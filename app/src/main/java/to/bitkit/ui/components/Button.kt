@@ -3,6 +3,7 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,12 +29,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import to.bitkit.R
 import to.bitkit.ui.shared.modifiers.alphaFeedback
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
+import to.bitkit.ui.shared.util.glassBlur
 import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppButtonDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -51,6 +56,21 @@ enum class ButtonSize {
         get() = when (this) {
             Small -> 16.dp
             Large -> 24.dp
+        }
+    val secondaryHorizontalPadding: Dp
+        get() = when (this) {
+            Small -> 16.dp
+            Large -> 28.dp
+        }
+    val secondaryGap: Dp
+        get() = when (this) {
+            Small -> 8.dp
+            Large -> 6.dp
+        }
+    val secondaryBlurRadius: Dp
+        get() = when (this) {
+            Small -> 5.dp
+            Large -> 8.dp
         }
 }
 
@@ -126,6 +146,11 @@ fun PrimaryButton(
     }
 }
 
+private fun secondaryBorder(size: ButtonSize, enabled: Boolean) = when (size) {
+    ButtonSize.Large -> BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
+    ButtonSize.Small -> BorderStroke(1.dp, if (enabled) Colors.White16 else Color.Transparent)
+}
+
 @Composable
 fun SecondaryButton(
     text: String?,
@@ -137,17 +162,22 @@ fun SecondaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
-    val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
-    val border = BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
+    val contentPadding = PaddingValues(horizontal = size.secondaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
+    val border = secondaryBorder(size, enabled)
+    val contentColor = when (size) {
+        ButtonSize.Large -> Colors.White80
+        ButtonSize.Small -> Colors.White64
+    }
     OutlinedButton(
         onClick = rememberDebouncedClick(onClick = onClick),
         enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.secondaryColors,
+        colors = AppButtonDefaults.secondaryColors.copy(contentColor = contentColor),
         contentPadding = contentPadding,
         border = border,
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
+            .glassBlur(blurRadius = size.secondaryBlurRadius)
     ) {
         if (isLoading) {
             CircularProgressIndicator(
@@ -158,7 +188,7 @@ fun SecondaryButton(
         } else {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(size.secondaryGap),
             ) {
                 if (icon != null) {
                     Box(
@@ -373,75 +403,29 @@ private fun PrimaryButtonPreview() {
 @Composable
 private fun SecondaryButtonPreview() {
     AppThemeSurface {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(16.dp)
-        ) {
-            SecondaryButton(
-                text = "Secondary",
-                onClick = {},
+        Box {
+            Image(
+                painter = painterResource(R.drawable.lightning),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
             )
-            SecondaryButton(
-                text = "Secondary With padding",
-                modifier = Modifier.padding(horizontal = 32.dp),
-                onClick = {},
-            )
-            SecondaryButton(
-                text = "Secondary With Icon",
-                onClick = {},
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.Favorite,
-                        contentDescription = "",
-                        modifier = Modifier.size(16.dp)
-                    )
-                },
-            )
-            SecondaryButton(
-                text = "Secondary Loading",
-                isLoading = true,
-                onClick = {},
-            )
-            SecondaryButton(
-                text = "Secondary Disabled",
-                onClick = {},
-                enabled = false,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.Favorite,
-                        contentDescription = "",
-                        modifier = Modifier.size(16.dp)
-                    )
-                },
-            )
-            SecondaryButton(
-                text = "Secondary Small",
-                size = ButtonSize.Small,
-                fullWidth = false,
-                onClick = {},
-            )
-            SecondaryButton(
-                text = "Secondary Small Loading",
-                size = ButtonSize.Small,
-                isLoading = true,
-                onClick = {},
-            )
-            SecondaryButton(
-                text = "Secondary Small Disabled",
-                size = ButtonSize.Small,
-                onClick = {},
-                enabled = false,
-            )
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(16.dp)
             ) {
                 SecondaryButton(
-                    text = null,
+                    text = "Secondary",
                     onClick = {},
-                    fullWidth = false,
-                    size = ButtonSize.Large,
+                )
+                SecondaryButton(
+                    text = "Secondary With padding",
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                    onClick = {},
+                )
+                SecondaryButton(
+                    text = "Secondary With Icon",
+                    onClick = {},
                     icon = {
                         Icon(
                             imageVector = Icons.Filled.Favorite,
@@ -451,19 +435,73 @@ private fun SecondaryButtonPreview() {
                     },
                 )
                 SecondaryButton(
-                    text = null,
+                    text = "Secondary Loading",
+                    isLoading = true,
                     onClick = {},
-                    fullWidth = false,
-                    size = ButtonSize.Small,
+                )
+                SecondaryButton(
+                    text = "Secondary Disabled",
+                    onClick = {},
                     enabled = false,
                     icon = {
                         Icon(
-                            imageVector = Icons.Filled.Home,
+                            imageVector = Icons.Filled.Favorite,
                             contentDescription = "",
                             modifier = Modifier.size(16.dp)
                         )
                     },
                 )
+                SecondaryButton(
+                    text = "Secondary Small",
+                    size = ButtonSize.Small,
+                    fullWidth = false,
+                    onClick = {},
+                )
+                SecondaryButton(
+                    text = "Secondary Small Loading",
+                    size = ButtonSize.Small,
+                    isLoading = true,
+                    onClick = {},
+                )
+                SecondaryButton(
+                    text = "Secondary Small Disabled",
+                    size = ButtonSize.Small,
+                    onClick = {},
+                    enabled = false,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    SecondaryButton(
+                        text = null,
+                        onClick = {},
+                        fullWidth = false,
+                        size = ButtonSize.Large,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Filled.Favorite,
+                                contentDescription = "",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                    )
+                    SecondaryButton(
+                        text = null,
+                        onClick = {},
+                        fullWidth = false,
+                        size = ButtonSize.Small,
+                        enabled = false,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Filled.Home,
+                                contentDescription = "",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                    )
+                }
             }
         }
     }
