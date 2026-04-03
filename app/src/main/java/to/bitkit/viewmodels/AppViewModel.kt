@@ -1887,23 +1887,23 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            val withdrawAmountSats = if (lnurl.data.isFixedAmount()) {
-                lnurl.data.fixedWithdrawAmountSat()
+            val invoice = if (lnurl.data.isFixedAmount()) {
+                lightningRepo.createInvoiceMsats(
+                    amountMsats = lnurl.data.maxWithdrawable,
+                    description = lnurl.data.defaultDescription,
+                    expirySeconds = 3600u,
+                )
             } else {
-                _sendUiState.value.amount.coerceAtLeast(
+                val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
                     (lnurl.data.minWithdrawable ?: 0u) / 1000u
                 )
-            }
-
-            _sendUiState.update {
-                it.copy(amount = withdrawAmountSats)
-            }
-
-            val invoice = lightningRepo.createInvoice(
-                amountSats = withdrawAmountSats,
-                description = lnurl.data.defaultDescription,
-                expirySeconds = 3600u,
-            ).getOrNull()
+                _sendUiState.update { it.copy(amount = withdrawAmountSats) }
+                lightningRepo.createInvoice(
+                    amountSats = withdrawAmountSats,
+                    description = lnurl.data.defaultDescription,
+                    expirySeconds = 3600u,
+                )
+            }.getOrNull()
 
             if (invoice == null) {
                 setSendEffect(SendEffect.NavigateToWithdrawError)

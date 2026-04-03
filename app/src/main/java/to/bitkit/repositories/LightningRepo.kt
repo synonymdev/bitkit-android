@@ -897,6 +897,15 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
+    suspend fun createInvoiceMsats(
+        amountMsats: ULong,
+        description: String,
+        expirySeconds: UInt = 86_400u,
+    ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
+        updateGeoBlockState()
+        runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
+    }
+
     @Suppress("ForbiddenComment")
     suspend fun fetchLnurlInvoice(
         callbackUrl: String,
