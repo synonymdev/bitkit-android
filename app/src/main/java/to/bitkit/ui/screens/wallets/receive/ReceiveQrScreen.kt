@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningState
@@ -583,7 +584,7 @@ private fun CopyAddressCard(
         Spacer(modifier = Modifier.height(16.dp))
         BodyS(
             text = (body ?: address).uppercase(),
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.MiddleEllipsis,
             modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier,
         )
@@ -870,7 +871,8 @@ private fun PreviewDetailsMode() {
                 tab = ReceiveTab.AUTO,
                 walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
-                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
+                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
+                        "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 cjitInvoice = null,
                 onClickEditInvoice = {},
