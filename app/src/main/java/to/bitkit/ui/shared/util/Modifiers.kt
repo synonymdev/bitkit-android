@@ -239,15 +239,16 @@ fun Modifier.primaryButtonStyle(
     shape: Shape,
     primaryColor: Color? = null,
     enableGradient: Boolean = true,
+    shadowElevation: Dp = 16.dp,
 ): Modifier {
     return this
         // Step 1: Add shadow (only when enabled)
         .then(
             if (isEnabled) {
                 Modifier.shadow(
-                    elevation = 16.dp,
+                    elevation = shadowElevation,
                     shape = shape,
-                    clip = false // Don't clip content, just add shadow
+                    clip = false,
                 )
             } else {
                 Modifier
@@ -266,32 +267,25 @@ fun Modifier.primaryButtonStyle(
                             brush = Brush.verticalGradient(
                                 colors = listOf(baseColor, Colors.Gray6),
                                 startY = 0f,
-                                endY = size.height
+                                endY = size.height,
                             ),
                             topLeft = Offset.Zero,
-                            size = size
+                            size = size,
                         )
                     } else {
                         drawRect(
                             color = baseColor,
                             topLeft = Offset.Zero,
-                            size = size
+                            size = size,
                         )
                     }
 
-                    // Draw top border highlight (2dp gradient fade)
-                    val borderHeight = 2.dp.toPx()
+                    // Draw top border highlight (1dp solid White10)
+                    val borderHeight = 1.dp.toPx()
                     drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Colors.White16,
-                                Color.Transparent
-                            ),
-                            startY = 0f,
-                            endY = borderHeight
-                        ),
+                        color = Colors.White10,
                         topLeft = Offset(0f, 0f),
-                        size = Size(size.width, borderHeight)
+                        size = Size(size.width, borderHeight),
                     )
 
                     // Draw the actual button content on top

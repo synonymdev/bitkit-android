@@ -57,6 +57,21 @@ enum class ButtonSize {
             Small -> 16.dp
             Large -> 24.dp
         }
+    val primaryHorizontalPadding: Dp
+        get() = when (this) {
+            Small -> 16.dp
+            Large -> 32.dp
+        }
+    val primaryGap: Dp
+        get() = when (this) {
+            Small -> 8.dp
+            Large -> 6.dp
+        }
+    val primaryShadowElevation: Dp
+        get() = when (this) {
+            Small -> 4.dp
+            Large -> 16.dp
+        }
     val secondaryHorizontalPadding: Dp
         get() = when (this) {
             Small -> 16.dp
@@ -87,8 +102,8 @@ fun PrimaryButton(
     color: Color? = null,
     enableGradient: Boolean = true,
 ) {
-    val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
-    val buttonShape = MaterialTheme.shapes.large
+    val contentPadding = PaddingValues(horizontal = size.primaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
+    val buttonShape = MaterialTheme.shapes.extraLarge
 
     Button(
         onClick = rememberDebouncedClick(onClick = onClick),
@@ -106,7 +121,8 @@ fun PrimaryButton(
                 isEnabled = enabled && !isLoading,
                 shape = buttonShape,
                 primaryColor = color,
-                enableGradient = enableGradient
+                enableGradient = enableGradient,
+                shadowElevation = size.primaryShadowElevation,
             )
             .alphaFeedback(enabled = enabled && !isLoading)
     ) {
@@ -119,7 +135,7 @@ fun PrimaryButton(
         } else {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(size.primaryGap),
             ) {
                 if (icon != null) {
                     Box(
