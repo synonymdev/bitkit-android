@@ -1469,7 +1469,7 @@ class AppViewModel @Inject constructor(
         Logger.debug("LNURL: $data", context = TAG)
 
         val isFixed = data.isFixedAmount()
-        val displaySats = if (isFixed) data.maxSendableSat() else data.minSendableSat()
+        val displaySats = data.minSendableSat()
 
         if (!lightningRepo.canSend(displaySats.coerceAtLeast(1u))) {
             toast(
@@ -1528,7 +1528,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val displayAmount = if (isFixed) data.fixedWithdrawAmountSat() else minWithdrawable
+        val displayAmount = if (isFixed) data.minWithdrawableSat() else minWithdrawable
 
         _sendUiState.update {
             it.copy(
