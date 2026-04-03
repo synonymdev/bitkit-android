@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mnemonic warning text transitions on reveal #857
 
 ### Changed
+- Update external success screen title and image to match new design #883
 - Unified send flow with payment method switcher, details toggle, Lightning support for BIP21 payments, and improved fee rate defaults #863
 - Update external success screen title and image to match new design #883
 - Settings redesigned with tabbed navigation (General/Security/Advanced) with swipe support #857
