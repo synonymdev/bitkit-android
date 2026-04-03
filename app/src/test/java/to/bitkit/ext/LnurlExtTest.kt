@@ -119,7 +119,6 @@ class LnurlExtTest : BaseUnitTest() {
         assertEquals(false, data.isFixedAmount())
     }
 
-
     private fun lnurlPayData(
         minSendable: ULong = 1_000u,
         maxSendable: ULong = 100_000u,
