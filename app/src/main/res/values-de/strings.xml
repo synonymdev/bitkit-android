@@ -799,7 +799,7 @@
     <string name="wallet__send_available_savings">Verfügbar (sparen)</string>
     <string name="wallet__send_max_spending__title">Reserve-Saldo</string>
     <string name="wallet__send_max_spending__description">Der maximal auszahlbare Betrag ist etwas niedriger, da eine Reserve erforderlich ist.</string>
-    <string name="wallet__send_review">Überprüfen &amp; Senden</string>
+    <string name="wallet__send_review">Bestätigen</string>
     <string name="wallet__send_confirming_in">Bestätigung in</string>
     <string name="wallet__send_invoice_expiration">Rechnungsverfall</string>
     <string name="wallet__send_swipe">Zum Bezahlen wischen</string>
