@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Preserve msat precision for LNURL pay and withdraw callbacks #879
+- Avoid msat truncation when paying invoices with built-in amounts #879
 - Fix ANR on RGS server settings screen caused by catastrophic regex backtracking #880
 - Fix crash when returning app to foreground on Receive screen #875
 - Show loading state on Spending tab when node is not running #875
