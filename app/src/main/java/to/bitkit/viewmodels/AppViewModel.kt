@@ -78,7 +78,6 @@ import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.callbackAmountMsats
-import to.bitkit.ext.fixedWithdrawAmountSat
 import to.bitkit.ext.isFixedAmount
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
