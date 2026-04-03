@@ -12,12 +12,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -280,12 +282,18 @@ fun Modifier.primaryButtonStyle(
                         )
                     }
 
-                    // Draw top border highlight (1dp solid White10)
-                    val borderHeight = 1.dp.toPx()
-                    drawRect(
-                        color = Colors.White10,
-                        topLeft = Offset(0f, 0f),
-                        size = Size(size.width, borderHeight),
+                    // Draw top shine highlight following the rounded contour
+                    val outline = shape.createOutline(size, layoutDirection, this)
+                    val shinePath = Path()
+                    shinePath.addOutline(outline)
+                    drawPath(
+                        path = shinePath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Colors.White10, Color.Transparent),
+                            startY = 0f,
+                            endY = size.height * 0.15f,
+                        ),
+                        style = Stroke(width = 1.dp.toPx()),
                     )
 
                     // Draw the actual button content on top
