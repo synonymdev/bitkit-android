@@ -168,6 +168,7 @@
     <string name="lightning__next_outbound_htlc_limit">Límit del pròxim HTLC de sortida</string>
     <string name="lightning__next_outbound_htlc_min">Mínim del pròxim HTLC de sortida</string>
     <string name="lightning__no_funds__description">Abans de poder transferir fons del teu saldo d\'estalvis, has d\'enviar bitcoin a la teva cartera Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Finançar cartera</string>
     <string name="lightning__no_funds__title">No hi ha fons disponibles</string>
     <string name="lightning__node_id">ID de Node LDK</string>
     <string name="lightning__node_info">Node de Lightning</string>

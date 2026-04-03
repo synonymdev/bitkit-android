@@ -168,6 +168,7 @@
     <string name="lightning__next_outbound_htlc_limit">Limit dalšího odchozího HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Min dalšího odchozího HTLC</string>
     <string name="lightning__no_funds__description">Než budete moci převést prostředky ze svého zůstatku na spořicím účtu, musíte poslat bitcoiny do peněženky Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Financovat peněženku</string>
     <string name="lightning__no_funds__title">Žádné dostupné prostředky</string>
     <string name="lightning__node_id">ID uzlu LDK</string>
     <string name="lightning__node_info">Lightning uzel</string>

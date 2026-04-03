@@ -100,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Konfiguracja ręczna</string>
     <string name="lightning__no_funds__title">Brak dostępnych środków</string>
     <string name="lightning__no_funds__description">Zanim będzie można przelać środki z salda oszczędności, należy wysłać bitcoiny do portfela Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Doładuj portfel</string>
     <string name="lightning__transfer__nav_title">Prześlij środki</string>
     <string name="lightning__transfer__confirm">Proszę \n&lt;accent&gt;potwierdzić&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">&lt;accent&gt;Niestandardowa&lt;/accent&gt; opłata transakcyjna</string>

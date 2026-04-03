@@ -168,6 +168,7 @@
     <string name="lightning__next_outbound_htlc_limit">Volgende uitgaande HTLC-limiet</string>
     <string name="lightning__next_outbound_htlc_min">Volgende uitgaande HTLC min</string>
     <string name="lightning__no_funds__description">Voordat je geld van je spaargeld kunt overboeken, moet je bitcoin naar je Bitkit-wallet sturen.</string>
+    <string name="lightning__no_funds__fund_wallet">Wallet financieren</string>
     <string name="lightning__no_funds__title">Geen beschikbaar geld</string>
     <string name="lightning__node_id">LDK Node ID</string>
     <string name="lightning__node_info">Lightning Node</string>

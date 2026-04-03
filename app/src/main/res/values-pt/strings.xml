@@ -100,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Setup Manual</string>
     <string name="lightning__no_funds__title">Não há Fundos Disponíveis</string>
     <string name="lightning__no_funds__description">Antes de transferir fundos de seu saldo de poupança, receba bitcoin na sua carteira Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Financiar Carteira</string>
     <string name="lightning__transfer__nav_title">Transf. fundos</string>
     <string name="lightning__transfer__confirm">Por favor\n&lt;accent&gt;confirme&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">&lt;accent&gt;Taxa&lt;/accent&gt; personalizada</string>

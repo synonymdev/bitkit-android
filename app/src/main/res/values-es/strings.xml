@@ -173,6 +173,7 @@
     <string name="lightning__funding_advanced__nav_title">Saldo de gastos</string>
     <string name="lightning__no_funds__title">No hay fondos disponibles</string>
     <string name="lightning__no_funds__description">Antes de que pueda transferir fondos a su saldo de ahorros, tiene que enviar bitcoin a su monedero Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Financiar monedero</string>
     <string name="lightning__transfer__nav_title">Transferir fondos</string>
     <string name="lightning__transfer__confirm">Por favor,\n&lt;accent&gt;confirme&lt;/accent&gt;</string>
     <string name="lightning__transfer__swipe">Deslizar para transferir</string>

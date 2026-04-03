@@ -168,6 +168,7 @@
     <string name="lightning__next_outbound_htlc_limit">Límite del próximo HTLC saliente</string>
     <string name="lightning__next_outbound_htlc_min">Mínimo del próximo HTLC saliente</string>
     <string name="lightning__no_funds__description">Para transferir fondos a su saldo de ahorros, primero tiene que enviar bitcoin a su billetera Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Financiar billetera</string>
     <string name="lightning__no_funds__title">Sin fondos disponibles</string>
     <string name="lightning__node_id">ID del nodo LDK</string>
     <string name="lightning__node_info">Nodo Lightning</string>

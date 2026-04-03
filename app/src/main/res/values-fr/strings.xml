@@ -100,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Configuration manuelle</string>
     <string name="lightning__no_funds__title">Pas de fonds disponibles</string>
     <string name="lightning__no_funds__description">Avant de pouvoir transférer des fonds depuis votre solde d\'épargne, vous devez envoyer des bitcoins à votre portefeuille Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Approvisionner le portefeuille</string>
     <string name="lightning__transfer__nav_title">Transfert de fonds</string>
     <string name="lightning__transfer__confirm">Veuillez\n&lt;accent&gt;confirmer&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">&lt;accent&gt;Frais&lt;/accent&gt; sur mesure</string>

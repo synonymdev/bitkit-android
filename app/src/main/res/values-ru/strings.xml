@@ -180,6 +180,7 @@
     <string name="lightning__next_outbound_htlc_limit">Лимит след. исходящего HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Мин. след. исходящего HTLC</string>
     <string name="lightning__no_funds__description">Прежде чем вы сможете перевести средства со своего баланса сбережений, вам нужно отправить биткойны в ваш кошелёк Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Пополнить кошелёк</string>
     <string name="lightning__no_funds__title">Недостаточно Средств</string>
     <string name="lightning__node_id">ID Узла LDK</string>
     <string name="lightning__node_info">Lightning Узел</string>

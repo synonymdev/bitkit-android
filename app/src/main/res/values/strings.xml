@@ -178,6 +178,7 @@
     <string name="lightning__next_outbound_htlc_limit">Next Outbound HTLC Limit</string>
     <string name="lightning__next_outbound_htlc_min">Next Outbound HTLC Min</string>
     <string name="lightning__no_funds__description">Before you can transfer funds from your savings balance, you need to send bitcoin to your Bitkit wallet.</string>
+    <string name="lightning__no_funds__fund_wallet">Fund Wallet</string>
     <string name="lightning__no_funds__title">No Available Funds</string>
     <string name="lightning__node_id">LDK Node ID</string>
     <string name="lightning__node_info">Lightning Node</string>

@@ -168,6 +168,7 @@
     <string name="lightning__next_outbound_htlc_limit">Όριο επόμενου εξερχόμενου HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Ελάχιστο επόμενο εξερχόμενο HTLC</string>
     <string name="lightning__no_funds__description">Πριν μπορέσεις να μεταφέρεις κεφάλαια από το υπόλοιπο αποταμιεύσεων, πρέπει να στείλεις bitcoin στο πορτοφόλι Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Χρηματοδότηση πορτοφολιού</string>
     <string name="lightning__no_funds__title">Δεν υπάρχουν διαθέσιμα κεφάλαια</string>
     <string name="lightning__node_id">LDK Node ID</string>
     <string name="lightning__node_info">Κόμβος Lightning</string>
