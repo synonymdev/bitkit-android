@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -56,7 +57,6 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
-import to.bitkit.ext.truncate
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
@@ -582,8 +582,10 @@ private fun CopyAddressCard(
         Caption13Up(text = title, color = Colors.White64)
         Spacer(modifier = Modifier.height(16.dp))
         BodyS(
-            text = (body ?: address).truncate(32).uppercase(),
-            modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier
+            text = (body ?: address).uppercase(),
+            maxLines = 2,
+            overflow = TextOverflow.MiddleEllipsis,
+            modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier,
         )
         Spacer(modifier = Modifier.height(16.dp))
         Row(
