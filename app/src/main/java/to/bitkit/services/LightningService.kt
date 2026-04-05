@@ -590,15 +590,19 @@ class LightningService @Inject constructor(
     }
 
     suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
+        return receiveMsats(amountMsat = sat?.let { it * 1000u }, description = description, expirySecs = expirySecs)
+    }
+
+    suspend fun receiveMsats(amountMsat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val message = description
 
         return ServiceQueue.LDK.background {
-            val bolt11Invoice: Bolt11Invoice = if (sat != null) {
+            val bolt11Invoice: Bolt11Invoice = if (amountMsat != null) {
                 node.bolt11Payment()
                     .receive(
-                        amountMsat = sat * 1000u,
+                        amountMsat = amountMsat,
                         description = Bolt11InvoiceDescription.Direct(description = message),
                         expirySecs = expirySecs,
                     )
