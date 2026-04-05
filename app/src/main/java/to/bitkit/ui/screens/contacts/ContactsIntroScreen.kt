@@ -65,7 +65,7 @@ private fun Content(
             BodyM(text = stringResource(R.string.contacts__intro_description), color = Colors.White64)
             VerticalSpacer(32.dp)
             PrimaryButton(
-                text = stringResource(R.string.common__continue),
+                text = stringResource(R.string.contacts__intro_add_contact),
                 onClick = onContinue,
             )
             VerticalSpacer(16.dp)

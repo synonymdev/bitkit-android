@@ -104,6 +104,7 @@
                 <data android:scheme="lnurlw" />
                 <data android:scheme="lnurlc" />
                 <data android:scheme="lnurlp" />
+                <data android:scheme="pubkyauth" />
             </intent-filter>
 
             <!-- NFC -->

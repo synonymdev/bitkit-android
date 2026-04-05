@@ -124,7 +124,7 @@ fun DrawerMenu(
                 when {
                     !hasSeenContactsIntro -> rootNavController.navigateIfNotCurrent(Routes.ContactsIntro)
                     isProfileAuthenticated -> rootNavController.navigateIfNotCurrent(Routes.Contacts)
-                    hasSeenProfileIntro -> rootNavController.navigateIfNotCurrent(Routes.PubkyRingAuth)
+                    hasSeenProfileIntro -> rootNavController.navigateIfNotCurrent(Routes.PubkyChoice)
                     else -> rootNavController.navigateIfNotCurrent(Routes.ProfileIntro)
                 }
             },

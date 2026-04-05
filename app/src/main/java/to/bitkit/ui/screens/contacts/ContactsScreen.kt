@@ -16,6 +16,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,12 +26,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
+import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.GradientCircularProgressIndicator
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.Text13Up
@@ -46,6 +53,8 @@ fun ContactsScreen(
     onBackClick: () -> Unit,
     onClickMyProfile: () -> Unit,
     onClickContact: (String) -> Unit,
+    onAddContact: (String) -> Unit = {},
+    onScanQr: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -57,6 +66,8 @@ fun ContactsScreen(
         onClickMyProfile = onClickMyProfile,
         onClickContact = onClickContact,
         onSearchTextChange = { viewModel.onSearchTextChange(it) },
+        onAddContact = onAddContact,
+        onScanQr = onScanQr,
     )
 }
 
@@ -67,7 +78,11 @@ private fun Content(
     onClickMyProfile: () -> Unit,
     onClickContact: (String) -> Unit,
     onSearchTextChange: (String) -> Unit,
+    onAddContact: (String) -> Unit,
+    onScanQr: () -> Unit,
 ) {
+    var showAddContactSheet by remember { mutableStateOf(false) }
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.contacts__nav_title),
@@ -76,18 +91,29 @@ private fun Content(
         )
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            SearchInput(
-                value = uiState.searchText,
-                onValueChange = onSearchTextChange,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SearchInput(
+                    value = uiState.searchText,
+                    onValueChange = onSearchTextChange,
+                    modifier = Modifier.weight(1f),
+                )
+                HorizontalSpacer(8.dp)
+                ActionButton(
+                    onClick = { showAddContactSheet = true },
+                    iconRes = R.drawable.ic_plus,
+                )
+            }
             VerticalSpacer(8.dp)
         }
 
         when {
-            uiState.isLoading && uiState.groupedContacts.isEmpty() -> LoadingState()
+            uiState.isLoading && uiState.contacts.isEmpty() -> LoadingState()
             uiState.isEmpty && uiState.searchText.isBlank() -> EmptyState()
             else -> ContactsList(
-                groupedContacts = uiState.groupedContacts,
+                contacts = uiState.contacts,
                 myProfile = uiState.myProfile,
                 showMyProfile = uiState.searchText.isBlank(),
                 onClickMyProfile = onClickMyProfile,
@@ -95,11 +121,25 @@ private fun Content(
             )
         }
     }
+
+    if (showAddContactSheet) {
+        AddContactSheet(
+            onDismiss = { showAddContactSheet = false },
+            onSubmit = { publicKey ->
+                showAddContactSheet = false
+                onAddContact(publicKey)
+            },
+            onScanQr = {
+                showAddContactSheet = false
+                onScanQr()
+            },
+        )
+    }
 }
 
 @Composable
 private fun ContactsList(
-    groupedContacts: Map<Char, List<PubkyProfile>>,
+    contacts: ImmutableList<PubkyProfile>,
     myProfile: PubkyProfile?,
     showMyProfile: Boolean,
     onClickMyProfile: () -> Unit,
@@ -121,10 +161,10 @@ private fun ContactsList(
             }
         }
 
-        groupedContacts.forEach { (letter, contacts) ->
+        if (contacts.isNotEmpty()) {
             item {
                 Text13Up(
-                    text = letter.toString(),
+                    text = stringResource(R.string.contacts__contacts_header),
                     color = Colors.White64,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
                 )
@@ -158,13 +198,13 @@ private fun ContactRow(
         ContactAvatar(profile = profile)
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            BodySSB(
-                text = profile.name,
-                color = Colors.White,
-            )
             BodyS(
                 text = profile.truncatedPublicKey,
                 color = Colors.White64,
+            )
+            BodySSB(
+                text = profile.name,
+                color = Colors.White,
             )
         }
     }
@@ -216,22 +256,23 @@ private fun EmptyState() {
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
-    val contacts = listOf(
-        PubkyProfile("pk1", "Alex Stronghand", "", null, emptyList(), null),
-        PubkyProfile("pk2", "Anna Pleb", "", null, emptyList(), null),
-        PubkyProfile("pk3", "Areem Holden", "", null, emptyList(), null),
-        PubkyProfile("pk4", "Craig Wrong", "", null, emptyList(), null),
-    )
     AppThemeSurface {
         Content(
             uiState = ContactsUiState(
-                groupedContacts = contacts.groupBy { it.name.first() }.toSortedMap(),
-                myProfile = PubkyProfile("pk0", "Satoshi Nakamoto", "", null, emptyList(), null),
+                contacts = persistentListOf(
+                    PubkyProfile("pk1", "Alex Stronghand", "", null, emptyList(), status = null),
+                    PubkyProfile("pk2", "Anna Pleb", "", null, emptyList(), status = null),
+                    PubkyProfile("pk3", "Areem Holden", "", null, emptyList(), status = null),
+                    PubkyProfile("pk4", "Craig Wrong", "", null, emptyList(), status = null),
+                ),
+                myProfile = PubkyProfile("pk0", "Satoshi Nakamoto", "", null, emptyList(), status = null),
             ),
             onBackClick = {},
             onClickMyProfile = {},
             onClickContact = {},
             onSearchTextChange = {},
+            onAddContact = {},
+            onScanQr = {},
         )
     }
 }

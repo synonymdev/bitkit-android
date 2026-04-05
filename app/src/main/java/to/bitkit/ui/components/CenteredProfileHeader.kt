@@ -1,0 +1,89 @@
+package to.bitkit.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import to.bitkit.R
+import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+
+private const val TRUNCATED_PK_LENGTH = 11
+
+@Composable
+fun CenteredProfileHeader(
+    publicKey: String,
+    name: String,
+    bio: String,
+    imageUrl: String?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier,
+    ) {
+        Text13Up(
+            text = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
+            color = Colors.White64,
+            textAlign = TextAlign.Center,
+        )
+
+        VerticalSpacer(16.dp)
+
+        if (imageUrl != null) {
+            PubkyImage(uri = imageUrl, size = 100.dp)
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(Colors.Gray5),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_user_square),
+                    contentDescription = null,
+                    tint = Colors.White32,
+                    modifier = Modifier.size(50.dp),
+                )
+            }
+        }
+
+        VerticalSpacer(16.dp)
+
+        Display(text = name)
+
+        if (bio.isNotEmpty()) {
+            VerticalSpacer(8.dp)
+            BodyM(
+                text = bio,
+                color = Colors.White64,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun CenteredProfileHeaderPreview() {
+    AppThemeSurface {
+        CenteredProfileHeader(
+            publicKey = "pk8e3qm5f4kgczagxhertyuiop1gxag",
+            name = "Satoshi Nakamoto",
+            bio = "Building a peer-to-peer electronic cash system.",
+            imageUrl = null,
+        )
+    }
+}

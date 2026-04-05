@@ -1,8 +1,12 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,12 +48,9 @@ class ContactsViewModel @Inject constructor(
                     it.publicKey.contains(search, ignoreCase = true)
             }
         }
-        val grouped = filtered.groupBy {
-            val firstChar = it.name.firstOrNull()?.uppercaseChar()
-            if (firstChar?.isLetter() == true) firstChar else '#'
-        }.toSortedMap()
+        val sorted = filtered.sortedBy { it.name.lowercase() }.toImmutableList()
         ContactsUiState(
-            groupedContacts = grouped,
+            contacts = sorted,
             myProfile = myProfileValue,
             isLoading = isLoading,
             searchText = search,
@@ -65,11 +66,12 @@ class ContactsViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class ContactsUiState(
-    val groupedContacts: Map<Char, List<PubkyProfile>> = emptyMap(),
+    val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val myProfile: PubkyProfile? = null,
     val isLoading: Boolean = false,
     val searchText: String = "",
 ) {
-    val isEmpty: Boolean get() = groupedContacts.isEmpty() && !isLoading
+    val isEmpty: Boolean get() = contacts.isEmpty() && !isLoading
 }

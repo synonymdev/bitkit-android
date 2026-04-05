@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -102,6 +103,7 @@ class ProfileViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class ProfileUiState(
     val profile: PubkyProfile? = null,
     val publicKey: String? = null,

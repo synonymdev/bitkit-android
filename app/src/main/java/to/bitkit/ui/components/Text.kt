@@ -24,6 +24,7 @@ fun Display(
     fontWeight: FontWeight = FontWeight.Black,
     fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign? = null,
 ) {
     Text(
         text = text.uppercase(),
@@ -32,6 +33,7 @@ fun Display(
             fontSize = fontSize,
             color = color,
         ),
+        textAlign = textAlign,
         modifier = modifier,
     )
 }

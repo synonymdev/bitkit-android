@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.profile
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,30 +23,30 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
-class PubkyRingAuthViewModel @Inject constructor(
+class PubkyChoiceViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
     companion object {
-        private const val TAG = "PubkyRingAuthViewModel"
+        private const val TAG = "PubkyChoiceViewModel"
     }
 
-    private val _uiState = MutableStateFlow(PubkyRingAuthUiState())
+    private val _uiState = MutableStateFlow(PubkyChoiceUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _effects = MutableSharedFlow<PubkyRingAuthEffect>(extraBufferCapacity = 1)
+    private val _effects = MutableSharedFlow<PubkyChoiceEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
     private var approvalJob: Job? = null
 
     override fun onCleared() {
         super.onCleared()
-        if (_uiState.value.isWaitingForRing || _uiState.value.isAuthenticating) {
+        if (_uiState.value.isWaitingForRing) {
             pubkyRepo.cancelAuthenticationSync()
         }
     }
 
-    fun authenticate() {
+    fun startRingAuth() {
         viewModelScope.launch {
             if (_uiState.value.isWaitingForRing) {
                 approvalJob?.cancel()
@@ -54,12 +55,8 @@ class PubkyRingAuthViewModel @Inject constructor(
                 pubkyRepo.cancelAuthentication()
             }
 
-            _uiState.update { it.copy(isAuthenticating = true) }
-
             pubkyRepo.startAuthentication()
                 .onSuccess { authUrl ->
-                    _uiState.update { it.copy(isAuthenticating = false) }
-
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
@@ -72,12 +69,11 @@ class PubkyRingAuthViewModel @Inject constructor(
                     }
 
                     _uiState.update { it.copy(isWaitingForRing = true) }
-                    context.startActivity(intent)
+                    _effects.emit(PubkyChoiceEffect.OpenRingAuth(authUrl))
                     waitForApproval()
                 }
                 .onFailure {
-                    Logger.error("Authentication failed", it, context = TAG)
-                    _uiState.update { it.copy(isAuthenticating = false) }
+                    Logger.error("Starting Ring auth failed", it, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__auth_error_title),
@@ -93,8 +89,15 @@ class PubkyRingAuthViewModel @Inject constructor(
         approvalJob = viewModelScope.launch {
             pubkyRepo.completeAuthentication()
                 .onSuccess {
-                    _uiState.update { it.copy(isWaitingForRing = false) }
-                    _effects.emit(PubkyRingAuthEffect.Authenticated)
+                    _uiState.update { it.copy(isWaitingForRing = false, isLoadingAfterAuth = true) }
+                    pubkyRepo.prepareImport()
+                    _uiState.update { it.copy(isLoadingAfterAuth = false) }
+                    val hasContacts = pubkyRepo.pendingImportContacts.value.isNotEmpty()
+                    if (hasContacts) {
+                        _effects.emit(PubkyChoiceEffect.NavigateToContactImportOverview)
+                    } else {
+                        _effects.emit(PubkyChoiceEffect.NavigateToPayContacts)
+                    }
                 }
                 .onFailure {
                     Logger.error("Auth approval failed", it, context = TAG)
@@ -108,17 +111,30 @@ class PubkyRingAuthViewModel @Inject constructor(
         }
     }
 
+    fun cancelAuth() {
+        viewModelScope.launch {
+            approvalJob?.cancel()
+            approvalJob = null
+            pubkyRepo.cancelAuthentication()
+            _uiState.update { it.copy(isWaitingForRing = false, isLoadingAfterAuth = false) }
+        }
+    }
+
     fun dismissRingNotInstalledDialog() {
         _uiState.update { it.copy(showRingNotInstalledDialog = false) }
     }
 }
 
-data class PubkyRingAuthUiState(
-    val isAuthenticating: Boolean = false,
+@Immutable
+data class PubkyChoiceUiState(
     val isWaitingForRing: Boolean = false,
+    val isLoadingAfterAuth: Boolean = false,
     val showRingNotInstalledDialog: Boolean = false,
 )
 
-sealed interface PubkyRingAuthEffect {
-    data object Authenticated : PubkyRingAuthEffect
+sealed interface PubkyChoiceEffect {
+    data class OpenRingAuth(val authUrl: String) : PubkyChoiceEffect
+    data object NavigateToCreateProfile : PubkyChoiceEffect
+    data object NavigateToContactImportOverview : PubkyChoiceEffect
+    data object NavigateToPayContacts : PubkyChoiceEffect
 }

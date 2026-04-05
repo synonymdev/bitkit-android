@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,7 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,13 +23,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,13 +35,15 @@ import to.bitkit.models.PubkyProfileLink
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.GradientCircularProgressIndicator
-import to.bitkit.ui.components.Headline
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.LinkRow
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
@@ -59,6 +58,7 @@ import to.bitkit.ui.theme.Colors
 fun ProfileScreen(
     viewModel: ProfileViewModel,
     onBackClick: () -> Unit,
+    onEditProfile: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -74,6 +74,7 @@ fun ProfileScreen(
     Content(
         uiState = uiState,
         onBackClick = onBackClick,
+        onClickEdit = onEditProfile,
         onClickCopy = { viewModel.copyPublicKey() },
         onClickShare = { uiState.publicKey?.let { shareText(context, it) } },
         onClickSignOut = { viewModel.showSignOutConfirmation() },
@@ -87,6 +88,7 @@ fun ProfileScreen(
 private fun Content(
     uiState: ProfileUiState,
     onBackClick: () -> Unit,
+    onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
     onClickSignOut: () -> Unit,
@@ -108,6 +110,7 @@ private fun Content(
             currentProfile != null -> ProfileBody(
                 profile = currentProfile,
                 isSigningOut = uiState.isSigningOut,
+                onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickShare = onClickShare,
                 onClickSignOut = onClickSignOut,
@@ -131,11 +134,13 @@ private fun Content(
 private fun ProfileBody(
     profile: PubkyProfile,
     isSigningOut: Boolean,
+    onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
     onClickSignOut: () -> Unit,
 ) {
     Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
@@ -143,55 +148,12 @@ private fun ProfileBody(
     ) {
         VerticalSpacer(24.dp)
 
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Headline(text = AnnotatedString(profile.name))
-                VerticalSpacer(8.dp)
-                BodySSB(text = profile.truncatedPublicKey)
-            }
-
-            if (profile.imageUrl != null) {
-                PubkyImage(uri = profile.imageUrl, size = 64.dp)
-            } else {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(Colors.PubkyGreen)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_user_square),
-                        contentDescription = null,
-                        tint = Colors.White32,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-        }
-
-        VerticalSpacer(16.dp)
-
-        if (profile.bio.isNotEmpty()) {
-            BodyM(text = profile.bio, color = Colors.White64)
-            VerticalSpacer(8.dp)
-        }
-        HorizontalDivider()
-
-        VerticalSpacer(24.dp)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ActionButton(onClick = onClickCopy, iconRes = R.drawable.ic_copy)
-            ActionButton(onClick = onClickShare, iconRes = R.drawable.ic_share)
-            ActionButton(
-                onClick = onClickSignOut,
-                imageVector = Icons.AutoMirrored.Filled.Logout,
-                enabled = !isSigningOut,
-            )
-        }
+        CenteredProfileHeader(
+            publicKey = profile.publicKey,
+            name = profile.name,
+            bio = profile.bio,
+            imageUrl = profile.imageUrl,
+        )
 
         VerticalSpacer(24.dp)
 
@@ -217,16 +179,67 @@ private fun ProfileBody(
                 }
             }
         }
-        VerticalSpacer(12.dp)
-        BodyS(
-            text = stringResource(R.string.profile__qr_scan_label).replace("{name}", profile.name),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+
+        VerticalSpacer(24.dp)
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            ActionButton(onClick = onClickEdit, iconRes = R.drawable.ic_edit)
+            ActionButton(onClick = onClickCopy, iconRes = R.drawable.ic_copy)
+            ActionButton(onClick = onClickShare, iconRes = R.drawable.ic_share)
+        }
 
         VerticalSpacer(32.dp)
 
-        profile.links.forEach { LinkRow(label = it.label, value = it.url) }
+        if (profile.links.isNotEmpty()) {
+            profile.links.forEach { LinkRow(label = it.label, value = it.url) }
+        }
+
+        if (profile.tags.isNotEmpty()) {
+            VerticalSpacer(16.dp)
+            Text13Up(
+                text = stringResource(R.string.profile__edit_tags),
+                color = Colors.White64,
+                modifier = Modifier.fillMaxWidth()
+            )
+            VerticalSpacer(8.dp)
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                profile.tags.forEach { tag ->
+                    TagButton(text = tag, onClick = null)
+                }
+            }
+        }
+
+        VerticalSpacer(24.dp)
+        SignOutButton(isSigningOut = isSigningOut, onClick = onClickSignOut)
+        VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun SignOutButton(
+    isSigningOut: Boolean,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = rememberDebouncedClick(onClick = onClick),
+        enabled = !isSigningOut,
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Logout,
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(16.dp),
+        )
+        HorizontalSpacer(8.dp)
+        BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
     }
 }
 
@@ -277,10 +290,12 @@ private fun Preview() {
                     bio = "Building a peer-to-peer electronic cash system.",
                     imageUrl = null,
                     links = listOf(PubkyProfileLink("Website", "https://bitcoin.org")),
+                    tags = listOf("Founder", "Bitcoin"),
                     status = null,
                 ),
             ),
             onBackClick = {},
+            onClickEdit = {},
             onClickCopy = {},
             onClickShare = {},
             onClickSignOut = {},

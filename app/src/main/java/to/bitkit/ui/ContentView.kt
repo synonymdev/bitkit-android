@@ -59,16 +59,30 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
+import to.bitkit.ui.screens.contacts.AddContactScreen
+import to.bitkit.ui.screens.contacts.AddContactViewModel
 import to.bitkit.ui.screens.contacts.ContactDetailScreen
 import to.bitkit.ui.screens.contacts.ContactDetailViewModel
+import to.bitkit.ui.screens.contacts.ContactImportOverviewScreen
+import to.bitkit.ui.screens.contacts.ContactImportOverviewViewModel
+import to.bitkit.ui.screens.contacts.ContactImportSelectScreen
+import to.bitkit.ui.screens.contacts.ContactImportSelectViewModel
 import to.bitkit.ui.screens.contacts.ContactsIntroScreen
 import to.bitkit.ui.screens.contacts.ContactsScreen
 import to.bitkit.ui.screens.contacts.ContactsViewModel
+import to.bitkit.ui.screens.contacts.EditContactScreen
+import to.bitkit.ui.screens.contacts.EditContactViewModel
+import to.bitkit.ui.screens.profile.CreateProfileScreen
+import to.bitkit.ui.screens.profile.CreateProfileViewModel
+import to.bitkit.ui.screens.profile.EditProfileScreen
+import to.bitkit.ui.screens.profile.EditProfileViewModel
+import to.bitkit.ui.screens.profile.PayContactsScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.profile.ProfileScreen
 import to.bitkit.ui.screens.profile.ProfileViewModel
-import to.bitkit.ui.screens.profile.PubkyRingAuthScreen
-import to.bitkit.ui.screens.profile.PubkyRingAuthViewModel
+import to.bitkit.ui.screens.profile.PubkyAuthApprovalSheet
+import to.bitkit.ui.screens.profile.PubkyChoiceScreen
+import to.bitkit.ui.screens.profile.PubkyChoiceViewModel
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
 import to.bitkit.ui.screens.settings.DevSettingsScreen
@@ -413,6 +427,11 @@ fun ContentView(
 
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         Sheet.QrScanner -> QrScanningSheet(appViewModel)
+                        is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(
+                            authUrl = sheet.authUrl,
+                            viewModel = hiltViewModel(),
+                            onDismiss = { appViewModel.hideSheet() },
+                        )
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
                                 TimedSheetType.APP_UPDATE -> {
@@ -533,7 +552,7 @@ private fun RootNavHost(
             navController = navController,
         )
         settings(navController, settingsViewModel)
-        contacts(navController, settingsViewModel)
+        contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
         generalSettingsSubScreens(navController)
@@ -901,9 +920,11 @@ private fun NavGraphBuilder.settings(
     }
 }
 
+@Suppress("LongMethod")
 private fun NavGraphBuilder.contacts(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
+    appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Contacts> {
         val viewModel: ContactsViewModel = hiltViewModel()
@@ -912,6 +933,12 @@ private fun NavGraphBuilder.contacts(
             onBackClick = { navController.popBackStack() },
             onClickMyProfile = { navController.navigateTo(Routes.Profile) },
             onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
+            onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
+            onScanQr = {
+                appViewModel.showScannerSheet { scannedData ->
+                    navController.navigateTo(Routes.AddContact(scannedData))
+                }
+            },
         )
     }
     composableWithDefaultTransitions<Routes.ContactsIntro> {
@@ -922,7 +949,7 @@ private fun NavGraphBuilder.contacts(
                 settingsViewModel.setHasSeenContactsIntro(true)
                 val destination = when {
                     isAuthenticated -> Routes.Contacts
-                    hasSeenProfileIntro -> Routes.PubkyRingAuth
+                    hasSeenProfileIntro -> Routes.PubkyChoice
                     else -> Routes.ProfileIntro
                 }
                 navController.navigateTo(destination) { popUpTo(Routes.Home) }
@@ -935,10 +962,51 @@ private fun NavGraphBuilder.contacts(
         ContactDetailScreen(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
+            onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.AddContact> {
+        val viewModel: AddContactViewModel = hiltViewModel()
+        AddContactScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onContactSaved = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.EditContact> {
+        val viewModel: EditContactViewModel = hiltViewModel()
+        EditContactScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onContactDeleted = {
+                navController.navigateTo(Routes.Contacts) { popUpTo(Routes.Home) }
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactImportOverview> {
+        val viewModel: ContactImportOverviewViewModel = hiltViewModel()
+        ContactImportOverviewScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onNavigateToSelect = { navController.navigateTo(Routes.ContactImportSelect) },
+            onImportComplete = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactImportSelect> {
+        val viewModel: ContactImportSelectViewModel = hiltViewModel()
+        ContactImportSelectScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onImportComplete = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
         )
     }
 }
 
+@Suppress("LongMethod")
 private fun NavGraphBuilder.profile(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
@@ -948,25 +1016,58 @@ private fun NavGraphBuilder.profile(
         ProfileScreen(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
+            onEditProfile = { navController.navigateTo(Routes.EditProfile) },
         )
     }
     composableWithDefaultTransitions<Routes.ProfileIntro> {
         ProfileIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenProfileIntro(true)
-                navController.navigateTo(Routes.PubkyRingAuth)
+                navController.navigateTo(Routes.PubkyChoice)
             },
             onBackClick = { navController.popBackStack() },
         )
     }
-    composableWithDefaultTransitions<Routes.PubkyRingAuth> {
-        val viewModel: PubkyRingAuthViewModel = hiltViewModel()
-        PubkyRingAuthScreen(
+    composableWithDefaultTransitions<Routes.PubkyChoice> {
+        val viewModel: PubkyChoiceViewModel = hiltViewModel()
+        PubkyChoiceScreen(
+            viewModel = viewModel,
+            onNavigateToCreateProfile = { navController.navigateTo(Routes.CreateProfile) },
+            onNavigateToContactImportOverview = {
+                navController.navigateTo(Routes.ContactImportOverview) { popUpTo(Routes.Home) }
+            },
+            onNavigateToPayContacts = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.CreateProfile> {
+        val viewModel: CreateProfileViewModel = hiltViewModel()
+        CreateProfileScreen(
+            viewModel = viewModel,
+            onNavigateToPayContacts = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.EditProfile> {
+        val viewModel: EditProfileViewModel = hiltViewModel()
+        EditProfileScreen(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
-            onAuthenticated = {
+            onProfileDeleted = {
+                navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.PayContacts> {
+        PayContactsScreen(
+            onContinue = {
                 navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
             },
+            onBackClick = { navController.popBackStack() },
         )
     }
 }
@@ -1507,7 +1608,7 @@ fun NavController.navigateToProfile(
     hasSeenIntro: Boolean,
 ) = when {
     isAuthenticated -> navigateTo(Routes.Profile)
-    hasSeenIntro -> navigateTo(Routes.PubkyRingAuth)
+    hasSeenIntro -> navigateTo(Routes.PubkyChoice)
     else -> navigateTo(Routes.ProfileIntro)
 }
 
@@ -1795,7 +1896,28 @@ sealed interface Routes {
     data object ProfileIntro : Routes
 
     @Serializable
-    data object PubkyRingAuth : Routes
+    data object PubkyChoice : Routes
+
+    @Serializable
+    data object CreateProfile : Routes
+
+    @Serializable
+    data object EditProfile : Routes
+
+    @Serializable
+    data object PayContacts : Routes
+
+    @Serializable
+    data class AddContact(val publicKey: String) : Routes
+
+    @Serializable
+    data class EditContact(val publicKey: String) : Routes
+
+    @Serializable
+    data object ContactImportOverview : Routes
+
+    @Serializable
+    data object ContactImportSelect : Routes
 
     @Serializable
     data object ShopIntro : Routes

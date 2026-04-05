@@ -154,15 +154,32 @@ internal object Env {
     const val BITREFILL_APP = "Bitkit"
     const val BITREFILL_REF = "AL6dyZYt"
 
+    private val pubkyDomain: String
+        get() = when (network) {
+            Network.BITCOIN -> "bitkit.to"
+            else -> "staging.bitkit.to"
+        }
+
     val pubkyCapabilities: String
         get() {
             val prefix = when (network) {
                 Network.BITCOIN -> ""
                 else -> "staging."
             }
-            return "/pub/${prefix}paykit.app/v0/:rw," +
-                "/pub/${prefix}pubky.app/profile.json:rw,/pub/${prefix}pubky.app/follows/:rw"
+            return "/pub/$pubkyDomain/:rw,/pub/${prefix}pubky.app/:r,/pub/${prefix}paykit/v0/:rw"
         }
+
+    // Switch to production for mainnet once available
+    const val homegateUrl = "https://homegate.staging.pubky.app"
+
+    val profilePath: String
+        get() = "/pub/$pubkyDomain/profile.json"
+
+    val contactsBasePath: String
+        get() = "/pub/$pubkyDomain/contacts/"
+
+    val blobsBasePath: String
+        get() = "/pub/$pubkyDomain/blobs/"
 
     val rnBackupServerHost: String
         get() = when (network) {

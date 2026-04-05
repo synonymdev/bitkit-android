@@ -172,7 +172,7 @@ class AppViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val coreService: CoreService,
-    @Suppress("UnusedPrivateProperty") private val pubkyRepo: PubkyRepo,
+    private val pubkyRepo: PubkyRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
@@ -294,7 +294,8 @@ class AppViewModel @Inject constructor(
                     val isHighPrioritySheetShowing = currentSheet is Sheet.Gift ||
                         currentSheet is Sheet.Send ||
                         currentSheet is Sheet.LnurlAuth ||
-                        currentSheet is Sheet.Pin
+                        currentSheet is Sheet.Pin ||
+                        currentSheet is Sheet.PubkyAuth
                     if (!isHighPrioritySheetShowing) {
                         showSheet(Sheet.TimedSheet(sheetType))
                     }
@@ -303,6 +304,17 @@ class AppViewModel @Inject constructor(
                     _currentSheet.update { current ->
                         if (current is Sheet.TimedSheet) null else current
                     }
+                }
+            }
+        }
+        viewModelScope.launch {
+            pubkyRepo.sessionRestorationFailed.collect { failed ->
+                if (failed) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__session_expired),
+                    )
+                    pubkyRepo.clearSessionRestorationFailed()
                 }
             }
         }
@@ -1278,6 +1290,11 @@ class AppViewModel @Inject constructor(
                 description = context.getString(R.string.other__scan__error__generic),
                 testTag = "DuplicatedBip21Toast",
             )
+            return@withContext
+        }
+
+        if (input.startsWith("$PUBKYAUTH_SCHEME://")) {
+            handlePubkyAuth(input)
             return@withContext
         }
 
@@ -2451,9 +2468,25 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
+        if (uri.scheme == PUBKYAUTH_SCHEME) {
+            handlePubkyAuth(uri.toString())
+            return@launch
+        }
+
         if (!walletRepo.walletExists()) return@launch
 
         launchScan(source = ScanSource.DEEPLINK, data = uri.toString(), startDelay = SCREEN_TRANSITION_DELAY)
+    }
+
+    private suspend fun handlePubkyAuth(authUrl: String) {
+        if (!pubkyRepo.hasSecretKey()) {
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.profile__auth_approval_ring_only),
+            )
+            return
+        }
+        showSheet(Sheet.PubkyAuth(authUrl))
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
@@ -2515,6 +2548,7 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
+        private const val PUBKYAUTH_SCHEME = "pubkyauth"
     }
 }
 

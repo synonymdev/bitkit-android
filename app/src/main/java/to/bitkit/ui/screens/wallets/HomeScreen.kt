@@ -114,7 +114,6 @@ import to.bitkit.ui.components.TAB_BAR_HEIGHT
 import to.bitkit.ui.components.TAB_BAR_PADDING_BOTTOM
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer

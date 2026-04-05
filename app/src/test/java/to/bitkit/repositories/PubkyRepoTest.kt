@@ -18,6 +18,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.env.Env
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -48,6 +49,7 @@ class PubkyRepoTest : BaseUnitTest() {
         keychain = keychain,
         imageLoader = imageLoader,
         pubkyStore = pubkyStore,
+        httpClient = mock(),
     )
 
     @Test
@@ -255,19 +257,24 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `loadContacts should populate contacts on success`() = test {
         authenticateForTesting()
-        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
-        val contactKey = "pubky://contact1"
-        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(contactKey))
+        val contactKey = "pubkycontact1"
+        val contactPath = "${Env.contactsBasePath}$contactKey"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        whenever(pubkyService.sessionList("test_secret", Env.contactsBasePath))
+            .thenReturn(listOf(contactPath))
 
-        val contactProfile = mock<CorePubkyProfile>()
-        whenever(contactProfile.name).thenReturn("Alice")
-        whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
+        val json = """{"name":"Alice","bio":"Hello"}"""
+        val pk = checkNotNull(sut.publicKey.value)
+        val strippedPk = pk.removePrefix("pubky")
+        whenever(pubkyService.fetchFileString("pubky://$strippedPk${Env.contactsBasePath}$contactKey"))
+            .thenReturn(json)
 
         sut.loadContacts()
 
         val contacts = sut.contacts.value
         assertEquals(1, contacts.size)
         assertEquals("Alice", contacts.first().name)
+        assertEquals(contactKey, contacts.first().publicKey)
         assertFalse(sut.isLoadingContacts.value)
     }
 
@@ -275,16 +282,22 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `loadContacts should return early when no public key`() = test {
         sut.loadContacts()
 
-        verify(pubkyService, never()).getContacts(any())
+        verify(pubkyService, never()).sessionList(any(), any())
     }
 
     @Test
     fun `loadContacts should use placeholder when profile fetch fails`() = test {
         authenticateForTesting()
-        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
-        val contactKey = "pubky://contact2"
-        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(contactKey))
-        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Network error"))
+        val contactKey = "pubkycontact2"
+        val contactPath = "${Env.contactsBasePath}$contactKey"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        whenever(pubkyService.sessionList("test_secret", Env.contactsBasePath))
+            .thenReturn(listOf(contactPath))
+
+        val pk = checkNotNull(sut.publicKey.value)
+        val strippedPk = pk.removePrefix("pubky")
+        whenever(pubkyService.fetchFileString("pubky://$strippedPk${Env.contactsBasePath}$contactKey"))
+            .thenThrow(RuntimeException("Network error"))
 
         sut.loadContacts()
 
@@ -321,13 +334,17 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut should clear contacts`() = test {
         authenticateForTesting()
-        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
-        val contactKey = "pubky://contact4"
-        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(contactKey))
+        val contactKey = "pubkycontact4"
+        val contactPath = "${Env.contactsBasePath}$contactKey"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        whenever(pubkyService.sessionList("test_secret", Env.contactsBasePath))
+            .thenReturn(listOf(contactPath))
 
-        val contactProfile = mock<CorePubkyProfile>()
-        whenever(contactProfile.name).thenReturn("Charlie")
-        whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
+        val pk = checkNotNull(sut.publicKey.value)
+        val strippedPk = pk.removePrefix("pubky")
+        val json = """{"name":"Charlie","bio":""}"""
+        whenever(pubkyService.fetchFileString("pubky://$strippedPk${Env.contactsBasePath}$contactKey"))
+            .thenReturn(json)
 
         sut.loadContacts()
         assertEquals(1, sut.contacts.value.size)
@@ -338,21 +355,25 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loadContacts should prefix keys missing pubky prefix`() = test {
+    fun `loadContacts should extract contact key from path`() = test {
         authenticateForTesting()
-        val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
-        val bareKey = "abc123"
-        val prefixedKey = "pubky://abc123"
-        whenever(pubkyService.getContacts(pk)).thenReturn(listOf(bareKey))
+        val contactKey = "pubkyabc123"
+        val contactPath = "${Env.contactsBasePath}$contactKey"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        whenever(pubkyService.sessionList("test_secret", Env.contactsBasePath))
+            .thenReturn(listOf(contactPath))
 
-        val contactProfile = mock<CorePubkyProfile>()
-        whenever(contactProfile.name).thenReturn("Prefixed")
-        whenever(pubkyService.getProfile(prefixedKey)).thenReturn(contactProfile)
+        val pk = checkNotNull(sut.publicKey.value)
+        val strippedPk = pk.removePrefix("pubky")
+        val expectedUri = "pubky://$strippedPk${Env.contactsBasePath}$contactKey"
+        val json = """{"name":"Extracted","bio":""}"""
+        whenever(pubkyService.fetchFileString(expectedUri)).thenReturn(json)
 
         sut.loadContacts()
 
-        verify(pubkyService).getProfile(prefixedKey)
-        assertEquals("Prefixed", sut.contacts.value.first().name)
+        verify(pubkyService).fetchFileString(expectedUri)
+        assertEquals("Extracted", sut.contacts.value.first().name)
+        assertEquals(contactKey, sut.contacts.value.first().publicKey)
     }
 
     private suspend fun authenticateForTesting() {
@@ -364,7 +385,8 @@ class PubkyRepoTest : BaseUnitTest() {
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("Test")
         whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
-        whenever(pubkyService.getContacts(testPk)).thenReturn(emptyList())
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
 
         sut.completeAuthentication()
     }
