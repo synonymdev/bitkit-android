@@ -47,6 +47,7 @@ import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.MSat
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
@@ -374,7 +375,7 @@ private fun ChannelItem(
         LightningChannel(
             capacity = channelUi.details.channelValueSats.toLong(),
             localBalance = channelUi.details.amountOnClose.toLong(),
-            remoteBalance = (channelUi.details.inboundCapacityMsat / 1000u).toLong(),
+            remoteBalance = MSat(channelUi.details.inboundCapacityMsat).floor().toLong(),
             status = status,
         )
         VerticalSpacer(16.dp)
