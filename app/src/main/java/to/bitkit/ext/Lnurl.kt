@@ -3,10 +3,12 @@ package to.bitkit.ext
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import to.bitkit.models.MSat
+import to.bitkit.models.msatCeilOf
+import to.bitkit.models.msatFloorOf
 
 fun LnurlPayData.commentAllowed(): Boolean = commentAllowed?.let { it > 0u } == true
-fun LnurlPayData.maxSendableSat(): ULong = MSat(maxSendable).floor()
-fun LnurlPayData.minSendableSat(): ULong = MSat(minSendable).ceil()
+fun LnurlPayData.maxSendableSat(): ULong = msatFloorOf(maxSendable)
+fun LnurlPayData.minSendableSat(): ULong = msatCeilOf(minSendable)
 
 /**
  * True when the LNURL-pay endpoint specifies a single exact amount.
@@ -30,8 +32,8 @@ fun LnurlPayData.isFixedAmount(): Boolean =
 fun LnurlPayData.callbackAmountMsats(userSats: ULong? = null): ULong =
     if (isFixedAmount()) minSendable else (userSats ?: minSendableSat()) * MSat.PER_SAT
 
-fun LnurlWithdrawData.minWithdrawableSat(): ULong = MSat(minWithdrawable ?: 0u).ceil()
-fun LnurlWithdrawData.maxWithdrawableSat(): ULong = MSat(maxWithdrawable).floor()
+fun LnurlWithdrawData.minWithdrawableSat(): ULong = msatCeilOf(minWithdrawable ?: 0u)
+fun LnurlWithdrawData.maxWithdrawableSat(): ULong = msatFloorOf(maxWithdrawable)
 
 /**
  * True when the LNURL-withdraw endpoint specifies a single exact amount,

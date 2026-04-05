@@ -49,7 +49,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
-import to.bitkit.models.MSat
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.toAddressType
 import to.bitkit.utils.AppError
@@ -695,7 +695,7 @@ class LightningService @Inject constructor(
             return@background runCatching {
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val feesMsat = node.bolt11Payment().estimateRoutingFees(invoice)
-                val feeSat = MSat(feesMsat).floor()
+                val feeSat = msatFloorOf(feesMsat)
                 Result.success(feeSat)
             }.getOrElse {
                 Result.failure(if (it is NodeException) LdkError(it) else it)
@@ -711,7 +711,7 @@ class LightningService @Inject constructor(
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val amountMsat = amountSats * 1000u
                 val feesMsat = node.bolt11Payment().estimateRoutingFeesUsingAmount(invoice, amountMsat)
-                val feeSat = MSat(feesMsat).floor()
+                val feeSat = msatFloorOf(feesMsat)
                 Result.success(feeSat)
             }.getOrElse {
                 Result.failure(if (it is NodeException) LdkError(it) else it)
@@ -729,7 +729,7 @@ class LightningService @Inject constructor(
 
         val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
         Logger.debug(
-            "sendProbes: invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { MSat(it).floor() }} sats)",
+            "sendProbes: invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { msatFloorOf(it) }} sats)",
             context = TAG
         )
 
@@ -752,8 +752,8 @@ class LightningService @Inject constructor(
 
         val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
         Logger.debug(
-            "sendProbesUsingAmount: customAmountMsat=$amountMsat (${MSat(amountMsat).floor()} sats), " +
-                "invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { MSat(it).floor() }} sats)",
+            "sendProbesUsingAmount: customAmountMsat=$amountMsat (${msatFloorOf(amountMsat)} sats), " +
+                "invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { msatFloorOf(it) }} sats)",
             context = TAG
         )
 

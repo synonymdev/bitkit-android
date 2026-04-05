@@ -50,7 +50,7 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatToString
 import to.bitkit.ext.uri
-import to.bitkit.models.MSat
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodePeer
 import to.bitkit.models.alias
@@ -337,8 +337,8 @@ private fun ChannelsSection(
                 }
                 LightningChannel(
                     capacity = (channel.channelValueSats).toLong(),
-                    localBalance = MSat(channel.outboundCapacityMsat).floor().toLong(),
-                    remoteBalance = MSat(channel.inboundCapacityMsat).floor().toLong(),
+                    localBalance = msatFloorOf(channel.outboundCapacityMsat).toLong(),
+                    remoteBalance = msatFloorOf(channel.inboundCapacityMsat).toLong(),
                     status = if (channel.isChannelReady) ChannelStatusUi.OPEN else ChannelStatusUi.PENDING,
                 )
                 VerticalSpacer(8.dp)
@@ -357,25 +357,25 @@ private fun ChannelsSection(
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_capacity),
-                    value = "₿ ${MSat(channel.inboundCapacityMsat).floor().formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.inboundCapacityMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_htlc_max),
                     value = "₿ ${
-                        (channel.inboundHtlcMaximumMsat?.let { MSat(it).floor() } ?: 0u).formatToModernDisplay()
+                        (channel.inboundHtlcMaximumMsat?.let { msatFloorOf(it) } ?: 0u).formatToModernDisplay()
                     }",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_htlc_min),
-                    value = "₿ ${MSat(channel.inboundHtlcMinimumMsat).floor().formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.inboundHtlcMinimumMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__next_outbound_htlc_limit),
-                    value = "₿ ${MSat(channel.nextOutboundHtlcLimitMsat).floor().formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.nextOutboundHtlcLimitMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__next_outbound_htlc_min),
-                    value = "₿ ${MSat(channel.nextOutboundHtlcMinimumMsat).floor().formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.nextOutboundHtlcMinimumMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.common__confirmations),

@@ -72,7 +72,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
-import to.bitkit.models.MSat
+import to.bitkit.models.msatFloorOf
 import to.bitkit.ext.channelId
 import to.bitkit.ext.create
 import to.bitkit.ext.latestSpendingTxid
@@ -502,7 +502,7 @@ class ActivityService(
                 value = payment.amountSats ?: 0u,
                 invoice = kind.bolt11 ?: "Loading...",
                 timestamp = payment.latestUpdateTimestamp,
-                fee = MSat(payment.feePaidMsat ?: 0u).floor(),
+                fee = msatFloorOf(payment.feePaidMsat ?: 0u),
                 message = kind.description.orEmpty(),
                 preimage = kind.preimage,
                 seenAt = null,
@@ -611,7 +611,7 @@ class ActivityService(
             ldkValue
         }
 
-        val ldkFeeSats = MSat(ldkFeeMsat).floor()
+        val ldkFeeSats = msatFloorOf(ldkFeeMsat)
         val updatedFee = if (existingActivity.v1.fee == 0uL && ldkFeeSats > 0uL) ldkFeeSats else existingActivity.v1.fee
 
         val updatedOnChain = existingActivity.v1.copy(
@@ -650,7 +650,7 @@ class ActivityService(
             txType = payment.direction.toPaymentType(),
             txId = kind.txid,
             value = payment.amountSats ?: 0u,
-            fee = MSat(payment.feePaidMsat ?: 0u).floor(),
+            fee = msatFloorOf(payment.feePaidMsat ?: 0u),
             address = resolvedAddress ?: "Loading...",
             timestamp = activityTimestamp,
             confirmed = confirmationData.isConfirmed,

@@ -32,7 +32,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
-import to.bitkit.models.MSat
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
@@ -566,7 +566,7 @@ class WalletRepo @Inject constructor(
             val channels = lightningRepo.lightningState.value.channels
             if (channels.filterOpen().isEmpty()) return@runCatching false
 
-            val inboundBalanceSats = channels.sumOf { MSat(it.inboundCapacityMsat).floor() }
+            val inboundBalanceSats = channels.sumOf { msatFloorOf(it.inboundCapacityMsat) }
 
             return@runCatching (_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats
         }.onFailure {

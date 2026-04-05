@@ -91,7 +91,7 @@ import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.FeeRate
-import to.bitkit.models.MSat
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -1895,7 +1895,7 @@ class AppViewModel @Inject constructor(
                 )
             } else {
                 val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
-                    MSat(lnurl.data.minWithdrawable ?: 0u).floor()
+                    msatFloorOf(lnurl.data.minWithdrawable ?: 0u)
                 )
                 _sendUiState.update { it.copy(amount = withdrawAmountSats) }
                 lightningRepo.createInvoice(
