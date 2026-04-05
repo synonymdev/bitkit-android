@@ -19,8 +19,8 @@ value class MSat(val value: ULong) {
     fun floor(): ULong = value / PER_SAT
 }
 
-/** Syntactic sugar for [MSat.ceil]. */
+/** Round [msat] up to the nearest whole sat. Use for payment/display amounts. */
 fun msatCeilOf(msat: ULong): ULong = MSat(msat).ceil()
 
-/** Syntactic sugar for [MSat.floor]. */
+/** Truncate sub-sat remainder from [msat]. Use for fees and upper bounds. */
 fun msatFloorOf(msat: ULong): ULong = MSat(msat).floor()
