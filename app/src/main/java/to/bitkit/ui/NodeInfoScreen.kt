@@ -361,7 +361,9 @@ private fun ChannelsSection(
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_htlc_max),
-                    value = "₿ ${(channel.inboundHtlcMaximumMsat?.let { MSat(it).floor() } ?: 0u).formatToModernDisplay()}",
+                    value = "₿ ${
+                        (channel.inboundHtlcMaximumMsat?.let { MSat(it).floor() } ?: 0u).formatToModernDisplay()
+                    }",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_htlc_min),

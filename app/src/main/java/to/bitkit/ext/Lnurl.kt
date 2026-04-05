@@ -28,7 +28,7 @@ fun LnurlPayData.isFixedAmount(): Boolean =
  * For variable-amount requests the user-selected sat amount is converted to msats.
  */
 fun LnurlPayData.callbackAmountMsats(userSats: ULong? = null): ULong =
-    if (isFixedAmount()) minSendable else (userSats ?: minSendableSat()) * 1000u
+    if (isFixedAmount()) minSendable else (userSats ?: minSendableSat()) * MSat.PER_SAT
 
 fun LnurlWithdrawData.minWithdrawableSat(): ULong = MSat(minWithdrawable ?: 0u).ceil()
 fun LnurlWithdrawData.maxWithdrawableSat(): ULong = MSat(maxWithdrawable).floor()
