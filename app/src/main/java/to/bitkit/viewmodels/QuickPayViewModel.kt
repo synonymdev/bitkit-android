@@ -39,22 +39,25 @@ class QuickPayViewModel @Inject constructor(
 
     fun pay(data: QuickPayData) {
         viewModelScope.launch {
-            val (bolt11, amount) = when (data) {
+            val (bolt11, amount, displaySats) = when (data) {
                 is QuickPayData.Bolt11 -> {
                     Logger.info("QuickPay: processing bolt11 invoice")
-                    data.bolt11 to data.sats
+                    Triple(data.bolt11, null, data.sats)
                 }
 
                 is QuickPayData.LnurlPay -> {
                     Logger.info("QuickPay: fetching LNURL Pay invoice from callback")
-                    val invoice = lightningRepo.fetchLnurlInvoice(callbackUrl = data.callback, amountSats = data.sats)
+                    val invoice = lightningRepo.fetchLnurlInvoice(
+                        callbackUrl = data.callback,
+                        amountMsats = data.amountMsats,
+                    )
                         .getOrElse { error ->
                             _uiState.update {
                                 it.copy(result = QuickPayResult.Error(error.message.orEmpty()))
                             }
                             return@launch
                         }
-                    invoice.bolt11 to data.sats
+                    Triple(invoice.bolt11, null, data.sats)
                 }
             }
 
@@ -65,7 +68,7 @@ class QuickPayViewModel @Inject constructor(
                         it.copy(
                             result = QuickPayResult.Success(
                                 paymentHash = paymentHash,
-                                amountWithFee = amount.toLong() // TODO GET FEE WHEN AVAILABLE
+                                amountWithFee = displaySats.toLong() // TODO GET FEE WHEN AVAILABLE
                             )
                         )
                     }
@@ -77,7 +80,7 @@ class QuickPayViewModel @Inject constructor(
                             it.copy(
                                 result = QuickPayResult.Pending(
                                     paymentHash = error.paymentHash,
-                                    amount = amount.toLong(),
+                                    amount = displaySats.toLong(),
                                 )
                             )
                         }
