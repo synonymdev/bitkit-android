@@ -897,20 +897,29 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
+    suspend fun createInvoiceMsats(
+        amountMsats: ULong,
+        description: String,
+        expirySeconds: UInt = 86_400u,
+    ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
+        updateGeoBlockState()
+        runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
+    }
+
     @Suppress("ForbiddenComment")
     suspend fun fetchLnurlInvoice(
         callbackUrl: String,
-        amountSats: ULong,
+        amountMsats: ULong,
         comment: String? = null,
     ): Result<LightningInvoice> {
         return runCatching {
             // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
-            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).getOrThrow().pr
+            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountMsats, comment).getOrThrow().pr
             val decoded = (coreService.decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
             Logger.error(
-                "fetchLnurlInvoice error, url: $callbackUrl, amount: $amountSats, comment: $comment",
+                "Failed to fetch LNURL invoice, url: '$callbackUrl', amountMsats: '$amountMsats', comment: '$comment'",
                 it,
                 context = TAG,
             )
