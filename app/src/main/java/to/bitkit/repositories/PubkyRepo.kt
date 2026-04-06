@@ -243,7 +243,10 @@ class PubkyRepo @Inject constructor(
                     }
                 }
             }.onSuccess { loadedProfile ->
-                if (_publicKey.value == null) return@onSuccess
+                if (_publicKey.value != pk) {
+                    Logger.debug("Skipped stale profile load for '$pk'", context = TAG)
+                    return@onSuccess
+                }
                 _profile.update { loadedProfile }
                 cacheMetadata(loadedProfile)
             }.onFailure {
@@ -460,7 +463,10 @@ class PubkyRepo @Inject constructor(
                     }
                 }
             }.onSuccess { loadedContacts ->
-                if (_publicKey.value == null) return@onSuccess
+                if (_publicKey.value != pk) {
+                    Logger.debug("Skipped stale contacts load for '$pk'", context = TAG)
+                    return@onSuccess
+                }
                 _contacts.update { loadedContacts }
             }.onFailure {
                 Logger.error("Failed to load contacts", it, context = TAG)
@@ -487,14 +493,15 @@ class PubkyRepo @Inject constructor(
                 "No session available"
             }
             val prefixedKey = publicKey.ensurePubkyPrefix()
-            val profile = existingProfile ?: run {
+            val profile = existingProfile?.copy(publicKey = prefixedKey) ?: run {
                 val ffiProfile = pubkyService.getProfile(prefixedKey)
                 PubkyProfile.fromFfi(prefixedKey, ffiProfile)
             }
             val data = profile.toProfileData().encode()
             pubkyService.sessionPut(session, "${Env.contactsBasePath}$prefixedKey", data)
             _contacts.update { current ->
-                (current + profile).sortedBy { it.name.lowercase() }
+                (current.filter { it.publicKey != prefixedKey } + profile)
+                    .sortedBy { it.name.lowercase() }
             }
             Logger.info("Added contact '$prefixedKey'", context = TAG)
         }

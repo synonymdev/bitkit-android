@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.profile
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -83,7 +84,8 @@ class PubkyChoiceViewModel @Inject constructor(
         }
     }
 
-    private fun waitForApproval() {
+    @VisibleForTesting
+    internal fun waitForApproval() {
         if (approvalJob?.isActive == true) return
 
         approvalJob = viewModelScope.launch {
@@ -91,13 +93,24 @@ class PubkyChoiceViewModel @Inject constructor(
                 .onSuccess {
                     _uiState.update { it.copy(isWaitingForRing = false, isLoadingAfterAuth = true) }
                     pubkyRepo.prepareImport()
-                    _uiState.update { it.copy(isLoadingAfterAuth = false) }
-                    val hasContacts = pubkyRepo.pendingImportContacts.value.isNotEmpty()
-                    if (hasContacts) {
-                        _effects.emit(PubkyChoiceEffect.NavigateToContactImportOverview)
-                    } else {
-                        _effects.emit(PubkyChoiceEffect.NavigateToPayContacts)
-                    }
+                        .onSuccess {
+                            _uiState.update { state -> state.copy(isLoadingAfterAuth = false) }
+                            val hasContacts = pubkyRepo.pendingImportContacts.value.isNotEmpty()
+                            if (hasContacts) {
+                                _effects.emit(PubkyChoiceEffect.NavigateToContactImportOverview)
+                            } else {
+                                _effects.emit(PubkyChoiceEffect.NavigateToPayContacts)
+                            }
+                        }
+                        .onFailure {
+                            Logger.error("Preparing contact import failed", it, context = TAG)
+                            _uiState.update { state -> state.copy(isLoadingAfterAuth = false) }
+                            ToastEventBus.send(
+                                type = Toast.ToastType.ERROR,
+                                title = context.getString(R.string.common__error),
+                                description = it.message,
+                            )
+                        }
                 }
                 .onFailure {
                     Logger.error("Auth approval failed", it, context = TAG)

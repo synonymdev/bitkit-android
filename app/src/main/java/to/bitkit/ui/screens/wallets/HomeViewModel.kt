@@ -39,7 +39,7 @@ import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

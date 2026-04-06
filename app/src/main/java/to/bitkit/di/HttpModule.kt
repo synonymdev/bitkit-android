@@ -1,3 +1,5 @@
+@file:Suppress("ImportOrdering")
+
 package to.bitkit.di
 
 import dagger.Module
@@ -18,9 +20,9 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
-import to.bitkit.utils.UrlValidator
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.UrlValidator
 import javax.inject.Singleton
 import io.ktor.client.plugins.logging.Logger as KtorLogger
 

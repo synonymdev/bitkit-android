@@ -1,23 +1,36 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.components.AddLinkSheet
 import to.bitkit.ui.components.AddTagSheet
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.CenteredProfileHeader
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.ProfileEditForm
 import to.bitkit.ui.components.ProfileEditLink
+import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun EditContactScreen(
@@ -39,6 +52,7 @@ fun EditContactScreen(
     Content(
         uiState = uiState,
         onBackClick = onBackClick,
+        onRetryClick = { viewModel.retryLoadContact() },
         onNameChange = { viewModel.onNameChange(it) },
         onBioChange = { viewModel.onBioChange(it) },
         onRemoveLink = { viewModel.removeLink(it) },
@@ -60,6 +74,7 @@ fun EditContactScreen(
 private fun Content(
     uiState: EditContactUiState,
     onBackClick: () -> Unit,
+    onRetryClick: () -> Unit,
     onNameChange: (String) -> Unit,
     onBioChange: (String) -> Unit,
     onRemoveLink: (Int) -> Unit,
@@ -82,32 +97,36 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
 
-        ProfileEditForm(
-            name = uiState.name,
-            onNameChange = onNameChange,
-            publicKey = uiState.publicKey,
-            bio = uiState.bio,
-            onBioChange = onBioChange,
-            links = uiState.links,
-            onRemoveLink = onRemoveLink,
-            onAddLink = onAddLink,
-            tags = uiState.tags,
-            onRemoveTag = onRemoveTag,
-            onAddTag = onAddTag,
-            onSave = onSave,
-            onCancel = onBackClick,
-            isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
-            avatarContent = {
-                CenteredProfileHeader(
-                    publicKey = uiState.publicKey,
-                    name = "",
-                    bio = "",
-                    imageUrl = uiState.imageUrl,
-                )
-            },
-            onDelete = onDelete,
-            deleteLabel = stringResource(R.string.contacts__delete_contact),
-        )
+        when {
+            uiState.isLoading -> LoadingState()
+            uiState.isMissing -> EmptyState(onRetryClick = onRetryClick)
+            else -> ProfileEditForm(
+                name = uiState.name,
+                onNameChange = onNameChange,
+                publicKey = uiState.publicKey,
+                bio = uiState.bio,
+                onBioChange = onBioChange,
+                links = uiState.links,
+                onRemoveLink = onRemoveLink,
+                onAddLink = onAddLink,
+                tags = uiState.tags,
+                onRemoveTag = onRemoveTag,
+                onAddTag = onAddTag,
+                onSave = onSave,
+                onCancel = onBackClick,
+                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                avatarContent = {
+                    CenteredProfileHeader(
+                        publicKey = uiState.publicKey,
+                        name = "",
+                        bio = "",
+                        imageUrl = uiState.imageUrl,
+                    )
+                },
+                onDelete = onDelete,
+                deleteLabel = stringResource(R.string.contacts__delete_contact),
+            )
+        }
     }
 
     if (uiState.showDeleteDialog) {
@@ -135,6 +154,34 @@ private fun Content(
     }
 }
 
+@Composable
+private fun LoadingState() {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+private fun EmptyState(onRetryClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp)
+    ) {
+        VerticalSpacer(48.dp)
+        BodyM(text = stringResource(R.string.contacts__detail_empty_state), color = Colors.White64)
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.profile__retry_load),
+            onClick = onRetryClick,
+        )
+    }
+}
+
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
@@ -152,6 +199,7 @@ private fun Preview() {
                 isLoading = false,
             ),
             onBackClick = {},
+            onRetryClick = {},
             onNameChange = {},
             onBioChange = {},
             onRemoveLink = {},

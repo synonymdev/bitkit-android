@@ -15,9 +15,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
@@ -49,15 +51,52 @@ class EditContactViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     init {
-        loadContact()
+        observeContactUpdates()
+        retryLoadContact()
     }
 
-    private fun loadContact() {
-        val contact = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
-        if (contact == null) {
-            Logger.warn("Contact '$publicKey' not found in local contacts", context = TAG)
-            return
+    fun retryLoadContact() {
+        viewModelScope.launch {
+            val cachedContact = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
+            if (cachedContact != null) {
+                applyContact(cachedContact)
+                return@launch
+            }
+
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    isMissing = false,
+                )
+            }
+
+            pubkyRepo.loadContacts()
+
+            val refreshedContact = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
+            if (refreshedContact != null) {
+                applyContact(refreshedContact)
+                return@launch
+            }
+
+            Logger.warn("Failed to find contact '$publicKey' after refresh", context = TAG)
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    isMissing = true,
+                )
+            }
         }
+    }
+
+    private fun observeContactUpdates() {
+        viewModelScope.launch {
+            pubkyRepo.contacts.collectLatest { contacts ->
+                contacts.find { it.publicKey == publicKey }?.let { applyContact(it) }
+            }
+        }
+    }
+
+    private fun applyContact(contact: PubkyProfile) {
         _uiState.update {
             it.copy(
                 name = contact.name,
@@ -68,6 +107,7 @@ class EditContactViewModel @Inject constructor(
                 }.toImmutableList(),
                 tags = contact.tags.toImmutableList(),
                 isLoading = false,
+                isMissing = false,
             )
         }
     }
@@ -182,6 +222,7 @@ data class EditContactUiState(
     val links: ImmutableList<ProfileEditLink> = persistentListOf(),
     val tags: ImmutableList<String> = persistentListOf(),
     val isLoading: Boolean = true,
+    val isMissing: Boolean = false,
     val isSaving: Boolean = false,
     val showDeleteDialog: Boolean = false,
     val showAddLinkSheet: Boolean = false,

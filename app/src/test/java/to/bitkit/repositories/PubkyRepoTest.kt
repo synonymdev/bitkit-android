@@ -19,6 +19,7 @@ import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.models.PubkyProfile
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -279,6 +280,103 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `addContact should replace existing contact with normalized key`() = test {
+        authenticateForTesting()
+        val original = PubkyProfile(
+            publicKey = "contact-key",
+            name = "Alice",
+            bio = "",
+            imageUrl = null,
+            links = emptyList(),
+            tags = listOf("old"),
+            status = null,
+        )
+        val updated = original.copy(name = "Alice Updated", tags = listOf("new"))
+
+        sut.addContact("contact-key", existingProfile = original)
+        sut.addContact("contact-key", existingProfile = updated)
+
+        val contacts = sut.contacts.value
+        assertEquals(1, contacts.size)
+        assertEquals("pubkycontact-key", contacts.first().publicKey)
+        assertEquals("Alice Updated", contacts.first().name)
+        assertEquals(listOf("new"), contacts.first().tags)
+    }
+
+    @Test
+    fun `loadProfile should ignore stale result when authenticated key changes`() = test {
+        val oldSecret = "old_secret"
+        val oldPublicKey = "old_public_key"
+        val newSecret = "new_secret"
+        val newPublicKey = "new_public_key"
+        authenticateForTesting(
+            publicKey = oldPublicKey,
+            secret = oldSecret,
+            profileName = "Initial Old",
+        )
+        whenever(pubkyService.completeAuth()).thenReturn(newSecret)
+        whenever(pubkyService.importSession(newSecret)).thenReturn(newPublicKey)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(newSecret)
+        whenever(pubkyService.sessionList(newSecret, Env.contactsBasePath)).thenReturn(emptyList())
+        val staleProfile = createFfiProfile(name = "Stale Old")
+        whenever(pubkyService.getProfile(oldPublicKey)).thenAnswer {
+            runBlocking { sut.completeAuthentication() }
+            staleProfile
+        }
+
+        sut.loadProfile()
+
+        assertEquals(newPublicKey, sut.publicKey.value)
+        assertEquals("Initial Old", sut.profile.value?.name)
+    }
+
+    @Test
+    fun `loadContacts should ignore stale result when authenticated key changes`() = test {
+        val oldSecret = "old_secret"
+        val oldPublicKey = "old_public_key"
+        val newSecret = "new_secret"
+        val newPublicKey = "new_public_key"
+        val existingContact = PubkyProfile(
+            publicKey = "pubkyexisting-contact",
+            name = "Existing Contact",
+            bio = "",
+            imageUrl = null,
+            links = emptyList(),
+            tags = emptyList(),
+            status = null,
+        )
+        val staleContactKey = "pubkystale-contact"
+        val staleContactPath = "${Env.contactsBasePath}$staleContactKey"
+        val staleContactUri = "pubky://$oldPublicKey${Env.contactsBasePath}$staleContactKey"
+
+        authenticateForTesting(
+            publicKey = oldPublicKey,
+            secret = oldSecret,
+            profileName = "Initial Old",
+        )
+        sut.addContact(existingContact.publicKey, existingProfile = existingContact)
+
+        whenever(pubkyService.completeAuth()).thenReturn(newSecret)
+        whenever(pubkyService.importSession(newSecret)).thenReturn(newPublicKey)
+        val newProfile = createFfiProfile(name = "New User")
+        whenever(pubkyService.getProfile(newPublicKey)).thenReturn(newProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(oldSecret)
+        whenever(pubkyService.sessionList(oldSecret, Env.contactsBasePath)).thenReturn(listOf(staleContactPath))
+        whenever(pubkyService.fetchFileString(staleContactUri)).thenAnswer {
+            runBlocking { sut.completeAuthentication() }
+            """{"name":"Stale Contact","bio":""}"""
+        }
+
+        sut.loadContacts()
+
+        val contacts = sut.contacts.value
+        assertEquals(newPublicKey, sut.publicKey.value)
+        assertEquals(1, contacts.size)
+        assertEquals(existingContact.publicKey, contacts.first().publicKey)
+        assertEquals(existingContact.name, contacts.first().name)
+    }
+
+    @Test
     fun `loadContacts should return early when no public key`() = test {
         sut.loadContacts()
 
@@ -376,18 +474,27 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(contactKey, sut.contacts.value.first().publicKey)
     }
 
-    private suspend fun authenticateForTesting() {
-        val testSecret = "test_secret"
-        val testPk = "test_pk_12345"
-        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
-        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
-
-        val ffiProfile = mock<CorePubkyProfile>()
-        whenever(ffiProfile.name).thenReturn("Test")
-        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
-        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
+    private suspend fun authenticateForTesting(
+        publicKey: String = "test_pk_12345",
+        secret: String = "test_secret",
+        profileName: String = "Test",
+    ) {
+        whenever(pubkyService.completeAuth()).thenReturn(secret)
+        whenever(pubkyService.importSession(secret)).thenReturn(publicKey)
+        val ffiProfile = createFfiProfile(name = profileName)
+        whenever(pubkyService.getProfile(publicKey)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(secret)
+        whenever(pubkyService.sessionList(secret, Env.contactsBasePath)).thenReturn(emptyList())
 
         sut.completeAuthentication()
+    }
+
+    private fun createFfiProfile(name: String): CorePubkyProfile {
+        val ffiProfile = mock<CorePubkyProfile>()
+        whenever(ffiProfile.name).thenReturn(name)
+        whenever(ffiProfile.bio).thenReturn("")
+        whenever(ffiProfile.image).thenReturn(null)
+        whenever(ffiProfile.status).thenReturn(null)
+        return ffiProfile
     }
 }

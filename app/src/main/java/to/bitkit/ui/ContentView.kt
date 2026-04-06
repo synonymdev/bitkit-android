@@ -1426,7 +1426,7 @@ private fun NavGraphBuilder.widgets(
             fiatSymbol = LocalCurrencies.current.currencySymbol,
             onBackClick = { navController.popBackStack() },
             showWidgets = showWidgets,
-            onEnableInSettingsClick = { navController.navigate(Routes.WidgetsSettings) },
+            onEnableInSettingsClick = { navController.navigateTo(Routes.WidgetsSettings) },
         )
     }
     composableWithDefaultTransitions<Routes.SuggestionsPreview> {
