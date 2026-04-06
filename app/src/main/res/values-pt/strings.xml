@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Colar URI do nó</string>
     <string name="lightning__external_manual__scan">Escanear QR</string>
     <string name="lightning__external_amount__title">Saldo de\n&lt;accent&gt;gastos&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Conexão\n&lt;accent&gt;iniciada&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo de gastos</string>
+    <string name="lightning__external_success__title">Abertura\n&lt;accent&gt;de canal&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">Conexão Lightning iniciada. Você poderá usar seu saldo de gastos em &lt;accent&gt;±30 minutos&lt;/accent&gt; (depende da configuração do nó).</string>
     <string name="lightning__error_channel_purchase">Setup dos Pagamentos Instantâneos falhou</string>
     <string name="lightning__error_channel_setup_msg">Ocorreu um erro ao configurar seu saldo de gastos. {raw}</string>
