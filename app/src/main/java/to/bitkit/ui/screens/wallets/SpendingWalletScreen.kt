@@ -135,7 +135,7 @@ fun SpendingWalletScreen(
                 }
 
                 if (!showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
 
                     if (canTransfer) {
                         SecondaryButton(
@@ -145,7 +145,7 @@ fun SpendingWalletScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             },
                             modifier = Modifier.testTag("TransferToSavings")
