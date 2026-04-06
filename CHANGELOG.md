@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Retouch Primary, Secondary, and Tertiary buttons styling #887
 - Avoid msat truncation when paying invoices and LNURL callbacks #879
 - Fix ANR on RGS server settings screen caused by catastrophic regex backtracking #880
 - Fix crash when returning app to foreground on Receive screen #875
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Replace Advanced button with Manual Setup shortcut on Funding screen #885
+- Updated design of the success screen in the manual channel setup flow #883
 - Unified send flow with payment method switcher, details toggle, Lightning support for BIP21 payments, and improved fee rate defaults #863
 - Settings redesigned with tabbed navigation (General/Security/Advanced) with swipe support #857
 - Icons added to all settings rows for faster scanning #857

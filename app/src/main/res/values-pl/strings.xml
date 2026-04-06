@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Wklej adres URI węzła</string>
     <string name="lightning__external_manual__scan">Skanuj QR</string>
     <string name="lightning__external_amount__title">Saldo\n&lt;accent&gt;wydatków&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Połączenie\n&lt;accent&gt;zainicjowane&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo wydatków</string>
+    <string name="lightning__external_success__title">Otwieranie\n&lt;accent&gt;kanału&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">Połączenie Lightning zostało zainicjowane. Będą Państwo mogli wykorzystać swoje saldo wydatków w ciągu &lt;accent&gt;±30 minut&lt;/accent&gt; (w zależności od konfiguracji węzła).</string>
     <string name="lightning__error_channel_purchase">Konfiguracja płatności natychmiastowych nie powiodła się</string>
     <string name="lightning__error_channel_setup_msg">Wystąpił błąd podczas konfigurowania salda natychmiastowego. {raw}</string>
