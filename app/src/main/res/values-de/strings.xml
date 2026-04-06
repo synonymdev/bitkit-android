@@ -152,7 +152,6 @@
     <string name="lightning__external_manual__paste">Paste Node URI</string>
     <string name="lightning__external_manual__scan">QR-Code scannen</string>
     <string name="lightning__external_amount__title">Spending\n&lt;accent&gt;balance&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Kanal wird\n&lt;accent&gt;geöffnet&lt;/accent&gt;</string>
     <string name="lightning__external_success__nav_title">Ausgabenguthaben</string>
     <string name="lightning__external_success__title">Kanal wird\n&lt;accent&gt;geöffnet&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">Lightning-Verbindung initiiert. Du kannst dein Guthaben in &lt;accent&gt;±30 Minuten&lt;/accent&gt; verwenden (abhängig von der Node-Konfiguration).</string>
