@@ -192,7 +192,7 @@ class WakeNodeWorker @AssistedInject constructor(
         showDetails: Boolean,
         hiddenBody: String,
     ) {
-        val sats = event.amountMsat / 1000u
+        val sats = (event.amountMsat + 999u) / 1000u
         // Save for UI to pick up
         cacheStore.setBackgroundReceive(
             NewTransactionSheetDetails(

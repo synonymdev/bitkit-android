@@ -41,14 +41,14 @@ class LnurlService @Inject constructor(
 
     suspend fun fetchLnurlInvoice(
         callbackUrl: String,
-        amountSats: ULong,
+        amountMsats: ULong,
         comment: String? = null,
     ): Result<LnurlPayResponse> = runCatching {
         Logger.debug("Fetching LNURL pay invoice from: $callbackUrl", context = TAG)
 
         val response = client.get(callbackUrl) {
             url {
-                parameters["amount"] = "${amountSats * 1000u}" // convert to msat
+                parameters["amount"] = "$amountMsats"
                 comment?.takeIf { it.isNotBlank() }?.let {
                     parameters["comment"] = it
                 }
