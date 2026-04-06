@@ -179,7 +179,7 @@ class ProbingToolViewModel @Inject constructor(
 
             is Scanner.LnurlPay -> {
                 val amount = amountSats ?: return@runCatching null
-                lightningRepo.fetchLnurlInvoice(decoded.data.callback, amount).getOrThrow().bolt11
+                lightningRepo.fetchLnurlInvoice(decoded.data.callback, amount * 1000u).getOrThrow().bolt11
             }
 
             else -> null
