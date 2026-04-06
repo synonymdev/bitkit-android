@@ -201,7 +201,7 @@ fun SecondaryButton(
                 } else {
                     Modifier
                 }
-            ),
+            )
     ) {
         OutlinedButton(
             onClick = rememberDebouncedClick(onClick = onClick),
