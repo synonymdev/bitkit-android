@@ -73,11 +73,11 @@ import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.amountSats
+import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
-import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.isFixedAmount
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
@@ -984,6 +984,7 @@ class AppViewModel @Inject constructor(
                         )
                         return@takeIf false
                     }
+                    lightningRepo.waitForUsableChannels()
                     val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                     if (!canSend) {
                         val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
@@ -1286,6 +1287,10 @@ class AppViewModel @Inject constructor(
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
+        if (isMainScanner && scan.isLightningRelated()) {
+            showSheet(Sheet.Send())
+        }
+
         when (scan) {
             is Scanner.OnChain -> onScanOnchain(scan.invoice, input)
             is Scanner.Lightning -> onScanLightning(scan.invoice, input)
@@ -1422,6 +1427,7 @@ class AppViewModel @Inject constructor(
         val quickPayHandled = handleQuickPayIfApplicable(amountSats = invoice.amountSatoshis, invoice = invoice)
         if (quickPayHandled) return
 
+        lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
@@ -1470,6 +1476,7 @@ class AppViewModel @Inject constructor(
         val isFixed = data.isFixedAmount()
         val displaySats = data.minSendableSat()
 
+        lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(displaySats.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,
@@ -2527,6 +2534,12 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
     }
+}
+
+private fun Scanner?.isLightningRelated(): Boolean = when (this) {
+    is Scanner.Lightning, is Scanner.LnurlPay -> true
+    is Scanner.OnChain -> invoice.params?.containsKey("lightning") == true
+    else -> false
 }
 
 // region send contract

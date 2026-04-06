@@ -339,15 +339,33 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `canSend should return false when node is stopped`() = test {
-        assertFalse(sut.canSend(1000uL, fallbackToCachedBalance = true))
+        assertFalse(sut.canSend(1000uL))
     }
 
     @Test
-    fun `canSend should return service value when node is running`() = test {
+    fun `canSend should return true when channels have sufficient capacity`() = test {
         startNodeForTesting()
-        whenever(lightningService.canSend(any())).thenReturn(true)
+        val channel = createChannelDetails().copy(
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 2_000_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        sut.syncState()
 
         assertTrue(sut.canSend(1000uL))
+    }
+
+    @Test
+    fun `canSend should return false when channels have insufficient capacity`() = test {
+        startNodeForTesting()
+        val channel = createChannelDetails().copy(
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 500_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        sut.syncState()
+
+        assertFalse(sut.canSend(1000uL))
     }
 
     @Test

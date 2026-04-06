@@ -58,6 +58,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toPeerDetailsList
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NATIVE_WITNESS_TYPES
@@ -983,7 +984,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun waitForUsableChannels() {
+    suspend fun waitForUsableChannels() {
         if (lightningService.channels?.any { it.isUsable } == true) return
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
@@ -1213,29 +1214,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true) = withContext(bgDispatcher) {
-        if (!_lightningState.value.nodeLifecycleState.canRun()) {
-            return@withContext false
-        }
-        if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
-            return@withContext amountSats <= cachedLightningBalance()
-        }
-        if (lightningService.channels == null) {
-            withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
-                _lightningState.first { lightningService.channels != null }
-            }
-        }
-        if (lightningService.canSend(amountSats)) return@withContext true
-        val channelsLoading = lightningService.channels?.none { it.isUsable } == true
-        if (fallbackToCachedBalance && channelsLoading) {
-            return@withContext amountSats <= cachedLightningBalance()
-        }
-        return@withContext false
-    }
-
-    private suspend fun cachedLightningBalance(): ULong {
-        val cached = cacheStore.data.first().balance
-        return maxOf(cached?.maxSendLightningSats ?: 0u, cached?.totalLightningSats ?: 0u)
+    fun canSend(amountSats: ULong): Boolean {
+        val state = _lightningState.value
+        if (!state.nodeLifecycleState.canRun()) return false
+        return state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
     }
 
     fun getNodeId(): String? =
@@ -1421,7 +1403,6 @@ class LightningRepo @Inject constructor(
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
-        private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
         private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
         val SEND_LN_TIMEOUT = 10.seconds
     }
