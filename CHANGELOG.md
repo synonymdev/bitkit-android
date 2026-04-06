@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mnemonic warning text transitions on reveal #857
 
 ### Changed
-- Replace Advanced button with Manual Setup shortcut on Funding screen #885
+- Update funding screen: replace Advanced with Manual Setup, fix Use Other Wallet navigation to open amount entry, and add Fund Wallet button to no-funds dialog #885
 - Updated design of the success screen in the manual channel setup flow #883
 - Unified send flow with payment method switcher, details toggle, Lightning support for BIP21 payments, and improved fee rate defaults #863
 - Settings redesigned with tabbed navigation (General/Security/Advanced) with swipe support #857
