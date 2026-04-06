@@ -73,10 +73,12 @@ import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.amountSats
+import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
+import to.bitkit.ext.isFixedAmount
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -1233,7 +1235,7 @@ class AppViewModel @Inject constructor(
                 val maxSendable = maxSendableLightningSats()
                 when (val lnurl = _sendUiState.value.lnurl) {
                     null -> amount <= maxSendable && lightningRepo.canSend(amount)
-                    is LnurlParams.LnurlWithdraw -> amount < lnurl.data.maxWithdrawableSat()
+                    is LnurlParams.LnurlWithdraw -> amount <= lnurl.data.maxWithdrawableSat()
                     is LnurlParams.LnurlPay -> {
                         val maxSat = lnurl.data.maxSendableSat()
                         amount <= maxSat && amount <= maxSendable && lightningRepo.canSend(amount)
@@ -1484,10 +1486,10 @@ class AppViewModel @Inject constructor(
     private suspend fun onScanLnurlPay(data: LnurlPayData) {
         Logger.debug("LNURL: $data", context = TAG)
 
-        val minSendable = data.minSendableSat()
-        val maxSendable = data.maxSendableSat()
+        val isFixed = data.isFixedAmount()
+        val displaySats = data.minSendableSat()
 
-        if (!lightningRepo.canSend(minSendable)) {
+        if (!lightningRepo.canSend(displaySats.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_pay_error),
@@ -1496,8 +1498,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val hasAmount = minSendable == maxSendable && minSendable > 0u
-        val initialAmount = if (hasAmount) minSendable else 0u
+        val initialAmount = if (isFixed) displaySats else 0u
 
         _sendUiState.update {
             it.copy(
@@ -1507,10 +1508,10 @@ class AppViewModel @Inject constructor(
             )
         }
 
-        if (hasAmount) {
-            Logger.info("Found amount $$minSendable in lnurlPay, proceeding with payment", context = TAG)
+        if (isFixed) {
+            Logger.info("Found fixed amount '$displaySats' sats in lnurlPay, proceeding with payment", context = TAG)
 
-            val quickPayHandled = handleQuickPayIfApplicable(amountSats = minSendable, lnurlPay = data)
+            val quickPayHandled = handleQuickPayIfApplicable(amountSats = displaySats, lnurlPay = data)
             if (quickPayHandled) return
 
             if (isMainScanner) {
@@ -1532,10 +1533,11 @@ class AppViewModel @Inject constructor(
     private suspend fun onScanLnurlWithdraw(data: LnurlWithdrawData) {
         Logger.debug("LNURL: $data", context = TAG)
 
+        val isFixed = data.isFixedAmount()
         val minWithdrawable = data.minWithdrawableSat()
         val maxWithdrawable = data.maxWithdrawableSat()
 
-        if (minWithdrawable > maxWithdrawable) {
+        if (!isFixed && minWithdrawable > maxWithdrawable) {
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_withdr_error),
@@ -1544,15 +1546,17 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        val displayAmount = minWithdrawable
+
         _sendUiState.update {
             it.copy(
                 payMethod = SendMethod.LIGHTNING,
-                amount = minWithdrawable,
+                amount = displayAmount,
                 lnurl = LnurlParams.LnurlWithdraw(data = data)
             )
         }
 
-        if (minWithdrawable == maxWithdrawable) {
+        if (isFixed || minWithdrawable == maxWithdrawable) {
             delay(TRANSITION_SCREEN_MS)
             if (isMainScanner) {
                 showSheet(Sheet.Send(SendRoute.WithdrawConfirm))
@@ -1661,7 +1665,11 @@ class AppViewModel @Inject constructor(
 
             val quickPayData: QuickPayData = when {
                 lnurlPay != null -> {
-                    QuickPayData.LnurlPay(sats = amountSats, callback = lnurlPay.callback)
+                    QuickPayData.LnurlPay(
+                        sats = amountSats,
+                        callback = lnurlPay.callback,
+                        amountMsats = lnurlPay.callbackAmountMsats(amountSats),
+                    )
                 }
 
                 else -> {
@@ -1785,9 +1793,10 @@ class AppViewModel @Inject constructor(
         val isLnurlPay = lnurl is LnurlParams.LnurlPay
 
         if (isLnurlPay) {
+            val amountMsats = lnurl.data.callbackAmountMsats(amount)
             lightningRepo.fetchLnurlInvoice(
                 callbackUrl = lnurl.data.callback,
-                amountSats = amount,
+                amountMsats = amountMsats,
                 comment = _sendUiState.value.comment.takeIf { it.isNotEmpty() },
             ).onSuccess { invoice ->
                 _sendUiState.update {
@@ -1835,8 +1844,8 @@ class AppViewModel @Inject constructor(
                 val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
                 val bolt11 = decodedInvoice.bolt11
 
-                // Determine if we should override amount
-                val paymentAmount = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
+                val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
+                val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount ?: 0uL
 
                 val tags = _sendUiState.value.selectedTags
                 var createdMetadataPaymentId: String? = null
@@ -1864,14 +1873,14 @@ class AppViewModel @Inject constructor(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.SENT,
                             paymentHashOrTxId = actualPaymentHash,
-                            sats = paymentAmount.toLong(), // TODO Add fee when available
+                            sats = displayAmountSats.toLong(), // TODO Add fee when available
                         ),
                     )
                 }.onFailure {
                     if (it is PaymentPendingException) {
                         Logger.info("Lightning payment pending", context = TAG)
                         pendingPaymentRepo.track(it.paymentHash)
-                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, paymentAmount.toLong()))
+                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, displayAmountSats.toLong()))
                         return@onFailure
                     }
                     // Delete pre-activity metadata on failure
@@ -1896,19 +1905,23 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            _sendUiState.update {
-                it.copy(
-                    amount = it.amount.coerceAtLeast(
-                        (lnurl.data.minWithdrawable ?: 0u) / 1000u
-                    )
+            val invoice = if (lnurl.data.isFixedAmount()) {
+                lightningRepo.createInvoiceMsats(
+                    amountMsats = lnurl.data.maxWithdrawable,
+                    description = lnurl.data.defaultDescription,
+                    expirySeconds = 3600u,
                 )
-            }
-
-            val invoice = lightningRepo.createInvoice(
-                amountSats = _sendUiState.value.amount,
-                description = lnurl.data.defaultDescription,
-                expirySeconds = 3600u,
-            ).getOrNull()
+            } else {
+                val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
+                    (lnurl.data.minWithdrawable ?: 0u) / 1000u
+                )
+                _sendUiState.update { it.copy(amount = withdrawAmountSats) }
+                lightningRepo.createInvoice(
+                    amountSats = withdrawAmountSats,
+                    description = lnurl.data.defaultDescription,
+                    expirySeconds = 3600u,
+                )
+            }.getOrNull()
 
             if (invoice == null) {
                 setSendEffect(SendEffect.NavigateToWithdrawError)
@@ -2666,6 +2679,6 @@ sealed interface QuickPayData {
     data class Bolt11(override val sats: ULong, val bolt11: String) : QuickPayData
 
     @Stable
-    data class LnurlPay(override val sats: ULong, val callback: String) : QuickPayData
+    data class LnurlPay(override val sats: ULong, val callback: String, val amountMsats: ULong) : QuickPayData
 }
 // endregion

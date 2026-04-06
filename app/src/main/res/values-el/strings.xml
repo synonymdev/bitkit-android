@@ -130,8 +130,9 @@
     <string name="lightning__external_manual__scan">Σάρωση QR</string>
     <string name="lightning__external_manual__text">Μπορείς να χρησιμοποιήσεις έναν εξωτερικό κόμβο για να ανοίξεις χειροκίνητα μια σύνδεση Lightning. Εισάγαγε τα στοιχεία του κόμβου για να συνεχίσεις.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Χειροκίνητη ρύθμιση&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Υπόλοιπο δαπανών</string>
     <string name="lightning__external_success__text">Η σύνδεση Lightning ξεκίνησε. Θα μπορείς να χρησιμοποιήσεις το υπόλοιπο δαπανών σε &lt;accent&gt;±30 λεπτά&lt;/accent&gt; (εξαρτάται από τη διαμόρφωση του κόμβου).</string>
-    <string name="lightning__external_success__title">Η σύνδεση\n&lt;accent&gt;ξεκίνησε&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Άνοιγμα\n&lt;accent&gt;καναλιού&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Ποσοστό τέλους</string>
     <string name="lightning__fee_rate_update_time">Χρόνος ενημέρωσης cache τελών</string>
     <string name="lightning__fees">Τέλη</string>

@@ -130,8 +130,9 @@
     <string name="lightning__external_manual__scan">Escaneja QR</string>
     <string name="lightning__external_manual__text">Pots utilitzar un node extern per obrir manualment una connexió Lightning. Introdueix els detalls del node per continuar.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Configuració manual&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo de despesa</string>
     <string name="lightning__external_success__text">Connexió Lightning iniciada. Podràs utilitzar el teu saldo de despesa en &lt;accent&gt;±30 minuts&lt;/accent&gt; (depèn de la configuració del node).</string>
-    <string name="lightning__external_success__title">Connexió\n&lt;accent&gt;iniciada&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Obertura\n&lt;accent&gt;de canal&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Taxa de tarifa</string>
     <string name="lightning__fee_rate_update_time">Temps d\'actualització de la memòria cau de tarifes</string>
     <string name="lightning__fees">Tarifes</string>

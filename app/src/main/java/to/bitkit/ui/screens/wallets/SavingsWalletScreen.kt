@@ -5,13 +5,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +31,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
@@ -68,22 +75,32 @@ fun SavingsWalletScreen(
         mutableStateOf(hasFunds && !isGeoBlocked)
     }
 
+    val hazeState = rememberHazeState()
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Colors.Black)
             .blockPointerInputPassthrough()
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.piggybank),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
+        // Background layer: hazeSource must be a sibling of hazeEffect, not a parent.
+        // Haze can't blur an ancestor — source and effect must be at the same level.
+        Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 32.dp)
-                .offset(x = (120).dp)
-                .size(268.dp)
-        )
+                .matchParentSize()
+                .background(Colors.Black)
+                .hazeSource(hazeState)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.piggybank),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 0.dp)
+                    .offset(x = (160).dp)
+                    .size(360.dp)
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
+            )
+        }
         ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__savings__title),
@@ -108,7 +125,7 @@ fun SavingsWalletScreen(
                     IncomingTransfer(
                         amount = balances.balanceInTransferToSavings,
                         remainingDuration = forceCloseRemainingDuration,
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        modifier = Modifier.padding(vertical = 8.dp)
                     )
                 }
 
@@ -123,9 +140,10 @@ fun SavingsWalletScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             },
+                            hazeState = hazeState,
                             modifier = Modifier.testTag("TransferToSpending")
                         )
                     }

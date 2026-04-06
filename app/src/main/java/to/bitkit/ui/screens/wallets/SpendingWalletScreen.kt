@@ -4,14 +4,17 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +29,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -38,6 +43,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -70,21 +76,31 @@ fun SpendingWalletScreen(
         mutableStateOf(hasLnBalance && hasChannels)
     }
 
+    val hazeState = rememberHazeState()
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Colors.Black)
             .blockPointerInputPassthrough()
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.coin_stack_x_2),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
+        // Background layer: hazeSource must be a sibling of hazeEffect, not a parent.
+        // Haze can't blur an ancestor — source and effect must be at the same level.
+        Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (155).dp)
-                .size(330.dp)
-        )
+                .matchParentSize()
+                .background(Colors.Black)
+                .hazeSource(hazeState)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.coin_stack_x_2),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (155).dp)
+                    .size(330.dp)
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
+            )
+        }
         ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__spending__title),
@@ -113,7 +129,7 @@ fun SpendingWalletScreen(
                 }
 
                 if (!showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
 
                     if (canTransfer) {
                         SecondaryButton(
@@ -123,9 +139,10 @@ fun SpendingWalletScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             },
+                            hazeState = hazeState,
                             modifier = Modifier.testTag("TransferToSavings")
                         )
                     }
