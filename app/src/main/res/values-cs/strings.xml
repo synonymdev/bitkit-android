@@ -130,8 +130,9 @@
     <string name="lightning__external_manual__scan">Skenovat QR</string>
     <string name="lightning__external_manual__text">Můžete použít externí uzel k ručnímu otevření lightning připojení. Zadejte údaje o uzlu pro pokračování.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Manuální nastavení&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Zůstatek k utracení</string>
     <string name="lightning__external_success__text">Iniciováno připojení lightning. Zůstatek na účtu budete moci použít do &lt;accent&gt;±30 minut&lt;/accent&gt; (závisí na konfiguraci uzlu).</string>
-    <string name="lightning__external_success__title">Připojení\n&lt;accent&gt;iniciováno&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Otevírání\n&lt;accent&gt;kanálu&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Sazba poplatku</string>
     <string name="lightning__fee_rate_update_time">Čas aktualizace mezipaměti poplatků</string>
     <string name="lightning__fees">Poplatky</string>

@@ -130,8 +130,9 @@
     <string name="lightning__external_manual__scan">Scansiona QR</string>
     <string name="lightning__external_manual__text">Puoi usare un nodo esterno per aprire manualmente una connessione Lightning. Inserisci i dettagli del nodo per continuare.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Configurazione manuale&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo di spesa</string>
     <string name="lightning__external_success__text">Connessione Lightning avviata. Potrai utilizzare il tuo conto di spesa in &lt;accent&gt;±30 minuti&lt;/accent&gt; (dipende dalla configurazione del nodo).</string>
-    <string name="lightning__external_success__title">Connessione\n&lt;accent&gt;avviata&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Apertura\n&lt;accent&gt;del canale&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Tasso di commissione</string>
     <string name="lightning__fee_rate_update_time">Tempo di Aggiornamento Cache Commissioni</string>
     <string name="lightning__fees">Commissioni</string>

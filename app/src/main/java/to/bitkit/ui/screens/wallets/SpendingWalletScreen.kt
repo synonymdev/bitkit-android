@@ -4,12 +4,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -45,6 +43,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -130,7 +129,7 @@ fun SpendingWalletScreen(
                 }
 
                 if (!showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
 
                     if (canTransfer) {
                         SecondaryButton(
@@ -160,8 +159,7 @@ fun SpendingWalletScreen(
         }
         if (showEmptyState) {
             EmptyStateView(
-                text = stringResource(R.string.wallet__spending__onboarding)
-                    .withAccent(accentColor = Colors.Purple),
+                text = stringResource(R.string.wallet__spending__onboarding).withAccent(accentColor = Colors.Purple),
                 modifier = Modifier
                     .systemBarsPadding()
                     .align(Alignment.BottomCenter)
