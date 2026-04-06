@@ -74,4 +74,75 @@ class LnurlExtTest : BaseUnitTest() {
         val nonRoundMin = nullMin.copy(minWithdrawable = 1_500u)
         assertEquals(2u, nonRoundMin.minWithdrawableSat())
     }
+
+    @Test
+    fun `isFixedAmount returns true when min equals max`() {
+        val data = lnurlPayData(minSendable = 5_000u, maxSendable = 5_000u)
+        assertEquals(true, data.isFixedAmount())
+    }
+
+    @Test
+    fun `isFixedAmount returns true for sub-sat fixed amount`() {
+        val data = lnurlPayData(minSendable = 500_500u, maxSendable = 500_500u)
+        assertEquals(501u, data.minSendableSat())
+        assertEquals(500u, data.maxSendableSat())
+        assertEquals(true, data.isFixedAmount())
+    }
+
+    @Test
+    fun `isFixedAmount returns false for variable range`() {
+        val data = lnurlPayData(minSendable = 1_000u, maxSendable = 100_000u)
+        assertEquals(false, data.isFixedAmount())
+    }
+
+    @Test
+    fun `callbackAmountMsats returns original msats for fixed amount`() {
+        val data = lnurlPayData(minSendable = 500_500u, maxSendable = 500_500u)
+        assertEquals(500_500u, data.callbackAmountMsats(500u))
+    }
+
+    @Test
+    fun `callbackAmountMsats converts user sats for variable amount`() {
+        val data = lnurlPayData(minSendable = 1_000u, maxSendable = 100_000u)
+        assertEquals(50_000u, data.callbackAmountMsats(50u))
+    }
+
+    @Test
+    fun `withdraw isFixedAmount returns true for sub-sat fixed amount`() {
+        val data = withdrawData(minWithdrawable = 500_500u, maxWithdrawable = 500_500u)
+        assertEquals(true, data.isFixedAmount())
+    }
+
+    @Test
+    fun `withdraw isFixedAmount returns false for variable range`() {
+        val data = withdrawData(minWithdrawable = 1_000u, maxWithdrawable = 100_000u)
+        assertEquals(false, data.isFixedAmount())
+    }
+
+    private fun lnurlPayData(
+        minSendable: ULong = 1_000u,
+        maxSendable: ULong = 100_000u,
+    ) = LnurlPayData(
+        uri = "lnurl",
+        callback = "callback",
+        minSendable = minSendable,
+        maxSendable = maxSendable,
+        metadataStr = "[]",
+        commentAllowed = null,
+        allowsNostr = false,
+        nostrPubkey = null,
+    )
+
+    private fun withdrawData(
+        minWithdrawable: ULong? = null,
+        maxWithdrawable: ULong = 1_000u,
+    ) = LnurlWithdrawData(
+        uri = "lnurl",
+        callback = "callback",
+        k1 = "k1",
+        defaultDescription = "desc",
+        minWithdrawable = minWithdrawable,
+        maxWithdrawable = maxWithdrawable,
+        tag = "withdraw",
+    )
 }
