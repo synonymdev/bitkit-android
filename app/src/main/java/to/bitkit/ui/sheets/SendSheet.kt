@@ -28,6 +28,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.components.ConnectionIssuesView
+import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
@@ -55,6 +56,7 @@ import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.WalletViewModel
 
 @Suppress("CyclomaticComplexMethod")
@@ -66,6 +68,19 @@ fun SendSheet(
 ) {
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
     val isOffline = connectivityState != ConnectivityState.CONNECTED
+    val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+    val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+
+    val shouldShowSyncOverlay = remember(lightningState, sendUiState.payMethod) {
+        if (!lightningState.nodeLifecycleState.isRunning()) return@remember true
+        val isLightningPayment = sendUiState.payMethod == SendMethod.LIGHTNING
+        if (isLightningPayment) {
+            val hasAnyChannels = lightningState.channels.isNotEmpty()
+            if (!hasAnyChannels) return@remember false
+            return@remember lightningState.channels.none { it.isUsable }
+        }
+        false
+    }
 
     LaunchedEffect(startDestination) {
         // always reset state on new user-initiated send
@@ -354,6 +369,19 @@ fun SendSheet(
             exit = fadeOut(),
         ) {
             ConnectionIssuesView(titleText = stringResource(R.string.wallet__send_bitcoin))
+        }
+
+        AnimatedVisibility(
+            visible = shouldShowSyncOverlay && !isOffline,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            SyncNodeView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .gradientBackground()
+                    .navigationBarsPadding()
+            )
         }
     }
 }
