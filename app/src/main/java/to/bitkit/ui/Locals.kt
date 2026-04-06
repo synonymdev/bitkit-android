@@ -4,6 +4,7 @@ import androidx.compose.material3.DrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
+import dev.chrisbanes.haze.HazeState
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.viewmodels.ActivityListViewModel
@@ -29,6 +30,7 @@ val LocalActivityListViewModel = staticCompositionLocalOf<ActivityListViewModel?
 val LocalTransferViewModel = staticCompositionLocalOf<TransferViewModel?> { null }
 val LocalSettingsViewModel = staticCompositionLocalOf<SettingsViewModel?> { null }
 val LocalBackupsViewModel = staticCompositionLocalOf<BackupsViewModel?> { null }
+val LocalHazeState = staticCompositionLocalOf<HazeState?> { null }
 
 val appViewModel: AppViewModel?
     @Composable get() = LocalAppViewModel.current
@@ -56,3 +58,6 @@ val backupsViewModel: BackupsViewModel?
 
 val drawerState: DrawerState?
     @Composable get() = LocalDrawerState.current
+
+val hazeState: HazeState?
+    @Composable get() = LocalHazeState.current
