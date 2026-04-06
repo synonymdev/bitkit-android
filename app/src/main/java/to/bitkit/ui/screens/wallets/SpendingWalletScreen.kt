@@ -38,6 +38,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -113,7 +114,7 @@ fun SpendingWalletScreen(
                 }
 
                 if (!showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
 
                     if (canTransfer) {
                         SecondaryButton(
@@ -123,7 +124,7 @@ fun SpendingWalletScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             },
                             modifier = Modifier.testTag("TransferToSavings")
