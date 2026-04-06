@@ -3,8 +3,8 @@ package to.bitkit.appwidget.ui.price
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
+import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
@@ -12,16 +12,14 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
-import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
 import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
-import to.bitkit.appwidget.ui.theme.GlanceColors
-import to.bitkit.ui.theme.Colors
+import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PriceGlanceContent(
@@ -35,11 +33,7 @@ fun PriceGlanceContent(
     GlanceWidgetScaffold(onClick = launchIntent) {
         Text(
             text = context.getString(R.string.widgets__price__name),
-            style = TextStyle(
-                color = GlanceColors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            ),
+            style = GlanceTextStyles.bodyMSB,
         )
 
         Spacer(modifier = GlanceModifier.height(8.dp))
@@ -47,10 +41,7 @@ fun PriceGlanceContent(
         if (price == null) {
             Text(
                 text = context.getString(R.string.appwidget__loading),
-                style = TextStyle(
-                    color = GlanceColors.textSecondary,
-                    fontSize = 13.sp,
-                ),
+                style = GlanceTextStyles.captionB,
             )
             return@GlanceWidgetScaffold
         }
@@ -67,10 +58,7 @@ fun PriceGlanceContent(
             Spacer(modifier = GlanceModifier.height(4.dp))
             Text(
                 text = price.source,
-                style = TextStyle(
-                    color = GlanceColors.textTertiary,
-                    fontSize = 11.sp,
-                ),
+                style = GlanceTextStyles.source,
             )
         }
     }
@@ -84,37 +72,22 @@ private fun PriceRow(widget: PriceWidgetData) {
     ) {
         Text(
             text = "${widget.pair.symbol}${widget.price}",
-            style = TextStyle(
-                color = GlanceColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-            ),
+            style = GlanceTextStyles.subtitle,
         )
         Spacer(modifier = GlanceModifier.width(8.dp))
         Text(
             text = widget.change.formatted,
-            style = TextStyle(
+            style = GlanceTextStyles.captionB.copy(
                 color = if (widget.change.isPositive) {
-                    androidx.glance.color.ColorProvider(
-                        day = Colors.Green,
-                        night = Colors.Green,
-                    )
+                    ColorProvider(day = Colors.Green, night = Colors.Green)
                 } else {
-                    androidx.glance.color.ColorProvider(
-                        day = Colors.Red,
-                        night = Colors.Red,
-                    )
+                    ColorProvider(day = Colors.Red, night = Colors.Red)
                 },
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
             ),
         )
     }
     Text(
         text = widget.pair.displayName,
-        style = TextStyle(
-            color = GlanceColors.textSecondary,
-            fontSize = 12.sp,
-        ),
+        style = GlanceTextStyles.footnoteM,
     )
 }

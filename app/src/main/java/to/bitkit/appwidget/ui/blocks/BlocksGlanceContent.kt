@@ -3,19 +3,16 @@ package to.bitkit.appwidget.ui.blocks
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.ui.components.GlanceDataRow
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
-import to.bitkit.appwidget.ui.theme.GlanceColors
+import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.models.widget.BlockModel
 
 @Composable
@@ -30,11 +27,7 @@ fun BlocksGlanceContent(
     GlanceWidgetScaffold(onClick = launchIntent) {
         Text(
             text = context.getString(to.bitkit.R.string.widgets__blocks__name),
-            style = TextStyle(
-                color = GlanceColors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            ),
+            style = GlanceTextStyles.bodyMSB,
         )
 
         Spacer(modifier = GlanceModifier.height(8.dp))
@@ -42,10 +35,7 @@ fun BlocksGlanceContent(
         if (block == null) {
             Text(
                 text = context.getString(to.bitkit.R.string.appwidget__loading),
-                style = TextStyle(
-                    color = GlanceColors.textSecondary,
-                    fontSize = 13.sp,
-                ),
+                style = GlanceTextStyles.captionB,
             )
             return@GlanceWidgetScaffold
         }
@@ -69,10 +59,7 @@ fun BlocksGlanceContent(
             Spacer(modifier = GlanceModifier.height(4.dp))
             Text(
                 text = block.source,
-                style = TextStyle(
-                    color = GlanceColors.textTertiary,
-                    fontSize = 11.sp,
-                ),
+                style = GlanceTextStyles.source,
                 modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp),
             )
         }

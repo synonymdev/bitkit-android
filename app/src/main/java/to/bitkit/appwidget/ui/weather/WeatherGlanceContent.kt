@@ -3,18 +3,15 @@ package to.bitkit.appwidget.ui.weather
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.height
-import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
 import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.ui.components.GlanceDataRow
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
-import to.bitkit.appwidget.ui.theme.GlanceColors
+import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.WeatherDTO
 
@@ -30,11 +27,7 @@ fun WeatherGlanceContent(
     GlanceWidgetScaffold(onClick = launchIntent) {
         Text(
             text = context.getString(R.string.widgets__weather__name),
-            style = TextStyle(
-                color = GlanceColors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            ),
+            style = GlanceTextStyles.bodyMSB,
         )
 
         Spacer(modifier = GlanceModifier.height(8.dp))
@@ -42,10 +35,7 @@ fun WeatherGlanceContent(
         if (weather == null) {
             Text(
                 text = context.getString(R.string.appwidget__loading),
-                style = TextStyle(
-                    color = GlanceColors.textSecondary,
-                    fontSize = 13.sp,
-                ),
+                style = GlanceTextStyles.captionB,
             )
             return@GlanceWidgetScaffold
         }
@@ -53,11 +43,7 @@ fun WeatherGlanceContent(
         if (prefs.showTitle) {
             Text(
                 text = "${weather.condition.icon} ${conditionLabel(context, weather.condition)}",
-                style = TextStyle(
-                    color = GlanceColors.textPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
+                style = GlanceTextStyles.subtitle,
             )
             Spacer(modifier = GlanceModifier.height(4.dp))
         }
@@ -65,10 +51,7 @@ fun WeatherGlanceContent(
         if (prefs.showDescription) {
             Text(
                 text = conditionDescription(context, weather.condition),
-                style = TextStyle(
-                    color = GlanceColors.textSecondary,
-                    fontSize = 12.sp,
-                ),
+                style = GlanceTextStyles.footnoteM,
             )
             Spacer(modifier = GlanceModifier.height(4.dp))
         }
