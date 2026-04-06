@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
@@ -24,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
@@ -33,11 +35,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.R
 import to.bitkit.ui.shared.modifiers.alphaFeedback
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
-import to.bitkit.ui.shared.util.glassBlur
 import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppButtonDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -76,12 +83,6 @@ enum class ButtonSize {
             Small -> 8.dp
             Large -> 6.dp
         }
-    val secondaryBlurRadius: Dp
-        get() = when (this) {
-            Small -> 5.dp
-            Large -> 8.dp
-        }
-
     fun secondaryBorder(enabled: Boolean): BorderStroke = when (this) {
         Large -> BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
         Small -> BorderStroke(1.dp, if (enabled) Colors.White16 else Color.Transparent)
@@ -170,6 +171,7 @@ fun SecondaryButton(
     size: ButtonSize = ButtonSize.Large,
     enabled: Boolean = true,
     fullWidth: Boolean = true,
+    hazeState: HazeState? = null,
 ) {
     val contentPadding = PaddingValues(horizontal = size.secondaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
     val border = size.secondaryBorder(enabled)
@@ -177,46 +179,67 @@ fun SecondaryButton(
         ButtonSize.Large -> Colors.White80
         ButtonSize.Small -> Colors.White64
     }
-    OutlinedButton(
-        onClick = rememberDebouncedClick(onClick = onClick),
-        enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.secondaryColors.copy(contentColor = contentColor),
-        contentPadding = contentPadding,
-        border = border,
+    // hazeEffect must be on a Box wrapper (not OutlinedButton — Material's Surface draws over it)
+    // and AFTER size modifiers (Haze needs to know dimensions)
+    val buttonShape = MaterialTheme.shapes.extraLarge
+    Box(
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
-            .glassBlur(blurRadius = size.secondaryBlurRadius)
-    ) {
-        if (isLoading) {
-            GradientCircularProgressIndicator(
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(size.height / 2)
-            )
-        } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(size.secondaryGap),
-            ) {
-                if (icon != null) {
-                    Box(
-                        modifier = if (enabled) {
-                            Modifier
-                        } else {
-                            Modifier.graphicsLayer {
-                                colorFilter = ColorFilter.tint(Colors.White32)
-                            }
-                        }
-                    ) {
-                        icon()
-                    }
-                }
-                text?.let {
-                    Text(
-                        text = text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            .clip(buttonShape)
+            .then(
+                if (hazeState != null) {
+                    Modifier.hazeEffect(
+                        state = hazeState,
+                        style = HazeStyle(
+                            blurRadius = 12.dp,
+                            backgroundColor = Color.Black,
+                            tint = HazeTint(Color.Black.copy(alpha = 0.2f)),
+                        ),
                     )
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        OutlinedButton(
+            onClick = rememberDebouncedClick(onClick = onClick),
+            enabled = enabled && !isLoading,
+            colors = AppButtonDefaults.secondaryColors.copy(contentColor = contentColor),
+            contentPadding = contentPadding,
+            border = border,
+            modifier = if (fullWidth) Modifier.fillMaxSize() else Modifier,
+        ) {
+            if (isLoading) {
+                GradientCircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(size.height / 2)
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(size.secondaryGap),
+                ) {
+                    if (icon != null) {
+                        Box(
+                            modifier = if (enabled) {
+                                Modifier
+                            } else {
+                                Modifier.graphicsLayer {
+                                    colorFilter = ColorFilter.tint(Colors.White32)
+                                }
+                            }
+                        ) {
+                            icon()
+                        }
+                    }
+                    text?.let {
+                        Text(
+                            text = text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -278,7 +301,7 @@ fun TertiaryButton(
     }
 }
 
-@Preview(showBackground = true)
+@Preview
 @Composable
 private fun PrimaryButtonPreview() {
     AppThemeSurface {
@@ -405,33 +428,39 @@ private fun PrimaryButtonPreview() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview
 @Composable
 private fun SecondaryButtonPreview() {
+    val hazeState = rememberHazeState()
     AppThemeSurface {
         Box {
-            Image(
-                painter = painterResource(R.drawable.lightning),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize()
-            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .hazeSource(hazeState)
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.lightning),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(16.dp)
             ) {
-                SecondaryButton(
-                    text = "Secondary",
-                    onClick = {},
-                )
+                SecondaryButton(text = "Secondary", hazeState = hazeState, onClick = {})
                 SecondaryButton(
                     text = "Secondary With padding",
                     modifier = Modifier.padding(horizontal = 32.dp),
+                    hazeState = hazeState,
                     onClick = {},
                 )
                 SecondaryButton(
                     text = "Secondary With Icon",
                     onClick = {},
+                    hazeState = hazeState,
                     icon = {
                         Icon(
                             imageVector = Icons.Filled.Favorite,
@@ -443,12 +472,14 @@ private fun SecondaryButtonPreview() {
                 SecondaryButton(
                     text = "Secondary Loading",
                     isLoading = true,
+                    hazeState = hazeState,
                     onClick = {},
                 )
                 SecondaryButton(
                     text = "Secondary Disabled",
                     onClick = {},
                     enabled = false,
+                    hazeState = hazeState,
                     icon = {
                         Icon(
                             imageVector = Icons.Filled.Favorite,
@@ -461,12 +492,14 @@ private fun SecondaryButtonPreview() {
                     text = "Secondary Small",
                     size = ButtonSize.Small,
                     fullWidth = false,
+                    hazeState = hazeState,
                     onClick = {},
                 )
                 SecondaryButton(
                     text = "Secondary Small Loading",
                     size = ButtonSize.Small,
                     isLoading = true,
+                    hazeState = hazeState,
                     onClick = {},
                 )
                 SecondaryButton(
@@ -485,6 +518,7 @@ private fun SecondaryButtonPreview() {
                         onClick = {},
                         fullWidth = false,
                         size = ButtonSize.Large,
+                        hazeState = hazeState,
                         icon = {
                             Icon(
                                 imageVector = Icons.Filled.Favorite,
@@ -513,7 +547,7 @@ private fun SecondaryButtonPreview() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview
 @Composable
 private fun TertiaryButtonPreview() {
     AppThemeSurface {
