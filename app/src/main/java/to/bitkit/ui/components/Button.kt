@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
@@ -83,6 +82,7 @@ enum class ButtonSize {
             Small -> 8.dp
             Large -> 6.dp
         }
+
     fun secondaryBorder(enabled: Boolean): BorderStroke = when (this) {
         Large -> BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
         Small -> BorderStroke(1.dp, if (enabled) Colors.White16 else Color.Transparent)
@@ -183,6 +183,7 @@ fun SecondaryButton(
     // and AFTER size modifiers (Haze needs to know dimensions)
     val buttonShape = MaterialTheme.shapes.extraLarge
     Box(
+        propagateMinConstraints = true,
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
@@ -208,7 +209,6 @@ fun SecondaryButton(
             colors = AppButtonDefaults.secondaryColors.copy(contentColor = contentColor),
             contentPadding = contentPadding,
             border = border,
-            modifier = if (fullWidth) Modifier.fillMaxSize() else Modifier,
         ) {
             if (isLoading) {
                 GradientCircularProgressIndicator(
@@ -488,6 +488,25 @@ private fun SecondaryButtonPreview() {
                         )
                     },
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SecondaryButton(
+                        text = "Secondary",
+                        fullWidth = false,
+                        hazeState = hazeState,
+                        onClick = {},
+                        modifier = Modifier.weight(1f)
+                    )
+                    SecondaryButton(
+                        text = "Secondary",
+                        fullWidth = false,
+                        hazeState = hazeState,
+                        onClick = {},
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 SecondaryButton(
                     text = "Secondary Small",
                     size = ButtonSize.Small,
@@ -588,6 +607,23 @@ private fun TertiaryButtonPreview() {
                 },
                 onClick = {}
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TertiaryButton(
+                    text = "Tertiary",
+                    fullWidth = false,
+                    onClick = {},
+                    modifier = Modifier.weight(1f)
+                )
+                TertiaryButton(
+                    text = "Tertiary",
+                    fullWidth = false,
+                    onClick = {},
+                    modifier = Modifier.weight(1f)
+                )
+            }
             TertiaryButton(
                 text = "Tertiary Small",
                 size = ButtonSize.Small,

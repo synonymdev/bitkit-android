@@ -4,12 +4,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -45,6 +43,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -63,6 +62,7 @@ fun SpendingWalletScreen(
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     onTransferToSavingsClick: () -> Unit,
+    onTransferFromSavingsClick: () -> Unit,
     onBackClick: () -> Unit,
     balances: BalanceState = LocalBalances.current,
 ) {
@@ -76,7 +76,9 @@ fun SpendingWalletScreen(
         val hasChannels = channels.isNotEmpty()
         mutableStateOf(hasLnBalance && hasChannels)
     }
-
+    val canTransferFromSavings by remember(showEmptyState, balances.totalOnchainSats) {
+        mutableStateOf(showEmptyState && balances.totalOnchainSats > 0uL)
+    }
     val hazeState = rememberHazeState()
     Box(
         modifier = Modifier
@@ -129,8 +131,26 @@ fun SpendingWalletScreen(
                     )
                 }
 
+                if (canTransferFromSavings) {
+                    VerticalSpacer(32.dp)
+
+                    SecondaryButton(
+                        onClick = onTransferFromSavingsClick,
+                        text = stringResource(R.string.lightning__funding__button1),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_transfer),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        hazeState = hazeState,
+                        modifier = Modifier.testTag("TransferFromSavings")
+                    )
+                }
+
                 if (!showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    VerticalSpacer(32.dp)
 
                     if (canTransfer) {
                         SecondaryButton(
@@ -160,8 +180,7 @@ fun SpendingWalletScreen(
         }
         if (showEmptyState) {
             EmptyStateView(
-                text = stringResource(R.string.wallet__spending__onboarding)
-                    .withAccent(accentColor = Colors.Purple),
+                text = stringResource(R.string.wallet__spending__onboarding).withAccent(accentColor = Colors.Purple),
                 modifier = Modifier
                     .systemBarsPadding()
                     .align(Alignment.BottomCenter)
@@ -182,6 +201,7 @@ private fun Preview() {
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
                 balances = BalanceState(totalLightningSats = 50_000u),
             )
@@ -202,6 +222,7 @@ private fun PreviewTransfer() {
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
                 balances = BalanceState(
                     totalLightningSats = 50_000u,
@@ -225,6 +246,7 @@ private fun PreviewNoActivity() {
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
                 balances = BalanceState(totalLightningSats = 50_000u),
             )
@@ -245,7 +267,29 @@ private fun PreviewEmpty() {
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewEmptyWithSavings() {
+    AppThemeSurface {
+        Box {
+            SpendingWalletScreen(
+                channels = persistentListOf(),
+                lightningActivities = persistentListOf(),
+                onAllActivityButtonClick = {},
+                onActivityItemClick = {},
+                onEmptyActivityRowClick = {},
+                onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
+                onBackClick = {},
+                balances = BalanceState(totalOnchainSats = 100_000u),
             )
             TabBar()
         }
