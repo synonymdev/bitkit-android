@@ -19,6 +19,7 @@ import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.theme.GlanceColors
+import to.bitkit.ui.theme.Colors
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 
@@ -95,13 +96,13 @@ private fun PriceRow(widget: PriceWidgetData) {
             style = TextStyle(
                 color = if (widget.change.isPositive) {
                     androidx.glance.color.ColorProvider(
-                        day = GlanceColors.Green,
-                        night = GlanceColors.Green,
+                        day = Colors.Green,
+                        night = Colors.Green,
                     )
                 } else {
                     androidx.glance.color.ColorProvider(
-                        day = GlanceColors.Red,
-                        night = GlanceColors.Red,
+                        day = Colors.Red,
+                        night = Colors.Red,
                     )
                 },
                 fontSize = 13.sp,
