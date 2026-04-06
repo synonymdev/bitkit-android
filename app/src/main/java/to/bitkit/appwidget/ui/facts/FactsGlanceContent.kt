@@ -61,7 +61,7 @@ fun FactsGlanceContent(
         if (prefs.showSource) {
             Spacer(modifier = GlanceModifier.height(8.dp))
             Text(
-                text = context.getString(R.string.appwidget__facts__source),
+                text = context.getString(R.string.widgets__widget__source),
                 style = TextStyle(
                     color = GlanceColors.textTertiary,
                     fontSize = 11.sp,

@@ -187,7 +187,7 @@
         <receiver
             android:name=".appwidget.ui.blocks.BlocksGlanceReceiver"
             android:exported="true"
-            android:label="@string/appwidget__blocks__name">
+            android:label="@string/widgets__blocks__name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -200,7 +200,7 @@
         <receiver
             android:name=".appwidget.ui.price.PriceGlanceReceiver"
             android:exported="true"
-            android:label="@string/appwidget__price__name">
+            android:label="@string/widgets__price__name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -213,7 +213,7 @@
         <receiver
             android:name=".appwidget.ui.weather.WeatherGlanceReceiver"
             android:exported="true"
-            android:label="@string/appwidget__weather__name">
+            android:label="@string/widgets__weather__name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -226,7 +226,7 @@
         <receiver
             android:name=".appwidget.ui.headlines.HeadlinesGlanceReceiver"
             android:exported="true"
-            android:label="@string/appwidget__headlines__name">
+            android:label="@string/widgets__news__name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -239,7 +239,7 @@
         <receiver
             android:name=".appwidget.ui.facts.FactsGlanceReceiver"
             android:exported="true"
-            android:label="@string/appwidget__facts__name">
+            android:label="@string/widgets__facts__name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

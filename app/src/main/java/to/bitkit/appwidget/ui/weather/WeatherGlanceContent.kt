@@ -75,14 +75,14 @@ fun WeatherGlanceContent(
 
         if (prefs.showCurrentFee) {
             GlanceDataRow(
-                label = context.getString(R.string.appwidget__weather__current_fee),
+                label = context.getString(R.string.widgets__weather__current_fee),
                 value = weather.currentFee,
             )
         }
 
         if (prefs.showNextBlockFee) {
             GlanceDataRow(
-                label = context.getString(R.string.appwidget__weather__next_block),
+                label = context.getString(R.string.widgets__weather__next_block),
                 value = "${weather.nextBlockFee} sat/vB",
             )
         }
@@ -90,14 +90,14 @@ fun WeatherGlanceContent(
 }
 
 private fun conditionLabel(context: Context, condition: FeeCondition): String = when (condition) {
-    FeeCondition.GOOD -> context.getString(R.string.appwidget__weather__good)
-    FeeCondition.AVERAGE -> context.getString(R.string.appwidget__weather__average)
-    FeeCondition.POOR -> context.getString(R.string.appwidget__weather__poor)
+    FeeCondition.GOOD -> context.getString(R.string.widgets__weather__condition__good__title)
+    FeeCondition.AVERAGE -> context.getString(R.string.widgets__weather__condition__average__title)
+    FeeCondition.POOR -> context.getString(R.string.widgets__weather__condition__poor__title)
 }
 
 private fun conditionDescription(context: Context, condition: FeeCondition): String =
     when (condition) {
-        FeeCondition.GOOD -> context.getString(R.string.appwidget__weather__good_desc)
-        FeeCondition.AVERAGE -> context.getString(R.string.appwidget__weather__average_desc)
-        FeeCondition.POOR -> context.getString(R.string.appwidget__weather__poor_desc)
+        FeeCondition.GOOD -> context.getString(R.string.widgets__weather__condition__good__description)
+        FeeCondition.AVERAGE -> context.getString(R.string.widgets__weather__condition__average__description)
+        FeeCondition.POOR -> context.getString(R.string.widgets__weather__condition__poor__description)
     }

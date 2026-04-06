@@ -203,7 +203,7 @@ private fun PriceConfigContent(
                 modifier = Modifier.weight(1f),
             )
             PrimaryButton(
-                text = stringResource(R.string.appwidget__config__confirm),
+                text = stringResource(R.string.common__save),
                 fullWidth = false,
                 onClick = onSave,
                 modifier = Modifier.weight(1f),
