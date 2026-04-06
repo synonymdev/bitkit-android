@@ -144,6 +144,7 @@ fun SpendingWalletScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                         },
+                        hazeState = hazeState,
                         modifier = Modifier.testTag("TransferFromSavings")
                     )
                 }
