@@ -984,6 +984,7 @@ class AppViewModel @Inject constructor(
                         )
                         return@takeIf false
                     }
+                    lightningRepo.waitForUsableChannels()
                     val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                     if (!canSend) {
                         val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
@@ -1426,6 +1427,7 @@ class AppViewModel @Inject constructor(
         val quickPayHandled = handleQuickPayIfApplicable(amountSats = invoice.amountSatoshis, invoice = invoice)
         if (quickPayHandled) return
 
+        lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
@@ -1474,6 +1476,7 @@ class AppViewModel @Inject constructor(
         val isFixed = data.isFixedAmount()
         val displaySats = data.minSendableSat()
 
+        lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(displaySats.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,

@@ -984,7 +984,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun waitForUsableChannels() {
+    suspend fun waitForUsableChannels() {
         if (lightningService.channels?.any { it.isUsable } == true) return
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
@@ -1214,23 +1214,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun canSend(amountSats: ULong) = withContext(bgDispatcher) {
+    fun canSend(amountSats: ULong): Boolean {
         val state = _lightningState.value
-        if (!state.nodeLifecycleState.canRun()) return@withContext false
-
-        if (state.channels.none { it.isUsable }) {
-            syncState()
-            val ready = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
-                _lightningState.first { it.channels.any { ch -> ch.isUsable } }
-            }
-            if (ready == null) {
-                Logger.warn("Timeout waiting for usable channels in canSend", context = TAG)
-                return@withContext false
-            }
-        }
-
-        return@withContext _lightningState.value.channels
-            .totalNextOutboundHtlcLimitSats() >= amountSats
+        if (!state.nodeLifecycleState.canRun()) return false
+        return state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
     }
 
     fun getNodeId(): String? =
