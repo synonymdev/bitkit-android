@@ -4,12 +4,18 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +30,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -72,22 +80,31 @@ fun SpendingWalletScreen(
     val canTransferFromSavings by remember(showEmptyState, balances.totalOnchainSats) {
         mutableStateOf(showEmptyState && balances.totalOnchainSats > 0uL)
     }
-
+    val hazeState = rememberHazeState()
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Colors.Black)
             .blockPointerInputPassthrough()
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.coin_stack_x_2),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
+        // Background layer: hazeSource must be a sibling of hazeEffect, not a parent.
+        // Haze can't blur an ancestor — source and effect must be at the same level.
+        Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (155).dp)
-                .size(330.dp)
-        )
+                .matchParentSize()
+                .background(Colors.Black)
+                .hazeSource(hazeState)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.coin_stack_x_2),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (155).dp)
+                    .size(330.dp)
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
+            )
+        }
         ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__spending__title),
@@ -146,6 +163,7 @@ fun SpendingWalletScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                             },
+                            hazeState = hazeState,
                             modifier = Modifier.testTag("TransferToSavings")
                         )
                     }
