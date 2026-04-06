@@ -453,9 +453,9 @@ private fun SecondaryButtonPreview() {
                 SecondaryButton(text = "Secondary", hazeState = hazeState, onClick = {})
                 SecondaryButton(
                     text = "Secondary With padding",
-                    modifier = Modifier.padding(horizontal = 32.dp),
                     hazeState = hazeState,
                     onClick = {},
+                    modifier = Modifier.padding(horizontal = 32.dp)
                 )
                 SecondaryButton(
                     text = "Secondary With Icon",
