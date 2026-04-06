@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Polish Primary, Secondary, and Tertiary buttons to match Figma design specs #887
 - Avoid msat truncation when paying invoices and LNURL callbacks #879
 - Fix ANR on RGS server settings screen caused by catastrophic regex backtracking #880
 - Fix crash when returning app to foreground on Receive screen #875
