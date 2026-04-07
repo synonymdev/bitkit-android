@@ -130,8 +130,9 @@
     <string name="lightning__external_manual__scan">QR scannen</string>
     <string name="lightning__external_manual__text">Je kunt een externe node gebruiken om handmatig een Lightning-verbinding te openen. Voer de node-gegevens in om door te gaan.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Handmatige configuratie&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Uitgavenbalans</string>
     <string name="lightning__external_success__text">Lightning-verbinding gestart. Je kunt je bestedingssaldo gebruiken in &lt;accent&gt;±30 minuten&lt;/accent&gt; (afhankelijk van node-configuratie).</string>
-    <string name="lightning__external_success__title">Verbinding\n&lt;accent&gt;gestart&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Kanaal wordt\n&lt;accent&gt;geopend&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Vergoedingstarief</string>
     <string name="lightning__fee_rate_update_time">Vergoedingstarief cache update tijd</string>
     <string name="lightning__fees">Vergoedingen</string>
@@ -146,9 +147,8 @@
     <string name="lightning__force_title">Forceer\n&lt;accent&gt;overboeking&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Overboeken van spaargeld</string>
     <string name="lightning__funding__button2">Andere wallet gebruiken</string>
-    <string name="lightning__funding__button3">Geavanceerd</string>
     <string name="lightning__funding__nav_title">Bestedingssaldo</string>
-    <string name="lightning__funding__text">Je kunt je Bitkit spaargeld gebruiken of bitcoin versturen vanaf een andere wallet.</string>
+    <string name="lightning__funding__text">De makkelijkste optie is om je Bitkit-spaargeld te gebruiken of bitcoin te versturen vanuit een andere wallet.</string>
     <string name="lightning__funding__text_blocked">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__title">Vul je &lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>
@@ -169,6 +169,7 @@
     <string name="lightning__next_outbound_htlc_limit">Volgende uitgaande HTLC-limiet</string>
     <string name="lightning__next_outbound_htlc_min">Volgende uitgaande HTLC min</string>
     <string name="lightning__no_funds__description">Voordat je geld van je spaargeld kunt overboeken, moet je bitcoin naar je Bitkit-wallet sturen.</string>
+    <string name="lightning__no_funds__fund_wallet">Wallet financieren</string>
     <string name="lightning__no_funds__title">Geen beschikbaar geld</string>
     <string name="lightning__node_id">LDK Node ID</string>
     <string name="lightning__node_info">Lightning Node</string>
@@ -945,7 +946,7 @@
     <string name="wallet__send_max_spending__title">Reservesaldo</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Factuur\n&lt;accent&gt;betalen...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Controleren &amp; verzenden</string>
+    <string name="wallet__send_review">Bevestigen</string>
     <string name="wallet__send_sent">Bitcoin verzonden</string>
     <string name="wallet__send_swipe">Veeg om te betalen</string>
     <string name="wallet__send_to">Naar</string>

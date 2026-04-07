@@ -130,8 +130,9 @@
     <string name="lightning__external_manual__scan">Scansiona QR</string>
     <string name="lightning__external_manual__text">Puoi usare un nodo esterno per aprire manualmente una connessione Lightning. Inserisci i dettagli del nodo per continuare.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Configurazione manuale&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo di spesa</string>
     <string name="lightning__external_success__text">Connessione Lightning avviata. Potrai utilizzare il tuo conto di spesa in &lt;accent&gt;±30 minuti&lt;/accent&gt; (dipende dalla configurazione del nodo).</string>
-    <string name="lightning__external_success__title">Connessione\n&lt;accent&gt;avviata&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Apertura\n&lt;accent&gt;del canale&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Tasso di commissione</string>
     <string name="lightning__fee_rate_update_time">Tempo di Aggiornamento Cache Commissioni</string>
     <string name="lightning__fees">Commissioni</string>
@@ -146,9 +147,8 @@
     <string name="lightning__force_title">Trasferimento\n&lt;accent&gt;forzoso&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Trasferimento da risparmio</string>
     <string name="lightning__funding__button2">Usa un altro portafoglio</string>
-    <string name="lightning__funding__button3">Avanzate</string>
     <string name="lightning__funding__nav_title">Conto di Spesa</string>
-    <string name="lightning__funding__text">Puoi utilizzare i tuoi risparmi Bitkit o inviare bitcoin da un portafoglio diverso.</string>
+    <string name="lightning__funding__text">Il modo più semplice è usare i tuoi risparmi Bitkit o inviare bitcoin da un portafoglio diverso.</string>
     <string name="lightning__funding__text_blocked">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__title">Manda fondi al tuo &lt;accent&gt;conto di spesa&lt;/accent&gt;</string>
@@ -169,6 +169,7 @@
     <string name="lightning__next_outbound_htlc_limit">Limite HTLC in Uscita Successivo</string>
     <string name="lightning__next_outbound_htlc_min">HTLC Min in Uscita Successivo</string>
     <string name="lightning__no_funds__description">Prima di poter trasferire fondi dal tuo conto di risparmio, devi inviare bitcoin al tuo portafoglio Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Finanzia portafoglio</string>
     <string name="lightning__no_funds__title">Nessun fondo disponibile</string>
     <string name="lightning__node_id">ID Nodo LDK</string>
     <string name="lightning__node_info">Nodo Lightning</string>
@@ -945,7 +946,7 @@
     <string name="wallet__send_max_spending__title">Saldo di Riserva</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagamento\n&lt;accent&gt;fattura...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Rivedi &amp; Invia</string>
+    <string name="wallet__send_review">Conferma</string>
     <string name="wallet__send_sent">Bitcoin Inviati</string>
     <string name="wallet__send_swipe">Scorri per Pagare</string>
     <string name="wallet__send_to">A</string>

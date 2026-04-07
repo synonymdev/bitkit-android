@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Los geht\'s</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Du kannst dein Bitkit-Sparkonto verwenden oder Bitcoin aus einer anderen Wallet senden.</string>
+    <string name="lightning__funding__text">Am einfachsten ist es, deine Bitkit-Ersparnisse zu verwenden oder Bitcoin von einer anderen Wallet zu senden.</string>
     <string name="lightning__funding__text_blocked">Bitkit bietet derzeit keine Lightning-Dienste in deinem Land an,  aber du kannst dich trotzdem direkt mit anderen Knotenpunkten verbinden.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit bietet derzeit keine Lightning-Dienste in deinem Land an,  aber du kannst dich trotzdem direkt mit anderen Knotenpunkten verbinden.</string>
     <string name="lightning__funding__button1">Von Sparkonto übertragen</string>
     <string name="lightning__funding__button2">Anderes Wallet verwenden</string>
-    <string name="lightning__funding__button3">Fortgeschritten</string>
     <string name="lightning__funding_advanced__nav_title">Ausgabenkonto</string>
     <string name="lightning__funding_advanced__title">Fortgeschrittene&lt;accent&gt;setup&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__text">Scannen Sie einen QR-Code, um Ihren LNURL-Kanal von einem anderen LSP zu beanspruchen, oder wählen Sie die manuelle Einrichtung.</string>
@@ -101,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Manuelle Einrichtung</string>
     <string name="lightning__no_funds__title">Keine verfügbaren Mittel</string>
     <string name="lightning__no_funds__description">Bevor du Geld von deinem Sparkonto übertragen kannst, musst du Bitcoin zu deiner Bitkit Wallet senden.</string>
+    <string name="lightning__no_funds__fund_wallet">Wallet aufladen</string>
     <string name="lightning__transfer__nav_title">Übertrage Guthaben</string>
     <string name="lightning__transfer__confirm">Bitte\n&lt;accent&gt;bestätige&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">Benutzerdefiniert &lt;accent&gt;fee&lt;/accent&gt;</string>
@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Paste Node URI</string>
     <string name="lightning__external_manual__scan">QR-Code scannen</string>
     <string name="lightning__external_amount__title">Spending\n&lt;accent&gt;balance&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Verbindung\n&lt;accent&gt;initiiert&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Ausgabenguthaben</string>
+    <string name="lightning__external_success__title">Kanal wird\n&lt;accent&gt;geöffnet&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">Lightning-Verbindung initiiert. Du kannst dein Guthaben in &lt;accent&gt;±30 Minuten&lt;/accent&gt; verwenden (abhängig von der Node-Konfiguration).</string>
     <string name="lightning__error_channel_purchase">Einrichtung der Instant-Zahlungen fehlgeschlagen</string>
     <string name="lightning__error_channel_setup_msg">Ein Fehler ist bei der Einrichtung deines Sofortguthabens aufgetreten. {raw}</string>
@@ -799,7 +800,7 @@
     <string name="wallet__send_available_savings">Verfügbar (sparen)</string>
     <string name="wallet__send_max_spending__title">Reserve-Saldo</string>
     <string name="wallet__send_max_spending__description">Der maximal auszahlbare Betrag ist etwas niedriger, da eine Reserve erforderlich ist.</string>
-    <string name="wallet__send_review">Überprüfen &amp; Senden</string>
+    <string name="wallet__send_review">Bestätigen</string>
     <string name="wallet__send_confirming_in">Bestätigung in</string>
     <string name="wallet__send_invoice_expiration">Rechnungsverfall</string>
     <string name="wallet__send_swipe">Zum Bezahlen wischen</string>

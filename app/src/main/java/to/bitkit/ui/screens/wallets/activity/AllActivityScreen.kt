@@ -70,7 +70,7 @@ fun AllActivityScreen(
         onTagClick = { app.showSheet(Sheet.ActivityTagSelector) },
         onDateRangeClick = { app.showSheet(Sheet.ActivityDateRangeSelector) },
         onActivityItemClick = onActivityItemClick,
-        onEmptyActivityRowClick = { app.showSheet(Sheet.Receive) },
+        onEmptyActivityRowClick = { app.showSheet(Sheet.Receive()) },
     )
 }
 

@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Commencer</string>
     <string name="lightning__funding__nav_title">Solde Dépenses</string>
     <string name="lightning__funding__title">Financez votre &lt;accent&gt;solde Dépenses&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Vous pouvez utiliser votre épargne Bitkit ou envoyer des bitcoins à partir d\'un autre portefeuille.</string>
+    <string name="lightning__funding__text">Le plus simple est d\'utiliser vos économies Bitkit ou d\'envoyer des bitcoins depuis un autre portefeuille.</string>
     <string name="lightning__funding__text_blocked">Bitkit ne fournit pas actuellement de services Lightning dans votre pays, mais vous pouvez toujours vous connecter directement à d\'autres nœuds.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit ne fournit pas actuellement de services Lightning dans votre pays, mais vous pouvez toujours vous connecter directement à d\'autres nœuds.</string>
     <string name="lightning__funding__button1">Transfert depuis l\'épargne</string>
     <string name="lightning__funding__button2">Utiliser un autre portefeuille</string>
-    <string name="lightning__funding__button3">Avancé</string>
     <string name="lightning__funding_advanced__nav_title">Solde Dépenses</string>
     <string name="lightning__funding_advanced__title">&lt;accent&gt;Configuration&lt;/accent&gt; avancée</string>
     <string name="lightning__funding_advanced__text">Scannez un QR code pour réclamer votre canal LNURL à un autre LSP, ou choisissez la configuration manuelle.</string>
@@ -101,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Configuration manuelle</string>
     <string name="lightning__no_funds__title">Pas de fonds disponibles</string>
     <string name="lightning__no_funds__description">Avant de pouvoir transférer des fonds depuis votre solde d\'épargne, vous devez envoyer des bitcoins à votre portefeuille Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Approvisionner le portefeuille</string>
     <string name="lightning__transfer__nav_title">Transfert de fonds</string>
     <string name="lightning__transfer__confirm">Veuillez\n&lt;accent&gt;confirmer&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">&lt;accent&gt;Frais&lt;/accent&gt; sur mesure</string>
@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Coller l\'URI du nœud</string>
     <string name="lightning__external_manual__scan">Scanner QR</string>
     <string name="lightning__external_amount__title">Dépenses \n&lt;accent&gt;solde&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Connexion \n&lt;accent&gt;initiée&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Solde de dépenses</string>
+    <string name="lightning__external_success__title">Ouverture\n&lt;accent&gt;du canal&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">La connexion Lightning est initiée. Vous pourrez utiliser votre compte courant dans &lt;accent&gt;±30 minutes&lt;/accent&gt; (en fonction de la configuration du nœud).</string>
     <string name="lightning__error_channel_purchase">Échec de la configuration des paiements instantanés</string>
     <string name="lightning__error_channel_setup_msg">Une erreur s\'est produite lors de l\'établissement de votre solde du compte courant. {raw}</string>
@@ -799,7 +800,7 @@
     <string name="wallet__send_available_savings">Disponible (épargne)</string>
     <string name="wallet__send_max_spending__title">Solde Réserve</string>
     <string name="wallet__send_max_spending__description">Le montant maximum pouvant être dépensé est un peu moins élevé en raison d\'un solde de Réserve requis.</string>
-    <string name="wallet__send_review">Révision et envoi</string>
+    <string name="wallet__send_review">Confirmer</string>
     <string name="wallet__send_confirming_in">Confirmation en</string>
     <string name="wallet__send_invoice_expiration">Expiration de la facture</string>
     <string name="wallet__send_swipe">Glisser pour payer</string>
