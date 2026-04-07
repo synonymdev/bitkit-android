@@ -32,6 +32,8 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyProfile
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
@@ -61,8 +63,10 @@ fun PubkyAuthApprovalSheet(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showBiometrics by remember { mutableStateOf(false) }
+    var showAuthCheck by remember { mutableStateOf(false) }
     var pendingAuthUrl by remember { mutableStateOf<String?>(null) }
 
+    val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
@@ -73,12 +77,29 @@ fun PubkyAuthApprovalSheet(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is PubkyAuthApprovalEffect.RequestBiometric -> {
-                    if (isPinEnabled && isBiometricEnabled && isBiometrySupported) {
-                        pendingAuthUrl = it.authUrl
-                        showBiometrics = true
-                    } else {
-                        viewModel.confirmAuthorize(it.authUrl)
+                is PubkyAuthApprovalEffect.RequestLocalAuth -> {
+                    pendingAuthUrl = it.authUrl
+                    when (
+                        resolvePubkyApprovalLocalAuthMode(
+                            isPinEnabled = isPinEnabled,
+                            isBiometricEnabled = isBiometricEnabled,
+                            isBiometrySupported = isBiometrySupported,
+                        )
+                    ) {
+                        PubkyApprovalLocalAuthMode.AuthCheck -> {
+                            showBiometrics = false
+                            showAuthCheck = true
+                        }
+
+                        PubkyApprovalLocalAuthMode.Biometrics -> {
+                            showAuthCheck = false
+                            showBiometrics = true
+                        }
+
+                        PubkyApprovalLocalAuthMode.None -> {
+                            pendingAuthUrl = null
+                            viewModel.confirmAuthorize(it.authUrl)
+                        }
                     }
                 }
                 PubkyAuthApprovalEffect.Dismiss -> onDismiss()
@@ -94,6 +115,22 @@ fun PubkyAuthApprovalSheet(
             onDismiss = { viewModel.dismiss() },
         )
 
+        if (showAuthCheck) {
+            AuthCheckView(
+                appViewModel = app,
+                settingsViewModel = settings,
+                onSuccess = {
+                    showAuthCheck = false
+                    pendingAuthUrl?.let { viewModel.confirmAuthorize(it) }
+                    pendingAuthUrl = null
+                },
+                onBack = {
+                    showAuthCheck = false
+                    pendingAuthUrl = null
+                },
+            )
+        }
+
         if (showBiometrics) {
             BiometricsView(
                 onSuccess = {
@@ -108,6 +145,22 @@ fun PubkyAuthApprovalSheet(
             )
         }
     }
+}
+
+internal enum class PubkyApprovalLocalAuthMode {
+    None,
+    Biometrics,
+    AuthCheck,
+}
+
+internal fun resolvePubkyApprovalLocalAuthMode(
+    isPinEnabled: Boolean,
+    isBiometricEnabled: Boolean,
+    isBiometrySupported: Boolean,
+): PubkyApprovalLocalAuthMode = when {
+    isPinEnabled -> PubkyApprovalLocalAuthMode.AuthCheck
+    isBiometricEnabled && isBiometrySupported -> PubkyApprovalLocalAuthMode.Biometrics
+    else -> PubkyApprovalLocalAuthMode.None
 }
 
 @Composable

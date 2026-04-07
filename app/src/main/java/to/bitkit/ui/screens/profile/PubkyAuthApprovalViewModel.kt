@@ -63,7 +63,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
     fun requestAuthorize(authUrl: String) {
         viewModelScope.launch {
-            _effects.emit(PubkyAuthApprovalEffect.RequestBiometric(authUrl))
+            _effects.emit(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl))
         }
     }
 
@@ -112,6 +112,6 @@ sealed interface ApprovalState {
 }
 
 sealed interface PubkyAuthApprovalEffect {
-    data class RequestBiometric(val authUrl: String) : PubkyAuthApprovalEffect
+    data class RequestLocalAuth(val authUrl: String) : PubkyAuthApprovalEffect
     data object Dismiss : PubkyAuthApprovalEffect
 }
