@@ -147,9 +147,8 @@
     <string name="lightning__force_title">تحويل\n&lt;accent&gt;إجباري&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">تحويل من المدخرات</string>
     <string name="lightning__funding__button2">استخدم محفظة أخرى</string>
-    <string name="lightning__funding__button3">متقدم</string>
     <string name="lightning__funding__nav_title">رصيد الإنفاق</string>
-    <string name="lightning__funding__text">يمكنك استخدام مدخرات Bitkit أو إرسال Bitcoin من محفظة مختلفة.</string>
+    <string name="lightning__funding__text">أسهل خيار هو استخدام مدخرات Bitkit الخاصة بك أو إرسال بيتكوين من محفظة مختلفة.</string>
     <string name="lightning__funding__text_blocked">لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى مباشرة.</string>
     <string name="lightning__funding__text_blocked_cjit">لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى مباشرة.</string>
     <string name="lightning__funding__title">موّل &lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
@@ -170,6 +169,7 @@
     <string name="lightning__next_outbound_htlc_limit">حد HTLC الصادر التالي</string>
     <string name="lightning__next_outbound_htlc_min">الحد الأدنى لـ HTLC الصادر التالي</string>
     <string name="lightning__no_funds__description">قبل أن تتمكن من تحويل الأموال من رصيد مدخراتك، تحتاج إلى إرسال Bitcoin إلى محفظة Bitkit الخاصة بك.</string>
+    <string name="lightning__no_funds__fund_wallet">تمويل المحفظة</string>
     <string name="lightning__no_funds__title">لا توجد أموال متاحة</string>
     <string name="lightning__node_id">معرّف عقدة LDK</string>
     <string name="lightning__node_info">عقدة Lightning</string>
