@@ -284,7 +284,7 @@ fun BodyS(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
