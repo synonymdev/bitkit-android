@@ -138,8 +138,9 @@
     <string name="lightning__external_manual__scan">Сканировать QR</string>
     <string name="lightning__external_manual__text">Вы можете использовать внешний узел для ручного открытия Lightning соединения. Введите данные узла, чтобы продолжить.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Ручная Настройка&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Баланс расходов</string>
     <string name="lightning__external_success__text">Lightning соединение инициировано. Вы сможете использовать ваш баланс расходов через &lt;accent&gt;±30 минут&lt;/accent&gt; (зависит от конфигурации узла).</string>
-    <string name="lightning__external_success__title">Соединение\n&lt;accent&gt;Инициировано&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Открытие\n&lt;accent&gt;канала&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Ставка Комиссии</string>
     <string name="lightning__fee_rate_update_time">Время обновления кэша комиссии</string>
     <string name="lightning__fees">Комиссии</string>

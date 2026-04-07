@@ -130,8 +130,9 @@
     <string name="lightning__external_manual__scan">Escanear QR</string>
     <string name="lightning__external_manual__text">Você pode usar um nó externo para abrir manualmente uma conexão Lightning. Digite os detalhes do nó para continuar.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Setup manual&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo de gastos</string>
     <string name="lightning__external_success__text">Conexão Lightning iniciada. Você poderá usar seu saldo de gastos em &lt;accent&gt;±30 minutos&lt;/accent&gt; (depende da configuração do nó).</string>
-    <string name="lightning__external_success__title">Conexão\n&lt;accent&gt;iniciada&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Abertura\n&lt;accent&gt;de canal&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Taxa por bytes</string>
     <string name="lightning__fee_rate_update_time">Atualização do Cache de Taxa</string>
     <string name="lightning__fees">Taxas</string>

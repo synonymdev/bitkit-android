@@ -17,10 +17,10 @@ fun ExternalSuccessScreen(
     onContinue: () -> Unit,
 ) {
     InfoScreenContent(
-        navTitle = stringResource(R.string.lightning__external__nav_title),
+        navTitle = stringResource(R.string.lightning__external_success__nav_title),
         title = stringResource(R.string.lightning__external_success__title).withAccent(accentColor = Colors.Purple),
         description = stringResource(R.string.lightning__external_success__text).withAccentBoldBright(),
-        image = painterResource(R.drawable.switch_box),
+        image = painterResource(R.drawable.lightning),
         buttonText = localizedRandom(R.string.common__ok_random),
         onButtonClick = onContinue,
         testTag = "ExternalSuccess",
