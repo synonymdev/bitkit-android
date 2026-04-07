@@ -87,6 +87,7 @@ fun EditInvoiceScreen(
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+    val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         editInvoiceVM.editInvoiceEffect.collect { effect ->
@@ -142,9 +143,10 @@ fun EditInvoiceScreen(
         },
         onContinueKeyboard = { keyboardVisible = false },
         onContinueGeneral = { editInvoiceVM.onClickContinue() },
+        isLoading = isLoading,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
-        isSoftKeyboardVisible = isSoftKeyboardVisible
+        isSoftKeyboardVisible = isSoftKeyboardVisible,
     )
 }
 
@@ -164,6 +166,7 @@ fun EditInvoiceContent(
     onTextChanged: (String) -> Unit,
     onClickTag: (String) -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
     BoxWithConstraints(
@@ -310,7 +313,7 @@ fun EditInvoiceContent(
                                 .fillMaxWidth()
                                 .padding(bottom = 16.dp)
                         ) {
-                            tags.map { tagText ->
+                            tags.forEach { tagText ->
                                 TagButton(
                                     text = tagText,
                                     displayIconClose = true,
@@ -338,7 +341,8 @@ fun EditInvoiceContent(
                         PrimaryButton(
                             text = stringResource(R.string.wallet__receive_show_qr),
                             onClick = onContinueGeneral,
-                            modifier = Modifier.testTag("ShowQrReceive")
+                            isLoading = isLoading,
+                            modifier = Modifier.testTag("ShowQrReceive"),
                         )
 
                         VerticalSpacer(16.dp)

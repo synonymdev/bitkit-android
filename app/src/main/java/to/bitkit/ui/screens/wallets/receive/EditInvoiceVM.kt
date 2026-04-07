@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
@@ -17,6 +20,10 @@ class EditInvoiceVM @Inject constructor(
 
     private val _editInvoiceEffect = MutableSharedFlow<EditInvoiceScreenEffects>(extraBufferCapacity = 1)
     val editInvoiceEffect = _editInvoiceEffect.asSharedFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading = _isLoading.asStateFlow()
+
     private fun editInvoiceEffect(effect: EditInvoiceScreenEffects) = viewModelScope.launch {
         _editInvoiceEffect.emit(
             effect
@@ -25,6 +32,7 @@ class EditInvoiceVM @Inject constructor(
 
     fun onClickContinue() {
         viewModelScope.launch {
+            _isLoading.update { true }
             walletRepo.shouldRequestAdditionalLiquidity().onSuccess { shouldRequest ->
                 if (shouldRequest) {
                     editInvoiceEffect(EditInvoiceScreenEffects.NavigateAddLiquidity)
@@ -35,6 +43,7 @@ class EditInvoiceVM @Inject constructor(
                 Logger.warn("Error checking for liquidity, navigating back to QR Screen", context = TAG)
                 editInvoiceEffect(EditInvoiceScreenEffects.UpdateInvoice)
             }
+            _isLoading.update { false }
         }
     }
 
