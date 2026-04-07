@@ -147,9 +147,8 @@
     <string name="lightning__force_title">Forçar\n&lt;accent&gt;transferència&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Transferir des d\'estalvis</string>
     <string name="lightning__funding__button2">Utilitza un altre moneder</string>
-    <string name="lightning__funding__button3">Avançat</string>
     <string name="lightning__funding__nav_title">Balanç de despesa</string>
-    <string name="lightning__funding__text">Pots utilitzar els teus estalvis de Bitkit o enviar bitcoin des d\'una altra cartera.</string>
+    <string name="lightning__funding__text">La forma més fàcil és utilitzar els teus estalvis de Bitkit o enviar bitcoin des d\'una altra cartera.</string>
     <string name="lightning__funding__text_blocked">Bitkit no ofereix serveis Lightning al teu país, però encara pots connectar-te a altres nodes directament.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit no ofereix serveis Lightning al teu país, però encara pots connectar-te a altres nodes directament.</string>
     <string name="lightning__funding__title">Finança el teu &lt;accent&gt;saldo de despesa&lt;/accent&gt;</string>
@@ -170,6 +169,7 @@
     <string name="lightning__next_outbound_htlc_limit">Límit del pròxim HTLC de sortida</string>
     <string name="lightning__next_outbound_htlc_min">Mínim del pròxim HTLC de sortida</string>
     <string name="lightning__no_funds__description">Abans de poder transferir fons del teu saldo d\'estalvis, has d\'enviar bitcoin a la teva cartera Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Finançar cartera</string>
     <string name="lightning__no_funds__title">No hi ha fons disponibles</string>
     <string name="lightning__node_id">ID de Node LDK</string>
     <string name="lightning__node_info">Node de Lightning</string>

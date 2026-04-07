@@ -155,9 +155,8 @@
     <string name="lightning__force_title">Принудительный\n&lt;accent&gt;Перевод&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Перевести из Сбережений</string>
     <string name="lightning__funding__button2">Использовать Другой Кошелёк</string>
-    <string name="lightning__funding__button3">Дополнительно</string>
     <string name="lightning__funding__nav_title">Баланс Расходов</string>
-    <string name="lightning__funding__text">Вы можете использовать свои сбережения Bitkit или отправить биткойны из другого кошелька.</string>
+    <string name="lightning__funding__text">Самый простой вариант — использовать ваши сбережения Bitkit или отправить биткоин с другого кошелька.</string>
     <string name="lightning__funding__text_blocked">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__title">Пополните свой &lt;accent&gt;Баланс Расходов&lt;/accent&gt;</string>
@@ -182,6 +181,7 @@
     <string name="lightning__next_outbound_htlc_limit">Лимит след. исходящего HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Мин. след. исходящего HTLC</string>
     <string name="lightning__no_funds__description">Прежде чем вы сможете перевести средства со своего баланса сбережений, вам нужно отправить биткойны в ваш кошелёк Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Пополнить кошелёк</string>
     <string name="lightning__no_funds__title">Недостаточно Средств</string>
     <string name="lightning__node_id">ID Узла LDK</string>
     <string name="lightning__node_info">Lightning Узел</string>
