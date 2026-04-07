@@ -102,7 +102,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(100uL))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
-        whenever { lightningRepo.canSend(any()) }.thenReturn(true)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
 
         sut = AppViewModel(
             connectivityRepo = connectivityRepo,
