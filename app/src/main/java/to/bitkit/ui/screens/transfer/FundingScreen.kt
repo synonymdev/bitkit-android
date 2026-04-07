@@ -7,9 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,9 +21,9 @@ import to.bitkit.R
 import to.bitkit.env.Defaults
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.RectangleButton
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -40,7 +37,7 @@ fun FundingScreen(
     isGeoBlocked: Boolean,
     onTransfer: () -> Unit = {},
     onFund: () -> Unit = {},
-    onAdvanced: () -> Unit = {},
+    onManual: () -> Unit = {},
     onBackClick: () -> Unit = {},
 ) {
     val balances = LocalBalances.current
@@ -106,29 +103,26 @@ fun FundingScreen(
                     modifier = Modifier.testTag("FundReceive")
                 )
                 RectangleButton(
-                    label = stringResource(R.string.lightning__funding__button3),
-                    icon = R.drawable.ic_share_purple,
+                    label = stringResource(R.string.lightning__funding_advanced__button2),
+                    icon = R.drawable.ic_pencil_full,
                     iconTint = Colors.Purple,
-                    onClick = onAdvanced,
-                    modifier = Modifier.testTag("FundCustom")
+                    iconSize = 13.37.dp,
+                    onClick = onManual,
+                    modifier = Modifier.testTag("FundManual")
                 )
             }
         }
         if (showNoFundsAlert) {
-            AlertDialog(
-                onDismissRequest = { showNoFundsAlert = false },
-                confirmButton = {
-                    TextButton(onClick = { showNoFundsAlert = false }) {
-                        BodyM(text = stringResource(R.string.common__ok), color = Colors.Purple)
-                    }
+            AppAlertDialog(
+                title = stringResource(R.string.lightning__no_funds__title),
+                text = stringResource(R.string.lightning__no_funds__description),
+                confirmText = stringResource(R.string.lightning__no_funds__fund_wallet),
+                confirmTextColor = Colors.Purple,
+                onConfirm = {
+                    showNoFundsAlert = false
+                    onFund()
                 },
-                title = {
-                    BodyMB(text = stringResource(R.string.lightning__no_funds__title))
-                },
-                text = {
-                    BodyM(text = stringResource(R.string.lightning__no_funds__description))
-                },
-                shape = MaterialTheme.shapes.small,
+                onDismiss = { showNoFundsAlert = false },
             )
         }
     }

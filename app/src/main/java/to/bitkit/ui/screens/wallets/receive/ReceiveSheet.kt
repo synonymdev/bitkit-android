@@ -40,6 +40,7 @@ fun ReceiveSheet(
     navigateToExternalConnection: () -> Unit,
     walletState: WalletState,
     isOffline: Boolean,
+    startRoute: ReceiveRoute = ReceiveRoute.QR,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -56,6 +57,12 @@ fun ReceiveSheet(
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
         wallet.refreshReceiveState()
+    }
+
+    LaunchedEffect(startRoute) {
+        if (startRoute != ReceiveRoute.QR) {
+            navController.navigateTo(startRoute)
+        }
     }
 
     Box(
