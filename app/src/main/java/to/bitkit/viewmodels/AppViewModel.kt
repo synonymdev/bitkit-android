@@ -1415,6 +1415,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun onScanLightning(invoice: LightningInvoice, scanResult: String) {
         if (invoice.isExpired) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1429,6 +1430,7 @@ class AppViewModel @Inject constructor(
 
         lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
+            hideSheet()
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
             toast(
@@ -1478,6 +1480,7 @@ class AppViewModel @Inject constructor(
 
         lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(displaySats.coerceAtLeast(1u))) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_pay_error),

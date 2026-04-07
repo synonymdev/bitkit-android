@@ -984,10 +984,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun waitForUsableChannels() {
+    suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
         if (lightningService.channels?.any { it.isUsable } == true) {
             syncState()
-            return
+            return@withContext
         }
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
