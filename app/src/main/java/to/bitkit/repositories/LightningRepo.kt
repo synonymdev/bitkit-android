@@ -985,14 +985,20 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun waitForUsableChannels() {
-        if (lightningService.channels?.any { it.isUsable } == true) return
+        if (lightningService.channels?.any { it.isUsable } == true) {
+            syncState()
+            return
+        }
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
-        syncState()
 
         withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
-            _lightningState.first { state -> state.channels.any { it.isUsable } }
+            while (lightningService.channels?.any { it.isUsable } != true) {
+                delay(1.seconds)
+            }
         } ?: Logger.warn("Timeout waiting for usable channels", context = TAG)
+
+        syncState()
     }
 
     @Suppress("LongParameterList")
