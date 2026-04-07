@@ -143,7 +143,7 @@ fun LazyListScope.activityListGroupedItems(
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
 ) {
-    if (items != null && items.isNotEmpty()) {
+    if (!items.isNullOrEmpty()) {
         val groupedItems = groupActivityItems(items)
         itemsIndexed(
             items = groupedItems,
@@ -171,7 +171,7 @@ fun LazyListScope.activityListGroupedItems(
                                 fadeInSpec = tween(durationMillis = 300),
                                 fadeOutSpec = tween(durationMillis = 300),
                                 placementSpec = tween(durationMillis = 300),
-                            ),
+                            )
                     )
                 }
 
@@ -182,7 +182,7 @@ fun LazyListScope.activityListGroupedItems(
                                 fadeInSpec = tween(durationMillis = 300),
                                 fadeOutSpec = tween(durationMillis = 300),
                                 placementSpec = tween(durationMillis = 300),
-                            ),
+                            )
                     ) {
                         ActivityRow(item, onActivityItemClick, testTag = "Activity-$index")
                         VerticalSpacer(16.dp)
@@ -197,7 +197,7 @@ fun LazyListScope.activityListGroupedItems(
                     onClick = onAllActivityButtonClick,
                     modifier = Modifier
                         .wrapContentWidth()
-                        .padding(top = 8.dp),
+                        .padding(top = 8.dp)
                 )
             }
         }
@@ -214,7 +214,7 @@ fun LazyListScope.activityListGroupedItems(
                     color = Colors.White64,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(16.dp)
                 )
             }
         }
