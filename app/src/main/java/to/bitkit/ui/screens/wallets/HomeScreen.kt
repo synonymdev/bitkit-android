@@ -50,7 +50,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -138,6 +137,7 @@ import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
+import to.bitkit.ui.theme.TopBarGradient
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -805,20 +805,13 @@ private fun TopBar(
     onNavigateToAppStatus: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
 ) {
-    val topbarGradient = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0.5f to Colors.Black,
-            1.0f to Color.Transparent,
-        )
-    )
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .hazeEffect(state = hazeState) {
-                mask = topbarGradient
+                mask = TopBarGradient
             }
-            .background(topbarGradient)
+            .background(TopBarGradient)
             .zIndex(1f)
     ) {
         TopAppBar(
