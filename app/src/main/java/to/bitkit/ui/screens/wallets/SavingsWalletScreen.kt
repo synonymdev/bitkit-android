@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.wallets
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,7 +30,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.synonym.bitkitcore.Activity
+import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
@@ -42,15 +44,17 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
+import to.bitkit.ui.screens.wallets.activity.components.activityListGroupedItems
 import to.bitkit.ui.screens.wallets.activity.utils.previewOnchainActivityItems
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.TopBarGradient
 import to.bitkit.ui.utils.withAccent
 
 @Composable
@@ -76,6 +80,7 @@ fun SavingsWalletScreen(
     }
 
     val hazeState = rememberHazeState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -101,18 +106,31 @@ fun SavingsWalletScreen(
                     .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
             )
         }
-        ScreenColumn(noBackground = true) {
-            AppTopBar(
-                titleText = stringResource(R.string.wallet__savings__title),
-                icon = R.drawable.ic_btc_circle,
-                onBackClick = onBackClick,
-                actions = {
-                    DrawerNavIcon()
+
+        AppTopBar(
+            titleText = stringResource(R.string.wallet__savings__title),
+            icon = R.drawable.ic_btc_circle,
+            onBackClick = onBackClick,
+            actions = {
+                DrawerNavIcon()
+            },
+            modifier = Modifier
+                .hazeEffect(state = hazeState) {
+                    mask = TopBarGradient
                 }
-            )
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
+                .background(TopBarGradient)
+                .zIndex(1f)
+                .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
+            item { StatusBarSpacer() }
+            item { TopBarSpacer() }
+            item {
                 BalanceHeaderView(
                     sats = balances.totalOnchainSats.toLong(),
                     testTag = "TotalBalance",
@@ -120,19 +138,23 @@ fun SavingsWalletScreen(
                         .fillMaxWidth()
                         .testTag("TotalBalance")
                 )
+            }
 
-                if (balances.balanceInTransferToSavings > 0u) {
+            if (balances.balanceInTransferToSavings > 0u) {
+                item {
                     IncomingTransfer(
                         amount = balances.balanceInTransferToSavings,
                         remainingDuration = forceCloseRemainingDuration,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                 }
+            }
 
-                if (!showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+            if (!showEmptyState) {
+                item { Spacer(modifier = Modifier.height(32.dp)) }
 
-                    if (canTransfer) {
+                if (canTransfer) {
+                    item {
                         SecondaryButton(
                             onClick = onTransferToSpendingClick,
                             text = stringResource(R.string.wallet__transfer_to_spending),
@@ -147,17 +169,18 @@ fun SavingsWalletScreen(
                             modifier = Modifier.testTag("TransferToSpending")
                         )
                     }
-
-                    ActivityListGrouped(
-                        items = onchainActivities,
-                        onActivityItemClick = onActivityItemClick,
-                        onEmptyActivityRowClick = onEmptyActivityRowClick,
-                        showFooter = true,
-                        onAllActivityButtonClick = onAllActivityButtonClick,
-                    )
                 }
+
+                activityListGroupedItems(
+                    items = onchainActivities,
+                    onActivityItemClick = onActivityItemClick,
+                    onEmptyActivityRowClick = onEmptyActivityRowClick,
+                    showFooter = true,
+                    onAllActivityButtonClick = onAllActivityButtonClick,
+                )
             }
         }
+
         if (showEmptyState) {
             EmptyStateView(
                 text = stringResource(R.string.wallet__savings__onboarding).withAccent(),
