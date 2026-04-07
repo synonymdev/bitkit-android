@@ -121,6 +121,7 @@ import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
@@ -405,6 +406,7 @@ fun ContentView(
                         is Sheet.Receive -> {
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                             ReceiveSheet(
+                                startRoute = sheet.route,
                                 walletState = walletState,
                                 navigateToExternalConnection = {
                                     navController.navigateTo(ExternalConnection())
@@ -504,7 +506,7 @@ fun ContentView(
                     if (showTabBar) {
                         TabBar(
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
-                            onReceiveClick = { appViewModel.showSheet(Sheet.Receive) },
+                            onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
                             onScanClick = { appViewModel.showScannerSheet() },
                         )
                     }
@@ -696,13 +698,12 @@ private fun RootNavHost(
                     },
                     onFund = {
                         scope.launch {
-                            // TODO show receive sheet -> ReceiveAmount
                             navController.navigateToHome()
                             delay(500) // Wait for nav to actually finish
-                            appViewModel.showSheet(Sheet.Receive)
+                            appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.Amount))
                         }
                     },
-                    onAdvanced = { navController.navigateTo(Routes.FundingAdvanced) },
+                    onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                     isGeoBlocked = isGeoBlocked,
                 )
@@ -824,7 +825,7 @@ private fun NavGraphBuilder.home(
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
-            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
+            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
                 if (!hasSeenSpendingIntro) {
                     navController.navigateToTransferSpendingIntro()
@@ -846,7 +847,7 @@ private fun NavGraphBuilder.home(
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
-            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
+            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSavingsClick = {
                 if (!hasSeenSavingsIntro) {
                     navController.navigateToTransferSavingsIntro()
