@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mnemonic warning text transitions on reveal #857
 
 ### Changed
+- Show end of address on Receive Bitcoin screen using middle ellipsis truncation #886
 - Update funding screen: replace Advanced with Manual Setup, fix Use Other Wallet navigation to open amount entry, and add Fund Wallet button to no-funds dialog #885
 - Updated design of the success screen in the manual channel setup flow #883
 - Unified send flow with payment method switcher, details toggle, Lightning support for BIP21 payments, and improved fee rate defaults #863
