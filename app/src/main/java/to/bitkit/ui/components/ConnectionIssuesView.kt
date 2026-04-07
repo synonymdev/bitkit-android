@@ -42,7 +42,7 @@ fun ConnectionIssuesView(
             .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
-            .testTag("ConnectionIssueView"),
+            .testTag("ConnectionIssueView")
     ) {
         SheetTopBar(titleText = titleText)
         VerticalSpacer(24.dp)
@@ -51,7 +51,7 @@ fun ConnectionIssuesView(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
         ) {
             DashedRingsLayer(outerOnly = true)
 
@@ -61,7 +61,7 @@ fun ConnectionIssuesView(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .size(311.dp)
-                    .align(Alignment.Center),
+                    .align(Alignment.Center)
             )
 
             DashedRingsLayer(outerOnly = false)
@@ -78,18 +78,18 @@ fun ConnectionIssuesView(
         BodyM(
             text = stringResource(R.string.other__connection_issues_explain),
             color = Colors.White64,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
 
         VerticalSpacer(24.dp)
 
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             GradientCircularProgressIndicator(
                 strokeWidth = 1.dp,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(32.dp)
             )
         }
 
