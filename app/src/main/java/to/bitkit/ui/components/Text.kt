@@ -259,11 +259,11 @@ fun BodyS(
 ) {
     BodyS(
         text = AnnotatedString(text),
-        modifier = modifier,
         color = color,
         textAlign = textAlign,
         maxLines = maxLines,
         overflow = overflow,
+        modifier = modifier
     )
 }
 
