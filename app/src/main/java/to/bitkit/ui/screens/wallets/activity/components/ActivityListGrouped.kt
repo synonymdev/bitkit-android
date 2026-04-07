@@ -3,10 +3,8 @@ package to.bitkit.ui.screens.wallets.activity.components
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,7 +49,7 @@ fun ActivityListGrouped(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxSize()
     ) {
-        if (items != null && items.isNotEmpty()) {
+        if (!items.isNullOrEmpty()) {
             val groupedItems = groupActivityItems(items)
 
             LazyColumn(
@@ -116,7 +114,7 @@ fun ActivityListGrouped(
                     }
                 }
                 item {
-                    Spacer(modifier = Modifier.height(120.dp))
+                    VerticalSpacer(120.dp)
                 }
             }
         } else {
@@ -204,7 +202,7 @@ fun LazyListScope.activityListGroupedItems(
             }
         }
         item {
-            Spacer(modifier = Modifier.height(120.dp))
+            VerticalSpacer(120.dp)
         }
     } else {
         if (showFooter) {
