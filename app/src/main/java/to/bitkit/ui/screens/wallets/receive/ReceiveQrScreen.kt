@@ -581,7 +581,7 @@ private fun CopyAddressCard(
             text = (body ?: address).uppercase(),
             maxLines = 1,
             overflow = TextOverflow.MiddleEllipsis,
-            modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier,
+            modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier
         )
         VerticalSpacer(16.dp)
         Row(
