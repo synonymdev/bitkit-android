@@ -897,8 +897,9 @@ class AppViewModel @Inject constructor(
         }
 
         if (invoice.amountSatoshis > 0uL) {
-            val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
-            if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
+            lightningRepo.syncState()
+            if (!lightningRepo.canSend(invoice.amountSatoshis)) {
+                val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
                 val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
                 showAddressValidationError(
                     titleRes = R.string.other__pay_insufficient_spending,
