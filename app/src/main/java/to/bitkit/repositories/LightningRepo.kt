@@ -996,7 +996,7 @@ class LightningRepo @Inject constructor(
             while (lightningService.channels?.any { it.isUsable } != true) {
                 delay(1.seconds)
             }
-        } ?: Logger.warn("Timeout waiting for usable channels", context = TAG)
+        } ?: Logger.warn("Timed out waiting for usable channels", context = TAG)
 
         syncState()
     }
