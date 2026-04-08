@@ -342,7 +342,7 @@ fun EditInvoiceContent(
                             text = stringResource(R.string.wallet__receive_show_qr),
                             onClick = onContinueGeneral,
                             isLoading = isLoading,
-                            modifier = Modifier.testTag("ShowQrReceive"),
+                            modifier = Modifier.testTag("ShowQrReceive")
                         )
 
                         VerticalSpacer(16.dp)
