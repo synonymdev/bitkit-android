@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -66,13 +67,15 @@ fun SendSheet(
     startDestination: SendRoute = SendRoute.Recipient,
 ) {
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
-    val isOffline = connectivityState != ConnectivityState.CONNECTED
+    val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
 
-    val shouldShowSyncOverlay = remember(lightningState) {
-        if (!lightningState.nodeLifecycleState.isRunning()) return@remember true
-        val hasAnyChannels = lightningState.channels.isNotEmpty()
-        hasAnyChannels && lightningState.channels.none { it.isUsable }
+    val shouldShowSyncOverlay by remember {
+        derivedStateOf {
+            if (!lightningState.nodeLifecycleState.isRunning()) return@derivedStateOf true
+            val hasAnyChannels = lightningState.channels.isNotEmpty()
+            hasAnyChannels && lightningState.channels.none { it.isUsable }
+        }
     }
 
     LaunchedEffect(startDestination) {
