@@ -40,7 +40,7 @@ class EditInvoiceVM @Inject constructor(
                     editInvoiceEffect(EditInvoiceScreenEffects.UpdateInvoice)
                 }
             }.onFailure {
-                Logger.warn("Error checking for liquidity, navigating back to QR Screen", context = TAG)
+                Logger.warn("Failed to check for liquidity, navigating back to QR screen", context = TAG)
                 editInvoiceEffect(EditInvoiceScreenEffects.UpdateInvoice)
             }
             _isLoading.update { false }
