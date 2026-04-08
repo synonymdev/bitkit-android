@@ -256,12 +256,16 @@ fun BodyS(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     BodyS(
         text = AnnotatedString(text),
-        modifier = modifier,
         color = color,
         textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 
@@ -271,6 +275,8 @@ fun BodyS(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -278,7 +284,9 @@ fun BodyS(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 
