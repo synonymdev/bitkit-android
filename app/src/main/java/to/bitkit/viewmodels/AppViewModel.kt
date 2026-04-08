@@ -1273,6 +1273,7 @@ class AppViewModel @Inject constructor(
 
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
         if (Bip21Utils.isDuplicatedBip21(input)) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1301,6 +1302,7 @@ class AppViewModel @Inject constructor(
             is Scanner.NodeId -> onScanNodeId(scan)
             is Scanner.Gift -> onScanGift(scan.code, scan.amount)
             else -> {
+                hideSheet()
                 Logger.warn("Unhandled scan data: $scan", context = TAG)
                 toast(
                     type = Toast.ToastType.WARNING,
@@ -1315,6 +1317,7 @@ class AppViewModel @Inject constructor(
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
         val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
             .getOrElse {
+                hideSheet()
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),
@@ -1325,6 +1328,7 @@ class AppViewModel @Inject constructor(
             }
 
         if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1529,6 +1533,7 @@ class AppViewModel @Inject constructor(
         val maxWithdrawable = data.maxWithdrawableSat()
 
         if (!isFixed && minWithdrawable > maxWithdrawable) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_withdr_error),
