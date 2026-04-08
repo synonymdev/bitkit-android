@@ -8,7 +8,6 @@ import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.SingleAddressInfoResult
-import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
@@ -17,6 +16,8 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
@@ -275,18 +276,20 @@ internal object TrezorPreviewData {
         ),
     )
 
-    val sampleTransactionHistoryResult = TransactionHistoryResult(
-        transactions = sampleHistoryTransactions,
-        balance = sampleWalletBalance,
-        txCount = 3u,
-        blockHeight = 850_000u,
-        accountType = AccountType.NATIVE_SEGWIT,
-    )
-
-    val uiStateWithTxHistory = TrezorUiState(
+    val uiStateWithActiveWatcher = TrezorUiState(
         selectedNetwork = BitkitCoreNetwork.REGTEST,
-        txHistoryInput = SAMPLE_XPUB,
-        txHistoryResult = sampleTransactionHistoryResult,
+        watcherExtendedKey = SAMPLE_XPUB,
+        activeWatcherId = "watcher-abc-123",
+        watcherConnectionStatus = WatcherConnectionStatus.CONNECTED,
+        watcherBalance = sampleWalletBalance,
+        watcherTransactions = sampleHistoryTransactions.toImmutableList(),
+        watcherTransactionCount = 2u,
+        watcherBlockHeight = 850_000u,
+        watcherAccountType = AccountType.NATIVE_SEGWIT,
+        watcherEvents = persistentListOf(
+            "Watcher started: watcher-abc-123",
+            "TX update: 2 txs, balance=155000 sats",
+        ),
     )
 
     val uiStateBroadcast = TrezorUiState(

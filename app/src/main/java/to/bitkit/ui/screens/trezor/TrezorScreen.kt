@@ -94,6 +94,8 @@ private fun TrezorScreenContent(
     val trezorState by viewModel.trezorState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val needsPairingCode by viewModel.needsPairingCode.collectAsStateWithLifecycle()
+    val needsPinEntry by viewModel.needsPinEntry.collectAsStateWithLifecycle()
+    val needsPassphraseEntry by viewModel.needsPassphraseEntry.collectAsStateWithLifecycle()
 
     val permissionsState = rememberMultiplePermissionsState(bluetoothPermissions)
 
@@ -113,6 +115,20 @@ private fun TrezorScreenContent(
         PairingCodeDialog(
             onSubmit = viewModel::submitPairingCode,
             onCancel = viewModel::cancelPairingCode,
+        )
+    }
+
+    if (needsPinEntry) {
+        PinEntryDialog(
+            onSubmit = viewModel::submitPin,
+            onCancel = viewModel::cancelPin,
+        )
+    }
+
+    if (needsPassphraseEntry) {
+        PassphraseDialog(
+            onSubmit = viewModel::submitPassphrase,
+            onCancel = viewModel::cancelPassphrase,
         )
     }
 
@@ -151,8 +167,11 @@ private fun TrezorScreenContent(
             onBroadcast = viewModel::broadcastSignedTx,
             onBackToForm = viewModel::backToComposeForm,
             onResetSend = viewModel::resetSendFlow,
-            onTxHistoryInputChange = viewModel::setTxHistoryInput,
-            onLookupTxHistory = viewModel::lookupTransactionHistory,
+            onWatcherExtendedKeyChange = viewModel::setWatcherExtendedKey,
+            onWatcherGapLimitChange = viewModel::setWatcherGapLimit,
+            onStartWatcher = viewModel::startWatcher,
+            onStopWatcher = viewModel::stopWatcher,
+            onPopulateWatcherFromXpub = viewModel::populateWatcherFromXpub,
             permissionsGranted = permissionsState.allPermissionsGranted,
         )
     }
@@ -189,8 +208,11 @@ private fun Content(
     onBroadcast: () -> Unit = {},
     onBackToForm: () -> Unit = {},
     onResetSend: () -> Unit = {},
-    onTxHistoryInputChange: (String) -> Unit = {},
-    onLookupTxHistory: () -> Unit = {},
+    onWatcherExtendedKeyChange: (String) -> Unit = {},
+    onWatcherGapLimitChange: (String) -> Unit = {},
+    onStartWatcher: () -> Unit = {},
+    onStopWatcher: () -> Unit = {},
+    onPopulateWatcherFromXpub: () -> Unit = {},
     permissionsGranted: Boolean = true,
 ) {
     Column(
@@ -395,12 +417,16 @@ private fun Content(
                     onResetSend = onResetSend,
                 )
 
-                // Transaction History (always visible, no device needed)
+                // Event Watcher (always visible, no device needed)
                 VerticalSpacer(32.dp)
-                TransactionHistorySection(
+                WatcherSection(
                     uiState = uiState,
-                    onInputChange = onTxHistoryInputChange,
-                    onLookup = onLookupTxHistory,
+                    trezorState = trezorState,
+                    onExtendedKeyChange = onWatcherExtendedKeyChange,
+                    onGapLimitChange = onWatcherGapLimitChange,
+                    onStartWatcher = onStartWatcher,
+                    onStopWatcher = onStopWatcher,
+                    onPopulateFromXpub = onPopulateWatcherFromXpub,
                 )
 
                 // Debug Log Window
@@ -571,7 +597,7 @@ private fun StatusRow(trezorState: TrezorState) {
 }
 
 @Composable
-private fun StatusBadge(text: String, color: Color) {
+internal fun StatusBadge(text: String, color: Color) {
     Caption(
         text = text,
         color = color,

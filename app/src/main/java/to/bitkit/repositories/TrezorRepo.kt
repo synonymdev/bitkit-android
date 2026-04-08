@@ -8,8 +8,8 @@ import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
-import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -20,10 +20,15 @@ import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.WalletParams
+import com.synonym.bitkitcore.WatcherEvent
+import com.synonym.bitkitcore.WatcherParams
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -37,9 +42,11 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
+import to.bitkit.services.TrezorUiHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
@@ -50,6 +57,7 @@ class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trezorService: TrezorService,
     private val trezorTransport: TrezorTransport,
+    private val trezorUiHandler: TrezorUiHandler,
     private val trezorStore: TrezorStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -61,6 +69,18 @@ class TrezorRepo @Inject constructor(
 
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
+
+    private val _watcherEvents = MutableSharedFlow<Pair<String, WatcherEvent>>(extraBufferCapacity = 64)
+    val watcherEvents: SharedFlow<Pair<String, WatcherEvent>> = _watcherEvents.asSharedFlow()
+
+    private val _activeWatchers = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    private val eventBridge: EventListener = object : EventListener {
+        override fun onEvent(watcherId: String, event: WatcherEvent) {
+            TrezorDebugLog.log("WATCHER", "[$watcherId] ${event::class.simpleName}")
+            _watcherEvents.tryEmit(watcherId to event)
+        }
+    }
 
     /**
      * Flow indicating when a pairing code needs to be entered.
@@ -80,6 +100,26 @@ class TrezorRepo @Inject constructor(
      */
     fun cancelPairingCode() {
         trezorTransport.cancelPairingCode()
+    }
+
+    val needsPinEntry = trezorUiHandler.needsPinEntry
+
+    fun submitPin(pin: String) {
+        trezorUiHandler.submitPin(pin)
+    }
+
+    fun cancelPin() {
+        trezorUiHandler.cancelPin()
+    }
+
+    val needsPassphraseEntry = trezorUiHandler.needsPassphraseEntry
+
+    fun submitPassphrase(passphrase: String) {
+        trezorUiHandler.submitPassphrase(passphrase)
+    }
+
+    fun cancelPassphrase() {
+        trezorUiHandler.cancelPassphrase()
     }
 
     suspend fun initialize(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
@@ -200,24 +240,6 @@ class TrezorRepo @Inject constructor(
         }.onFailure { e ->
             Logger.error("Trezor getPublicKey failed", e, context = TAG)
             _state.update { it.copy(error = e.message) }
-        }
-    }
-
-    suspend fun getTransactionHistory(
-        extendedKey: String,
-        network: BitkitCoreNetwork = Env.network.toCoreNetwork(),
-        scriptType: AccountType? = null,
-    ): Result<TransactionHistoryResult> = withContext(ioDispatcher) {
-        runCatching {
-            trezorService.getTransactionHistory(
-                extendedKey = extendedKey,
-                electrumUrl = electrumUrlForNetwork(network),
-                network = network,
-                scriptType = scriptType,
-            )
-        }.onFailure {
-            Logger.error("Failed to get Trezor transaction history", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
         }
     }
 
@@ -475,6 +497,51 @@ class TrezorRepo @Inject constructor(
             Logger.error("Forget device failed", e, context = TAG)
             _state.update { it.copy(error = e.message) }
         }
+    }
+
+    suspend fun startWatcher(
+        extendedKey: String,
+        network: BitkitCoreNetwork,
+        gapLimit: UInt = 20u,
+    ): Result<String> = withContext(ioDispatcher) {
+        runCatching {
+            val watcherId = UUID.randomUUID().toString()
+            val params = WatcherParams(
+                watcherId = watcherId,
+                extendedKey = extendedKey,
+                electrumUrl = electrumUrlForNetwork(network),
+                network = network,
+                accountType = null,
+                gapLimit = gapLimit,
+            )
+            trezorService.startWatcher(params, eventBridge)
+            _activeWatchers.update { it + (watcherId to extendedKey) }
+            TrezorDebugLog.log("WATCHER", "Started watcher '$watcherId' for '${extendedKey.take(12)}...'")
+            Logger.info("Started watcher '$watcherId'", context = TAG)
+            watcherId
+        }.onFailure {
+            Logger.error("Start watcher failed", it, context = TAG)
+            _state.update { s -> s.copy(error = it.message) }
+        }
+    }
+
+    fun stopWatcher(watcherId: String): Result<Unit> = runCatching {
+        trezorService.stopWatcher(watcherId)
+        _activeWatchers.update { it - watcherId }
+        TrezorDebugLog.log("WATCHER", "Stopped watcher '$watcherId'")
+        Logger.info("Stopped watcher '$watcherId'", context = TAG)
+    }.onFailure {
+        Logger.error("Stop watcher failed", it, context = TAG)
+        _state.update { s -> s.copy(error = it.message) }
+    }
+
+    fun stopAllWatchers(): Result<Unit> = runCatching {
+        trezorService.stopAllWatchers()
+        _activeWatchers.update { emptyMap() }
+        TrezorDebugLog.log("WATCHER", "Stopped all watchers")
+    }.onFailure {
+        Logger.error("Stop all watchers failed", it, context = TAG)
+        _state.update { s -> s.copy(error = it.message) }
     }
 
     fun clearError() {

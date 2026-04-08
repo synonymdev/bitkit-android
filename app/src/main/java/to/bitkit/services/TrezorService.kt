@@ -4,8 +4,8 @@ import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
-import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -18,11 +18,14 @@ import com.synonym.bitkitcore.TrezorSignMessageParams
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorVerifyMessageParams
+import com.synonym.bitkitcore.WatcherParams
 import com.synonym.bitkitcore.onchainBroadcastRawTx
 import com.synonym.bitkitcore.onchainComposeTransaction
 import com.synonym.bitkitcore.onchainGetAccountInfo
 import com.synonym.bitkitcore.onchainGetAddressInfo
-import com.synonym.bitkitcore.onchainGetTransactionHistory
+import com.synonym.bitkitcore.onchainStartWatcher
+import com.synonym.bitkitcore.onchainStopAllWatchers
+import com.synonym.bitkitcore.onchainStopWatcher
 import com.synonym.bitkitcore.trezorClearCredentials
 import com.synonym.bitkitcore.trezorConnect
 import com.synonym.bitkitcore.trezorDisconnect
@@ -36,6 +39,7 @@ import com.synonym.bitkitcore.trezorIsInitialized
 import com.synonym.bitkitcore.trezorListDevices
 import com.synonym.bitkitcore.trezorScan
 import com.synonym.bitkitcore.trezorSetTransportCallback
+import com.synonym.bitkitcore.trezorSetUiCallback
 import com.synonym.bitkitcore.trezorSignMessage
 import com.synonym.bitkitcore.trezorSignTxFromPsbt
 import com.synonym.bitkitcore.trezorVerifyMessage
@@ -48,6 +52,7 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 @Singleton
 class TrezorService @Inject constructor(
     private val transport: TrezorTransport,
+    private val uiHandler: TrezorUiHandler,
 ) {
     @Volatile
     private var callbackRegistered = false
@@ -57,6 +62,7 @@ class TrezorService @Inject constructor(
             synchronized(this) {
                 if (!callbackRegistered) {
                     trezorSetTransportCallback(transport)
+                    trezorSetUiCallback(uiHandler)
                     callbackRegistered = true
                 }
             }
@@ -210,22 +216,6 @@ class TrezorService @Inject constructor(
         }
     }
 
-    suspend fun getTransactionHistory(
-        extendedKey: String,
-        electrumUrl: String,
-        network: BitkitCoreNetwork?,
-        scriptType: AccountType? = null,
-    ): TransactionHistoryResult {
-        return ServiceQueue.CORE.background {
-            onchainGetTransactionHistory(
-                extendedKey = extendedKey,
-                electrumUrl = electrumUrl,
-                network = network,
-                scriptType = scriptType,
-            )
-        }
-    }
-
     suspend fun getAccountInfo(
         extendedKey: String,
         electrumUrl: String,
@@ -256,5 +246,19 @@ class TrezorService @Inject constructor(
                 network = network,
             )
         }
+    }
+
+    suspend fun startWatcher(params: WatcherParams, listener: EventListener) {
+        ServiceQueue.CORE.background {
+            onchainStartWatcher(params = params, listener = listener)
+        }
+    }
+
+    fun stopWatcher(watcherId: String) {
+        onchainStopWatcher(watcherId = watcherId)
+    }
+
+    fun stopAllWatchers() {
+        onchainStopAllWatchers()
     }
 }
