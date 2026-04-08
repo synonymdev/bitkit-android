@@ -1315,6 +1315,7 @@ class AppViewModel @Inject constructor(
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
         val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
             .getOrElse {
+                hideSheet()
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),
@@ -1325,6 +1326,7 @@ class AppViewModel @Inject constructor(
             }
 
         if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
