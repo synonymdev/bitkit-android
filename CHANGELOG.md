@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 
 ### Fixed
-- Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 - Retouch Primary, Secondary, and Tertiary buttons styling #887
 - Avoid msat truncation when paying invoices and LNURL callbacks #879
 - Fix ANR on RGS server settings screen caused by catastrophic regex backtracking #880
