@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,14 +57,23 @@ fun ContactImportOverviewScreen(
         viewModel.effects.collect {
             when (it) {
                 ContactImportOverviewEffect.ImportComplete -> onImportComplete()
+                ContactImportOverviewEffect.NavigateBack -> onBackClick()
                 ContactImportOverviewEffect.NavigateToSelect -> onNavigateToSelect()
             }
         }
     }
 
+    LaunchedEffect(uiState.shouldRedirectToPayContacts) {
+        if (uiState.shouldRedirectToPayContacts) {
+            onImportComplete()
+        }
+    }
+
+    BackHandler(onBack = viewModel::onBackClick)
+
     Content(
         uiState = uiState,
-        onBackClick = onBackClick,
+        onBackClick = viewModel::onBackClick,
         onClickSelect = { viewModel.navigateToSelect() },
         onClickImportAll = { viewModel.importAll() },
     )

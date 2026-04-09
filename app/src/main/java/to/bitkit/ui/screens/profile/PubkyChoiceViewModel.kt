@@ -30,6 +30,7 @@ class PubkyChoiceViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "PubkyChoiceViewModel"
+        internal const val PUBKY_RING_PACKAGE = "to.pubky.ring"
     }
 
     private val _uiState = MutableStateFlow(PubkyChoiceUiState())
@@ -56,21 +57,21 @@ class PubkyChoiceViewModel @Inject constructor(
                 pubkyRepo.cancelAuthentication()
             }
 
+            if (!isRingInstalled()) {
+                showRingNotInstalledDialog()
+                return@launch
+            }
+
             pubkyRepo.startAuthentication()
                 .onSuccess { authUrl ->
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    val canOpen = intent.resolveActivity(context.packageManager) != null
-                    if (!canOpen) {
-                        approvalJob?.cancel()
-                        pubkyRepo.cancelAuthentication()
-                        _uiState.update { it.copy(showRingNotInstalledDialog = true) }
+                    val ringIntent = createRingAuthIntent(authUrl)
+                    if (!canOpenWithRing(ringIntent)) {
+                        cancelAuthAndShowRingDialog()
                         return@launch
                     }
 
                     _uiState.update { it.copy(isWaitingForRing = true) }
-                    _effects.emit(PubkyChoiceEffect.OpenRingAuth(authUrl))
+                    _effects.emit(PubkyChoiceEffect.OpenRingAuth(ringIntent))
                     waitForApproval()
                 }
                 .onFailure {
@@ -81,6 +82,12 @@ class PubkyChoiceViewModel @Inject constructor(
                         description = it.message,
                     )
                 }
+        }
+    }
+
+    fun onRingLaunchFailed() {
+        viewModelScope.launch {
+            cancelAuthAndShowRingDialog()
         }
     }
 
@@ -136,6 +143,37 @@ class PubkyChoiceViewModel @Inject constructor(
     fun dismissRingNotInstalledDialog() {
         _uiState.update { it.copy(showRingNotInstalledDialog = false) }
     }
+
+    @VisibleForTesting
+    internal fun createRingAuthIntent(authUrl: String): Intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)).apply {
+        setPackage(PUBKY_RING_PACKAGE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    @VisibleForTesting
+    internal fun isRingInstalled(): Boolean =
+        context.packageManager.getLaunchIntentForPackage(PUBKY_RING_PACKAGE) != null
+
+    @VisibleForTesting
+    internal fun canOpenWithRing(intent: Intent): Boolean =
+        intent.resolveActivity(context.packageManager) != null
+
+    private suspend fun cancelAuthAndShowRingDialog() {
+        approvalJob?.cancel()
+        approvalJob = null
+        pubkyRepo.cancelAuthentication()
+        showRingNotInstalledDialog()
+    }
+
+    private fun showRingNotInstalledDialog() {
+        _uiState.update {
+            it.copy(
+                isWaitingForRing = false,
+                isLoadingAfterAuth = false,
+                showRingNotInstalledDialog = true,
+            )
+        }
+    }
 }
 
 @Immutable
@@ -146,7 +184,7 @@ data class PubkyChoiceUiState(
 )
 
 sealed interface PubkyChoiceEffect {
-    data class OpenRingAuth(val authUrl: String) : PubkyChoiceEffect
+    data class OpenRingAuth(val intent: Intent) : PubkyChoiceEffect
     data object NavigateToCreateProfile : PubkyChoiceEffect
     data object NavigateToContactImportOverview : PubkyChoiceEffect
     data object NavigateToPayContacts : PubkyChoiceEffect

@@ -44,6 +44,10 @@ class ContactImportOverviewViewModel @Inject constructor(
         viewModelScope.launch {
             val profile = pubkyRepo.pendingImportProfile.value
             val contacts = pubkyRepo.pendingImportContacts.value
+            if (!hasPendingImport(profile, contacts)) {
+                _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
+                return@launch
+            }
             _uiState.update {
                 it.copy(
                     profile = profile,
@@ -61,6 +65,7 @@ class ContactImportOverviewViewModel @Inject constructor(
             _uiState.update { it.copy(isImporting = true) }
             pubkyRepo.importContacts(contacts.map { it.publicKey })
                 .onSuccess {
+                    pubkyRepo.clearPendingImport()
                     _uiState.update { it.copy(isImporting = false) }
                     _effects.emit(ContactImportOverviewEffect.ImportComplete)
                 }
@@ -81,6 +86,13 @@ class ContactImportOverviewViewModel @Inject constructor(
             _effects.emit(ContactImportOverviewEffect.NavigateToSelect)
         }
     }
+
+    fun onBackClick() {
+        viewModelScope.launch {
+            pubkyRepo.clearPendingImport()
+            _effects.emit(ContactImportOverviewEffect.NavigateBack)
+        }
+    }
 }
 
 @Stable
@@ -88,9 +100,11 @@ data class ContactImportOverviewUiState(
     val profile: PubkyProfile? = null,
     val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val isImporting: Boolean = false,
+    val shouldRedirectToPayContacts: Boolean = false,
 )
 
 sealed interface ContactImportOverviewEffect {
     data object ImportComplete : ContactImportOverviewEffect
     data object NavigateToSelect : ContactImportOverviewEffect
+    data object NavigateBack : ContactImportOverviewEffect
 }

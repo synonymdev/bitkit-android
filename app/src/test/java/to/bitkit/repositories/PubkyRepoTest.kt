@@ -102,6 +102,21 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `completeAuthentication should not load contacts automatically`() = test {
+        val testSecret = "session_secret"
+        val testPk = "completed_pk"
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
+        val ffiProfile = createFfiProfile(name = "User")
+        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
+
+        val result = sut.completeAuthentication()
+
+        assertTrue(result.isSuccess)
+        verify(pubkyService, never()).sessionList(any(), any())
+    }
+
+    @Test
     fun `completeAuthentication should reset state on failure`() = test {
         whenever(pubkyService.completeAuth()).thenThrow(RuntimeException("Failed"))
 
@@ -229,6 +244,39 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verifyBlocking(pubkyService) { forceSignOut() }
         assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `clearPendingImport should only clear temporary import state`() = test {
+        authenticateForTesting()
+        val existingContact = PubkyProfile(
+            publicKey = "pubkyexisting-contact",
+            name = "Existing Contact",
+            bio = "",
+            imageUrl = null,
+            links = emptyList(),
+            tags = emptyList(),
+            status = null,
+        )
+        val pendingContactKey = "pubkypending-contact"
+        val publicKey = checkNotNull(sut.publicKey.value)
+
+        sut.addContact(existingContact.publicKey, existingProfile = existingContact)
+        whenever(pubkyService.getContacts(publicKey)).thenReturn(listOf(pendingContactKey))
+        val pendingContactProfile = createFfiProfile(name = "Pending Contact")
+        whenever(pubkyService.getProfile(pendingContactKey)).thenReturn(pendingContactProfile)
+
+        val prepareResult = sut.prepareImport()
+
+        assertTrue(prepareResult.isSuccess)
+        assertNotNull(sut.pendingImportProfile.value)
+        assertEquals(1, sut.pendingImportContacts.value.size)
+
+        sut.clearPendingImport()
+
+        assertNull(sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
+        assertEquals(listOf(existingContact), sut.contacts.value)
     }
 
     @Test
@@ -449,6 +497,26 @@ class PubkyRepoTest : BaseUnitTest() {
 
         sut.signOut()
 
+        assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
+    fun `signOut should clear pending import`() = test {
+        authenticateForTesting()
+        val publicKey = checkNotNull(sut.publicKey.value)
+        val pendingContactKey = "pubkypending-contact"
+        whenever(pubkyService.getContacts(publicKey)).thenReturn(listOf(pendingContactKey))
+        val pendingContactProfile = createFfiProfile(name = "Pending Contact")
+        whenever(pubkyService.getProfile(pendingContactKey)).thenReturn(pendingContactProfile)
+
+        sut.prepareImport()
+        assertNotNull(sut.pendingImportProfile.value)
+        assertEquals(1, sut.pendingImportContacts.value.size)
+
+        sut.signOut()
+
+        assertNull(sut.pendingImportProfile.value)
+        assertTrue(sut.pendingImportContacts.value.isEmpty())
         assertTrue(sut.contacts.value.isEmpty())
     }
 

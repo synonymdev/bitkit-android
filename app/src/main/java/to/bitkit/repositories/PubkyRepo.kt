@@ -210,7 +210,6 @@ class PubkyRepo @Inject constructor(
             _authState.update { PubkyAuthState.Authenticated }
             Logger.info("Pubky auth completed for '$pk'", context = TAG)
             loadProfile()
-            loadContacts()
         }.map { }
     }
 
@@ -583,6 +582,7 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun prepareImport(): Result<Unit> = runCatching {
+        clearPendingImport()
         val pk = requireNotNull(_publicKey.value) { "Not authenticated" }
         withContext(ioDispatcher) {
             val contactKeys = pubkyService.getContacts(pk)
@@ -608,6 +608,11 @@ class PubkyRepo @Inject constructor(
             _pendingImportProfile.update { ownProfile }
             _pendingImportContacts.update { contacts }
         }
+    }
+
+    suspend fun clearPendingImport() {
+        _pendingImportProfile.update { null }
+        _pendingImportContacts.update { emptyList() }
     }
 
     // endregion
@@ -646,8 +651,7 @@ class PubkyRepo @Inject constructor(
         _publicKey.update { null }
         _profile.update { null }
         _contacts.update { emptyList() }
-        _pendingImportProfile.update { null }
-        _pendingImportContacts.update { emptyList() }
+        clearPendingImport()
         _authState.update { PubkyAuthState.Idle }
     }
 

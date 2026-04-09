@@ -2468,6 +2468,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun clearPendingPubkyImport() {
+        viewModelScope.launch {
+            pubkyRepo.clearPendingImport()
+        }
+    }
+
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
         if (uri.toString().contains("recovery-mode")) {
             lightningRepo.setRecoveryMode(enabled = true)

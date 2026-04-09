@@ -72,11 +72,10 @@ fun PubkyChoiceScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is PubkyChoiceEffect.OpenRingAuth -> {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it.authUrl)).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(intent)
+                is PubkyChoiceEffect.OpenRingAuth -> runCatching {
+                    context.startActivity(it.intent)
+                }.onFailure {
+                    viewModel.onRingLaunchFailed()
                 }
                 PubkyChoiceEffect.NavigateToCreateProfile -> onNavigateToCreateProfile()
                 PubkyChoiceEffect.NavigateToContactImportOverview -> onNavigateToContactImportOverview()

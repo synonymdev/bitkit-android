@@ -42,7 +42,12 @@ class ContactImportSelectViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            val profile = pubkyRepo.pendingImportProfile.value
             val contacts = pubkyRepo.pendingImportContacts.value
+            if (!hasPendingImport(profile, contacts)) {
+                _uiState.update { it.copy(shouldRedirectToPayContacts = true) }
+                return@launch
+            }
             _uiState.update {
                 it.copy(
                     contacts = contacts.map { profile ->
@@ -81,12 +86,17 @@ class ContactImportSelectViewModel @Inject constructor(
 
     fun importSelected() {
         val selected = _uiState.value.contacts.filter { it.isSelected }
-        if (selected.isEmpty()) return
-
         viewModelScope.launch {
+            if (selected.isEmpty()) {
+                pubkyRepo.clearPendingImport()
+                _effects.emit(ContactImportSelectEffect.ImportComplete)
+                return@launch
+            }
+
             _uiState.update { it.copy(isImporting = true) }
             pubkyRepo.importContacts(selected.map { it.profile.publicKey })
                 .onSuccess {
+                    pubkyRepo.clearPendingImport()
                     _uiState.update { it.copy(isImporting = false) }
                     _effects.emit(ContactImportSelectEffect.ImportComplete)
                 }
@@ -101,6 +111,12 @@ class ContactImportSelectViewModel @Inject constructor(
                 }
         }
     }
+
+    fun onBackClick() {
+        viewModelScope.launch {
+            _effects.emit(ContactImportSelectEffect.NavigateBack)
+        }
+    }
 }
 
 @Stable
@@ -113,10 +129,12 @@ data class SelectableContact(
 data class ContactImportSelectUiState(
     val contacts: ImmutableList<SelectableContact> = persistentListOf(),
     val isImporting: Boolean = false,
+    val shouldRedirectToPayContacts: Boolean = false,
 ) {
     val selectedCount: Int get() = contacts.count { it.isSelected }
 }
 
 sealed interface ContactImportSelectEffect {
     data object ImportComplete : ContactImportSelectEffect
+    data object NavigateBack : ContactImportSelectEffect
 }

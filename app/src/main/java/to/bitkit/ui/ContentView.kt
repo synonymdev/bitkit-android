@@ -72,6 +72,7 @@ import to.bitkit.ui.screens.contacts.ContactsScreen
 import to.bitkit.ui.screens.contacts.ContactsViewModel
 import to.bitkit.ui.screens.contacts.EditContactScreen
 import to.bitkit.ui.screens.contacts.EditContactViewModel
+import to.bitkit.ui.screens.contacts.shouldDiscardPendingImport
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.CreateProfileViewModel
 import to.bitkit.ui.screens.profile.EditProfileScreen
@@ -516,6 +517,11 @@ fun ContentView(
                 rootNavController = navController,
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
+                onBeforeNavigate = { destination ->
+                    if (shouldDiscardPendingImport(navController.currentDestination, destination)) {
+                        appViewModel.clearPendingPubkyImport()
+                    }
+                },
                 hasSeenProfileIntro = hasSeenProfileIntro,
                 hasSeenContactsIntro = hasSeenContactsIntro,
                 isProfileAuthenticated = isProfileAuthenticated,

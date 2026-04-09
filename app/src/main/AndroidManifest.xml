@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
+        <package android:name="to.pubky.ring" />
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
         </intent>
