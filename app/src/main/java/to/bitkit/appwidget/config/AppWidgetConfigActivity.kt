@@ -38,8 +38,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
 
         val typeName = intent?.getStringExtra(EXTRA_WIDGET_TYPE)
         val type = typeName?.let { runCatching { AppWidgetType.valueOf(it) }.getOrNull() }
-            ?: resolveTypeFromProvider()
-            ?: AppWidgetType.BLOCKS
+            ?: AppWidgetType.PRICE
 
         viewModel.init(appWidgetId, type)
 
@@ -59,23 +58,6 @@ class AppWidgetConfigActivity : ComponentActivity() {
                     onCancel = { finish() },
                 )
             }
-        }
-    }
-
-    private fun resolveTypeFromProvider(): AppWidgetType? {
-        val providerInfo = intent?.extras?.let {
-            val id = it.getInt(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-            if (id != -1) AppWidgetManager.getInstance(this).getAppWidgetInfo(id) else null
-        } ?: return null
-
-        val providerClass = providerInfo.provider.className
-        return when {
-            providerClass.contains("Blocks") -> AppWidgetType.BLOCKS
-            providerClass.contains("Price") -> AppWidgetType.PRICE
-            providerClass.contains("Weather") -> AppWidgetType.WEATHER
-            providerClass.contains("Headlines") -> AppWidgetType.HEADLINES
-            providerClass.contains("Facts") -> AppWidgetType.FACTS
-            else -> null
         }
     }
 }

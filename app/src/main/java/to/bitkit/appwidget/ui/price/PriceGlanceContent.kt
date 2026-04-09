@@ -1,16 +1,21 @@
 package to.bitkit.appwidget.ui.price
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.Text
 import to.bitkit.R
@@ -26,17 +31,27 @@ fun PriceGlanceContent(
     context: Context,
     price: PriceDTO?,
     entry: AppWidgetEntry,
+    chartBitmap: Bitmap? = null,
 ) {
     val prefs = entry.pricePreferences
     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
 
     GlanceWidgetScaffold(onClick = launchIntent) {
-        Text(
-            text = context.getString(R.string.widgets__price__name),
-            style = GlanceTextStyles.bodyMSB,
-        )
-
-        Spacer(modifier = GlanceModifier.height(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = GlanceModifier.padding(bottom = 8.dp),
+        ) {
+            Image(
+                provider = ImageProvider(R.drawable.widget_chart_line),
+                contentDescription = null,
+                modifier = GlanceModifier.size(32.dp),
+            )
+            Spacer(modifier = GlanceModifier.width(16.dp))
+            Text(
+                text = context.getString(R.string.widgets__price__name),
+                style = GlanceTextStyles.bodyMSB,
+            )
+        }
 
         if (price == null) {
             Text(
@@ -51,15 +66,33 @@ fun PriceGlanceContent(
 
         for (widget in displayWidgets) {
             PriceRow(widget = widget)
-            Spacer(modifier = GlanceModifier.height(4.dp))
+        }
+
+        if (chartBitmap != null) {
+            Spacer(modifier = GlanceModifier.height(8.dp))
+            Image(
+                provider = ImageProvider(chartBitmap),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = GlanceModifier.fillMaxWidth().height(80.dp),
+            )
         }
 
         if (prefs.showSource) {
-            Spacer(modifier = GlanceModifier.height(4.dp))
-            Text(
-                text = price.source,
-                style = GlanceTextStyles.source,
-            )
+            Spacer(modifier = GlanceModifier.height(8.dp))
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+            ) {
+                Text(
+                    text = context.getString(R.string.widgets__widget__source),
+                    style = GlanceTextStyles.source,
+                )
+                Text(
+                    text = price.source,
+                    style = GlanceTextStyles.source,
+                )
+            }
         }
     }
 }
@@ -71,10 +104,10 @@ private fun PriceRow(widget: PriceWidgetData) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "${widget.pair.symbol}${widget.price}",
-            style = GlanceTextStyles.subtitle,
+            text = widget.pair.displayName,
+            style = GlanceTextStyles.footnoteM,
         )
-        Spacer(modifier = GlanceModifier.width(8.dp))
+        Spacer(modifier = GlanceModifier.defaultWeight())
         Text(
             text = widget.change.formatted,
             style = GlanceTextStyles.captionB.copy(
@@ -85,9 +118,10 @@ private fun PriceRow(widget: PriceWidgetData) {
                 },
             ),
         )
+        Spacer(modifier = GlanceModifier.width(16.dp))
+        Text(
+            text = widget.price,
+            style = GlanceTextStyles.bodySSB,
+        )
     }
-    Text(
-        text = widget.pair.displayName,
-        style = GlanceTextStyles.footnoteM,
-    )
 }

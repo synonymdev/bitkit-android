@@ -7,6 +7,7 @@
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:initialLayout="@layout/glance_default_loading_layout"
+    android:previewLayout="@layout/appwidget_preview_price"
     android:description="@string/appwidget__price__description"
     android:configure="to.bitkit.appwidget.config.AppWidgetConfigActivity"
     android:updatePeriodMillis="0" />
