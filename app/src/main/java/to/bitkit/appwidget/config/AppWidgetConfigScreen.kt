@@ -25,18 +25,12 @@ import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
-import to.bitkit.models.widget.ArticleModel
-import to.bitkit.models.widget.BlockModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.widgets.blocks.BlocksEditContent
-import to.bitkit.ui.screens.widgets.facts.FactsEditContent
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditContent
-import to.bitkit.ui.screens.widgets.weather.WeatherEditContent
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -48,63 +42,6 @@ fun AppWidgetConfigScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     when (state.type) {
-        AppWidgetType.BLOCKS -> BlocksEditContent(
-            onBack = onCancel,
-            blocksPreferences = state.blocksPreferences,
-            block = state.blockModel ?: BlockModel(
-                height = "",
-                time = "",
-                date = "",
-                transactionCount = "",
-                size = "",
-                source = "",
-            ),
-            onClickShowBlock = { viewModel.toggleBlocksShow(BlocksField.BLOCK) },
-            onClickShowTime = { viewModel.toggleBlocksShow(BlocksField.TIME) },
-            onClickShowDate = { viewModel.toggleBlocksShow(BlocksField.DATE) },
-            onClickShowTransactions = { viewModel.toggleBlocksShow(BlocksField.TRANSACTIONS) },
-            onClickShowSize = { viewModel.toggleBlocksShow(BlocksField.SIZE) },
-            onClickShowSource = { viewModel.toggleBlocksShow(BlocksField.SOURCE) },
-            onClickReset = { viewModel.resetPreferences() },
-            onClickPreview = { viewModel.saveAndFinish(onConfirm) },
-        )
-
-        AppWidgetType.WEATHER -> WeatherEditContent(
-            onBack = onCancel,
-            weather = null,
-            weatherPreferences = state.weatherPreferences,
-            onClickShowTitle = { viewModel.toggleWeatherShow(WeatherField.TITLE) },
-            onClickShowDescription = { viewModel.toggleWeatherShow(WeatherField.DESCRIPTION) },
-            onClickShowCurrentFee = { viewModel.toggleWeatherShow(WeatherField.CURRENT_FEE) },
-            onClickShowNextBlockFee = { viewModel.toggleWeatherShow(WeatherField.NEXT_BLOCK) },
-            onClickReset = { viewModel.resetPreferences() },
-            onClickPreview = { viewModel.saveAndFinish(onConfirm) },
-        )
-
-        AppWidgetType.HEADLINES -> HeadlinesEditContent(
-            onBack = onCancel,
-            headlinePreferences = state.headlinePreferences,
-            article = ArticleModel(
-                title = "",
-                timeAgo = "",
-                link = "",
-                publisher = "",
-            ),
-            onClickTime = { viewModel.toggleHeadlineTime() },
-            onClickShowSource = { viewModel.toggleHeadlineSource() },
-            onClickReset = { viewModel.resetPreferences() },
-            onClickPreview = { viewModel.saveAndFinish(onConfirm) },
-        )
-
-        AppWidgetType.FACTS -> FactsEditContent(
-            onBack = onCancel,
-            factsPreferences = state.factsPreferences,
-            fact = state.currentFact,
-            onClickShowSource = { viewModel.toggleFactsSource() },
-            onClickReset = { viewModel.resetPreferences() },
-            onClickPreview = { viewModel.saveAndFinish(onConfirm) },
-        )
-
         AppWidgetType.PRICE -> PriceConfigContent(
             state = state,
             onTogglePair = { viewModel.togglePricePair(it) },

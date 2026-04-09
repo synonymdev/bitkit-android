@@ -10,9 +10,6 @@ import kotlinx.coroutines.flow.map
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
-import to.bitkit.data.dto.ArticleDTO
-import to.bitkit.data.dto.BlockDTO
-import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.AppWidgetDataSerializer
 import javax.inject.Inject
@@ -23,7 +20,6 @@ private val Context.appWidgetDataStore: DataStore<AppWidgetData> by dataStore(
     serializer = AppWidgetDataSerializer,
 )
 
-@Suppress("TooManyFunctions")
 @Singleton
 class AppWidgetPreferencesStore @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -76,23 +72,7 @@ class AppWidgetPreferencesStore @Inject constructor(
     fun hasWidgetsOfType(type: AppWidgetType): Flow<Boolean> =
         data.map { it.entries.any { entry -> entry.type == type } }
 
-    suspend fun cacheBlockData(block: BlockDTO) {
-        store.updateData { it.copy(cachedBlock = block) }
-    }
-
-    suspend fun cacheWeatherData(weather: WeatherDTO) {
-        store.updateData { it.copy(cachedWeather = weather) }
-    }
-
     suspend fun cachePriceData(price: PriceDTO) {
         store.updateData { it.copy(cachedPrice = price) }
-    }
-
-    suspend fun cacheArticles(articles: List<ArticleDTO>) {
-        store.updateData { it.copy(cachedArticles = articles) }
-    }
-
-    suspend fun cacheFacts(facts: List<String>) {
-        store.updateData { it.copy(cachedFacts = facts) }
     }
 }
