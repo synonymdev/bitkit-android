@@ -511,8 +511,8 @@
     <string name="profile__delete_profile">Delete Profile</string>
     <string name="profile__delete_success">Profile deleted</string>
     <string name="profile__deriving_keys">Deriving your keys…</string>
-    <string name="profile__edit_bio">BIO</string>
-    <string name="profile__edit_bio_placeholder">Short bio. Tell a bit about yourself.</string>
+    <string name="profile__edit_bio">NOTES</string>
+    <string name="profile__edit_bio_placeholder">Short note. Tell a bit about yourself.</string>
     <string name="profile__edit_delete_section">DELETE</string>
     <string name="profile__edit_name_placeholder">YOUR NAME</string>
     <string name="profile__edit_nav_title">Edit Profile</string>
