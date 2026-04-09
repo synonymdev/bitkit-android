@@ -8,8 +8,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -99,6 +101,21 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals(testPk, sut.publicKey.value)
         assertTrue(sut.isAuthenticated.value)
         verifyBlocking(keychain) { saveString(Keychain.Key.PAYKIT_SESSION.name, testSecret) }
+    }
+
+    @Test
+    fun `completeAuthentication should clear managed secret key`() = test {
+        val testSecret = "session_secret"
+        val testPk = "completed_pk"
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
+        val ffiProfile = createFfiProfile(name = "User")
+        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
+
+        val result = sut.completeAuthentication()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
     }
 
     @Test
@@ -466,6 +483,19 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `loadContacts should treat missing contacts directory as empty`() = test {
+        authenticateForTesting()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        whenever(pubkyService.sessionList("test_secret", Env.contactsBasePath))
+            .thenThrow(RuntimeException("Directory Not Found (404)"))
+
+        sut.loadContacts()
+
+        assertTrue(sut.contacts.value.isEmpty())
+        assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
     fun `fetchContactProfile should return bitkit profile when available`() = test {
         val contactKey = "pubkycontact3"
         val strippedKey = contactKey.removePrefix("pubky")
@@ -512,6 +542,44 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `uploadAvatar should use session when managed key belongs to another pubky`() = test {
+        val session = "test_session"
+        val currentPublicKey = "pubkyalice"
+        val staleSecretKey = "stale_secret"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(staleSecretKey)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(pubkyService.publicKeyFromSecret(staleSecretKey)).thenReturn("pubkybob")
+
+        authenticateForTesting(publicKey = currentPublicKey, secret = session, profileName = "Alice")
+        clearInvocations(keychain)
+
+        val result = sut.uploadAvatar(byteArrayOf(1, 2, 3))
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService, never()) { putWithSecretKey(any(), any(), any()) }
+        verifyBlocking(pubkyService) { sessionPut(eq(session), any(), any()) }
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `uploadAvatar should use managed key when it matches current pubky`() = test {
+        val session = "test_session"
+        val currentPublicKey = "pubkyalice"
+        val secretKey = "managed_secret"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn("alice")
+
+        authenticateForTesting(publicKey = currentPublicKey, secret = session, profileName = "Alice")
+
+        val result = sut.uploadAvatar(byteArrayOf(1, 2, 3))
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) { putWithSecretKey(eq(secretKey), any(), any()) }
+        verifyBlocking(pubkyService, never()) { sessionPut(eq(session), any(), any()) }
+    }
+
+    @Test
     fun `signOut should clear contacts`() = test {
         authenticateForTesting()
         val contactKey = "pubkycontact4"
@@ -552,6 +620,30 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.pendingImportProfile.value)
         assertTrue(sut.pendingImportContacts.value.isEmpty())
         assertTrue(sut.contacts.value.isEmpty())
+    }
+
+    @Test
+    fun `wipeLocalState should clear pubky state without server sign out`() = test {
+        authenticateForTesting()
+        val contact = PubkyProfile(
+            publicKey = "pubkycontact4",
+            name = "Charlie",
+            bio = "",
+            imageUrl = null,
+            links = emptyList(),
+            tags = emptyList(),
+            status = null,
+        )
+        sut.addContact(contact.publicKey, existingProfile = contact)
+
+        sut.wipeLocalState()
+
+        assertNull(sut.publicKey.value)
+        assertNull(sut.profile.value)
+        assertTrue(sut.contacts.value.isEmpty())
+        assertFalse(sut.isAuthenticated.value)
+        verify(pubkyService, never()).signOut()
+        verifyBlocking(pubkyStore) { reset() }
     }
 
     @Test

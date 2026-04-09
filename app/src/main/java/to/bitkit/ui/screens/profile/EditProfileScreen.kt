@@ -29,7 +29,6 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.components.AddLinkSheet
 import to.bitkit.ui.components.AddTagSheet
-import to.bitkit.ui.components.AvatarCameraOverlay
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.ProfileEditForm
 import to.bitkit.ui.components.ProfileEditLink
@@ -125,7 +124,7 @@ private fun Content(
         if (uiState.isLoading) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize()
             ) {
                 GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
             }
@@ -202,17 +201,16 @@ private fun AvatarSection(
                 model = newAvatarUri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize()
             )
             imageUrl != null -> PubkyImage(uri = imageUrl, size = 100.dp)
             else -> Icon(
                 painter = painterResource(R.drawable.ic_user_square),
                 contentDescription = null,
                 tint = Colors.White32,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(40.dp)
             )
         }
-        AvatarCameraOverlay()
     }
 }
 

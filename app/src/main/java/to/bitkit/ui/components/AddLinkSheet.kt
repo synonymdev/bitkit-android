@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -24,6 +26,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -46,6 +50,7 @@ fun AddLinkSheet(
     BottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.imePadding()
     ) {
         if (showSuggestions) {
             SuggestionsContent(
@@ -81,7 +86,13 @@ private fun LinkFormContent(
     onSave: () -> Unit,
     isSaveEnabled: Boolean,
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(
+        modifier = Modifier
+            .sheetHeight(isModal = true)
+            .gradientBackground()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp),
+    ) {
         SheetTopBar(titleText = stringResource(R.string.profile__add_link))
         VerticalSpacer(16.dp)
         Text13Up(text = stringResource(R.string.profile__add_link_label))
@@ -92,7 +103,7 @@ private fun LinkFormContent(
             placeholder = stringResource(R.string.profile__add_link_label_placeholder),
             trailingIcon = { SuggestionsButton(onClick = onShowSuggestions) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         VerticalSpacer(16.dp)
         Text13Up(text = stringResource(R.string.profile__add_link_url))
@@ -102,7 +113,7 @@ private fun LinkFormContent(
             onValueChange = onUrlChange,
             placeholder = stringResource(R.string.profile__add_link_url_placeholder),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         VerticalSpacer(8.dp)
         BodyS(
@@ -127,7 +138,13 @@ internal fun SuggestionsContent(
     onSelect: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(
+        modifier = Modifier
+            .sheetHeight(isModal = true)
+            .gradientBackground()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp),
+    ) {
         SheetTopBar(titleText = title, onBack = onBack)
         VerticalSpacer(16.dp)
         FlowRow(
@@ -150,7 +167,7 @@ private fun SuggestionsButton(onClick: () -> Unit) {
             painter = painterResource(R.drawable.ic_lightbulb),
             contentDescription = null,
             tint = Colors.PubkyGreen,
-            modifier = Modifier.padding(end = 4.dp),
+            modifier = Modifier.padding(end = 4.dp)
         )
         BodySSB(
             text = stringResource(R.string.profile__suggestions),

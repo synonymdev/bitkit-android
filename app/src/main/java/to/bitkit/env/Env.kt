@@ -173,11 +173,16 @@ internal object Env {
         }
 
     val homegateUrl: String
-        get() = homegateUrlFor(
-            network = network,
-            isLocalE2eBackend = isLocalE2eBackend,
-            e2eHomegateUrl = e2eHomegateUrl,
-        )
+        get() {
+            if (isLocalE2eBackend) {
+                return e2eHomegateUrl
+            }
+
+            return when (network) {
+                Network.BITCOIN -> "https://homegate.pubky.app"
+                else -> "https://homegate.staging.pubky.app"
+            }
+        }
 
     val profilePath: String
         get() = "/pub/$pubkyDomain/profile.json"
@@ -236,21 +241,6 @@ internal object Env {
     }
 
     // endregion
-}
-
-internal fun homegateUrlFor(
-    network: Network,
-    isLocalE2eBackend: Boolean,
-    e2eHomegateUrl: String,
-): String {
-    if (isLocalE2eBackend) {
-        return e2eHomegateUrl
-    }
-
-    return when (network) {
-        Network.BITCOIN -> "https://homegate.pubky.app"
-        else -> "https://homegate.staging.pubky.app"
-    }
 }
 
 @Suppress("ConstPropertyName")

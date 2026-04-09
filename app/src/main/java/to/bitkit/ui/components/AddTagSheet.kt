@@ -2,6 +2,8 @@ package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -20,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -40,6 +44,7 @@ fun AddTagSheet(
     BottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.imePadding()
     ) {
         if (showSuggestions) {
             SuggestionsContent(
@@ -71,7 +76,13 @@ private fun TagFormContent(
     onSave: () -> Unit,
     isSaveEnabled: Boolean,
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(
+        modifier = Modifier
+            .sheetHeight(isModal = true)
+            .gradientBackground()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp),
+    ) {
         SheetTopBar(titleText = stringResource(R.string.profile__add_tag))
         VerticalSpacer(16.dp)
         Text13Up(text = stringResource(R.string.profile__add_tag_label))
@@ -80,22 +91,9 @@ private fun TagFormContent(
             value = tag,
             onValueChange = onTagChange,
             placeholder = stringResource(R.string.profile__add_tag_placeholder),
-            trailingIcon = {
-                TextButton(onClick = onShowSuggestions) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_lightbulb),
-                        contentDescription = null,
-                        tint = Colors.PubkyGreen,
-                        modifier = Modifier.padding(end = 4.dp),
-                    )
-                    BodySSB(
-                        text = stringResource(R.string.profile__suggestions),
-                        color = Colors.PubkyGreen,
-                    )
-                }
-            },
+            trailingIcon = { SuggestionsButton(onClick = onShowSuggestions) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         VerticalSpacer(24.dp)
         PrimaryButton(
@@ -104,6 +102,22 @@ private fun TagFormContent(
             enabled = isSaveEnabled,
         )
         VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun SuggestionsButton(onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Icon(
+            painter = painterResource(R.drawable.ic_lightbulb),
+            contentDescription = null,
+            tint = Colors.PubkyGreen,
+            modifier = Modifier.padding(end = 4.dp)
+        )
+        BodySSB(
+            text = stringResource(R.string.profile__suggestions),
+            color = Colors.PubkyGreen,
+        )
     }
 }
 

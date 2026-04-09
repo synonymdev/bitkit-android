@@ -199,6 +199,7 @@ class PubkyRepo @Inject constructor(
                 val pk = pubkyService.importSession(sessionSecret)
 
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+                runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
                 keychain.saveString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
 
                 pk
@@ -342,10 +343,21 @@ class PubkyRepo @Inject constructor(
 
     suspend fun uploadAvatar(imageBytes: ByteArray): Result<String> = runCatching {
         withContext(ioDispatcher) {
-            val secretKeyHex = requireNotNull(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)) {
-                "No secret key available"
+            val publicKey = requireNotNull(_publicKey.value) {
+                "No public key available"
             }
-            uploadAvatar(imageBytes, secretKeyHex).getOrThrow()
+            val secretKeyHex = managedSecretKeyFor(publicKey)
+            if (secretKeyHex != null) {
+                return@withContext uploadAvatar(imageBytes, secretKeyHex).getOrThrow()
+            }
+
+            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
+                "No session available"
+            }
+            val compressed = compressAvatar(imageBytes)
+            val path = "${Env.blobsBasePath}${System.currentTimeMillis()}.jpg"
+            pubkyService.sessionPut(session, path, compressed)
+            "$PUBKY_SCHEME${publicKey.removePrefix(PUBKY_PREFIX)}$path"
         }
     }
 
@@ -441,7 +453,18 @@ class PubkyRepo @Inject constructor(
                     val session = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
                         ?: return@withContext emptyList()
 
-                    val contactPaths = pubkyService.sessionList(session, Env.contactsBasePath)
+                    val contactPaths = runCatching {
+                        pubkyService.sessionList(session, Env.contactsBasePath)
+                    }.getOrElse {
+                        if (it.isMissingPubkyDirectory()) {
+                            Logger.debug(
+                                "Treating missing contacts directory as empty for '$pk'",
+                                context = TAG,
+                            )
+                            return@withContext emptyList()
+                        }
+                        throw it
+                    }
                     val strippedOwnerKey = pk.removePrefix(PUBKY_PREFIX)
 
                     coroutineScope {
@@ -638,21 +661,20 @@ class PubkyRepo @Inject constructor(
 
     // region Sign out
 
-    suspend fun signOut(): Result<Unit> = runCatching {
-        withContext(ioDispatcher) { pubkyService.signOut() }
-    }.recoverCatching {
-        Logger.warn("Server sign out failed, forcing local sign out", it, context = TAG)
-        withContext(ioDispatcher) { pubkyService.forceSignOut() }
-    }.also {
-        runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) } }
-        runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) } }
-        evictPubkyImages()
-        runCatching { withContext(ioDispatcher) { pubkyStore.reset() } }
-        _publicKey.update { null }
-        _profile.update { null }
-        _contacts.update { emptyList() }
-        clearPendingImport()
-        _authState.update { PubkyAuthState.Idle }
+    suspend fun signOut(): Result<Unit> {
+        val result = runCatching {
+            withContext(ioDispatcher) { pubkyService.signOut() }
+        }.recoverCatching {
+            Logger.warn("Forcing local sign out after server sign out failed", it, context = TAG)
+            withContext(ioDispatcher) { pubkyService.forceSignOut() }
+        }
+
+        clearLocalState()
+        return result
+    }
+
+    suspend fun wipeLocalState() {
+        clearLocalState()
     }
 
     // endregion
@@ -678,8 +700,54 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    private suspend fun managedSecretKeyFor(publicKey: String): String? = withContext(ioDispatcher) {
+        val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+            ?: return@withContext null
+
+        val derivedPublicKey = runCatching {
+            pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
+        }.onFailure {
+            Logger.warn("Ignoring invalid managed secret key for '$publicKey'", it, context = TAG)
+        }.getOrNull()
+
+        if (derivedPublicKey == publicKey) {
+            return@withContext secretKeyHex
+        }
+
+        if (derivedPublicKey != null) {
+            Logger.warn("Ignoring stale managed secret key for '$publicKey'", context = TAG)
+        }
+        runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        null
+    }
+
+    private suspend fun clearLocalState() {
+        runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) } }
+        runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) } }
+        evictPubkyImages()
+        runCatching { withContext(ioDispatcher) { pubkyStore.reset() } }
+        _publicKey.update { null }
+        _profile.update { null }
+        _contacts.update { emptyList() }
+        clearPendingImport()
+        _sessionRestorationFailed.update { false }
+        _authState.update { PubkyAuthState.Idle }
+    }
+
     private fun String.ensurePubkyPrefix(): String =
         if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
+
+    private fun Throwable.isMissingPubkyDirectory(): Boolean {
+        val fullMessage = buildString {
+            append(message.orEmpty())
+            cause?.message?.takeIf { it.isNotBlank() }?.let {
+                append(" ")
+                append(it)
+            }
+        }
+        return fullMessage.contains("directory not found", ignoreCase = true) ||
+            (fullMessage.contains("404") && fullMessage.contains("not found", ignoreCase = true))
+    }
 
     // endregion
 }

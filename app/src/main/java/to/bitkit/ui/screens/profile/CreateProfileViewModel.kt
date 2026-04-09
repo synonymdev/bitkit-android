@@ -175,10 +175,6 @@ class CreateProfileViewModel @Inject constructor(
                 avatarBytes = state.avatarBytes,
             ).onSuccess {
                 _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.profile__create_success),
-                )
                 _effects.emit(CreateProfileEffect.CreateSuccess)
             }.onFailure {
                 Logger.error("Failed to create identity", it, context = TAG)

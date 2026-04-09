@@ -1,5 +1,3 @@
-@file:Suppress("ImportOrdering")
-
 package to.bitkit.di
 
 import dagger.Module

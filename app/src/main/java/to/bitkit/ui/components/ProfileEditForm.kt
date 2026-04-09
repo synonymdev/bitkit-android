@@ -3,7 +3,6 @@ package to.bitkit.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -74,7 +72,7 @@ fun ProfileEditForm(
             onValueChange = onNameChange,
             placeholder = stringResource(R.string.profile__edit_name_placeholder),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         HorizontalDivider()
         VerticalSpacer(12.dp)
@@ -87,7 +85,7 @@ fun ProfileEditForm(
         BodyS(
             text = publicKey,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
@@ -95,7 +93,7 @@ fun ProfileEditForm(
         Text13Up(
             text = stringResource(R.string.profile__edit_bio),
             color = Colors.White64,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         VerticalSpacer(8.dp)
         TextInput(
@@ -104,14 +102,18 @@ fun ProfileEditForm(
             placeholder = stringResource(R.string.profile__edit_bio_placeholder),
             minLines = 2,
             maxLines = 4,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
 
         VerticalSpacer(16.dp)
         links.forEachIndexed { index, link ->
             HorizontalDivider(color = Colors.White10)
             VerticalSpacer(8.dp)
-            Text13Up(text = link.label, color = Colors.White64)
+            Text13Up(
+                text = link.label,
+                color = Colors.White64,
+                modifier = Modifier.fillMaxWidth()
+            )
             VerticalSpacer(8.dp)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -143,7 +145,7 @@ fun ProfileEditForm(
                     Icon(
                         painter = painterResource(R.drawable.ic_link),
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp)
                     )
                 },
             )
@@ -153,13 +155,13 @@ fun ProfileEditForm(
         Text13Up(
             text = stringResource(R.string.profile__edit_tags),
             color = Colors.White64,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         VerticalSpacer(8.dp)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             tags.forEachIndexed { index, tag ->
                 TagButton(
@@ -180,7 +182,7 @@ fun ProfileEditForm(
                     Icon(
                         painter = painterResource(R.drawable.ic_tag),
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp)
                     )
                 },
             )
@@ -199,7 +201,7 @@ fun ProfileEditForm(
             Text13Up(
                 text = stringResource(R.string.profile__edit_delete_section),
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth()
             )
             VerticalSpacer(8.dp)
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -213,7 +215,7 @@ fun ProfileEditForm(
                             painter = painterResource(R.drawable.ic_trash),
                             contentDescription = null,
                             tint = Colors.Red,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     },
                 )
@@ -224,18 +226,18 @@ fun ProfileEditForm(
         VerticalSpacer(16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
                 onClick = onCancel,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = isSaveEnabled,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
         }
         VerticalSpacer(16.dp)
@@ -243,28 +245,6 @@ fun ProfileEditForm(
 }
 
 data class ProfileEditLink(val label: String, val url: String)
-
-@Composable
-fun AvatarCameraOverlay() {
-    Box(
-        contentAlignment = Alignment.BottomEnd,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(24.dp)
-                .background(Colors.Brand, CircleShape),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_camera),
-                contentDescription = null,
-                tint = Colors.Black,
-                modifier = Modifier.size(14.dp),
-            )
-        }
-    }
-}
 
 @Preview(showSystemUi = true)
 @Composable
