@@ -145,6 +145,10 @@ class LightningRepo @Inject constructor(
                         return@collect
                     }
 
+                    if (_lightningState.value.nodeLifecycleState.isRunning()) {
+                        connectToTrustedPeers()
+                    }
+
                     // Start retry loop if sync is failing
                     startSyncRetryLoopIfNeeded()
                 }
@@ -528,6 +532,7 @@ class LightningRepo @Inject constructor(
                 refreshChannelCache()
                 syncState()
             }
+
             is Event.ChannelClosed -> scope.launch { registerClosedChannel(event.channelId, event.reason) }
             else -> Unit
         }
