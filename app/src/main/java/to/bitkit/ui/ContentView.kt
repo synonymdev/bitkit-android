@@ -527,7 +527,7 @@ fun ContentView(
                 hasSeenProfileIntro = hasSeenProfileIntro,
                 hasSeenContactsIntro = hasSeenContactsIntro,
                 isProfileAuthenticated = isProfileAuthenticated,
-                modifier = Modifier.align(Alignment.TopEnd),
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }

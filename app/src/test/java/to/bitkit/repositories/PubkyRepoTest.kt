@@ -235,6 +235,18 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deleteProfile should fail when signOut fails`() = test {
+        authenticateForTesting()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
+        whenever(pubkyService.signOut()).thenThrow(RuntimeException("Sign out failed"))
+        whenever(pubkyService.forceSignOut()).thenThrow(RuntimeException("Force sign out failed"))
+
+        val result = sut.deleteProfile()
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
     fun `signOut should force sign out when server sign out fails`() = test {
         authenticateForTesting()
         whenever(pubkyService.signOut()).thenThrow(RuntimeException("Server error"))
@@ -547,12 +559,12 @@ class PubkyRepoTest : BaseUnitTest() {
         secret: String = "test_secret",
         profileName: String = "Test",
     ) {
-        whenever(pubkyService.completeAuth()).thenReturn(secret)
-        whenever(pubkyService.importSession(secret)).thenReturn(publicKey)
+        whenever { pubkyService.completeAuth() }.thenReturn(secret)
+        whenever { pubkyService.importSession(secret) }.thenReturn(publicKey)
         val ffiProfile = createFfiProfile(name = profileName)
-        whenever(pubkyService.getProfile(publicKey)).thenReturn(ffiProfile)
+        whenever { pubkyService.getProfile(publicKey) }.thenReturn(ffiProfile)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(secret)
-        whenever(pubkyService.sessionList(secret, Env.contactsBasePath)).thenReturn(emptyList())
+        whenever { pubkyService.sessionList(secret, Env.contactsBasePath) }.thenReturn(emptyList())
 
         sut.completeAuthentication()
     }

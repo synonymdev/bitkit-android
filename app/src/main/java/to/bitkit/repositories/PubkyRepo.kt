@@ -383,7 +383,7 @@ class PubkyRepo @Inject constructor(
             }
             pubkyService.sessionDelete(session, Env.profilePath)
         }
-        signOut()
+        signOut().getOrThrow()
     }
 
     @Suppress("LongParameterList")
