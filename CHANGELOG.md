@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 - Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
+- Connection issues overlay with connectivity fixes across Send, Receive, and Transfer flows #878
 
 ## [2.2.0] - 2026-04-07
 
@@ -19,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Transfer from Savings button on empty Spending screen when savings balance exists #882
-- Connection issues overlay with connectivity fixes across Send, Receive, and Transfer flows #878
 - Lightning Connections empty state with onboarding screen #857
 - Unified PIN management screen (enable/disable/change in one place) #857
 - Support entry in drawer menu #857
