@@ -145,6 +145,10 @@ class LightningRepo @Inject constructor(
                         return@collect
                     }
 
+                    if (_lightningState.value.nodeLifecycleState.isRunning()) {
+                        connectToTrustedPeers()
+                    }
+
                     // Start retry loop if sync is failing
                     startSyncRetryLoopIfNeeded()
                 }
@@ -524,7 +528,11 @@ class LightningRepo @Inject constructor(
 
     private fun handleLdkEvent(event: Event) {
         when (event) {
-            is Event.ChannelPending, is Event.ChannelReady -> scope.launch { refreshChannelCache() }
+            is Event.ChannelPending, is Event.ChannelReady -> scope.launch {
+                refreshChannelCache()
+                syncState()
+            }
+
             is Event.ChannelClosed -> scope.launch { registerClosedChannel(event.channelId, event.reason) }
             else -> Unit
         }
@@ -985,20 +993,13 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
-        if (lightningService.channels?.any { it.isUsable } == true) {
-            syncState()
-            return@withContext
-        }
+        if (_lightningState.value.channels.any { it.isUsable }) return@withContext
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
         withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
-            while (lightningService.channels?.any { it.isUsable } != true) {
-                delay(1.seconds)
-            }
+            _lightningState.first { state -> state.channels.any { it.isUsable } }
         } ?: Logger.warn("Timed out waiting for usable channels", context = TAG)
-
-        syncState()
     }
 
     @Suppress("LongParameterList")
