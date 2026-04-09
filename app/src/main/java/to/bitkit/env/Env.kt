@@ -20,6 +20,8 @@ internal object Env {
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
+    val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
+    const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
@@ -53,10 +55,11 @@ internal object Env {
 
     val electrumServerUrl: String
         get() {
-            val isE2eLocal = isE2eTest && e2eBackend == "local"
             return when (network) {
                 Network.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
-                Network.REGTEST -> if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+                Network.REGTEST -> {
+                    if (isLocalE2eBackend) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+                }
                 Network.TESTNET -> ElectrumServers.TESTNET
                 else -> TODO("${network.name} network not implemented")
             }
@@ -169,8 +172,12 @@ internal object Env {
             return "/pub/$pubkyDomain/:rw,/pub/${prefix}pubky.app/:r,/pub/${prefix}paykit/v0/:rw"
         }
 
-    // Switch to production for mainnet once available
-    const val homegateUrl = "https://homegate.staging.pubky.app"
+    val homegateUrl: String
+        get() = homegateUrlFor(
+            network = network,
+            isLocalE2eBackend = isLocalE2eBackend,
+            e2eHomegateUrl = e2eHomegateUrl,
+        )
 
     val profilePath: String
         get() = "/pub/$pubkyDomain/profile.json"
@@ -229,6 +236,21 @@ internal object Env {
     }
 
     // endregion
+}
+
+internal fun homegateUrlFor(
+    network: Network,
+    isLocalE2eBackend: Boolean,
+    e2eHomegateUrl: String,
+): String {
+    if (isLocalE2eBackend) {
+        return e2eHomegateUrl
+    }
+
+    return when (network) {
+        Network.BITCOIN -> "https://homegate.pubky.app"
+        else -> "https://homegate.staging.pubky.app"
+    }
 }
 
 @Suppress("ConstPropertyName")

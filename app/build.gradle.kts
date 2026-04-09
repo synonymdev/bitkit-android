@@ -47,6 +47,7 @@ val bcp47Locales = listOf(
     "en", "ar", "es-419", "ca", "cs", "de", "el", "es", "es-ES", "fr", "it", "nl", "pl", "pt", "pt-BR", "ru"
 )
 val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
+val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
 
 android {
     namespace = "to.bitkit"
@@ -63,6 +64,7 @@ android {
         }
         buildConfigField("boolean", "E2E", System.getenv("E2E")?.toBoolean()?.toString() ?: "false")
         buildConfigField("String", "E2E_BACKEND", "\"$e2eBackendEnv\"")
+        buildConfigField("String", "E2E_HOMEGATE_URL", "\"$e2eHomegateUrlEnv\"")
         buildConfigField("boolean", "GEO", System.getenv("GEO")?.toBoolean()?.toString() ?: "true")
         buildConfigField("String", "LOCALES", "\"${bcp47Locales.joinToString(",")}\"")
     }
