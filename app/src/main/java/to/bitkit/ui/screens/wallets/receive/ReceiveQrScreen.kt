@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,6 +43,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -56,7 +55,6 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
-import to.bitkit.ext.truncate
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
@@ -199,7 +197,7 @@ fun ReceiveQrScreen(
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
         Column {
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             // Tab row
             CustomTabRowWithSpacing(
@@ -221,7 +219,7 @@ fun ReceiveQrScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            Spacer(Modifier.height(24.dp))
+            VerticalSpacer(24.dp)
 
             // Content area (QR or Details) with LazyRow
             LazyRow(
@@ -268,6 +266,7 @@ fun ReceiveQrScreen(
                                         walletState.bip21,
                                         walletState.onchainAddress,
                                     )
+
                                     else -> invoice
                                 }
 
@@ -289,7 +288,7 @@ fun ReceiveQrScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            VerticalSpacer(24.dp)
 
             AnimatedVisibility(visible = lightningState.nodeLifecycleState.isRunning()) {
                 val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
@@ -332,7 +331,7 @@ fun ReceiveQrScreen(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -366,7 +365,7 @@ private fun ReceiveQrView(
             modifier = Modifier.weight(1f, fill = false)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
@@ -376,7 +375,6 @@ private fun ReceiveQrView(
                 size = ButtonSize.Small,
                 onClick = onClickEditInvoice,
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
@@ -402,7 +400,6 @@ private fun ReceiveQrView(
                             coroutineScope.launch { qrButtonTooltipState.show() }
                         },
                         fullWidth = true,
-                        color = Colors.White10,
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
@@ -425,7 +422,6 @@ private fun ReceiveQrView(
                     } ?: shareText(context, copyText)
                 },
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
@@ -437,7 +433,7 @@ private fun ReceiveQrView(
                 modifier = Modifier.weight(1f)
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
     }
 }
 
@@ -580,12 +576,14 @@ private fun CopyAddressCard(
             .padding(24.dp)
     ) {
         Caption13Up(text = title, color = Colors.White64)
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         BodyS(
-            text = (body ?: address).truncate(32).uppercase(),
+            text = (body ?: address).uppercase(),
+            maxLines = 1,
+            overflow = TextOverflow.MiddleEllipsis,
             modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -594,7 +592,6 @@ private fun CopyAddressCard(
                 size = ButtonSize.Small,
                 onClick = onClickEditInvoice,
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
@@ -620,7 +617,6 @@ private fun CopyAddressCard(
                             coroutineScope.launch { tooltipState.show() }
                         },
                         fullWidth = false,
-                        color = Colors.White10,
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
@@ -637,7 +633,6 @@ private fun CopyAddressCard(
                 size = ButtonSize.Small,
                 onClick = { shareText(context, address) },
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
@@ -868,7 +863,8 @@ private fun PreviewDetailsMode() {
                 tab = ReceiveTab.AUTO,
                 walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
-                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
+                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
+                        "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 cjitInvoice = null,
                 onClickEditInvoice = {},
