@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-04-07
+
 ### Fixed
+- Retouch Primary, Secondary, and Tertiary buttons styling #887
+- Avoid msat truncation when paying invoices and LNURL callbacks #879
 - Fix ANR on RGS server settings screen caused by catastrophic regex backtracking #880
 - Fix crash when returning app to foreground on Receive screen #875
 - Show loading state on Spending tab when node is not running #875
@@ -22,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mnemonic warning text transitions on reveal #857
 
 ### Changed
+- Show end of address on Receive Bitcoin screen using middle ellipsis truncation #886
+- Update funding screen: replace Advanced with Manual Setup, fix Use Other Wallet navigation to open amount entry, and add Fund Wallet button to no-funds dialog #885
+- Updated design of the success screen in the manual channel setup flow #883
 - Unified send flow with payment method switcher, details toggle, Lightning support for BIP21 payments, and improved fee rate defaults #863
 - Settings redesigned with tabbed navigation (General/Security/Advanced) with swipe support #857
 - Icons added to all settings rows for faster scanning #857
@@ -38,4 +45,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...v2.2.0

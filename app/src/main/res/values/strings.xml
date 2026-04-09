@@ -148,8 +148,9 @@
     <string name="lightning__external_manual__scan">Scan QR</string>
     <string name="lightning__external_manual__text">You can use an external node to manually open a Lightning connection. Enter the node details to continue.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Manual setup&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Spending Balance</string>
     <string name="lightning__external_success__text">Lightning connection initiated. You will be able to use your spending balance in &lt;accent&gt;±30 minutes&lt;/accent&gt; (depends on node configuration).</string>
-    <string name="lightning__external_success__title">Connection\n&lt;accent&gt;initiated&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Channel\n&lt;accent&gt;opening&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Fee rate</string>
     <string name="lightning__fee_rate_update_time">Fee Rate Cache Update Time</string>
     <string name="lightning__fees">Fees</string>
@@ -164,9 +165,8 @@
     <string name="lightning__force_title">Force\n&lt;accent&gt;Transfer&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Transfer from Savings</string>
     <string name="lightning__funding__button2">Use Other Wallet</string>
-    <string name="lightning__funding__button3">Advanced</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
-    <string name="lightning__funding__text">You can use your Bitkit savings or send bitcoin from a different wallet.</string>
+    <string name="lightning__funding__text">The easiest option is to use your Bitkit savings or send bitcoin from a different wallet.</string>
     <string name="lightning__funding__text_blocked">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
@@ -187,6 +187,7 @@
     <string name="lightning__next_outbound_htlc_limit">Next Outbound HTLC Limit</string>
     <string name="lightning__next_outbound_htlc_min">Next Outbound HTLC Min</string>
     <string name="lightning__no_funds__description">Before you can transfer funds from your savings balance, you need to send bitcoin to your Bitkit wallet.</string>
+    <string name="lightning__no_funds__fund_wallet">Fund Wallet</string>
     <string name="lightning__no_funds__title">No Available Funds</string>
     <string name="lightning__node_id">LDK Node ID</string>
     <string name="lightning__node_info">Lightning Node</string>

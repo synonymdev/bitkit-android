@@ -97,7 +97,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             is NotifyPaymentReceived.Command.Onchain -> command.event.txid
         },
         sats = when (command) {
-            is NotifyPaymentReceived.Command.Lightning -> (command.event.amountMsat / 1000u).toLong()
+            is NotifyPaymentReceived.Command.Lightning -> ((command.event.amountMsat + 999u) / 1000u).toLong()
             is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
         },
     )
