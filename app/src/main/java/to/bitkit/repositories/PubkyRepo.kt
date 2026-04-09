@@ -476,14 +476,14 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> = runCatching {
-        withContext(ioDispatcher) {
-            val prefixedKey = publicKey.ensurePubkyPrefix()
-            val ffiProfile = pubkyService.getProfile(prefixedKey)
-            PubkyProfile.fromFfi(prefixedKey, ffiProfile)
-        }
-    }.onFailure {
-        Logger.error("Failed to load contact profile '$publicKey'", it, context = TAG)
+    suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
+        val prefixedKey = publicKey.ensurePubkyPrefix()
+        return fetchRemoteProfile(prefixedKey)
+            .map { it ?: PubkyProfile.placeholder(prefixedKey) }
+            .recover {
+                Logger.warn("Falling back to placeholder contact '$prefixedKey'", it, context = TAG)
+                PubkyProfile.placeholder(prefixedKey)
+            }
     }
 
     suspend fun addContact(publicKey: String, existingProfile: PubkyProfile? = null): Result<Unit> = runCatching {

@@ -466,9 +466,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fetchContactProfile should return profile on success`() = test {
-        val contactKey = "pubky://contact3"
+    fun `fetchContactProfile should return bitkit profile when available`() = test {
+        val contactKey = "pubkycontact3"
+        val strippedKey = contactKey.removePrefix("pubky")
+        val json = """{"name":"Bob","bio":"Bio"}"""
+        whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
+            .thenReturn(json)
+
+        val result = sut.fetchContactProfile(contactKey)
+
+        assertTrue(result.isSuccess)
+        assertEquals("Bob", result.getOrNull()?.name)
+        verify(pubkyService, never()).getProfile(contactKey)
+    }
+
+    @Test
+    fun `fetchContactProfile should fall back to pubky profile when bitkit profile is missing`() = test {
+        val contactKey = "pubkycontact3"
+        val strippedKey = contactKey.removePrefix("pubky")
         val contactProfile = mock<CorePubkyProfile>()
+        whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
+            .thenThrow(RuntimeException("Missing bitkit profile"))
         whenever(contactProfile.name).thenReturn("Bob")
         whenever(contactProfile.bio).thenReturn("Bio")
         whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
@@ -480,13 +498,17 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fetchContactProfile should return failure on error`() = test {
-        val contactKey = "pubky://failing"
-        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Failed"))
+    fun `fetchContactProfile should fall back to placeholder when remote lookup fails`() = test {
+        val contactKey = "pubkycontact3"
+        val strippedKey = contactKey.removePrefix("pubky")
+        whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
+            .thenThrow(RuntimeException("Missing bitkit profile"))
+        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Missing pubky profile"))
 
         val result = sut.fetchContactProfile(contactKey)
 
-        assertTrue(result.isFailure)
+        assertTrue(result.isSuccess)
+        assertEquals(PubkyProfile.placeholder(contactKey), result.getOrNull())
     }
 
     @Test
