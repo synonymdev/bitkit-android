@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.sheets.SendRoute
@@ -37,7 +38,7 @@ private val sheetContainerColor = Color(0xFF141414) // Equivalent to White08 on 
 @Stable
 sealed interface Sheet {
     data class Send(val route: SendRoute = SendRoute.Recipient) : Sheet
-    data object Receive : Sheet
+    data class Receive(val route: ReceiveRoute = ReceiveRoute.QR) : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
     data object ChangePin : Sheet
     data object DisablePin : Sheet
