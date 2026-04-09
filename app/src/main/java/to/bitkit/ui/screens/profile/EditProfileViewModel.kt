@@ -105,6 +105,16 @@ class EditProfileViewModel @Inject constructor(
         }
     }
 
+    fun updateLinkUrl(index: Int, url: String) {
+        _uiState.update {
+            it.copy(
+                links = it.links.mapIndexed { i, link ->
+                    if (i == index) link.copy(url = url) else link
+                }.toImmutableList(),
+            )
+        }
+    }
+
     fun removeLink(index: Int) {
         _uiState.update {
             it.copy(links = it.links.filterIndexed { i, _ -> i != index }.toImmutableList())

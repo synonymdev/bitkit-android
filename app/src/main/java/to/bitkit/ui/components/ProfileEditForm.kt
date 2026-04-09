@@ -1,7 +1,5 @@
 package to.bitkit.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,10 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -43,6 +43,7 @@ fun ProfileEditForm(
     bio: String,
     onBioChange: (String) -> Unit,
     links: ImmutableList<ProfileEditLink>,
+    onLinkUrlChange: (Int, String) -> Unit,
     onRemoveLink: (Int) -> Unit,
     onAddLink: () -> Unit,
     tags: ImmutableList<String>,
@@ -72,6 +73,8 @@ fun ProfileEditForm(
             onValueChange = onNameChange,
             placeholder = stringResource(R.string.profile__edit_name_placeholder),
             singleLine = true,
+            textStyle = AppTextStyles.Display.copy(textAlign = TextAlign.Center),
+            colors = AppTextFieldDefaults.transparent,
             modifier = Modifier.fillMaxWidth()
         )
         HorizontalDivider()
@@ -115,24 +118,23 @@ fun ProfileEditForm(
                 modifier = Modifier.fillMaxWidth()
             )
             VerticalSpacer(8.dp)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Colors.White10, RoundedCornerShape(8.dp))
-                    .padding(16.dp),
-            ) {
-                BodySSB(text = link.url, modifier = Modifier.weight(1f))
-                HorizontalSpacer(8.dp)
-                Icon(
-                    painter = painterResource(R.drawable.ic_trash),
-                    contentDescription = null,
-                    tint = Colors.White64,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clickable { onRemoveLink(index) },
-                )
-            }
+            TextInput(
+                value = link.url,
+                onValueChange = { onLinkUrlChange(index, it) },
+                placeholder = stringResource(R.string.profile__add_link_url_placeholder),
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = { onRemoveLink(index) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_trash),
+                            contentDescription = null,
+                            tint = Colors.White64,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
             VerticalSpacer(8.dp)
         }
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -259,6 +261,7 @@ private fun Preview() {
             bio = bio,
             onBioChange = { bio = it },
             links = persistentListOf(ProfileEditLink("X", "https://x.com/satoshinakamoto")),
+            onLinkUrlChange = { _, _ -> },
             onRemoveLink = {},
             onAddLink = {},
             tags = persistentListOf("Founder"),

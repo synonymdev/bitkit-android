@@ -56,6 +56,19 @@ class EditContactViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateLinkUrl should update existing contact link`() = test {
+        val contacts = MutableStateFlow<List<PubkyProfile>>(listOf(createContact()))
+        whenever(pubkyRepo.contacts).thenReturn(contacts)
+        whenever(pubkyRepo.loadContacts()).thenReturn(Unit)
+        val sut = createSut()
+
+        advanceUntilIdle()
+        sut.updateLinkUrl(0, "https://updated.example.com")
+
+        assertEquals("https://updated.example.com", sut.uiState.value.links.first().url)
+    }
+
+    @Test
     fun `contact still missing after refresh produces missing state`() = test {
         val contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
         whenever(pubkyRepo.contacts).thenReturn(contacts)
