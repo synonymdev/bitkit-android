@@ -401,9 +401,29 @@ class PubkyRepo @Inject constructor(
             val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
+            deleteAllContacts(session)
             pubkyService.sessionDelete(session, Env.profilePath)
         }
         signOut().getOrThrow()
+    }
+
+    private suspend fun deleteAllContacts(session: String) {
+        val contactPaths = runCatching {
+            pubkyService.sessionList(session, Env.contactsBasePath)
+        }.getOrElse {
+            if (it.isMissingPubkyDirectory()) return
+            throw it
+        }
+        contactPaths.forEach { path ->
+            val contactKey = path.substringAfterLast("/")
+            runCatching {
+                pubkyService.sessionDelete(session, "${Env.contactsBasePath}$contactKey")
+            }.onFailure {
+                Logger.warn("Failed to delete contact '$contactKey'", it, context = TAG)
+            }
+        }
+        _contacts.update { emptyList() }
+        Logger.info("Deleted all contacts", context = TAG)
     }
 
     @Suppress("LongParameterList")
