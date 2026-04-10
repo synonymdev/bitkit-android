@@ -46,7 +46,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
 }
 
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LargeClass")
 @Singleton
 class PubkyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
