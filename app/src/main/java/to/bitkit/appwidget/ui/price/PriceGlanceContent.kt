@@ -63,6 +63,7 @@ fun PriceGlanceContent(
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .cornerRadius(8.dp)
+                    .padding(top = 8.dp)
                     .then(HeightModifier(Dimension.Expand)),
             )
         }
