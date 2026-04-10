@@ -12,6 +12,7 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.ContentScale
+import androidx.glance.layout.HeightModifier
 import androidx.glance.layout.Row
 import androidx.glance.layout.WidthModifier
 import androidx.glance.layout.fillMaxWidth
@@ -28,7 +29,7 @@ import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.ui.theme.Colors
-
+@Suppress("RestrictedApi")
 @Composable
 fun PriceGlanceContent(
     price: PriceDTO?,
@@ -65,7 +66,8 @@ fun PriceGlanceContent(
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .height(80.dp)
-                    .cornerRadius(8.dp),
+                    .cornerRadius(8.dp)
+                    .then(HeightModifier(Dimension.Expand)),
             )
         }
     }
