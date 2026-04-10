@@ -56,6 +56,7 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
@@ -70,6 +71,8 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 // region AddContactSheet (bottom sheet)
+
+private const val PUBKY_INPUT_MAX_LENGTH = 64
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,10 +90,14 @@ fun AddContactSheet(
     ) {
         AddContactSheetContent(
             publicKeyInput = publicKeyInput,
-            onPublicKeyChange = { publicKeyInput = it },
-            onPaste = { context.getClipboardText()?.trim()?.let { publicKeyInput = it } },
+            onPublicKeyChange = { publicKeyInput = it.take(PUBKY_INPUT_MAX_LENGTH) },
+            onPaste = {
+                context.getClipboardText()?.trim()?.let {
+                    publicKeyInput = it.take(PUBKY_INPUT_MAX_LENGTH)
+                }
+            },
             onScanQr = onScanQr,
-            onSubmit = { onSubmit(publicKeyInput) },
+            onSubmit = { onSubmit(publicKeyInput.trim()) },
         )
     }
 }
@@ -129,24 +136,24 @@ private fun AddContactSheetContent(
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         )
         VerticalSpacer(16.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_scan_qr),
                 onClick = onScanQr,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
             PrimaryButton(
                 text = stringResource(R.string.contacts__add_button),
                 onClick = onSubmit,
                 enabled = publicKeyInput.isNotBlank(),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
         }
         VerticalSpacer(16.dp)
@@ -347,7 +354,7 @@ private fun RotatingEllipses(modifier: Modifier = Modifier) {
         Image(
             painter = painterResource(R.drawable.card),
             contentDescription = null,
-            modifier = Modifier.size(128.dp),
+            modifier = Modifier.size(128.dp)
         )
     }
 }
@@ -395,7 +402,7 @@ private fun LoadedContent(
             imageUrl = profile.imageUrl,
         )
 
-        Box(modifier = Modifier.weight(1f))
+        FillHeight()
 
         BodyS(
             text = stringResource(R.string.contacts__add_privacy_notice, profile.name),
@@ -405,18 +412,18 @@ private fun LoadedContent(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_discard),
                 onClick = onDiscard,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = !isLoading,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
         }
         VerticalSpacer(16.dp)

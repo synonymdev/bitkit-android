@@ -33,7 +33,7 @@ class PubkyImageFetcher(
         val json = JSONObject(String(data))
         val src = json.optString("src", "")
         if (src.isNotEmpty() && src.startsWith(PUBKY_SCHEME)) {
-            Logger.debug("File descriptor found, fetching blob from '$src'", context = TAG)
+            Logger.debug("Found file descriptor, fetching blob from '$src'", context = TAG)
             pubkyService.fetchFile(src)
         } else {
             data

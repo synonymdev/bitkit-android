@@ -33,6 +33,13 @@ import kotlin.time.Duration.Companion.milliseconds
 import com.synonym.bitkitcore.PubkyProfile as CorePubkyProfile
 
 class PubkyRepoTest : BaseUnitTest() {
+    companion object {
+        // Valid 52-char z-base-32 key (+ "pubky" prefix = 57 chars)
+        private const val VALID_CONTACT_KEY_A = "pubkyybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
+        private const val VALID_CONTACT_KEY_B = "pubkya345h769ybndrfg8ejkmcpqxot1uwiszybndrfg8ejkmcpqxot1u"
+        private const val VALID_SELF_KEY = "pubkyot1uwisza345h769ybndrfg8ejkmcpqxybndrfg8ejkmcpqxot1u"
+    }
+
     private lateinit var sut: PubkyRepo
 
     private val pubkyService = mock<PubkyService>()
@@ -279,7 +286,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `clearPendingImport should only clear temporary import state`() = test {
         authenticateForTesting()
         val existingContact = PubkyProfile(
-            publicKey = "pubkyexisting-contact",
+            publicKey = VALID_CONTACT_KEY_B,
             name = "Existing Contact",
             bio = "",
             imageUrl = null,
@@ -360,7 +367,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `addContact should replace existing contact with normalized key`() = test {
         authenticateForTesting()
         val original = PubkyProfile(
-            publicKey = "contact-key",
+            publicKey = VALID_CONTACT_KEY_B,
             name = "Alice",
             bio = "",
             imageUrl = null,
@@ -370,12 +377,12 @@ class PubkyRepoTest : BaseUnitTest() {
         )
         val updated = original.copy(name = "Alice Updated", tags = listOf("new"))
 
-        sut.addContact("contact-key", existingProfile = original)
-        sut.addContact("contact-key", existingProfile = updated)
+        sut.addContact(VALID_CONTACT_KEY_B, existingProfile = original)
+        sut.addContact(VALID_CONTACT_KEY_B, existingProfile = updated)
 
         val contacts = sut.contacts.value
         assertEquals(1, contacts.size)
-        assertEquals("pubkycontact-key", contacts.first().publicKey)
+        assertEquals(VALID_CONTACT_KEY_B, contacts.first().publicKey)
         assertEquals("Alice Updated", contacts.first().name)
         assertEquals(listOf("new"), contacts.first().tags)
     }
@@ -414,7 +421,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val newSecret = "new_secret"
         val newPublicKey = "new_public_key"
         val existingContact = PubkyProfile(
-            publicKey = "pubkyexisting-contact",
+            publicKey = VALID_CONTACT_KEY_B,
             name = "Existing Contact",
             bio = "",
             imageUrl = null,
@@ -497,7 +504,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `fetchContactProfile should return bitkit profile when available`() = test {
-        val contactKey = "pubkycontact3"
+        val contactKey = VALID_CONTACT_KEY_A
         val strippedKey = contactKey.removePrefix("pubky")
         val json = """{"name":"Bob","bio":"Bio"}"""
         whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
@@ -512,7 +519,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `fetchContactProfile should fall back to pubky profile when bitkit profile is missing`() = test {
-        val contactKey = "pubkycontact3"
+        val contactKey = VALID_CONTACT_KEY_A
         val strippedKey = contactKey.removePrefix("pubky")
         val contactProfile = mock<CorePubkyProfile>()
         whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
@@ -528,17 +535,35 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `fetchContactProfile should fall back to placeholder when remote lookup fails`() = test {
-        val contactKey = "pubkycontact3"
+    fun `fetchContactProfile should fall back to placeholder when remote profile is missing`() = test {
+        val contactKey = VALID_CONTACT_KEY_A
         val strippedKey = contactKey.removePrefix("pubky")
         whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
             .thenThrow(RuntimeException("Missing bitkit profile"))
-        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Missing pubky profile"))
+        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Profile not found"))
 
         val result = sut.fetchContactProfile(contactKey)
 
         assertTrue(result.isSuccess)
         assertEquals(PubkyProfile.placeholder(contactKey), result.getOrNull())
+    }
+
+    @Test
+    fun `fetchContactProfile should fail for invalid pubky format`() = test {
+        val result = sut.fetchContactProfile("pubkyinvalid-short")
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is PubkyContactError.InvalidFormat)
+    }
+
+    @Test
+    fun `addContact should fail when adding current pubky`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+
+        val result = sut.addContact(VALID_SELF_KEY)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is PubkyContactError.CannotAddSelf)
     }
 
     @Test

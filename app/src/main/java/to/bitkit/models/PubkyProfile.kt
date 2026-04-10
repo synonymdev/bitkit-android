@@ -1,12 +1,16 @@
 package to.bitkit.models
 
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import to.bitkit.ext.ellipsisMiddle
 import com.synonym.bitkitcore.PubkyProfile as CorePubkyProfile
 
+@Immutable
 data class PubkyProfileLink(val label: String, val url: String)
 
+@Stable
 data class PubkyProfile(
     val publicKey: String,
     val name: String,

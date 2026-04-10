@@ -1,5 +1,8 @@
 package to.bitkit.models
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class PubkyAuthPermission(
     val path: String,
     val accessLevel: String,

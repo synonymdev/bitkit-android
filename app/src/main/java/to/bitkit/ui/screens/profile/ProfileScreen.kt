@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,7 +34,6 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.GradientCircularProgressIndicator
-import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.LinkRow
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.QrCodeImage
@@ -109,11 +105,9 @@ private fun Content(
             uiState.isLoading && currentProfile == null -> LoadingState()
             currentProfile != null -> ProfileBody(
                 profile = currentProfile,
-                isSigningOut = uiState.isSigningOut,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickShare = onClickShare,
-                onClickSignOut = onClickSignOut,
             )
             else -> EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
         }
@@ -133,11 +127,9 @@ private fun Content(
 @Composable
 private fun ProfileBody(
     profile: PubkyProfile,
-    isSigningOut: Boolean,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
-    onClickSignOut: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -184,7 +176,7 @@ private fun ProfileBody(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             ActionButton(onClick = onClickEdit, iconRes = R.drawable.ic_edit)
             ActionButton(onClick = onClickCopy, iconRes = R.drawable.ic_copy)
@@ -209,7 +201,7 @@ private fun ProfileBody(
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 profile.tags.forEach { tag ->
                     TagButton(text = tag, onClick = null)
@@ -217,29 +209,7 @@ private fun ProfileBody(
             }
         }
 
-        VerticalSpacer(24.dp)
-        SignOutButton(isSigningOut = isSigningOut, onClick = onClickSignOut)
         VerticalSpacer(16.dp)
-    }
-}
-
-@Composable
-private fun SignOutButton(
-    isSigningOut: Boolean,
-    onClick: () -> Unit,
-) {
-    TextButton(
-        onClick = rememberDebouncedClick(onClick = onClick),
-        enabled = !isSigningOut,
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.Logout,
-            contentDescription = null,
-            tint = Colors.White64,
-            modifier = Modifier.size(16.dp),
-        )
-        HorizontalSpacer(8.dp)
-        BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
     }
 }
 

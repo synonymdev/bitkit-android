@@ -32,6 +32,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.services.PubkyService
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
@@ -39,6 +40,11 @@ import javax.inject.Singleton
 import kotlin.math.min
 
 enum class PubkyAuthState { Idle, Authenticating, Authenticated }
+
+sealed class PubkyContactError(message: String) : AppError(message) {
+    data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
+    data object InvalidFormat : PubkyContactError("Invalid pubky key format")
+}
 
 @Suppress("TooManyFunctions")
 @Singleton
@@ -56,6 +62,8 @@ class PubkyRepo @Inject constructor(
         private const val PUBKY_SCHEME = "pubky://"
         private const val AVATAR_MAX_SIZE = 400
         private const val AVATAR_QUALITY = 80
+        private const val PUBKY_KEY_LENGTH = 52
+        private val Z_BASE_32_REGEX = Regex("^[ybndrfg8ejkmcpqxot1uwisza345h769]+$")
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
@@ -137,7 +145,7 @@ class PubkyRepo @Inject constructor(
         }.getOrNull() ?: return
 
         when (result) {
-            is InitResult.NoSession -> Logger.debug("No saved paykit session found", context = TAG)
+            is InitResult.NoSession -> Logger.debug("Found no saved paykit session", context = TAG)
             is InitResult.Restored -> {
                 _publicKey.update { result.publicKey }
                 _authState.update { PubkyAuthState.Authenticated }
@@ -157,7 +165,7 @@ class PubkyRepo @Inject constructor(
         }.getOrNull()
 
         if (secretKeyHex.isNullOrEmpty()) {
-            Logger.warn("No secret key available for re-sign-in recovery", context = TAG)
+            Logger.warn("Skipped re-sign-in recovery, no secret key available", context = TAG)
             return InitResult.RestorationFailed
         }
 
@@ -264,7 +272,7 @@ class PubkyRepo @Inject constructor(
         val json = pubkyService.fetchFileString(uri)
         PubkyProfileData.decode(json).toPubkyProfile(publicKey)
     }.onFailure {
-        Logger.debug("No bitkit profile found, falling back to FFI", context = TAG)
+        Logger.debug("Falling back to FFI, no bitkit profile found", context = TAG)
     }.getOrNull()
 
     suspend fun fetchRemoteProfile(publicKey: String): Result<PubkyProfile?> = runCatching {
@@ -373,7 +381,7 @@ class PubkyRepo @Inject constructor(
                 "No session available"
             }
             writeProfile(session, name, bio, links, tags, imageUrl)
-            val pk = requireNotNull(_publicKey.value)
+            val pk = requireNotNull(_publicKey.value) { "No public key available" }
             val profile = PubkyProfile(
                 publicKey = pk,
                 name = name,
@@ -500,10 +508,14 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
-        val prefixedKey = publicKey.ensurePubkyPrefix()
+        val prefixedKey = runCatching { requireAddableContactPublicKey(publicKey) }
+            .getOrElse { return Result.failure(it) }
         return fetchRemoteProfile(prefixedKey)
             .map { it ?: PubkyProfile.placeholder(prefixedKey) }
-            .recover {
+            .recoverCatching {
+                if (!it.isMissingPubkyData()) {
+                    throw it
+                }
                 Logger.warn("Falling back to placeholder contact '$prefixedKey'", it, context = TAG)
                 PubkyProfile.placeholder(prefixedKey)
             }
@@ -514,7 +526,7 @@ class PubkyRepo @Inject constructor(
             val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            val prefixedKey = publicKey.ensurePubkyPrefix()
+            val prefixedKey = requireAddableContactPublicKey(publicKey)
             val profile = existingProfile?.copy(publicKey = prefixedKey) ?: run {
                 val ffiProfile = pubkyService.getProfile(prefixedKey)
                 PubkyProfile.fromFfi(prefixedKey, ffiProfile)
@@ -734,20 +746,45 @@ class PubkyRepo @Inject constructor(
         _authState.update { PubkyAuthState.Idle }
     }
 
+    private fun requireAddableContactPublicKey(publicKey: String): String {
+        val prefixedKey = publicKey.trim().ensurePubkyPrefix()
+        val strippedKey = prefixedKey.removePrefix(PUBKY_PREFIX)
+        if (strippedKey.length != PUBKY_KEY_LENGTH || !Z_BASE_32_REGEX.matches(strippedKey)) {
+            throw PubkyContactError.InvalidFormat
+        }
+        if (_publicKey.value == prefixedKey) {
+            throw PubkyContactError.CannotAddSelf
+        }
+        return prefixedKey
+    }
+
     private fun String.ensurePubkyPrefix(): String =
         if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
 
     private fun Throwable.isMissingPubkyDirectory(): Boolean {
-        val fullMessage = buildString {
+        if (isMissingPubkyData()) {
+            return true
+        }
+
+        val fullMessage = buildErrorMessage()
+        return fullMessage.contains("directory not found", ignoreCase = true)
+    }
+
+    private fun Throwable.isMissingPubkyData(): Boolean {
+        val fullMessage = buildErrorMessage()
+        return fullMessage.contains("404") ||
+            fullMessage.contains("not found", ignoreCase = true) ||
+            fullMessage.contains("missing", ignoreCase = true)
+    }
+
+    private fun Throwable.buildErrorMessage(): String =
+        buildString {
             append(message.orEmpty())
             cause?.message?.takeIf { it.isNotBlank() }?.let {
                 append(" ")
                 append(it)
             }
         }
-        return fullMessage.contains("directory not found", ignoreCase = true) ||
-            (fullMessage.contains("404") && fullMessage.contains("not found", ignoreCase = true))
-    }
 
     // endregion
 }

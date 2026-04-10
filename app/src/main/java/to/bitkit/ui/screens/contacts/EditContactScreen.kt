@@ -126,6 +126,8 @@ private fun Content(
                         imageUrl = uiState.imageUrl,
                     )
                 },
+                publicKeyLabel = stringResource(R.string.contacts__pubky),
+                showFooterNote = false,
                 onDelete = onDelete,
                 deleteLabel = stringResource(R.string.contacts__delete_contact),
             )

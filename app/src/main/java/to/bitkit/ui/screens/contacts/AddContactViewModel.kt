@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -58,11 +59,18 @@ class AddContactViewModel @Inject constructor(
                 .onSuccess { profile ->
                     _uiState.update { it.copy(fetchedProfile = profile, isLoading = false) }
                 }
-                .onFailure {
-                    _uiState.update {
-                        it.copy(
+                .onFailure { error ->
+                    _uiState.update { state ->
+                        state.copy(
                             isLoading = false,
-                            error = context.getString(R.string.contacts__add_error_fetch),
+                            error = when (error) {
+                                PubkyContactError.CannotAddSelf ->
+                                    context.getString(R.string.contacts__add_error_self)
+                                PubkyContactError.InvalidFormat ->
+                                    context.getString(R.string.contacts__add_error_invalid_key)
+                                else ->
+                                    context.getString(R.string.contacts__add_error_fetch)
+                            },
                         )
                     }
                 }

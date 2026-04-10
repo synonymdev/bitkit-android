@@ -18,6 +18,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -46,9 +48,19 @@ fun AddLinkSheet(
     var label by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     var showSuggestions by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    val dismissKeyboard = {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+    }
 
     BottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            dismissKeyboard()
+            onDismiss()
+        },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = Modifier.imePadding()
     ) {
@@ -57,6 +69,7 @@ fun AddLinkSheet(
                 title = stringResource(R.string.profile__suggestions_to_add),
                 suggestions = LINK_SUGGESTIONS,
                 onSelect = {
+                    dismissKeyboard()
                     label = it
                     showSuggestions = false
                 },
@@ -69,7 +82,10 @@ fun AddLinkSheet(
                 onLabelChange = { label = it },
                 onUrlChange = { url = it },
                 onShowSuggestions = { showSuggestions = true },
-                onSave = { onSave(label, url) },
+                onSave = {
+                    dismissKeyboard()
+                    onSave(label, url)
+                },
                 isSaveEnabled = label.isNotBlank() && url.isNotBlank(),
             )
         }

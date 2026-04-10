@@ -36,6 +36,7 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.Text13Up
@@ -93,12 +94,12 @@ private fun Content(
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 SearchInput(
                     value = uiState.searchText,
                     onValueChange = onSearchTextChange,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
                 HorizontalSpacer(8.dp)
                 ActionButton(
@@ -111,7 +112,11 @@ private fun Content(
 
         when {
             uiState.isLoading && uiState.contacts.isEmpty() -> LoadingState()
-            uiState.isEmpty && uiState.searchText.isBlank() -> EmptyState()
+            uiState.isEmpty && uiState.searchText.isBlank() -> EmptyState(
+                myProfile = uiState.myProfile,
+                onClickMyProfile = onClickMyProfile,
+                onAddContact = { showAddContactSheet = true },
+            )
             else -> ContactsList(
                 contacts = uiState.contacts,
                 myProfile = uiState.myProfile,
@@ -241,15 +246,36 @@ private fun LoadingState() {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(
+    myProfile: PubkyProfile?,
+    onClickMyProfile: () -> Unit,
+    onAddContact: () -> Unit,
+) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp)
+            .padding(horizontal = 16.dp)
     ) {
-        BodyM(text = stringResource(R.string.contacts__empty_state), color = Colors.White64)
+        VerticalSpacer(16.dp)
+        myProfile?.let {
+            Text13Up(
+                text = stringResource(R.string.contacts__my_profile),
+                color = Colors.White64,
+                modifier = Modifier.fillMaxWidth()
+            )
+            ContactRow(profile = it, onClick = onClickMyProfile)
+            HorizontalDivider()
+        }
+        VerticalSpacer(8.dp)
+        PrimaryButton(
+            text = stringResource(R.string.contacts__intro_add_contact),
+            onClick = onAddContact,
+        )
+        BodyM(
+            text = stringResource(R.string.contacts__empty_state),
+            color = Colors.White64,
+        )
     }
 }
 

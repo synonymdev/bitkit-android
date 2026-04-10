@@ -75,6 +75,8 @@
     <string name="contacts__add_description">Add a new contact by scanning their QR or pasting their pubky below.</string>
     <string name="contacts__add_discard">Discard</string>
     <string name="contacts__add_error_fetch">Could not retrieve contact info. Please check the public key and try again.</string>
+    <string name="contacts__add_error_invalid_key">Invalid pubky key format. Please check and try again.</string>
+    <string name="contacts__add_error_self">You can\'t add your own pubky as a contact.</string>
     <string name="contacts__add_privacy_notice">Please note that you and %1$s must add each other as contacts to pay each other privately. Otherwise, the payment will be visible publicly.</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Paste a pubky</string>
@@ -106,6 +108,7 @@
     <string name="contacts__intro_title">Dynamic\n&lt;accent&gt;contacts&lt;/accent&gt;</string>
     <string name="contacts__my_profile">MY PROFILE</string>
     <string name="contacts__nav_title">Contacts</string>
+    <string name="contacts__pubky">Pubky</string>
     <string name="fee__custom__description">Depends on the fee</string>
     <string name="fee__custom__shortDescription">Depends on the fee</string>
     <string name="fee__custom__title">Custom</string>
@@ -505,7 +508,7 @@
     <string name="profile__create_nav_title">Create Profile</string>
     <string name="profile__create_restoring">Restoring your existing profile…</string>
     <string name="profile__create_success">Profile created successfully</string>
-    <string name="profile__delete_confirm_description">This will permanently delete your Pubky profile.</string>
+    <string name="profile__delete_confirm_description">This will delete your current Pubky profile data. You can create a new profile for this pubky later.</string>
     <string name="profile__delete_confirm_title">Delete Profile?</string>
     <string name="profile__delete_error">Failed to delete profile</string>
     <string name="profile__delete_profile">Delete Profile</string>

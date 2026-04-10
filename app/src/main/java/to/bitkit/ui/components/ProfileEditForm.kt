@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +35,8 @@ import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
+private const val BIO_MAX_LENGTH = 160
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileEditForm(
@@ -54,13 +57,20 @@ fun ProfileEditForm(
     isSaveEnabled: Boolean,
     modifier: Modifier = Modifier,
     avatarContent: @Composable () -> Unit = {},
+    publicKeyLabel: String? = null,
+    footerNote: String? = null,
+    showFooterNote: Boolean = true,
     onDelete: (() -> Unit)? = null,
     deleteLabel: String = "",
 ) {
+    val resolvedPublicKeyLabel = publicKeyLabel ?: stringResource(R.string.profile__your_pubky)
+    val resolvedFooterNote = footerNote ?: stringResource(R.string.profile__edit_public_note)
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 32.dp)
     ) {
@@ -81,7 +91,7 @@ fun ProfileEditForm(
         VerticalSpacer(12.dp)
 
         Text13Up(
-            text = stringResource(R.string.profile__your_pubky),
+            text = resolvedPublicKeyLabel,
             color = Colors.White64,
         )
         VerticalSpacer(4.dp)
@@ -101,7 +111,7 @@ fun ProfileEditForm(
         VerticalSpacer(8.dp)
         TextInput(
             value = bio,
-            onValueChange = onBioChange,
+            onValueChange = { onBioChange(it.take(BIO_MAX_LENGTH)) },
             placeholder = stringResource(R.string.profile__edit_bio_placeholder),
             minLines = 2,
             maxLines = 4,
@@ -191,10 +201,12 @@ fun ProfileEditForm(
         }
 
         VerticalSpacer(16.dp)
-        BodyS(
-            text = stringResource(R.string.profile__edit_public_note),
-            color = Colors.White64,
-        )
+        if (showFooterNote) {
+            BodyS(
+                text = resolvedFooterNote,
+                color = Colors.White64,
+            )
+        }
 
         if (onDelete != null) {
             VerticalSpacer(16.dp)
