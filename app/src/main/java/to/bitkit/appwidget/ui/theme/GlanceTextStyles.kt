@@ -10,5 +10,4 @@ object GlanceTextStyles {
     val bodySSB = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = GlanceColors.textPrimary)
     val captionB = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = GlanceColors.textSecondary)
     val footnoteM = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GlanceColors.textSecondary)
-    val source = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal, color = GlanceColors.textTertiary)
 }

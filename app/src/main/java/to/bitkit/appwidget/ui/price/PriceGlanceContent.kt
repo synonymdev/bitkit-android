@@ -61,23 +61,6 @@ fun PriceGlanceContent(
                 modifier = GlanceModifier.fillMaxWidth().height(80.dp),
             )
         }
-
-        if (prefs.showSource) {
-            VerticalSpacer(8.dp)
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
-            ) {
-                Text(
-                    text = context.getString(R.string.widgets__widget__source),
-                    style = GlanceTextStyles.source,
-                )
-                Text(
-                    text = price.source,
-                    style = GlanceTextStyles.source,
-                )
-            }
-        }
     }
 }
 

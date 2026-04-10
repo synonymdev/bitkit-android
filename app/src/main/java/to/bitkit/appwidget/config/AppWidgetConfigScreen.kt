@@ -47,7 +47,6 @@ fun AppWidgetConfigScreen(
             state = state,
             onTogglePair = { viewModel.togglePricePair(it) },
             onSelectPeriod = { viewModel.selectPricePeriod(it) },
-            onToggleSource = { viewModel.togglePriceSource() },
             onReset = { viewModel.resetPreferences() },
             onSave = { viewModel.saveAndFinish(context, onConfirm) },
             onCancel = onCancel,
@@ -60,7 +59,6 @@ private fun PriceConfigContent(
     state: AppWidgetConfigUiState,
     onTogglePair: (TradingPair) -> Unit,
     onSelectPeriod: (GraphPeriod) -> Unit,
-    onToggleSource: () -> Unit,
     onReset: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -118,13 +116,6 @@ private fun PriceConfigContent(
                     onClick = { onSelectPeriod(period) },
                 )
             }
-
-            VerticalSpacer(16.dp)
-            ConfigToggleRow(
-                label = stringResource(R.string.widgets__widget__source),
-                isEnabled = prefs.showSource,
-                onClick = onToggleSource,
-            )
         }
 
         Row(

@@ -66,12 +66,6 @@ class AppWidgetConfigViewModel @Inject constructor(
         }
     }
 
-    fun togglePriceSource() {
-        _uiState.update {
-            it.copy(pricePreferences = it.pricePreferences.copy(showSource = !it.pricePreferences.showSource))
-        }
-    }
-
     fun resetPreferences() {
         _uiState.update { it.copy(pricePreferences = PricePreferences()) }
     }
@@ -107,11 +101,9 @@ data class AppWidgetConfigUiState(
 private fun HomePricePreferences.toInApp() = PricePreferences(
     enabledPairs = enabledPairs,
     period = period,
-    showSource = showSource,
 )
 
 private fun PricePreferences.toHome() = HomePricePreferences(
     enabledPairs = enabledPairs,
     period = period ?: GraphPeriod.ONE_DAY,
-    showSource = showSource,
 )
