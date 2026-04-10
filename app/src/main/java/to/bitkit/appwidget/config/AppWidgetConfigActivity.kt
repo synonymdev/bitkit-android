@@ -29,7 +29,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
             AppWidgetManager.INVALID_APPWIDGET_ID,
         ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
 
-        setResult(Activity.RESULT_CANCELED)
+        setResult(RESULT_CANCELED)
 
         if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
             finish()
