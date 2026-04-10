@@ -10,8 +10,10 @@ import androidx.glance.ImageProvider
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
+import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
@@ -20,7 +22,6 @@ import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
-import to.bitkit.appwidget.ui.components.VerticalSpacer
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
@@ -48,18 +49,26 @@ fun PriceGlanceContent(
         val enabledWidgets = price.widgets.filter { it.pair in prefs.enabledPairs }
         val displayWidgets = enabledWidgets.ifEmpty { price.widgets.take(1) }
 
-        for (widget in displayWidgets) {
-            PriceRow(widget = widget)
-        }
+        Box(modifier = GlanceModifier.fillMaxWidth().fillMaxHeight()) {
+            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                for (widget in displayWidgets) {
+                    PriceRow(widget = widget)
+                }
+            }
 
-        if (chartBitmap != null) {
-            VerticalSpacer(8.dp)
-            Image(
-                provider = ImageProvider(chartBitmap),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = GlanceModifier.fillMaxWidth().height(80.dp),
-            )
+            if (chartBitmap != null) {
+                Box(
+                    modifier = GlanceModifier.fillMaxWidth().fillMaxHeight(),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    Image(
+                        provider = ImageProvider(chartBitmap),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = GlanceModifier.fillMaxWidth().height(80.dp),
+                    )
+                }
+            }
         }
     }
 }
