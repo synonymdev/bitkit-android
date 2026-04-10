@@ -24,7 +24,6 @@ import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
-import to.bitkit.appwidget.ui.components.VerticalSpacer
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
@@ -57,14 +56,12 @@ fun PriceGlanceContent(
         }
 
         if (showChart && chartBitmap != null) {
-            VerticalSpacer(8.dp)
             Image(
                 provider = ImageProvider(chartBitmap),
                 contentDescription = null,
                 contentScale = ContentScale.FillBounds,
                 modifier = GlanceModifier
                     .fillMaxWidth()
-                    .height(80.dp)
                     .cornerRadius(8.dp)
                     .then(HeightModifier(Dimension.Expand)),
             )
