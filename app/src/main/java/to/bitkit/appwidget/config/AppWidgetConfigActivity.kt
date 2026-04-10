@@ -47,7 +47,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
                 AppWidgetConfigScreen(
                     viewModel = viewModel,
                     onConfirm = {
-                        AppWidgetRefreshWorker.enqueueImmediate(this)
+                        AppWidgetRefreshWorker.enqueue(this)
                         val result = Intent().putExtra(
                             AppWidgetManager.EXTRA_APPWIDGET_ID,
                             appWidgetId,

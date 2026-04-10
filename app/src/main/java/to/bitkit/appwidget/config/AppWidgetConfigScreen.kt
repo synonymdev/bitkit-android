@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,7 @@ fun AppWidgetConfigScreen(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     when (state.type) {
@@ -48,7 +50,7 @@ fun AppWidgetConfigScreen(
             onSelectPeriod = { viewModel.selectPricePeriod(it) },
             onToggleSource = { viewModel.togglePriceSource() },
             onReset = { viewModel.resetPreferences() },
-            onSave = { viewModel.saveAndFinish(onConfirm) },
+            onSave = { viewModel.saveAndFinish(context, onConfirm) },
             onCancel = onCancel,
         )
     }
@@ -141,6 +143,8 @@ private fun PriceConfigContent(
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
+                isLoading = state.isSaving,
+                enabled = !state.isSaving,
                 fullWidth = false,
                 onClick = onSave,
                 modifier = Modifier.weight(1f),
