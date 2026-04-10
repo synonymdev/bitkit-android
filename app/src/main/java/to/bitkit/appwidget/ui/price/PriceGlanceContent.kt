@@ -7,6 +7,7 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -65,7 +66,10 @@ fun PriceGlanceContent(
                         provider = ImageProvider(chartBitmap),
                         contentDescription = null,
                         contentScale = ContentScale.FillBounds,
-                        modifier = GlanceModifier.fillMaxWidth().height(80.dp),
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .cornerRadius(8.dp),
                     )
                 }
             }
