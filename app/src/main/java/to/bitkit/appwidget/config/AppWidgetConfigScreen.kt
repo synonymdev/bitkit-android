@@ -3,9 +3,7 @@ package to.bitkit.appwidget.config
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +28,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
@@ -79,7 +78,7 @@ private fun PriceConfigContent(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            VerticalSpacer(26.dp)
 
             BodyM(
                 text = stringResource(R.string.widgets__widget__edit_description).replace(
@@ -89,13 +88,13 @@ private fun PriceConfigContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             BodySSB(
                 text = stringResource(R.string.appwidget__price__trading_pairs),
                 color = Colors.White64,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
 
             for (pair in TradingPair.entries) {
                 ConfigToggleRow(
@@ -105,12 +104,12 @@ private fun PriceConfigContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             BodySSB(
                 text = stringResource(R.string.appwidget__price__period),
                 color = Colors.White64,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
 
             for (period in GraphPeriod.entries) {
                 ConfigToggleRow(
@@ -120,7 +119,7 @@ private fun PriceConfigContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             ConfigToggleRow(
                 label = stringResource(R.string.widgets__widget__source),
                 isEnabled = prefs.showSource,
