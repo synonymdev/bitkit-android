@@ -1,12 +1,12 @@
 package to.bitkit.appwidget.ui.price
 
-import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -29,11 +29,11 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PriceGlanceContent(
-    context: Context,
     price: PriceDTO?,
     entry: AppWidgetEntry,
     chartBitmap: Bitmap? = null,
 ) {
+    val context = LocalContext.current
     val prefs = entry.pricePreferences
     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
 

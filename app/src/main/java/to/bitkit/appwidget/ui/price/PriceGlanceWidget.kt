@@ -27,7 +27,6 @@ class PriceGlanceWidget : GlanceAppWidget() {
 
         provideContent {
             PriceGlanceContent(
-                context = context,
                 price = data.cachedPrice,
                 entry = entry,
                 chartBitmap = chartBitmap,
