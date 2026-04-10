@@ -31,6 +31,7 @@ import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -62,8 +63,6 @@ class PubkyRepo @Inject constructor(
         private const val PUBKY_SCHEME = "pubky://"
         private const val AVATAR_MAX_SIZE = 400
         private const val AVATAR_QUALITY = 80
-        private const val PUBKY_KEY_LENGTH = 52
-        private val Z_BASE_32_REGEX = Regex("^[ybndrfg8ejkmcpqxot1uwisza345h769]+$")
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
@@ -767,11 +766,8 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun requireAddableContactPublicKey(publicKey: String): String {
-        val prefixedKey = publicKey.trim().ensurePubkyPrefix()
-        val strippedKey = prefixedKey.removePrefix(PUBKY_PREFIX)
-        if (strippedKey.length != PUBKY_KEY_LENGTH || !Z_BASE_32_REGEX.matches(strippedKey)) {
-            throw PubkyContactError.InvalidFormat
-        }
+        val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
+            ?: throw PubkyContactError.InvalidFormat
         if (_publicKey.value == prefixedKey) {
             throw PubkyContactError.CannotAddSelf
         }

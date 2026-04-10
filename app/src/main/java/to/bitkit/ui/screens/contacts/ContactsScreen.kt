@@ -129,6 +129,7 @@ private fun Content(
 
     if (showAddContactSheet) {
         AddContactSheet(
+            currentPublicKey = uiState.myProfile?.publicKey,
             onDismiss = { showAddContactSheet = false },
             onSubmit = { publicKey ->
                 showAddContactSheet = false

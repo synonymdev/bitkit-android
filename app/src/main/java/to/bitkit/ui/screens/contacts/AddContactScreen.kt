@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +42,8 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -51,6 +54,7 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.getClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
@@ -72,17 +76,26 @@ import to.bitkit.ui.utils.withAccent
 
 // region AddContactSheet (bottom sheet)
 
-private const val PUBKY_INPUT_MAX_LENGTH = 64
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddContactSheet(
+    currentPublicKey: String?,
     onDismiss: () -> Unit,
     onSubmit: (publicKey: String) -> Unit,
     onScanQr: () -> Unit,
 ) {
     val context = LocalContext.current
     var publicKeyInput by remember { mutableStateOf("") }
+    val trimmedInput = publicKeyInput.trim()
+    val normalizedInput = PubkyPublicKeyFormat.normalized(trimmedInput)
+    val validationMessage = when {
+        trimmedInput.isEmpty() -> null
+        PubkyPublicKeyFormat.matches(trimmedInput, currentPublicKey) ->
+            context.getString(R.string.contacts__add_error_self)
+        normalizedInput == null ->
+            context.getString(R.string.contacts__add_error_invalid_key)
+        else -> null
+    }
 
     BottomSheet(
         onDismissRequest = onDismiss,
@@ -90,14 +103,16 @@ fun AddContactSheet(
     ) {
         AddContactSheetContent(
             publicKeyInput = publicKeyInput,
-            onPublicKeyChange = { publicKeyInput = it.take(PUBKY_INPUT_MAX_LENGTH) },
+            validationMessage = validationMessage,
+            isSubmitEnabled = normalizedInput != null && validationMessage == null,
+            onPublicKeyChange = { publicKeyInput = PubkyPublicKeyFormat.bounded(it) },
             onPaste = {
                 context.getClipboardText()?.trim()?.let {
-                    publicKeyInput = it.take(PUBKY_INPUT_MAX_LENGTH)
+                    publicKeyInput = PubkyPublicKeyFormat.bounded(it)
                 }
             },
             onScanQr = onScanQr,
-            onSubmit = { onSubmit(publicKeyInput.trim()) },
+            onSubmit = { normalizedInput?.let(onSubmit) },
         )
     }
 }
@@ -105,6 +120,8 @@ fun AddContactSheet(
 @Composable
 private fun AddContactSheetContent(
     publicKeyInput: String,
+    validationMessage: String?,
+    isSubmitEnabled: Boolean,
     onPublicKeyChange: (String) -> Unit,
     onPaste: () -> Unit,
     onScanQr: () -> Unit,
@@ -127,6 +144,17 @@ private fun AddContactSheetContent(
             onValueChange = onPublicKeyChange,
             placeholder = stringResource(R.string.contacts__add_pubky_placeholder),
             singleLine = true,
+            isError = validationMessage != null,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                autoCorrectEnabled = false,
+                keyboardType = KeyboardType.Ascii,
+            ),
+            supportingText = validationMessage?.let { message ->
+                {
+                    BodyS(text = message, color = Colors.Red)
+                }
+            },
             trailingIcon = {
                 IconButton(onClick = onPaste) {
                     Icon(
@@ -152,7 +180,7 @@ private fun AddContactSheetContent(
             PrimaryButton(
                 text = stringResource(R.string.contacts__add_button),
                 onClick = onSubmit,
-                enabled = publicKeyInput.isNotBlank(),
+                enabled = isSubmitEnabled,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -440,6 +468,8 @@ private fun SheetPreview() {
     AppThemeSurface {
         AddContactSheetContent(
             publicKeyInput = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
+            validationMessage = null,
+            isSubmitEnabled = true,
             onPublicKeyChange = {},
             onPaste = {},
             onScanQr = {},
