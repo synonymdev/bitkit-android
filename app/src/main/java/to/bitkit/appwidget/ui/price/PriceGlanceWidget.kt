@@ -3,9 +3,12 @@ package to.bitkit.appwidget.ui.price
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import kotlinx.coroutines.flow.first
 import to.bitkit.appwidget.AppWidgetPreferencesStore
@@ -15,6 +18,10 @@ import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.ui.theme.Colors
 
 class PriceGlanceWidget : GlanceAppWidget() {
+
+    override val sizeMode = SizeMode.Responsive(
+        setOf(COMPACT, EXPANDED),
+    )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val store = AppWidgetPreferencesStore.getInstance(context)
@@ -58,5 +65,7 @@ class PriceGlanceWidget : GlanceAppWidget() {
     companion object {
         private const val CHART_WIDTH = 600
         private const val CHART_HEIGHT = 200
+        val COMPACT = DpSize(180.dp, 80.dp)
+        val EXPANDED = DpSize(180.dp, 180.dp)
     }
 }

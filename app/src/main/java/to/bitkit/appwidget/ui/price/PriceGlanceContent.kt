@@ -7,6 +7,7 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
+import androidx.glance.LocalSize
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
@@ -38,6 +39,8 @@ fun PriceGlanceContent(
     val prefs = entry.pricePreferences
     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
 
+    val showChart = LocalSize.current.height >= 160.dp
+
     GlanceWidgetScaffold(onClick = launchIntent) {
         if (price == null) {
             Text(
@@ -57,7 +60,7 @@ fun PriceGlanceContent(
                 }
             }
 
-            if (chartBitmap != null) {
+            if (showChart && chartBitmap != null) {
                 Box(
                     modifier = GlanceModifier.fillMaxWidth().fillMaxHeight(),
                     contentAlignment = Alignment.BottomCenter,
