@@ -38,10 +38,9 @@ fun PriceGlanceContent(
 ) {
     val context = LocalContext.current
     val prefs = entry.pricePreferences
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
     val showChart = LocalSize.current.height >= 160.dp
 
-    GlanceWidgetScaffold(onClick = launchIntent) {
+    GlanceWidgetScaffold {
         if (price == null) {
             Text(
                 text = context.getString(R.string.appwidget__loading),
