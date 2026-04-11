@@ -26,6 +26,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BlocktankNotificationType
+import to.bitkit.models.msatCeilOf
 import to.bitkit.models.BlocktankNotificationType.cjitPaymentArrived
 import to.bitkit.models.BlocktankNotificationType.incomingHtlc
 import to.bitkit.models.BlocktankNotificationType.mutualClose
@@ -192,7 +193,7 @@ class WakeNodeWorker @AssistedInject constructor(
         showDetails: Boolean,
         hiddenBody: String,
     ) {
-        val sats = (event.amountMsat + 999u) / 1000u
+        val sats = msatCeilOf(event.amountMsat)
         // Save for UI to pick up
         cacheStore.setBackgroundReceive(
             NewTransactionSheetDetails(
