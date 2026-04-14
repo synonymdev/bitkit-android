@@ -417,6 +417,26 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun unpublishMilestone(milestoneId: String): Result<Unit> = runCatching {
+        withContext(ioDispatcher) {
+            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
+                "No session available"
+            }
+            val currentIndex = fetchPublishedMilestonesIndexInternal(_publicKey.value)
+            val updatedMilestones = currentIndex?.milestones.orEmpty()
+                .filterNot { it.milestoneId == milestoneId }
+
+            pubkyService.sessionDelete(session, Env.milestonePath(milestoneId))
+            if (updatedMilestones.isEmpty()) {
+                pubkyService.sessionDelete(session, Env.milestonesIndexPath)
+            } else {
+                val updatedIndex = PublicMilestonesIndex(milestones = updatedMilestones)
+                pubkyService.sessionPut(session, Env.milestonesIndexPath, updatedIndex.encode())
+            }
+            _publishedMilestones.update { updatedMilestones }
+        }
+    }
+
     suspend fun loadPublishedMilestones(
         publicKey: String? = _publicKey.value,
     ): Result<List<PublicMilestoneRecord>> = runCatching {

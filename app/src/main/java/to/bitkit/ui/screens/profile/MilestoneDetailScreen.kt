@@ -53,8 +53,8 @@ fun MilestoneDetailScreen(
     Content(
         milestone = milestone,
         isAuthenticated = uiState.isAuthenticated,
-        isPublishing = uiState.publishingMilestoneId == milestoneId,
         onClickPublish = { milestoneIdValue?.let(viewModel::publishMilestone) },
+        onClickUnpublish = { milestoneIdValue?.let(viewModel::unpublishMilestone) },
         onConnectPubky = onConnectPubky,
         onBackClick = onBackClick,
     )
@@ -64,8 +64,8 @@ fun MilestoneDetailScreen(
 private fun Content(
     milestone: Milestone?,
     isAuthenticated: Boolean,
-    isPublishing: Boolean,
     onClickPublish: () -> Unit,
+    onClickUnpublish: () -> Unit,
     onConnectPubky: () -> Unit,
     onBackClick: () -> Unit,
 ) {
@@ -172,20 +172,10 @@ private fun Content(
                     )
                 }
 
-                isPublishing -> {
-                    PrimaryButton(
-                        text = stringResource(R.string.profile__milestone_publish),
-                        onClick = {},
-                        enabled = false,
-                        isLoading = true,
-                    )
-                }
-
                 milestone.isPublished -> {
                     SecondaryButton(
-                        text = stringResource(R.string.profile__milestone_published),
-                        onClick = {},
-                        enabled = false,
+                        text = stringResource(R.string.profile__milestone_make_private),
+                        onClick = onClickUnpublish,
                     )
                 }
 
@@ -253,8 +243,8 @@ private fun Preview() {
                 unlockedAtMs = 1_744_644_800_000,
             ),
             isAuthenticated = true,
-            isPublishing = false,
             onClickPublish = {},
+            onClickUnpublish = {},
             onConnectPubky = {},
             onBackClick = {},
         )

@@ -169,6 +169,14 @@ class MilestoneRepo @Inject constructor(
         }
     }
 
+    suspend fun markUnpublished(id: MilestoneId) = withContext(ioDispatcher) {
+        milestoneStore.update { current ->
+            current.copy(
+                publishedMilestoneIds = current.publishedMilestoneIds.filterNot { it == id.value },
+            )
+        }
+    }
+
     suspend fun setPublishedIds(ids: List<String>) = withContext(ioDispatcher) {
         milestoneStore.update { current ->
             current.copy(publishedMilestoneIds = ids.distinct())
