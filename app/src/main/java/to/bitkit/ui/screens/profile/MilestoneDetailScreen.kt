@@ -49,10 +49,13 @@ fun MilestoneDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val milestone = MilestoneId.fromValue(milestoneId)?.let(viewModel::getMilestone)
     val milestoneIdValue = MilestoneId.fromValue(milestoneId)
+    val isMilestoneActionInProgress =
+        milestoneIdValue != null && uiState.activeMilestoneActionId == milestoneIdValue.value
 
     Content(
         milestone = milestone,
         isAuthenticated = uiState.isAuthenticated,
+        isMilestoneActionInProgress = isMilestoneActionInProgress,
         onClickPublish = { milestoneIdValue?.let(viewModel::publishMilestone) },
         onClickUnpublish = { milestoneIdValue?.let(viewModel::unpublishMilestone) },
         onConnectPubky = onConnectPubky,
@@ -64,6 +67,7 @@ fun MilestoneDetailScreen(
 private fun Content(
     milestone: Milestone?,
     isAuthenticated: Boolean,
+    isMilestoneActionInProgress: Boolean,
     onClickPublish: () -> Unit,
     onClickUnpublish: () -> Unit,
     onConnectPubky: () -> Unit,
@@ -176,6 +180,7 @@ private fun Content(
                     SecondaryButton(
                         text = stringResource(R.string.profile__milestone_make_private),
                         onClick = onClickUnpublish,
+                        isLoading = isMilestoneActionInProgress,
                     )
                 }
 
@@ -183,6 +188,7 @@ private fun Content(
                     PrimaryButton(
                         text = stringResource(R.string.profile__milestone_publish),
                         onClick = onClickPublish,
+                        isLoading = isMilestoneActionInProgress,
                     )
                 }
             }
@@ -243,6 +249,7 @@ private fun Preview() {
                 unlockedAtMs = 1_744_644_800_000,
             ),
             isAuthenticated = true,
+            isMilestoneActionInProgress = false,
             onClickPublish = {},
             onClickUnpublish = {},
             onConnectPubky = {},

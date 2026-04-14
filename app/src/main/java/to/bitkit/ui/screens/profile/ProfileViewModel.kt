@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Milestone
@@ -42,6 +43,7 @@ class ProfileViewModel @Inject constructor(
 
     private val _showSignOutDialog = MutableStateFlow(false)
     private val _isSigningOut = MutableStateFlow(false)
+    private val _activeMilestoneActionId = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<ProfileUiState> = combine(
         combine(
@@ -67,12 +69,14 @@ class ProfileViewModel @Inject constructor(
             )
         },
         milestoneRepo.visibleMilestones,
-    ) { profileState, authState, milestones ->
+        _activeMilestoneActionId,
+    ) { profileState, authState, milestones, activeMilestoneActionId ->
         profileState.copy(
             isAuthenticated = authState.isAuthenticated,
             milestones = milestones,
             showSignOutDialog = authState.showSignOutDialog,
             isSigningOut = authState.isSigningOut,
+            activeMilestoneActionId = activeMilestoneActionId,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
 
@@ -147,23 +151,29 @@ class ProfileViewModel @Inject constructor(
 
         val record = PublicMilestoneRecord.fromMilestone(milestone) ?: return
         viewModelScope.launch {
-            pubkyRepo.publishMilestone(record)
-                .onSuccess {
-                    milestoneRepo.markPublished(id)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = "Published: ${milestone.title}",
-                        description = milestone.description,
-                    )
-                }
-                .onFailure {
-                    Logger.error("Failed to publish milestone '${id.value}'", it, context = TAG)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = it.message,
-                    )
-                }
+            _activeMilestoneActionId.value = id.value
+            yield()
+            try {
+                pubkyRepo.publishMilestone(record)
+                    .onSuccess {
+                        milestoneRepo.markPublished(id)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.SUCCESS,
+                            title = "Published: ${milestone.title}",
+                            description = milestone.description,
+                        )
+                    }
+                    .onFailure {
+                        Logger.error("Failed to publish milestone '${id.value}'", it, context = TAG)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = it.message,
+                        )
+                    }
+            } finally {
+                _activeMilestoneActionId.value = null
+            }
         }
     }
 
@@ -172,23 +182,29 @@ class ProfileViewModel @Inject constructor(
         if (!milestone.isPublished) return
 
         viewModelScope.launch {
-            pubkyRepo.unpublishMilestone(id.value)
-                .onSuccess {
-                    milestoneRepo.markUnpublished(id)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = "Made private: ${milestone.title}",
-                        description = milestone.description,
-                    )
-                }
-                .onFailure {
-                    Logger.error("Failed to unpublish milestone '${id.value}'", it, context = TAG)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = it.message,
-                    )
-                }
+            _activeMilestoneActionId.value = id.value
+            yield()
+            try {
+                pubkyRepo.unpublishMilestone(id.value)
+                    .onSuccess {
+                        milestoneRepo.markUnpublished(id)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.SUCCESS,
+                            title = "Made private: ${milestone.title}",
+                            description = milestone.description,
+                        )
+                    }
+                    .onFailure {
+                        Logger.error("Failed to unpublish milestone '${id.value}'", it, context = TAG)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = it.message,
+                        )
+                    }
+            } finally {
+                _activeMilestoneActionId.value = null
+            }
         }
     }
 }
@@ -202,6 +218,7 @@ data class ProfileUiState(
     val milestones: ImmutableList<Milestone> = persistentListOf(),
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
+    val activeMilestoneActionId: String? = null,
 )
 
 sealed interface ProfileEffect {
