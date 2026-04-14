@@ -10,6 +10,7 @@ data class Toast(
     val visibilityTime: Long = VISIBILITY_TIME_DEFAULT,
     @DrawableRes val iconRes: Int? = null,
     val accentCategory: MilestoneCategory? = null,
+    val useNeutralBackground: Boolean = false,
     val testTag: String? = null,
 ) {
     enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }

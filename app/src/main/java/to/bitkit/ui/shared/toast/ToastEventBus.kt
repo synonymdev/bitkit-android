@@ -19,10 +19,21 @@ object ToastEventBus {
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
         @DrawableRes iconRes: Int? = null,
         accentCategory: MilestoneCategory? = null,
+        useNeutralBackground: Boolean = false,
         testTag: String? = null,
     ) {
         _events.emit(
-            Toast(type, title, description, autoHide, visibilityTime, iconRes, accentCategory, testTag)
+            Toast(
+                type = type,
+                title = title,
+                description = description,
+                autoHide = autoHide,
+                visibilityTime = visibilityTime,
+                iconRes = iconRes,
+                accentCategory = accentCategory,
+                useNeutralBackground = useNeutralBackground,
+                testTag = testTag,
+            )
         )
     }
 
@@ -36,6 +47,7 @@ object ToastEventBus {
                 visibilityTime = Toast.VISIBILITY_TIME_DEFAULT,
                 iconRes = null,
                 accentCategory = null,
+                useNeutralBackground = false,
             )
         )
     }

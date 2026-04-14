@@ -606,8 +606,10 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleOnchainTransactionReceived(event: Event.OnchainTransactionReceived) {
-        notifyUnlockedMilestones(milestoneRepo.recordOnchainReceived(event.txid))
         notifyPaymentReceived(event)
+        if (activityRepo.isReceivedTransaction(event.txid)) {
+            notifyUnlockedMilestones(milestoneRepo.recordOnchainReceived(event.txid))
+        }
     }
 
     private suspend fun handleOnchainTransactionReorged(event: Event.OnchainTransactionReorged) {
@@ -2316,6 +2318,7 @@ class AppViewModel @Inject constructor(
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
         iconRes: Int? = null,
         accentCategory: MilestoneCategory? = null,
+        useNeutralBackground: Boolean = false,
         testTag: String? = null,
     ) {
         toastManager.enqueue(
@@ -2327,6 +2330,7 @@ class AppViewModel @Inject constructor(
                 visibilityTime = visibilityTime,
                 iconRes = iconRes,
                 accentCategory = accentCategory,
+                useNeutralBackground = useNeutralBackground,
                 testTag = testTag,
             )
         )
@@ -2349,6 +2353,7 @@ class AppViewModel @Inject constructor(
             visibilityTime = toast.visibilityTime,
             iconRes = toast.iconRes,
             accentCategory = toast.accentCategory,
+            useNeutralBackground = toast.useNeutralBackground,
             testTag = toast.testTag,
         )
     }
@@ -2361,6 +2366,7 @@ class AppViewModel @Inject constructor(
                 description = milestone.description,
                 iconRes = milestone.iconRes,
                 accentCategory = milestone.category,
+                useNeutralBackground = true,
             )
         }
     }

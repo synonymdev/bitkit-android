@@ -49,7 +49,7 @@ class ToastQueueManager(private val scope: CoroutineScope) {
             }
             newQueue
         }
-        dismissCurrentToast()
+        showNextToastIfAvailable()
     }
 
     /**

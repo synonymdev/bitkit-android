@@ -78,11 +78,11 @@ fun ToastView(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     hazeState: HazeState = rememberHazeState(blurEnabled = true),
-    hazeStyle: HazeStyle = CupertinoMaterials.thin(containerColor = toast.tintColor()),
+    hazeStyle: HazeStyle = CupertinoMaterials.thin(containerColor = toast.backgroundColor()),
     onDragStart: () -> Unit = {},
     onDragEnd: () -> Unit = {},
 ) {
-    val tintColor = toast.tintColor()
+    val tintColor = toast.foregroundColor()
     val coroutineScope = rememberCoroutineScope()
     val dragOffsetY = remember { Animatable(0f) }
     val dragOffsetX = remember { Animatable(0f) }
@@ -112,7 +112,7 @@ fun ToastView(
                     style = hazeStyle
                 )
                 .background(
-                    color = tintColor.copy(alpha = TINT_ALPHA),
+                    color = toast.backgroundColor().copy(alpha = TINT_ALPHA),
                     shape = MaterialTheme.shapes.medium
                 )
                 .pointerInput(Unit) {
@@ -411,6 +411,21 @@ private fun Toast.tintColor(): Color = when (type) {
     Toast.ToastType.LIGHTNING -> Colors.Purple
     Toast.ToastType.WARNING -> Colors.Brand
     Toast.ToastType.ERROR -> Colors.Red
+}
+
+@ReadOnlyComposable
+@Composable
+private fun Toast.backgroundColor(): Color = when {
+    useNeutralBackground -> Colors.Gray6
+    else -> tintColor()
+}
+
+@ReadOnlyComposable
+@Composable
+private fun Toast.foregroundColor(): Color = when {
+    useNeutralBackground -> Colors.White
+    accentCategory != null -> iconAccentColor()
+    else -> tintColor()
 }
 
 @ReadOnlyComposable

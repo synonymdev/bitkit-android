@@ -183,6 +183,7 @@ class CreateProfileViewModel @Inject constructor(
                         description = milestone.description,
                         iconRes = milestone.iconRes,
                         accentCategory = milestone.category,
+                        useNeutralBackground = true,
                     )
                 }
                 _uiState.update { it.copy(isSaving = false) }
