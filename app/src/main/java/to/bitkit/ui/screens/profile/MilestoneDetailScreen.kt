@@ -220,7 +220,8 @@ private fun MilestoneDetailRow(
 
 @Composable
 private fun milestoneStatusLabel(milestone: Milestone): String = when {
-    milestone.isUnlocked -> stringResource(R.string.profile__milestone_unlocked)
+    milestone.isPublished -> stringResource(R.string.profile__milestone_public)
+    milestone.isUnlocked -> stringResource(R.string.profile__milestone_private)
     milestone.progress > 0 -> stringResource(R.string.profile__milestone_in_progress)
     else -> stringResource(R.string.profile__milestone_locked)
 }

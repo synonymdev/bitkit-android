@@ -384,7 +384,7 @@ private fun MilestoneRow(
 @Composable
 private fun milestoneStatus(milestone: Milestone): String = when {
     milestone.isPublished -> stringResource(R.string.profile__milestone_public)
-    milestone.isUnlocked -> stringResource(R.string.profile__milestone_unlocked)
+    milestone.isUnlocked -> stringResource(R.string.profile__milestone_private)
     milestone.target > 1 -> "${milestone.progress}/${milestone.target}"
     else -> stringResource(R.string.profile__milestone_locked)
 }
@@ -395,11 +395,18 @@ private fun MilestoneStatus(milestone: Milestone) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (milestone.isPublished) {
-            Icon(
+        when {
+            milestone.isPublished -> Icon(
                 painter = painterResource(R.drawable.ic_globe),
                 contentDescription = null,
                 tint = Colors.Green,
+                modifier = Modifier.size(12.dp),
+            )
+
+            milestone.isUnlocked -> Icon(
+                painter = painterResource(R.drawable.ic_lock_key),
+                contentDescription = null,
+                tint = Colors.Gray1,
                 modifier = Modifier.size(12.dp),
             )
         }
@@ -412,7 +419,7 @@ private fun MilestoneStatus(milestone: Milestone) {
 
 private fun milestoneStatusColor(milestone: Milestone): Color = when {
     milestone.isPublished -> Colors.Green
-    milestone.isUnlocked -> Colors.Green
+    milestone.isUnlocked -> Colors.Gray1
     milestone.progress > 0 -> milestoneCategoryColor(milestone.category)
     else -> Colors.White64
 }

@@ -533,6 +533,7 @@
     <string name="profile__milestone_locked">Locked</string>
     <string name="profile__milestone_not_found">Unable to load milestone.</string>
     <string name="profile__milestone_progress">Progress</string>
+    <string name="profile__milestone_private">Private</string>
     <string name="profile__milestone_public">Public</string>
     <string name="profile__milestone_make_private">Make Private</string>
     <string name="profile__milestone_publish">Publish to Pubky</string>
@@ -540,7 +541,6 @@
     <string name="profile__milestone_published">Published to Pubky</string>
     <string name="profile__milestone_status">Status</string>
     <string name="profile__milestone_title">Milestones</string>
-    <string name="profile__milestone_unlocked">Unlocked</string>
     <string name="profile__milestone_unlocked_at">Unlocked At</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
