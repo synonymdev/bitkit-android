@@ -40,6 +40,7 @@ data class MilestoneStoreData(
     val openedChannelIds: List<String> = emptyList(),
     val lightningSentPaymentHashes: List<String> = emptyList(),
     val lightningReceivedPaymentHashes: List<String> = emptyList(),
+    val publishedMilestoneIds: List<String> = emptyList(),
     val unlockedMilestones: List<UnlockedMilestoneData> = emptyList(),
 )
 

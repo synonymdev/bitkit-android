@@ -193,6 +193,14 @@ internal object Env {
     val blobsBasePath: String
         get() = "/pub/$pubkyDomain/blobs/"
 
+    val milestonesBasePath: String
+        get() = "/pub/$pubkyDomain/milestones/"
+
+    val milestonesIndexPath: String
+        get() = "${milestonesBasePath}index.json"
+
+    fun milestonePath(milestoneId: String) = "${milestonesBasePath}$milestoneId.json"
+
     val rnBackupServerHost: String
         get() = when (network) {
             Network.BITCOIN -> "https://blocktank.synonym.to/backups-ldk"

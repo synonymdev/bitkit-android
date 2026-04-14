@@ -32,6 +32,8 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.PublicMilestoneRecord
+import to.bitkit.models.PublicMilestonesIndex
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -94,6 +96,9 @@ class PubkyRepo @Inject constructor(
 
     private val _pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     val pendingImportContacts: StateFlow<List<PubkyProfile>> = _pendingImportContacts.asStateFlow()
+
+    private val _publishedMilestones = MutableStateFlow<List<PublicMilestoneRecord>>(emptyList())
+    val publishedMilestones: StateFlow<List<PublicMilestoneRecord>> = _publishedMilestones.asStateFlow()
 
     val isAuthenticated: StateFlow<Boolean> = _authState.map { it == PubkyAuthState.Authenticated }
         .stateIn(scope, SharingStarted.Eagerly, false)
@@ -395,6 +400,35 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun publishMilestone(record: PublicMilestoneRecord): Result<Unit> = runCatching {
+        withContext(ioDispatcher) {
+            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
+                "No session available"
+            }
+            val currentIndex = fetchPublishedMilestonesIndexInternal(_publicKey.value)
+            val updatedMilestones = (
+                currentIndex?.milestones.orEmpty().filterNot { it.milestoneId == record.milestoneId } + record
+                )
+                .sortedByDescending { it.unlockedAtMs }
+            val updatedIndex = PublicMilestonesIndex(milestones = updatedMilestones)
+            pubkyService.sessionPut(session, Env.milestonePath(record.milestoneId), record.encode())
+            pubkyService.sessionPut(session, Env.milestonesIndexPath, updatedIndex.encode())
+            _publishedMilestones.update { updatedMilestones }
+        }
+    }
+
+    suspend fun loadPublishedMilestones(
+        publicKey: String? = _publicKey.value,
+    ): Result<List<PublicMilestoneRecord>> = runCatching {
+        withContext(ioDispatcher) {
+            val milestones = fetchPublishedMilestonesIndexInternal(publicKey)?.milestones.orEmpty()
+            if (publicKey == _publicKey.value) {
+                _publishedMilestones.update { milestones }
+            }
+            milestones
+        }
+    }
+
     suspend fun deleteProfile(): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
             val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
@@ -444,6 +478,18 @@ class PubkyRepo @Inject constructor(
             status = null,
         ).toProfileData()
         pubkyService.sessionPut(sessionSecret, Env.profilePath, data.encode())
+    }
+
+    private suspend fun fetchPublishedMilestonesIndexInternal(publicKey: String?): PublicMilestonesIndex? {
+        val pk = publicKey ?: return null
+        val strippedKey = pk.removePrefix(PUBKY_PREFIX)
+        val uri = "$PUBKY_SCHEME$strippedKey${Env.milestonesIndexPath}"
+        return runCatching {
+            val json = pubkyService.fetchFileString(uri)
+            PublicMilestonesIndex.decode(json)
+        }.onFailure {
+            Logger.debug("No published milestones found for '$pk'", context = TAG)
+        }.getOrNull()
     }
 
     private fun compressAvatar(imageBytes: ByteArray): ByteArray {

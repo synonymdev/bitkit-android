@@ -533,6 +533,10 @@
     <string name="profile__milestone_locked">Locked</string>
     <string name="profile__milestone_not_found">Unable to load milestone.</string>
     <string name="profile__milestone_progress">Progress</string>
+    <string name="profile__milestone_public">Public</string>
+    <string name="profile__milestone_publish">Publish to Pubky</string>
+    <string name="profile__milestone_publish_requires_pubky">Connect your Pubky profile in Bitkit to publish this milestone.</string>
+    <string name="profile__milestone_published">Published to Pubky</string>
     <string name="profile__milestone_status">Status</string>
     <string name="profile__milestone_title">Milestones</string>
     <string name="profile__milestone_unlocked">Unlocked</string>

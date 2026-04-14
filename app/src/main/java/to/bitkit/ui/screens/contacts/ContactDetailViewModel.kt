@@ -21,6 +21,7 @@ import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.models.PublicMilestoneRecord
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -60,10 +61,12 @@ class ContactDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         profile = cached,
+                        publishedMilestones = emptyList<PublicMilestoneRecord>().toImmutableList(),
                         tags = cached.tags.toImmutableList(),
                         isLoading = false,
                     )
                 }
+                loadPublishedMilestones()
                 return@launch
             }
             _uiState.update { it.copy(isLoading = true) }
@@ -72,10 +75,12 @@ class ContactDetailViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             profile = profile,
+                            publishedMilestones = emptyList<PublicMilestoneRecord>().toImmutableList(),
                             tags = profile.tags.toImmutableList(),
                             isLoading = false,
                         )
                     }
+                    loadPublishedMilestones()
                 }
                 .onFailure {
                     _uiState.update {
@@ -84,6 +89,20 @@ class ContactDetailViewModel @Inject constructor(
                             isLoading = false,
                         )
                     }
+                }
+        }
+    }
+
+    private fun loadPublishedMilestones() {
+        viewModelScope.launch {
+            pubkyRepo.loadPublishedMilestones(publicKey)
+                .onSuccess { milestones ->
+                    _uiState.update {
+                        it.copy(publishedMilestones = milestones.toImmutableList())
+                    }
+                }
+                .onFailure {
+                    Logger.error("Failed to load published milestones for '$publicKey'", it, context = TAG)
                 }
         }
     }
@@ -173,6 +192,7 @@ class ContactDetailViewModel @Inject constructor(
 @Stable
 data class ContactDetailUiState(
     val profile: PubkyProfile? = null,
+    val publishedMilestones: ImmutableList<PublicMilestoneRecord> = persistentListOf(),
     val tags: ImmutableList<String> = persistentListOf(),
     val isLoading: Boolean = false,
     val showAddTagSheet: Boolean = false,

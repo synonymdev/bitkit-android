@@ -368,10 +368,7 @@ private fun MilestoneRow(
                         text = milestone.title,
                         color = Colors.White,
                     )
-                    Text13Up(
-                        text = milestoneStatus(milestone),
-                        color = milestoneStatusColor(milestone),
-                    )
+                    MilestoneStatus(milestone = milestone)
                 }
                 VerticalSpacer(4.dp)
                 BodyS(
@@ -386,12 +383,35 @@ private fun MilestoneRow(
 
 @Composable
 private fun milestoneStatus(milestone: Milestone): String = when {
+    milestone.isPublished -> stringResource(R.string.profile__milestone_public)
     milestone.isUnlocked -> stringResource(R.string.profile__milestone_unlocked)
     milestone.target > 1 -> "${milestone.progress}/${milestone.target}"
     else -> stringResource(R.string.profile__milestone_locked)
 }
 
+@Composable
+private fun MilestoneStatus(milestone: Milestone) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (milestone.isPublished) {
+            Icon(
+                painter = painterResource(R.drawable.ic_globe),
+                contentDescription = null,
+                tint = Colors.Green,
+                modifier = Modifier.size(12.dp),
+            )
+        }
+        Text13Up(
+            text = milestoneStatus(milestone),
+            color = milestoneStatusColor(milestone),
+        )
+    }
+}
+
 private fun milestoneStatusColor(milestone: Milestone): Color = when {
+    milestone.isPublished -> Colors.Green
     milestone.isUnlocked -> Colors.Green
     milestone.progress > 0 -> milestoneCategoryColor(milestone.category)
     else -> Colors.White64

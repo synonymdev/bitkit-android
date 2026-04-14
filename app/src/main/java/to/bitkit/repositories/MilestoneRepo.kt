@@ -19,9 +19,11 @@ import to.bitkit.models.MilestoneDefinition
 import to.bitkit.models.MilestoneDefinitions
 import to.bitkit.models.MilestoneId
 import to.bitkit.models.MilestoneMetric
+import to.bitkit.models.PublicMilestoneRecord
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Suppress("TooManyFunctions")
 @Singleton
 class MilestoneRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -29,7 +31,10 @@ class MilestoneRepo @Inject constructor(
 ) {
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
 
-    val milestones: StateFlow<ImmutableList<Milestone>> = milestoneStore.data
+    private val milestoneStoreState: StateFlow<MilestoneStoreData> = milestoneStore.data
+        .stateIn(scope, SharingStarted.Eagerly, MilestoneStoreData())
+
+    val milestones: StateFlow<ImmutableList<Milestone>> = milestoneStoreState
         .map { data -> MilestoneDefinitions.all.map { it.toMilestone(data) }.toImmutableList() }
         .stateIn(
             scope,
@@ -147,8 +152,32 @@ class MilestoneRepo @Inject constructor(
             progress = progress.coerceAtMost(target),
             target = target,
             isUnlocked = unlocked,
+            isPublished = id.value in data.publishedMilestoneIds,
             unlockedAtMs = data.unlockedMilestoneById(id)?.unlockedAtMs,
         )
+    }
+
+    fun isPublished(id: MilestoneId): Boolean = milestoneStoreState.value.publishedMilestoneIds.contains(id.value)
+
+    suspend fun markPublished(id: MilestoneId) = withContext(ioDispatcher) {
+        milestoneStore.update { current ->
+            if (id.value in current.publishedMilestoneIds) {
+                current
+            } else {
+                current.copy(publishedMilestoneIds = current.publishedMilestoneIds + id.value)
+            }
+        }
+    }
+
+    suspend fun setPublishedIds(ids: List<String>) = withContext(ioDispatcher) {
+        milestoneStore.update { current ->
+            current.copy(publishedMilestoneIds = ids.distinct())
+        }
+    }
+
+    fun publishedRecords(): List<PublicMilestoneRecord> = milestones.value.mapNotNull { milestone ->
+        if (!isPublished(milestone.id)) return@mapNotNull null
+        PublicMilestoneRecord.fromMilestone(milestone)
     }
 
     private fun MilestoneMetric.countFor(data: MilestoneStoreData): Int = when (this) {

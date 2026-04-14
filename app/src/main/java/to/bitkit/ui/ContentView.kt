@@ -1035,6 +1035,7 @@ private fun NavGraphBuilder.profile(
         MilestoneDetailScreen(
             viewModel = viewModel,
             milestoneId = route.id,
+            onConnectPubky = { navController.navigateTo(Routes.PubkyChoice) },
             onBackClick = { navController.popBackStack() },
         )
     }

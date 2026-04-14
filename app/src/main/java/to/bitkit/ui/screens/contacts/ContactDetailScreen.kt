@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,11 +31,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.MilestoneCategory
+import to.bitkit.models.MilestoneDefinitions
+import to.bitkit.models.MilestoneId
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.models.PublicMilestoneRecord
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LinkRow
@@ -109,6 +119,7 @@ private fun Content(
             uiState.isLoading && currentProfile == null -> LoadingState()
             currentProfile != null -> ContactBody(
                 profile = currentProfile,
+                publishedMilestones = uiState.publishedMilestones,
                 tags = uiState.tags,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
@@ -143,6 +154,7 @@ private fun Content(
 @Composable
 private fun ContactBody(
     profile: PubkyProfile,
+    publishedMilestones: ImmutableList<PublicMilestoneRecord>,
     tags: ImmutableList<String>,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
@@ -181,6 +193,31 @@ private fun ContactBody(
 
         VerticalSpacer(32.dp)
 
+        if (publishedMilestones.isNotEmpty()) {
+            Text13Up(
+                text = stringResource(R.string.profile__milestone_title),
+                color = Colors.White64,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            VerticalSpacer(8.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Colors.Gray6, RoundedCornerShape(16.dp))
+            ) {
+                publishedMilestones.forEachIndexed { index, milestone ->
+                    PublishedMilestoneRow(
+                        milestone = milestone,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                    if (index != publishedMilestones.lastIndex) {
+                        HorizontalDivider(color = Colors.White10)
+                    }
+                }
+            }
+            VerticalSpacer(24.dp)
+        }
+
         profile.links.forEach { LinkRow(label = it.label, value = it.url) }
 
         VerticalSpacer(16.dp)
@@ -213,6 +250,56 @@ private fun ContactBody(
             )
         }
     }
+}
+
+@Composable
+private fun PublishedMilestoneRow(
+    milestone: PublicMilestoneRecord,
+    modifier: Modifier = Modifier,
+) {
+    val category = MilestoneCategory.fromValue(milestone.category) ?: MilestoneCategory.Onchain
+    val definition = MilestoneId.fromValue(milestone.milestoneId)?.let(MilestoneDefinitions::definitionOf)
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(28.dp)
+                .background(milestoneCategoryColor(category).copy(alpha = 0.24f), CircleShape)
+        ) {
+            definition?.let {
+                Icon(
+                    painter = painterResource(it.iconRes),
+                    contentDescription = null,
+                    tint = milestoneCategoryColor(category),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            BodyM(
+                text = milestone.title,
+                color = Colors.White,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            VerticalSpacer(4.dp)
+            BodyS(
+                text = milestone.description,
+                color = Colors.White64,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+private fun milestoneCategoryColor(category: MilestoneCategory) = when (category) {
+    MilestoneCategory.Pubky -> Colors.PubkyGreen
+    MilestoneCategory.Onchain -> Colors.Brand
+    MilestoneCategory.Lightning -> Colors.Purple
 }
 
 @Composable

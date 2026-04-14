@@ -21,6 +21,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.Milestone
@@ -28,6 +29,8 @@ import to.bitkit.models.MilestoneCategory
 import to.bitkit.models.MilestoneId
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
@@ -41,11 +44,18 @@ fun MilestoneDetailScreen(
     viewModel: ProfileViewModel,
     milestoneId: String,
     onBackClick: () -> Unit,
+    onConnectPubky: () -> Unit,
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val milestone = MilestoneId.fromValue(milestoneId)?.let(viewModel::getMilestone)
+    val milestoneIdValue = MilestoneId.fromValue(milestoneId)
 
     Content(
         milestone = milestone,
+        isAuthenticated = uiState.isAuthenticated,
+        isPublishing = uiState.publishingMilestoneId == milestoneId,
+        onClickPublish = { milestoneIdValue?.let(viewModel::publishMilestone) },
+        onConnectPubky = onConnectPubky,
         onBackClick = onBackClick,
     )
 }
@@ -53,6 +63,10 @@ fun MilestoneDetailScreen(
 @Composable
 private fun Content(
     milestone: Milestone?,
+    isAuthenticated: Boolean,
+    isPublishing: Boolean,
+    onClickPublish: () -> Unit,
+    onConnectPubky: () -> Unit,
     onBackClick: () -> Unit,
 ) {
     ScreenColumn {
@@ -142,6 +156,47 @@ private fun Content(
                 }
             }
 
+            VerticalSpacer(24.dp)
+
+            when {
+                !isAuthenticated -> {
+                    BodyS(
+                        text = stringResource(R.string.profile__milestone_publish_requires_pubky),
+                        color = Colors.White64,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    VerticalSpacer(12.dp)
+                    PrimaryButton(
+                        text = stringResource(R.string.profile__milestone_connect),
+                        onClick = onConnectPubky,
+                    )
+                }
+
+                isPublishing -> {
+                    PrimaryButton(
+                        text = stringResource(R.string.profile__milestone_publish),
+                        onClick = {},
+                        enabled = false,
+                        isLoading = true,
+                    )
+                }
+
+                milestone.isPublished -> {
+                    SecondaryButton(
+                        text = stringResource(R.string.profile__milestone_published),
+                        onClick = {},
+                        enabled = false,
+                    )
+                }
+
+                milestone.isUnlocked -> {
+                    PrimaryButton(
+                        text = stringResource(R.string.profile__milestone_publish),
+                        onClick = onClickPublish,
+                    )
+                }
+            }
+
             VerticalSpacer(16.dp)
         }
     }
@@ -194,8 +249,13 @@ private fun Preview() {
                 progress = 1,
                 target = 1,
                 isUnlocked = true,
+                isPublished = false,
                 unlockedAtMs = 1_744_644_800_000,
             ),
+            isAuthenticated = true,
+            isPublishing = false,
+            onClickPublish = {},
+            onConnectPubky = {},
             onBackClick = {},
         )
     }
