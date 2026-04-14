@@ -41,9 +41,17 @@ class MilestoneRepo @Inject constructor(
         .map { all ->
             all.filter { milestone ->
                 milestone.isUnlocked || milestone.progress > 0
-            }.toImmutableList()
+            }
+                .sortedWith(
+                    compareByDescending<Milestone> { it.isUnlocked }
+                        .thenByDescending { it.unlockedAtMs ?: 0L }
+                        .thenByDescending { it.progress }
+                )
+                .toImmutableList()
         }
         .stateIn(scope, SharingStarted.Eagerly, emptyList<Milestone>().toImmutableList())
+
+    fun getMilestone(id: MilestoneId): Milestone? = milestones.value.firstOrNull { it.id == id }
 
     suspend fun recordProfileConnected(): ImmutableList<Milestone> = withContext(ioDispatcher) {
         updateStore { current ->

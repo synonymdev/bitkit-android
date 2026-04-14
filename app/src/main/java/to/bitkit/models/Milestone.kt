@@ -12,6 +12,11 @@ enum class MilestoneId(val value: String) {
     OpenCircuit("open_circuit"),
     ZapAway("zap_away"),
     SignalFound("signal_found"),
+    ;
+
+    companion object {
+        fun fromValue(value: String): MilestoneId? = entries.firstOrNull { it.value == value }
+    }
 }
 
 enum class MilestoneCategory {

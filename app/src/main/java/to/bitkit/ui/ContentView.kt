@@ -77,6 +77,7 @@ import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.CreateProfileViewModel
 import to.bitkit.ui.screens.profile.EditProfileScreen
 import to.bitkit.ui.screens.profile.EditProfileViewModel
+import to.bitkit.ui.screens.profile.MilestoneDetailScreen
 import to.bitkit.ui.screens.profile.PayContactsScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.profile.ProfileScreen
@@ -1025,6 +1026,16 @@ private fun NavGraphBuilder.profile(
             onBackClick = { navController.popBackStack() },
             onEditProfile = { navController.navigateTo(Routes.EditProfile) },
             onConnectPubky = { navController.navigateTo(Routes.PubkyChoice) },
+            onClickMilestone = { navController.navigateTo(Routes.MilestoneDetail(it.value)) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.MilestoneDetail> { backStackEntry ->
+        val route: Routes.MilestoneDetail = backStackEntry.toRoute()
+        val viewModel: ProfileViewModel = hiltViewModel()
+        MilestoneDetailScreen(
+            viewModel = viewModel,
+            milestoneId = route.id,
+            onBackClick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.ProfileIntro> {
@@ -1892,6 +1903,9 @@ sealed interface Routes {
 
     @Serializable
     data object Profile : Routes
+
+    @Serializable
+    data class MilestoneDetail(val id: String) : Routes
 
     @Serializable
     data object ProfileIntro : Routes

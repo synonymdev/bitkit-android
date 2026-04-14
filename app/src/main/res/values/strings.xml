@@ -526,6 +526,17 @@
     <string name="profile__empty_state">Unable to load your profile.</string>
     <string name="profile__intro_description">Set up your portable pubky profile, so your contacts can reach you or pay you anytime, anywhere in the ecosystem.</string>
     <string name="profile__intro_title">Portable\n&lt;accent&gt;pubky\nprofile&lt;/accent&gt;</string>
+    <string name="profile__milestone_connect">Connect Pubky</string>
+    <string name="profile__milestone_empty">Use Bitkit to start unlocking milestones.</string>
+    <string name="profile__milestone_in_progress">In Progress</string>
+    <string name="profile__milestone_local_description">Milestones stay local to Bitkit. Connect Pubky when you are ready to make your profile public.</string>
+    <string name="profile__milestone_locked">Locked</string>
+    <string name="profile__milestone_not_found">Unable to load milestone.</string>
+    <string name="profile__milestone_progress">Progress</string>
+    <string name="profile__milestone_status">Status</string>
+    <string name="profile__milestone_title">Milestones</string>
+    <string name="profile__milestone_unlocked">Unlocked</string>
+    <string name="profile__milestone_unlocked_at">Unlocked At</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>

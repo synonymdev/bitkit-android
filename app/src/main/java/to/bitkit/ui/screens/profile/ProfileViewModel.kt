@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Milestone
+import to.bitkit.models.MilestoneId
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.MilestoneRepo
@@ -123,6 +124,8 @@ class ProfileViewModel @Inject constructor(
             )
         }
     }
+
+    fun getMilestone(id: MilestoneId): Milestone? = milestoneRepo.getMilestone(id)
 }
 
 @Stable

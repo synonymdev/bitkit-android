@@ -288,7 +288,7 @@ private fun ToastLeadingIcon(
         Icon(
             painter = painterResource(iconRes),
             contentDescription = null,
-            tint = Colors.White,
+            tint = accentColor,
             modifier = Modifier.size(16.dp),
         )
     }
