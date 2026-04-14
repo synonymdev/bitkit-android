@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -27,6 +28,7 @@ import javax.inject.Inject
 class PubkyChoiceViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val milestoneRepo: MilestoneRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "PubkyChoiceViewModel"
@@ -101,6 +103,15 @@ class PubkyChoiceViewModel @Inject constructor(
                     _uiState.update { it.copy(isWaitingForRing = false, isLoadingAfterAuth = true) }
                     pubkyRepo.prepareImport()
                         .onSuccess {
+                            milestoneRepo.recordProfileConnected().forEach { milestone ->
+                                ToastEventBus.send(
+                                    type = Toast.ToastType.SUCCESS,
+                                    title = "Unlocked: ${milestone.title}",
+                                    description = milestone.description,
+                                    iconRes = milestone.iconRes,
+                                    accentCategory = milestone.category,
+                                )
+                            }
                             _uiState.update { state -> state.copy(isLoadingAfterAuth = false) }
                             val hasContacts = pubkyRepo.pendingImportContacts.value.isNotEmpty()
                             if (hasContacts) {

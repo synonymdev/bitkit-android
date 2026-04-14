@@ -1,7 +1,9 @@
 package to.bitkit.ui.shared.toast
 
+import androidx.annotation.DrawableRes
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import to.bitkit.models.MilestoneCategory
 import to.bitkit.models.Toast
 
 object ToastEventBus {
@@ -15,10 +17,12 @@ object ToastEventBus {
         description: String? = null,
         autoHide: Boolean = true,
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
+        @DrawableRes iconRes: Int? = null,
+        accentCategory: MilestoneCategory? = null,
         testTag: String? = null,
     ) {
         _events.emit(
-            Toast(type, title, description, autoHide, visibilityTime, testTag)
+            Toast(type, title, description, autoHide, visibilityTime, iconRes, accentCategory, testTag)
         )
     }
 
@@ -30,6 +34,8 @@ object ToastEventBus {
                 description = error.message ?: "Unknown error",
                 autoHide = true,
                 visibilityTime = Toast.VISIBILITY_TIME_DEFAULT,
+                iconRes = null,
+                accentCategory = null,
             )
         )
     }

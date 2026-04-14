@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,11 +25,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.Milestone
+import to.bitkit.models.MilestoneCategory
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.ui.components.ActionButton
@@ -35,6 +41,7 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LinkRow
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
@@ -55,6 +62,7 @@ fun ProfileScreen(
     viewModel: ProfileViewModel,
     onBackClick: () -> Unit,
     onEditProfile: () -> Unit = {},
+    onConnectPubky: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -77,6 +85,7 @@ fun ProfileScreen(
         onDismissSignOutDialog = { viewModel.dismissSignOutDialog() },
         onConfirmSignOut = { viewModel.signOut() },
         onClickRetry = { viewModel.loadProfile() },
+        onClickConnectPubky = onConnectPubky,
     )
 }
 
@@ -91,6 +100,7 @@ private fun Content(
     onDismissSignOutDialog: () -> Unit,
     onConfirmSignOut: () -> Unit,
     onClickRetry: () -> Unit,
+    onClickConnectPubky: () -> Unit,
 ) {
     val currentProfile = uiState.profile
 
@@ -105,9 +115,14 @@ private fun Content(
             uiState.isLoading && currentProfile == null -> LoadingState()
             currentProfile != null -> ProfileBody(
                 profile = currentProfile,
+                milestones = uiState.milestones,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickShare = onClickShare,
+            )
+            !uiState.isAuthenticated -> DisconnectedState(
+                milestones = uiState.milestones,
+                onClickConnectPubky = onClickConnectPubky,
             )
             else -> EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
         }
@@ -127,6 +142,7 @@ private fun Content(
 @Composable
 private fun ProfileBody(
     profile: PubkyProfile,
+    milestones: List<Milestone>,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
@@ -185,6 +201,10 @@ private fun ProfileBody(
 
         VerticalSpacer(32.dp)
 
+        MilestonesSection(milestones = milestones)
+
+        VerticalSpacer(24.dp)
+
         if (profile.links.isNotEmpty()) {
             profile.links.forEach { LinkRow(label = it.label, value = it.url) }
         }
@@ -211,6 +231,143 @@ private fun ProfileBody(
 
         VerticalSpacer(16.dp)
     }
+}
+
+@Composable
+private fun DisconnectedState(
+    milestones: List<Milestone>,
+    onClickConnectPubky: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp)
+    ) {
+        VerticalSpacer(24.dp)
+        BodyM(
+            text = "Milestones stay local to Bitkit. Connect Pubky when you're ready to make your profile public.",
+            color = Colors.White64,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VerticalSpacer(24.dp)
+        PrimaryButton(
+            text = "Connect Pubky",
+            onClick = onClickConnectPubky,
+        )
+        VerticalSpacer(24.dp)
+        MilestonesSection(milestones = milestones)
+        VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun MilestonesSection(milestones: List<Milestone>) {
+    if (milestones.isEmpty()) {
+        Text13Up(
+            text = "Milestones",
+            color = Colors.White64,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VerticalSpacer(8.dp)
+        BodyS(
+            text = "Use Bitkit to start unlocking milestones.",
+            color = Colors.White64,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
+    }
+
+    Text13Up(
+        text = "Milestones",
+        color = Colors.White64,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    VerticalSpacer(8.dp)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Colors.Gray6, RoundedCornerShape(16.dp))
+    ) {
+        milestones.forEachIndexed { index, milestone ->
+            MilestoneRow(
+                milestone = milestone,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            )
+            if (index != milestones.lastIndex) {
+                HorizontalDivider(color = Colors.White10)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MilestoneRow(
+    milestone: Milestone,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(28.dp)
+                    .background(milestoneCategoryColor(milestone.category).copy(alpha = 0.24f), CircleShape)
+            ) {
+                Icon(
+                    painter = painterResource(milestone.iconRes),
+                    contentDescription = null,
+                    tint = milestoneCategoryColor(milestone.category),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    BodyM(
+                        text = milestone.title,
+                        color = Colors.White,
+                    )
+                    Text13Up(
+                        text = milestoneStatus(milestone),
+                        color = milestoneStatusColor(milestone),
+                    )
+                }
+                VerticalSpacer(4.dp)
+                BodyS(
+                    text = milestone.description,
+                    color = Colors.White64,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+private fun milestoneStatus(milestone: Milestone): String = when {
+    milestone.isUnlocked -> "Unlocked"
+    milestone.target > 1 -> "${milestone.progress}/${milestone.target}"
+    else -> "Locked"
+}
+
+private fun milestoneStatusColor(milestone: Milestone): Color = when {
+    milestone.isUnlocked -> Colors.Green
+    milestone.progress > 0 -> milestoneCategoryColor(milestone.category)
+    else -> Colors.White64
+}
+
+private fun milestoneCategoryColor(category: MilestoneCategory): Color = when (category) {
+    MilestoneCategory.Pubky -> Colors.PubkyGreen
+    MilestoneCategory.Onchain -> Colors.Brand
+    MilestoneCategory.Lightning -> Colors.Purple
 }
 
 @Composable
@@ -272,6 +429,7 @@ private fun Preview() {
             onDismissSignOutDialog = {},
             onConfirmSignOut = {},
             onClickRetry = {},
+            onClickConnectPubky = {},
         )
     }
 }

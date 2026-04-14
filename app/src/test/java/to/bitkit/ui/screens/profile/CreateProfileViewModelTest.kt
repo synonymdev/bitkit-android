@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -11,6 +12,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -20,6 +22,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class CreateProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
+    private val milestoneRepo: MilestoneRepo = mock()
     private val pubkyRepo: PubkyRepo = mock()
 
     private lateinit var sut: CreateProfileViewModel
@@ -30,9 +33,11 @@ class CreateProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.profile__create_error)).thenReturn("Create failed")
         whenever { pubkyRepo.deriveKeys() }.thenReturn(Result.success("pubkyalice" to "secret"))
         whenever { pubkyRepo.fetchRemoteProfile(any()) }.thenReturn(Result.success(null))
+        whenever { milestoneRepo.recordProfileConnected() }.thenReturn(persistentListOf())
 
         sut = CreateProfileViewModel(
             context = context,
+            milestoneRepo = milestoneRepo,
             pubkyRepo = pubkyRepo,
         )
     }

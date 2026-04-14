@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,8 +19,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
+import to.bitkit.models.Milestone
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -28,6 +32,7 @@ import javax.inject.Inject
 class ProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val milestoneRepo: MilestoneRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "ProfileViewModel"
@@ -37,18 +42,35 @@ class ProfileViewModel @Inject constructor(
     private val _isSigningOut = MutableStateFlow(false)
 
     val uiState: StateFlow<ProfileUiState> = combine(
-        pubkyRepo.profile,
-        pubkyRepo.publicKey,
-        pubkyRepo.isLoadingProfile,
-        _showSignOutDialog,
-        _isSigningOut,
-    ) { profile, publicKey, isLoading, showSignOutDialog, isSigningOut ->
-        ProfileUiState(
-            profile = profile,
-            publicKey = publicKey,
-            isLoading = isLoading,
-            showSignOutDialog = showSignOutDialog,
-            isSigningOut = isSigningOut,
+        combine(
+            pubkyRepo.profile,
+            pubkyRepo.publicKey,
+            pubkyRepo.isLoadingProfile,
+        ) { profile, publicKey, isLoading ->
+            ProfileUiState(
+                profile = profile,
+                publicKey = publicKey,
+                isLoading = isLoading,
+            )
+        },
+        combine(
+            pubkyRepo.isAuthenticated,
+            _showSignOutDialog,
+            _isSigningOut,
+        ) { isAuthenticated, showSignOutDialog, isSigningOut ->
+            ProfileUiState(
+                isAuthenticated = isAuthenticated,
+                showSignOutDialog = showSignOutDialog,
+                isSigningOut = isSigningOut,
+            )
+        },
+        milestoneRepo.visibleMilestones,
+    ) { profileState, authState, milestones ->
+        profileState.copy(
+            isAuthenticated = authState.isAuthenticated,
+            milestones = milestones,
+            showSignOutDialog = authState.showSignOutDialog,
+            isSigningOut = authState.isSigningOut,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
 
@@ -108,6 +130,8 @@ data class ProfileUiState(
     val profile: PubkyProfile? = null,
     val publicKey: String? = null,
     val isLoading: Boolean = false,
+    val isAuthenticated: Boolean = false,
+    val milestones: ImmutableList<Milestone> = persistentListOf(),
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
 )

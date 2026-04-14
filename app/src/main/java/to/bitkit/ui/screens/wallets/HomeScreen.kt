@@ -203,10 +203,7 @@ fun HomeScreen(
     }
 
     val navigateToProfile = {
-        rootNavController.navigateToProfile(
-            isAuthenticated = isPubkyAuthenticated,
-            hasSeenIntro = hasSeenProfileIntro,
-        )
+        rootNavController.navigateToProfile()
     }
 
     Content(

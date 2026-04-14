@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.profile
 
 import android.content.Context
 import android.content.pm.PackageManager
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -15,6 +16,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -25,6 +27,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class PubkyChoiceViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
+    private val milestoneRepo: MilestoneRepo = mock()
     private val packageManager: PackageManager = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
@@ -36,9 +39,11 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         whenever(context.packageManager).thenReturn(packageManager)
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
+        whenever { milestoneRepo.recordProfileConnected() }.thenReturn(persistentListOf())
         whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
         sut = PubkyChoiceViewModel(
             context = context,
+            milestoneRepo = milestoneRepo,
             pubkyRepo = pubkyRepo,
         )
     }

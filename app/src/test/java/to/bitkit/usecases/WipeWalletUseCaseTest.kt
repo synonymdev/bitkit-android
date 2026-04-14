@@ -17,6 +17,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -35,6 +36,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val lightningRepo = mock<LightningRepo>()
+    private val milestoneRepo = mock<MilestoneRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
     private val migrationService = mock<MigrationService>()
@@ -61,6 +63,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             blocktankRepo = blocktankRepo,
             activityRepo = activityRepo,
             lightningRepo = lightningRepo,
+            milestoneRepo = milestoneRepo,
             pubkyRepo = pubkyRepo,
             firebaseMessaging = firebaseMessaging,
             migrationService = migrationService,
@@ -85,6 +88,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             widgetsStore,
             blocktankRepo,
             activityRepo,
+            milestoneRepo,
             lightningRepo,
             pubkyRepo,
         )
@@ -97,6 +101,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(settingsStore).reset()
         inOrder.verify(cacheStore).reset()
         inOrder.verify(widgetsStore).reset()
+        inOrder.verify(milestoneRepo).reset()
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
         assertTrue(onWipeCalled)

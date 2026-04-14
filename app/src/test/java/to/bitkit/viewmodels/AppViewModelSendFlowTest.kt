@@ -30,6 +30,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PubkyRepo
@@ -72,6 +73,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
     private val keychain = mock<Keychain>()
+    private val milestoneRepo = mock<MilestoneRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
@@ -130,6 +132,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferRepo = transferRepo,
             migrationService = migrationService,
             coreService = coreService,
+            milestoneRepo = milestoneRepo,
             appUpdateSheet = mock(),
             backupSheet = mock(),
             notificationsSheet = mock(),

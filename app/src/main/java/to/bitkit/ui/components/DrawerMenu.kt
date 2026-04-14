@@ -149,17 +149,8 @@ fun DrawerMenu(
                 }
             },
             onClickProfile = {
-                onBeforeNavigate(
-                    when {
-                        isProfileAuthenticated -> Routes.Profile
-                        hasSeenProfileIntro -> Routes.PubkyChoice
-                        else -> Routes.ProfileIntro
-                    }
-                )
-                rootNavController.navigateToProfile(
-                    isAuthenticated = isProfileAuthenticated,
-                    hasSeenIntro = hasSeenProfileIntro,
-                )
+                onBeforeNavigate(Routes.Profile)
+                rootNavController.navigateToProfile()
             },
             onBeforeNavigate = onBeforeNavigate,
         )

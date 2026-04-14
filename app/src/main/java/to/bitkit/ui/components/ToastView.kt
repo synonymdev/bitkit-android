@@ -16,12 +16,14 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
@@ -40,6 +42,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -52,6 +55,7 @@ import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.MilestoneCategory
 import to.bitkit.models.Toast
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
@@ -216,21 +220,30 @@ fun ToastView(
                     )
                 }
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                BodyMSB(
-                    text = toast.title,
-                    color = tintColor,
-                )
-                toast.description?.let { description ->
-                    Caption(
-                        text = description,
-                        color = Colors.White
+                toast.iconRes?.let { iconRes ->
+                    ToastLeadingIcon(iconRes = iconRes, accentColor = toast.iconAccentColor())
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    BodyMSB(
+                        text = toast.title,
+                        color = tintColor,
                     )
+                    toast.description?.let { description ->
+                        Caption(
+                            text = description,
+                            color = Colors.White
+                        )
+                    }
                 }
             }
         }
@@ -258,6 +271,26 @@ fun ToastView(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ToastLeadingIcon(
+    iconRes: Int,
+    accentColor: Color,
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(28.dp)
+            .background(accentColor.copy(alpha = TINT_ALPHA), CircleShape)
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = Colors.White,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
@@ -378,4 +411,13 @@ private fun Toast.tintColor(): Color = when (type) {
     Toast.ToastType.LIGHTNING -> Colors.Purple
     Toast.ToastType.WARNING -> Colors.Brand
     Toast.ToastType.ERROR -> Colors.Red
+}
+
+@ReadOnlyComposable
+@Composable
+private fun Toast.iconAccentColor(): Color = when (accentCategory) {
+    MilestoneCategory.Pubky -> Colors.PubkyGreen
+    MilestoneCategory.Onchain -> Colors.Brand
+    MilestoneCategory.Lightning -> Colors.Purple
+    null -> tintColor()
 }

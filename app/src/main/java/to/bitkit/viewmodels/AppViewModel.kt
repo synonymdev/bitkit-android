@@ -91,6 +91,7 @@ import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.FeeRate
+import to.bitkit.models.MilestoneCategory
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -111,6 +112,7 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
@@ -174,6 +176,7 @@ class AppViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val coreService: CoreService,
+    private val milestoneRepo: MilestoneRepo,
     private val pubkyRepo: PubkyRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
@@ -399,6 +402,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleChannelReady(event: Event.ChannelReady) {
         transferRepo.syncTransferStates()
         walletRepo.syncBalances()
+        notifyUnlockedMilestones(milestoneRepo.recordChannelOpened(event.channelId))
         notifyChannelReady(event)
     }
 
@@ -602,6 +606,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleOnchainTransactionReceived(event: Event.OnchainTransactionReceived) {
+        notifyUnlockedMilestones(milestoneRepo.recordOnchainReceived(event.txid))
         notifyPaymentReceived(event)
     }
 
@@ -641,6 +646,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentReceived(event: Event.PaymentReceived) {
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            notifyUnlockedMilestones(milestoneRepo.recordLightningReceived(paymentHash))
         }
         notifyPaymentReceived(event)
     }
@@ -655,6 +661,7 @@ class AppViewModel @Inject constructor(
                 }
                 return
             }
+            notifyUnlockedMilestones(milestoneRepo.recordLightningSent(paymentHash))
         }
         notifyPaymentSentOnLightning(event)
     }
@@ -1817,6 +1824,7 @@ class AppViewModel @Inject constructor(
                 sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         Logger.info("Onchain send result txid: $txId", context = TAG)
+                        notifyUnlockedMilestones(milestoneRepo.recordOnchainSent(txId))
                         onSendSuccess(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.ONCHAIN,
@@ -2306,6 +2314,8 @@ class AppViewModel @Inject constructor(
         description: String? = null,
         autoHide: Boolean = true,
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
+        iconRes: Int? = null,
+        accentCategory: MilestoneCategory? = null,
         testTag: String? = null,
     ) {
         toastManager.enqueue(
@@ -2315,6 +2325,8 @@ class AppViewModel @Inject constructor(
                 description = description,
                 autoHide = autoHide,
                 visibilityTime = visibilityTime,
+                iconRes = iconRes,
+                accentCategory = accentCategory,
                 testTag = testTag,
             )
         )
@@ -2335,8 +2347,22 @@ class AppViewModel @Inject constructor(
             description = toast.description,
             autoHide = toast.autoHide,
             visibilityTime = toast.visibilityTime,
+            iconRes = toast.iconRes,
+            accentCategory = toast.accentCategory,
             testTag = toast.testTag,
         )
+    }
+
+    private suspend fun notifyUnlockedMilestones(milestones: List<to.bitkit.models.Milestone>) {
+        milestones.forEach { milestone ->
+            ToastEventBus.send(
+                type = Toast.ToastType.SUCCESS,
+                title = "Unlocked: ${milestone.title}",
+                description = milestone.description,
+                iconRes = milestone.iconRes,
+                accentCategory = milestone.category,
+            )
+        }
     }
 
     fun hideToast() = toastManager.dismissCurrentToast()

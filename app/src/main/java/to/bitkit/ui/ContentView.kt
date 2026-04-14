@@ -1024,6 +1024,7 @@ private fun NavGraphBuilder.profile(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
             onEditProfile = { navController.navigateTo(Routes.EditProfile) },
+            onConnectPubky = { navController.navigateTo(Routes.PubkyChoice) },
         )
     }
     composableWithDefaultTransitions<Routes.ProfileIntro> {
@@ -1610,14 +1611,7 @@ inline fun <reified T : Any> NavController.navigateTo(
     }
 }
 
-fun NavController.navigateToProfile(
-    isAuthenticated: Boolean,
-    hasSeenIntro: Boolean,
-) = when {
-    isAuthenticated -> navigateTo(Routes.Profile)
-    hasSeenIntro -> navigateTo(Routes.PubkyChoice)
-    else -> navigateTo(Routes.ProfileIntro)
-}
+fun NavController.navigateToProfile() = navigateTo(Routes.Profile)
 
 fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)
 

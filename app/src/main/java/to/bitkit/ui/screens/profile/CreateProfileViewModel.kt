@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.repositories.MilestoneRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -30,6 +31,7 @@ import javax.inject.Inject
 class CreateProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val milestoneRepo: MilestoneRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "CreateProfileViewModel"
@@ -174,6 +176,15 @@ class CreateProfileViewModel @Inject constructor(
                 tags = state.tags,
                 avatarBytes = state.avatarBytes,
             ).onSuccess {
+                milestoneRepo.recordProfileConnected().forEach { milestone ->
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = "Unlocked: ${milestone.title}",
+                        description = milestone.description,
+                        iconRes = milestone.iconRes,
+                        accentCategory = milestone.category,
+                    )
+                }
                 _uiState.update { it.copy(isSaving = false) }
                 _effects.emit(CreateProfileEffect.CreateSuccess)
             }.onFailure {
