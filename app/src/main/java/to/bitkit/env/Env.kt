@@ -174,7 +174,7 @@ internal object Env {
 
     val homegateUrl: String
         get() {
-            if (isLocalE2eBackend) {
+            if (isLocalE2eBackend || network == Network.REGTEST) {
                 return e2eHomegateUrl
             }
 
