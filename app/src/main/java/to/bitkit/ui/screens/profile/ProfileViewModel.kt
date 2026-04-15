@@ -159,8 +159,8 @@ class ProfileViewModel @Inject constructor(
                         milestoneRepo.markPublished(id)
                         ToastEventBus.send(
                             type = Toast.ToastType.SUCCESS,
-                            title = "Published: ${milestone.title}",
-                            description = milestone.description,
+                            title = context.getString(R.string.profile__milestone_toast_now_public),
+                            description = milestone.title,
                         )
                     }
                     .onFailure {
@@ -168,7 +168,7 @@ class ProfileViewModel @Inject constructor(
                         ToastEventBus.send(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.common__error),
-                            description = it.message,
+                            description = context.getString(R.string.profile__milestone_action_error),
                         )
                     }
             } finally {
@@ -190,8 +190,8 @@ class ProfileViewModel @Inject constructor(
                         milestoneRepo.markUnpublished(id)
                         ToastEventBus.send(
                             type = Toast.ToastType.SUCCESS,
-                            title = "Made private: ${milestone.title}",
-                            description = milestone.description,
+                            title = context.getString(R.string.profile__milestone_toast_now_private),
+                            description = milestone.title,
                         )
                     }
                     .onFailure {
@@ -199,7 +199,7 @@ class ProfileViewModel @Inject constructor(
                         ToastEventBus.send(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.common__error),
-                            description = it.message,
+                            description = context.getString(R.string.profile__milestone_action_error),
                         )
                     }
             } finally {

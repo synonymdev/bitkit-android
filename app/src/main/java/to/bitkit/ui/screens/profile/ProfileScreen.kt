@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -258,6 +261,12 @@ private fun DisconnectedState(
             .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
+        Text13Up(
+            text = stringResource(R.string.profile__milestone_disconnected_headline),
+            color = Colors.White64,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VerticalSpacer(8.dp)
         BodyM(
             text = stringResource(R.string.profile__milestone_local_description),
             color = Colors.White64,
@@ -353,7 +362,7 @@ private fun MilestoneRow(
             ) {
                 Icon(
                     painter = painterResource(milestone.iconRes),
-                    contentDescription = null,
+                    contentDescription = milestone.title,
                     tint = milestoneCategoryColor(milestone.category),
                     modifier = Modifier.size(18.dp),
                 )
@@ -376,6 +385,20 @@ private fun MilestoneRow(
                     color = Colors.White64,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (milestone.target > 1 && !milestone.isUnlocked) {
+                    VerticalSpacer(8.dp)
+                    LinearProgressIndicator(
+                        progress = {
+                            (milestone.progress.toFloat() / milestone.target.toFloat()).coerceIn(0f, 1f)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = milestoneCategoryColor(milestone.category),
+                        trackColor = Colors.White10,
+                    )
+                }
             }
         }
     }
@@ -398,14 +421,14 @@ private fun MilestoneStatus(milestone: Milestone) {
         when {
             milestone.isPublished -> Icon(
                 painter = painterResource(R.drawable.ic_globe),
-                contentDescription = null,
+                contentDescription = stringResource(R.string.profile__milestone_public),
                 tint = Colors.Green,
                 modifier = Modifier.size(12.dp),
             )
 
             milestone.isUnlocked -> Icon(
                 painter = painterResource(R.drawable.ic_lock_key),
-                contentDescription = null,
+                contentDescription = stringResource(R.string.profile__milestone_private),
                 tint = Colors.Gray1,
                 modifier = Modifier.size(12.dp),
             )
