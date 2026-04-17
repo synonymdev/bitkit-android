@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 - Connection issues overlay with connectivity fixes across Send, Receive, and Transfer flows #878
 
 ## [2.2.0] - 2026-04-07

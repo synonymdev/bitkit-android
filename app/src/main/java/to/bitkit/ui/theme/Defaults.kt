@@ -15,6 +15,7 @@ import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.Dp
@@ -136,3 +137,10 @@ object Insets {
 
 @OptIn(ExperimentalMaterial3Api::class)
 val TopBarHeight: Dp = TopAppBarDefaults.TopAppBarExpandedHeight
+
+val TopBarGradient: Brush = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.5f to Colors.Black,
+        1.0f to Color.Transparent,
+    ),
+)
