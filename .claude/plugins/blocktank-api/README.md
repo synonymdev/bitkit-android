@@ -4,17 +4,16 @@ A Claude Code plugin that gives Claude knowledge of the full Blocktank LSP API, 
 
 ## Setup
 
-Enable the plugin in `.claude/settings.local.json`:
+Run these two commands once from the repo root:
 
-```json
-{
-  "enabledPlugins": {
-    "blocktank-api@blocktank-api": true
-  }
-}
+```sh
+claude plugin marketplace add ./.claude/plugins --scope user
+claude plugin install blocktank-api@bitkit-android --scope user
 ```
 
-Then restart Claude Code. After restart the `/lsp` skill will be available.
+Then restart Claude Code if it was already running. The `blocktank-api:lsp` skill (invoked as `/lsp`) will be available.
+
+The repo ships a matching `.claude/settings.json` and `.claude/plugins/.claude-plugin/marketplace.json` so the two commands above resolve against committed, portable definitions — nothing to hand-edit. Verify with `claude plugin list | grep blocktank-api`.
 
 ## Usage
 

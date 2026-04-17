@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "bitkit-android": {
+      "source": {
+        "source": "directory",
+        "path": "${CLAUDE_PROJECT_DIR}/.claude/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "blocktank-api@bitkit-android": true
+  }
+}

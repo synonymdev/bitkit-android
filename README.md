@@ -62,6 +62,17 @@ The following IDE plugins are recommended for development with Android Studio or
 ```
 Reports are generated in: `app/build/reports/detekt/`.
 
+### AI tooling
+
+The repo ships a Claude Code plugin under `.claude/plugins/blocktank-api/` that gives Claude the `/lsp` skill for driving Blocktank LSP during local development. One-time setup after first clone:
+
+```sh
+claude plugin marketplace add ./.claude/plugins --scope user
+claude plugin install blocktank-api@bitkit-android --scope user
+```
+
+See [.claude/plugins/blocktank-api/README.md](.claude/plugins/blocktank-api/README.md) for usage and configuration.
+
 ## Test
 
 **Commands**
