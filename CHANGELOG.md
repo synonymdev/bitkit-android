@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-04-07
+
 ### Fixed
 - Retouch Primary, Secondary, and Tertiary buttons styling #887
 - Avoid msat truncation when paying invoices and LNURL callbacks #879
@@ -43,4 +45,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...v2.2.0
