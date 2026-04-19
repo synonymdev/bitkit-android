@@ -64,14 +64,15 @@ Reports are generated in: `app/build/reports/detekt/`.
 
 ### AI tooling
 
-The repo ships a Claude Code plugin under `.claude/plugins/blocktank-api/` that gives Claude the `/lsp` skill for driving Blocktank LSP during local development. One-time setup after first clone:
+The repo ships Claude Code plugins under `.claude/plugins/` to give Claude domain-specific skills for local development:
+
+- [**blocktank-api**](.claude/plugins/blocktank-api/README.md) — `/lsp` skill for driving Blocktank LSP during Lightning testing.
+
+Install or update all bundled plugins with:
 
 ```sh
-claude plugin marketplace add ./.claude/plugins --scope user
-claude plugin install blocktank-api@bitkit-android --scope user
+./.claude/install-plugins.sh
 ```
-
-See [.claude/plugins/blocktank-api/README.md](.claude/plugins/blocktank-api/README.md) for usage and configuration.
 
 ## Test
 
