@@ -148,10 +148,9 @@ class Keychain @Inject constructor(
         val walletIndex = runCatching {
             runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0L
         }.getOrDefault(-1L)
-        val causeChain = generateSequence<Throwable>(cause) { it.cause }
+        val causeChain = generateSequence(cause) { it.cause }
             .take(CAUSE_CHAIN_DEPTH)
-            .map { it.javaClass.simpleName }
-            .joinToString(separator = " <- ")
+            .joinToString(separator = " <- ") { it.javaClass.simpleName }
 
         Logger.warn(
             "Decrypt failed for key='$key' walletIndex='$walletIndex' " +
