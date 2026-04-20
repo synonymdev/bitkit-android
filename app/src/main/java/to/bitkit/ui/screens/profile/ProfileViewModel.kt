@@ -98,6 +98,7 @@ class ProfileViewModel @Inject constructor(
             ToastEventBus.send(
                 type = Toast.ToastType.SUCCESS,
                 title = context.getString(R.string.common__copied),
+                testTag = "ProfilePubkyCopiedToast",
             )
         }
     }

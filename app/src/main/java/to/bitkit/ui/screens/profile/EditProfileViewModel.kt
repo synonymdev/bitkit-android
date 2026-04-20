@@ -191,6 +191,7 @@ class EditProfileViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.profile__edit_save_success),
+                    testTag = "ProfileUpdatedToast",
                 )
                 _effects.emit(EditProfileEffect.SaveSuccess)
             }.onFailure {
