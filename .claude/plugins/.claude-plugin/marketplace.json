@@ -1,0 +1,14 @@
+{
+  "name": "bitkit-android",
+  "owner": {
+    "name": "Synonym",
+    "email": "dev@synonym.to"
+  },
+  "plugins": [
+    {
+      "name": "blocktank-api",
+      "source": "./blocktank-api",
+      "description": "Interact with the Blocktank LSP API for Lightning testing during bitkit development."
+    }
+  ]
+}

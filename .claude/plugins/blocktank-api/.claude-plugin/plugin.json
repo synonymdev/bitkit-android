@@ -1,0 +1,4 @@
+{
+  "name": "blocktank-api",
+  "description": "Interact with the Blocktank LSP API for Lightning testing during bitkit development."
+}
