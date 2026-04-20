@@ -62,6 +62,18 @@ The following IDE plugins are recommended for development with Android Studio or
 ```
 Reports are generated in: `app/build/reports/detekt/`.
 
+### AI tooling
+
+The repo ships Claude Code plugins under `.claude/plugins/` to give Claude domain-specific skills for local development:
+
+- [**blocktank-api**](.claude/plugins/blocktank-api/README.md) — `/lsp` skill for driving Blocktank LSP during Lightning testing.
+
+Install or update all bundled plugins with:
+
+```sh
+./.claude/install-plugins.sh
+```
+
 ## Test
 
 **Commands**
@@ -223,7 +235,7 @@ Please focus on:
 - Thread safety in coroutines
 ```
 
-#### Local Development Setup (YOLO Mode)
+### Local Development Setup (YOLO Mode)
 
 To enable auto-approved permissions for Claude Code during local development:
 
@@ -233,6 +245,12 @@ cp .claude/settings.local.template.json .claude/settings.local.json
 
 This reduces confirmation prompts for common operations (Bash, Read, Edit, Write, etc.).
 Destructive operations like `rm -rf`, `git commit`, and `git push` still require confirmation.
+
+### AI Dev Plugins
+
+Claude Code plugins provide specialized skills for development workflows. See [`.claude/plugins/`](.claude/plugins/) for available plugins.
+
+- [blocktank-api](.claude/plugins/blocktank-api/README.md) — Blocktank LSP API for LN testing on regtest
 
 ## License
 
