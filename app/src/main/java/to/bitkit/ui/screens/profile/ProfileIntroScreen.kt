@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -27,7 +28,7 @@ fun ProfileIntroScreen(
     onContinue: () -> Unit,
     onBackClick: () -> Unit,
 ) {
-    ScreenColumn {
+    ScreenColumn(modifier = Modifier.testTag("ProfileIntro")) {
         AppTopBar(
             titleText = stringResource(R.string.profile__nav_title),
             onBackClick = onBackClick,
@@ -55,6 +56,7 @@ fun ProfileIntroScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
+                modifier = Modifier.testTag("ProfileIntro-button")
             )
             VerticalSpacer(16.dp)
         }

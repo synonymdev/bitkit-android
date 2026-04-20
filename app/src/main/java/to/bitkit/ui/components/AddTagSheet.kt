@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -109,13 +110,16 @@ private fun TagFormContent(
             placeholder = stringResource(R.string.profile__add_tag_placeholder),
             trailingIcon = { SuggestionsButton(onClick = onShowSuggestions) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("AddTagInput"),
         )
         VerticalSpacer(24.dp)
         PrimaryButton(
             text = stringResource(R.string.common__save),
             onClick = onSave,
             enabled = isSaveEnabled,
+            modifier = Modifier.testTag("AddTagSave"),
         )
         VerticalSpacer(16.dp)
     }
@@ -123,7 +127,10 @@ private fun TagFormContent(
 
 @Composable
 private fun SuggestionsButton(onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.testTag("AddTagSuggestions"),
+    ) {
         Icon(
             painter = painterResource(R.drawable.ic_lightbulb),
             contentDescription = null,

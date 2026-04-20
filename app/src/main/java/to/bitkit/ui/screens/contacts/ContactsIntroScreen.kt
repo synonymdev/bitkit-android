@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -38,7 +39,7 @@ private fun Content(
     onContinue: () -> Unit,
     onBackClick: () -> Unit,
 ) {
-    ScreenColumn {
+    ScreenColumn(modifier = Modifier.testTag("ContactsIntro")) {
         AppTopBar(
             titleText = stringResource(R.string.contacts__nav_title),
             onBackClick = onBackClick,
@@ -67,6 +68,7 @@ private fun Content(
             PrimaryButton(
                 text = stringResource(R.string.contacts__intro_add_contact),
                 onClick = onContinue,
+                modifier = Modifier.testTag("ContactsIntro-button")
             )
             VerticalSpacer(16.dp)
         }

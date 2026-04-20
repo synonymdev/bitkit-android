@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -85,7 +86,9 @@ fun ProfileEditForm(
             singleLine = true,
             textStyle = AppTextStyles.Display.copy(textAlign = TextAlign.Center),
             colors = AppTextFieldDefaults.transparent,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("ProfileEditName"),
         )
         HorizontalDivider()
         VerticalSpacer(12.dp)
@@ -115,7 +118,9 @@ fun ProfileEditForm(
             placeholder = stringResource(R.string.profile__edit_bio_placeholder),
             minLines = 2,
             maxLines = 4,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("ProfileEditBio"),
         )
 
         VerticalSpacer(16.dp)
@@ -143,7 +148,9 @@ fun ProfileEditForm(
                         )
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("ProfileEditLink_$index"),
             )
             VerticalSpacer(8.dp)
         }
@@ -160,6 +167,7 @@ fun ProfileEditForm(
                         modifier = Modifier.size(16.dp)
                     )
                 },
+                modifier = Modifier.testTag("ProfileEditAddLink"),
             )
         }
 
@@ -197,6 +205,7 @@ fun ProfileEditForm(
                         modifier = Modifier.size(16.dp)
                     )
                 },
+                modifier = Modifier.testTag("ProfileEditAddTag"),
             )
         }
 
@@ -209,30 +218,32 @@ fun ProfileEditForm(
         }
 
         if (onDelete != null) {
-            VerticalSpacer(16.dp)
-            HorizontalDivider()
-            VerticalSpacer(16.dp)
-            Text13Up(
-                text = stringResource(R.string.profile__edit_delete_section),
-                color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
-            )
-            VerticalSpacer(8.dp)
-            Row(modifier = Modifier.fillMaxWidth()) {
-                PrimaryButton(
-                    text = deleteLabel,
-                    onClick = onDelete,
-                    size = ButtonSize.Small,
-                    fullWidth = false,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_trash),
-                            contentDescription = null,
-                            tint = Colors.Red,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
+            Column(modifier = Modifier.testTag("ProfileEditDelete")) {
+                VerticalSpacer(16.dp)
+                HorizontalDivider()
+                VerticalSpacer(16.dp)
+                Text13Up(
+                    text = stringResource(R.string.profile__edit_delete_section),
+                    color = Colors.White64,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                VerticalSpacer(8.dp)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    PrimaryButton(
+                        text = deleteLabel,
+                        onClick = onDelete,
+                        size = ButtonSize.Small,
+                        fullWidth = false,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_trash),
+                                contentDescription = null,
+                                tint = Colors.Red,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                    )
+                }
             }
         }
 
@@ -245,13 +256,17 @@ fun ProfileEditForm(
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
                 onClick = onCancel,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("ProfileEditCancel"),
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = isSaveEnabled,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("ProfileEditSave"),
             )
         }
         VerticalSpacer(16.dp)

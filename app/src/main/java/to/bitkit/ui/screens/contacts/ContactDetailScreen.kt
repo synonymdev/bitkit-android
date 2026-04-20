@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -165,6 +166,8 @@ private fun ContactBody(
             name = profile.name,
             bio = profile.bio,
             imageUrl = profile.imageUrl,
+            nameTestTag = "ContactViewName",
+            notesTestTag = "ContactViewNotes",
         )
 
         VerticalSpacer(24.dp)
@@ -173,21 +176,41 @@ private fun ContactBody(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            ActionButton(onClick = onClickCopy, iconRes = R.drawable.ic_copy)
-            ActionButton(onClick = onClickShare, iconRes = R.drawable.ic_share)
-            ActionButton(onClick = onClickEdit, iconRes = R.drawable.ic_edit)
-            ActionButton(onClick = onClickDelete, iconRes = R.drawable.ic_trash)
+            ActionButton(
+                onClick = onClickCopy,
+                iconRes = R.drawable.ic_copy,
+                modifier = Modifier.testTag("ContactCopy"),
+            )
+            ActionButton(
+                onClick = onClickShare,
+                iconRes = R.drawable.ic_share,
+                modifier = Modifier.testTag("ContactShare"),
+            )
+            ActionButton(
+                onClick = onClickEdit,
+                iconRes = R.drawable.ic_edit,
+                modifier = Modifier.testTag("ContactEdit"),
+            )
+            ActionButton(
+                onClick = onClickDelete,
+                iconRes = R.drawable.ic_trash,
+                modifier = Modifier.testTag("ContactDelete"),
+            )
         }
 
         VerticalSpacer(32.dp)
 
-        profile.links.forEach { LinkRow(label = it.label, value = it.url) }
+        profile.links.forEachIndexed { index, link ->
+            LinkRow(label = link.label, value = link.url, linkIndex = index)
+        }
 
         VerticalSpacer(16.dp)
         Text13Up(
             text = stringResource(R.string.profile__edit_tags),
             color = Colors.White64,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("ContactViewTagsHeader"),
         )
         VerticalSpacer(8.dp)
         FlowRow(
@@ -210,6 +233,7 @@ private fun ContactBody(
                 onClick = onAddTag,
                 icon = painterResource(R.drawable.ic_tag),
                 displayIconClose = true,
+                modifier = Modifier.testTag("ContactAddTag"),
             )
         }
     }
@@ -239,6 +263,7 @@ private fun EmptyState(onClickRetry: () -> Unit) {
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
             onClick = onClickRetry,
+            modifier = Modifier.testTag("ContactRetry"),
         )
     }
 }

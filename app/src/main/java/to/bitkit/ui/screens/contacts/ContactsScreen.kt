@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -105,6 +106,7 @@ private fun Content(
                 ActionButton(
                     onClick = { showAddContactSheet = true },
                     iconRes = R.drawable.ic_plus,
+                    modifier = Modifier.testTag("ContactsAddButton"),
                 )
             }
             VerticalSpacer(8.dp)
@@ -161,6 +163,7 @@ private fun ContactsList(
                 )
                 ContactRow(
                     profile = myProfile,
+                    modifier = Modifier.testTag("ContactsMyProfile"),
                     onClick = onClickMyProfile,
                 )
                 HorizontalDivider()
@@ -180,6 +183,7 @@ private fun ContactsList(
             items(contacts, key = { it.publicKey }) { contact ->
                 ContactRow(
                     profile = contact,
+                    modifier = Modifier.testTag("Contact_${contact.publicKey}"),
                     onClick = { onClickContact(contact.publicKey) },
                 )
                 HorizontalDivider()
@@ -191,12 +195,13 @@ private fun ContactsList(
 @Composable
 private fun ContactRow(
     profile: PubkyProfile,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickableAlpha(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -265,13 +270,18 @@ private fun EmptyState(
                 color = Colors.White64,
                 modifier = Modifier.fillMaxWidth()
             )
-            ContactRow(profile = it, onClick = onClickMyProfile)
+            ContactRow(
+                profile = it,
+                modifier = Modifier.testTag("ContactsMyProfile"),
+                onClick = onClickMyProfile,
+            )
             HorizontalDivider()
         }
         VerticalSpacer(8.dp)
         PrimaryButton(
             text = stringResource(R.string.contacts__intro_add_contact),
             onClick = onAddContact,
+            modifier = Modifier.testTag("ContactsEmptyAddButton"),
         )
         BodyM(
             text = stringResource(R.string.contacts__empty_state),

@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -124,6 +125,7 @@ private fun Content(
                 AvatarPickerButton(
                     avatarUri = uiState.avatarUri,
                     onClick = launchPhotoPicker,
+                    modifier = Modifier.testTag("CreateProfileAvatar"),
                 )
 
                 VerticalSpacer(24.dp)
@@ -135,7 +137,9 @@ private fun Content(
                     singleLine = true,
                     textStyle = AppTextStyles.Display.copy(textAlign = TextAlign.Center),
                     colors = AppTextFieldDefaults.transparent,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("CreateProfileUsername"),
                 )
 
                 VerticalSpacer(16.dp)
@@ -161,6 +165,7 @@ private fun Content(
                     onClick = onSave,
                     enabled = uiState.name.isNotBlank() && !uiState.isSaving,
                     isLoading = uiState.isSaving,
+                    modifier = Modifier.testTag("CreateProfileSave"),
                 )
                 VerticalSpacer(16.dp)
             }
@@ -172,10 +177,11 @@ private fun Content(
 private fun AvatarPickerButton(
     avatarUri: Uri?,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
+        modifier = modifier
             .size(100.dp)
             .clip(CircleShape)
             .background(Colors.Gray5)

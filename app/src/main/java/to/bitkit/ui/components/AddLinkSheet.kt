@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -119,7 +120,9 @@ private fun LinkFormContent(
             placeholder = stringResource(R.string.profile__add_link_label_placeholder),
             trailingIcon = { SuggestionsButton(onClick = onShowSuggestions) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("AddLinkLabel"),
         )
         VerticalSpacer(16.dp)
         Text13Up(text = stringResource(R.string.profile__add_link_url))
@@ -129,7 +132,9 @@ private fun LinkFormContent(
             onValueChange = onUrlChange,
             placeholder = stringResource(R.string.profile__add_link_url_placeholder),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("AddLinkUrl"),
         )
         VerticalSpacer(8.dp)
         BodyS(
@@ -141,6 +146,7 @@ private fun LinkFormContent(
             text = stringResource(R.string.common__save),
             onClick = onSave,
             enabled = isSaveEnabled,
+            modifier = Modifier.testTag("AddLinkSave"),
         )
         VerticalSpacer(16.dp)
     }
@@ -178,7 +184,10 @@ internal fun SuggestionsContent(
 
 @Composable
 private fun SuggestionsButton(onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.testTag("AddLinkSuggestions"),
+    ) {
         Icon(
             painter = painterResource(R.drawable.ic_lightbulb),
             contentDescription = null,

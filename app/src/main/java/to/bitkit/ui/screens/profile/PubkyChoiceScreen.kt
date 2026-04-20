@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -169,12 +170,14 @@ private fun Content(
                         iconResId = R.drawable.ic_user_plus,
                         text = stringResource(R.string.profile__choice_create),
                         onClick = onCreateProfile,
+                        modifier = Modifier.testTag("PubkyChoiceCreate")
                     )
                     VerticalSpacer(8.dp)
                     OptionCard(
                         iconResId = R.drawable.ic_lock_key,
                         text = stringResource(R.string.profile__choice_import),
                         onClick = onImportWithRing,
+                        modifier = Modifier.testTag("PubkyChoiceImport")
                     )
                 }
             }

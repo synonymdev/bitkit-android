@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -100,6 +101,7 @@ private fun Content(
                         uncheckedTrackColor = Colors.Gray4,
                         uncheckedBorderColor = Colors.Gray4,
                     ),
+                    modifier = Modifier.testTag("PayContactsToggle"),
                 )
             }
 
@@ -107,6 +109,7 @@ private fun Content(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
+                modifier = Modifier.testTag("PayContactsContinue"),
             )
             VerticalSpacer(16.dp)
         }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.theme.Colors
 
@@ -12,13 +13,21 @@ import to.bitkit.ui.theme.Colors
 fun LinkRow(
     label: String,
     value: String,
+    linkIndex: Int,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         VerticalSpacer(16.dp)
-        Text13Up(text = label, color = Colors.White64)
+        Text13Up(
+            text = label,
+            color = Colors.White64,
+            modifier = Modifier.testTag("ProfileLinkLabel_$linkIndex"),
+        )
         VerticalSpacer(8.dp)
-        BodySSB(text = value)
+        BodySSB(
+            text = value,
+            modifier = Modifier.testTag("ProfileLinkValue_$linkIndex"),
+        )
         VerticalSpacer(16.dp)
         HorizontalDivider()
     }

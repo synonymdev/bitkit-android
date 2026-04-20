@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -145,6 +146,8 @@ private fun ProfileBody(
             name = profile.name,
             bio = profile.bio,
             imageUrl = profile.imageUrl,
+            nameTestTag = "ProfileViewName",
+            notesTestTag = "ProfileViewNotes",
         )
 
         VerticalSpacer(24.dp)
@@ -155,7 +158,8 @@ private fun ProfileBody(
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "QRCode",
             )
             if (profile.imageUrl != null) {
                 Box(
@@ -178,15 +182,29 @@ private fun ProfileBody(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
             modifier = Modifier.fillMaxWidth()
         ) {
-            ActionButton(onClick = onClickEdit, iconRes = R.drawable.ic_edit)
-            ActionButton(onClick = onClickCopy, iconRes = R.drawable.ic_copy)
-            ActionButton(onClick = onClickShare, iconRes = R.drawable.ic_share)
+            ActionButton(
+                onClick = onClickEdit,
+                iconRes = R.drawable.ic_edit,
+                modifier = Modifier.testTag("ProfileEdit")
+            )
+            ActionButton(
+                onClick = onClickCopy,
+                iconRes = R.drawable.ic_copy,
+                modifier = Modifier.testTag("ProfileCopy")
+            )
+            ActionButton(
+                onClick = onClickShare,
+                iconRes = R.drawable.ic_share,
+                modifier = Modifier.testTag("ProfileShare")
+            )
         }
 
         VerticalSpacer(32.dp)
 
         if (profile.links.isNotEmpty()) {
-            profile.links.forEach { LinkRow(label = it.label, value = it.url) }
+            profile.links.forEachIndexed { index, link ->
+                LinkRow(label = link.label, value = link.url, linkIndex = index)
+            }
         }
 
         if (profile.tags.isNotEmpty()) {
@@ -194,7 +212,9 @@ private fun ProfileBody(
             Text13Up(
                 text = stringResource(R.string.profile__edit_tags),
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("ProfileViewTagsHeader"),
             )
             VerticalSpacer(8.dp)
             @OptIn(ExperimentalLayoutApi::class)
@@ -240,9 +260,13 @@ private fun EmptyState(
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
             onClick = onClickRetry,
+            modifier = Modifier.testTag("ProfileRetry"),
         )
         VerticalSpacer(8.dp)
-        TextButton(onClick = rememberDebouncedClick(onClick = onClickSignOut)) {
+        TextButton(
+            onClick = rememberDebouncedClick(onClick = onClickSignOut),
+            modifier = Modifier.testTag("ProfileEmptySignOut"),
+        ) {
             BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
         }
     }

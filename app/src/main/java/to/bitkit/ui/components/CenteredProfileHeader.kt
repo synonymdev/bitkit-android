@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -28,6 +29,8 @@ fun CenteredProfileHeader(
     bio: String,
     imageUrl: String?,
     modifier: Modifier = Modifier,
+    nameTestTag: String? = null,
+    notesTestTag: String? = null,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -62,7 +65,10 @@ fun CenteredProfileHeader(
 
         VerticalSpacer(16.dp)
 
-        Display(text = name)
+        Display(
+            text = name,
+            modifier = if (nameTestTag != null) Modifier.testTag(nameTestTag) else Modifier,
+        )
 
         if (bio.isNotEmpty()) {
             VerticalSpacer(8.dp)
@@ -70,6 +76,7 @@ fun CenteredProfileHeader(
                 text = bio,
                 color = Colors.White64,
                 textAlign = TextAlign.Center,
+                modifier = if (notesTestTag != null) Modifier.testTag(notesTestTag) else Modifier,
             )
         }
     }
