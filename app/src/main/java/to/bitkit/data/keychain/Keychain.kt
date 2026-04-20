@@ -143,11 +143,11 @@ class Keychain @Inject constructor(
     private fun emitLoadDiagnosticsOnce(key: String, cause: Throwable) {
         if (!loadDiagnosticsEmitted.add(key)) return
 
-        val aliasPresent = runCatching { keyStore.containsAlias() }.getOrDefault(false)
-        val entryPresent = runCatching { snapshot.contains(key.indexed) }.getOrDefault(false)
-        val walletIndex = runCatching {
+        val aliasPresent = probe { keyStore.containsAlias() }
+        val entryPresent = probe { snapshot.contains(key.indexed) }
+        val walletIndex = probe {
             runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0L
-        }.getOrDefault(-1L)
+        }
         val causeChain = generateSequence(cause) { it.cause }
             .take(CAUSE_CHAIN_DEPTH)
             .joinToString(separator = " <- ") { it.javaClass.simpleName }
@@ -159,6 +159,12 @@ class Keychain @Inject constructor(
             context = TAG,
         )
     }
+
+    private inline fun <T> probe(block: () -> T): String =
+        runCatching(block).fold(
+            onSuccess = { it.toString() },
+            onFailure = { "error:${it.javaClass.simpleName}" },
+        )
 
     enum class Key {
         PUSH_NOTIFICATION_TOKEN,
