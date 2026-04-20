@@ -11,12 +11,13 @@ import androidx.glance.LocalSize
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.HeightModifier
 import androidx.glance.layout.Row
 import androidx.glance.layout.WidthModifier
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.text.Text
 import androidx.glance.unit.Dimension
@@ -28,6 +29,7 @@ import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.ui.theme.Colors
+
 @Suppress("RestrictedApi")
 @Composable
 fun PriceGlanceContent(
@@ -56,16 +58,32 @@ fun PriceGlanceContent(
         }
 
         if (showChart && chartBitmap != null) {
-            Image(
-                provider = ImageProvider(chartBitmap),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
+            val chartWidget = displayWidgets.first()
+            val chartColor = if (chartWidget.change.isPositive) Colors.Green else Colors.Red
+            Box(
                 modifier = GlanceModifier
                     .fillMaxWidth()
-                    .cornerRadius(8.dp)
                     .padding(top = 8.dp)
                     .then(HeightModifier(Dimension.Expand)),
-            )
+                contentAlignment = Alignment.BottomStart,
+            ) {
+                Image(
+                    provider = ImageProvider(chartBitmap),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillBounds,
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .cornerRadius(8.dp),
+                )
+                Text(
+                    text = chartWidget.period.value,
+                    style = GlanceTextStyles.captionB.copy(
+                        color = ColorProvider(day = chartColor, night = chartColor),
+                    ),
+                    modifier = GlanceModifier.padding(7.dp),
+                )
+            }
         }
     }
 }
