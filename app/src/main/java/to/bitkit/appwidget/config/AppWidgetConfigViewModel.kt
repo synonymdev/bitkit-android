@@ -80,11 +80,9 @@ class AppWidgetConfigViewModel @Inject constructor(
                 entry.copy(pricePreferences = pricePreferences.toHome())
             }
             dataRepository.fetchPriceData(pricePreferences.period ?: GraphPeriod.ONE_DAY)
-                .onSuccess {
-                    preferencesStore.cachePriceData(it)
-                    PriceGlanceWidget().updateAll(context)
-                }
+                .onSuccess { preferencesStore.cachePriceData(it) }
                 .onFailure { Logger.warn("Failed to fetch initial price data", e = it, context = TAG) }
+            PriceGlanceWidget().updateAll(context)
             _uiState.update { it.copy(isSaving = false) }
             onComplete()
         }

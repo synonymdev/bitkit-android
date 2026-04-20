@@ -2,6 +2,9 @@ package to.bitkit.appwidget.ui.price
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -10,8 +13,8 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
-import kotlinx.coroutines.flow.first
 import to.bitkit.appwidget.AppWidgetPreferencesStore
+import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.price.PriceDTO
@@ -26,13 +29,15 @@ class PriceGlanceWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val store = AppWidgetPreferencesStore.getInstance(context)
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        val data = store.data.first()
-        val entry = data.entries.find { it.appWidgetId == appWidgetId }
-            ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.PRICE)
-
-        val chartBitmap = buildChartBitmap(data.cachedPrice, entry)
 
         provideContent {
+            val data by store.data.collectAsState(initial = AppWidgetData())
+            val entry = data.entries.find { it.appWidgetId == appWidgetId }
+                ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.PRICE)
+            val chartBitmap = remember(data.cachedPrice, entry.pricePreferences) {
+                buildChartBitmap(data.cachedPrice, entry)
+            }
+
             PriceGlanceContent(
                 price = data.cachedPrice,
                 entry = entry,

@@ -1,5 +1,7 @@
 package to.bitkit.appwidget.ui.price
 
+import android.appwidget.AppWidgetManager
+import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
@@ -22,7 +24,9 @@ import androidx.glance.layout.padding
 import androidx.glance.text.Text
 import androidx.glance.unit.Dimension
 import to.bitkit.R
+import to.bitkit.appwidget.config.AppWidgetConfigActivity
 import to.bitkit.appwidget.model.AppWidgetEntry
+import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
@@ -40,8 +44,12 @@ fun PriceGlanceContent(
     val context = LocalContext.current
     val prefs = entry.pricePreferences
     val showChart = LocalSize.current.height >= 160.dp
+    val configIntent = Intent(context, AppWidgetConfigActivity::class.java).apply {
+        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, entry.appWidgetId)
+        putExtra(AppWidgetConfigActivity.EXTRA_WIDGET_TYPE, AppWidgetType.PRICE.name)
+    }
 
-    GlanceWidgetScaffold {
+    GlanceWidgetScaffold(onClick = configIntent) {
         if (price == null) {
             Text(
                 text = context.getString(R.string.appwidget__loading),
