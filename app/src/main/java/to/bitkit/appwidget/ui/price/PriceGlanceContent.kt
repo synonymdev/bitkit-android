@@ -57,10 +57,10 @@ fun PriceGlanceContent(
             return@GlanceWidgetScaffold
         }
 
-        val enabledWidgets = price.widgets.filter { it.pair in prefs.enabledPairs }
-        val displayWidgets = enabledWidgets.ifEmpty { price.widgets.take(1) }
+        val enabledPairs = price.widgets.filter { it.pair in prefs.enabledPairs }
+        val displayWidgets = enabledPairs.ifEmpty { price.widgets.take(1) }
 
-        for (widget in displayWidgets) {
+        displayWidgets.forEach { widget ->
             PriceRow(widget = widget)
         }
 
