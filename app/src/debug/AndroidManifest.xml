@@ -4,5 +4,12 @@
 
     <application
         android:usesCleartextTraffic="true"
-        tools:ignore="MissingApplicationIcon" />
+        tools:ignore="MissingApplicationIcon">
+
+        <provider
+            android:name="to.bitkit.dev.DevToolsProvider"
+            android:authorities="${applicationId}.devtools"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+    </application>
 </manifest>
