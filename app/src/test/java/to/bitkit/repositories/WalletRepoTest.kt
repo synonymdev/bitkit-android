@@ -156,6 +156,17 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `walletExists relies on exists and does not touch load paths`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+
+        val result = sut.walletExists()
+
+        assertTrue(result)
+        verify(keychain, never()).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        verify(keychain, never()).load(Keychain.Key.BIP39_MNEMONIC.name)
+    }
+
+    @Test
     fun `setWalletExistsState should update walletState with current existence status`() = test {
         whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
 
