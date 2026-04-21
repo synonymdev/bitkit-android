@@ -87,4 +87,6 @@ class AndroidKeyStore(
         }
         generateKey()
     }
+
+    fun containsAlias(): Boolean = keyStore.containsAlias(alias)
 }
