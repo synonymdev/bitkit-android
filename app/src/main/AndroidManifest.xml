@@ -176,7 +176,10 @@
         <activity
             android:name=".appwidget.config.AppWidgetConfigActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
             android:screenOrientation="portrait"
+            android:taskAffinity=""
             android:theme="@style/Theme.App">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />

@@ -45,6 +45,7 @@ fun PriceGlanceContent(
     val prefs = entry.pricePreferences
     val showChart = LocalSize.current.height >= 160.dp
     val configIntent = Intent(context, AppWidgetConfigActivity::class.java).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, entry.appWidgetId)
         putExtra(AppWidgetConfigActivity.EXTRA_WIDGET_TYPE, AppWidgetType.PRICE.name)
     }
