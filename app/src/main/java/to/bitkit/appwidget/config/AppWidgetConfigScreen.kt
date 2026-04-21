@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -37,10 +36,9 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun AppWidgetConfigScreen(
     viewModel: AppWidgetConfigViewModel,
-    onConfirm: () -> Unit,
+    onConfirm: suspend () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     when (state.type) {
@@ -49,7 +47,7 @@ fun AppWidgetConfigScreen(
             onTogglePair = { viewModel.togglePricePair(it) },
             onSelectPeriod = { viewModel.selectPricePeriod(it) },
             onReset = { viewModel.resetPreferences() },
-            onSave = { viewModel.saveAndFinish(context, onConfirm) },
+            onSave = { viewModel.saveAndFinish(onConfirm) },
             onCancel = onCancel,
         )
     }

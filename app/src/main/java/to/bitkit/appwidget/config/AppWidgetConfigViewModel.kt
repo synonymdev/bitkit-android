@@ -1,8 +1,6 @@
 package to.bitkit.appwidget.config
 
-import android.content.Context
 import androidx.compose.runtime.Stable
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,7 +13,6 @@ import to.bitkit.appwidget.AppWidgetDataRepository
 import to.bitkit.appwidget.AppWidgetPreferencesStore
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.model.HomePricePreferences
-import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
@@ -71,7 +68,7 @@ class AppWidgetConfigViewModel @Inject constructor(
         _uiState.update { it.copy(pricePreferences = PricePreferences()) }
     }
 
-    fun saveAndFinish(context: Context, onComplete: () -> Unit) {
+    fun saveAndFinish(onComplete: suspend () -> Unit) {
         viewModelScope.launch {
             val appWidgetId = _uiState.value.appWidgetId
             val pricePreferences = _uiState.value.pricePreferences
@@ -83,9 +80,8 @@ class AppWidgetConfigViewModel @Inject constructor(
             dataRepository.fetchPriceData(pricePreferences.period ?: GraphPeriod.ONE_DAY)
                 .onSuccess { preferencesStore.cachePriceData(it) }
                 .onFailure { Logger.warn("Failed to fetch initial price data", e = it, context = TAG) }
-            PriceGlanceWidget().updateAll(context)
-            _uiState.update { it.copy(isSaving = false) }
             onComplete()
+            _uiState.update { it.copy(isSaving = false) }
         }
     }
 }

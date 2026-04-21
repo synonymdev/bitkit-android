@@ -7,9 +7,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.glance.appwidget.updateAll
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
@@ -47,7 +49,8 @@ class AppWidgetConfigActivity : ComponentActivity() {
                 AppWidgetConfigScreen(
                     viewModel = viewModel,
                     onConfirm = {
-                        AppWidgetRefreshWorker.enqueue(this)
+                        PriceGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                        AppWidgetRefreshWorker.enqueue(this@AppWidgetConfigActivity)
                         val result = Intent().putExtra(
                             AppWidgetManager.EXTRA_APPWIDGET_ID,
                             appWidgetId,
