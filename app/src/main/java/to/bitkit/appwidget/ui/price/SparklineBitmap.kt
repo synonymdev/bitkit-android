@@ -9,6 +9,8 @@ import android.graphics.Shader
 import androidx.annotation.ColorInt
 import androidx.core.graphics.createBitmap
 
+private const val SMOOTHING = 0.2f
+
 fun renderSparklineBitmap(
     values: List<Double>,
     width: Int,
@@ -28,15 +30,13 @@ fun renderSparklineBitmap(
     val drawHeight = height - padding * 2
     val stepX = drawWidth / (values.size - 1)
 
-    fun xAt(index: Int) = padding + index * stepX
-    fun yAt(value: Double) = padding + drawHeight - ((value - minValue) / range * drawHeight).toFloat()
-
-    val linePath = Path().apply {
-        moveTo(xAt(0), yAt(values[0]))
-        for (i in 1 until values.size) {
-            lineTo(xAt(i), yAt(values[i]))
-        }
+    val points = values.mapIndexed { i, v ->
+        val x = padding + i * stepX
+        val y = padding + drawHeight - ((v - minValue) / range * drawHeight).toFloat()
+        x to y
     }
+
+    val linePath = buildSmoothPath(points)
 
     val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = lineColor
@@ -48,8 +48,8 @@ fun renderSparklineBitmap(
     canvas.drawPath(linePath, linePaint)
 
     val fillPath = Path(linePath).apply {
-        lineTo(xAt(values.size - 1), height.toFloat())
-        lineTo(xAt(0), height.toFloat())
+        lineTo(points.last().first, height.toFloat())
+        lineTo(points.first().first, height.toFloat())
         close()
     }
 
@@ -58,7 +58,7 @@ fun renderSparklineBitmap(
             0f, padding,
             0f, height.toFloat(),
             (lineColor and 0x00FFFFFF) or 0xCC000000.toInt(),
-            (lineColor and 0x00FFFFFF) or 0x4D000000.toInt(),
+            (lineColor and 0x00FFFFFF) or 0x4D000000,
             Shader.TileMode.CLAMP,
         )
         style = Paint.Style.FILL
@@ -66,4 +66,21 @@ fun renderSparklineBitmap(
     canvas.drawPath(fillPath, fillPaint)
 
     return bitmap
+}
+
+private fun buildSmoothPath(points: List<Pair<Float, Float>>): Path = Path().apply {
+    moveTo(points[0].first, points[0].second)
+    for (i in 0 until points.size - 1) {
+        val p0 = points[(i - 1).coerceAtLeast(0)]
+        val p1 = points[i]
+        val p2 = points[i + 1]
+        val p3 = points[(i + 2).coerceAtMost(points.lastIndex)]
+
+        val cp1x = p1.first + (p2.first - p0.first) * SMOOTHING
+        val cp1y = p1.second + (p2.second - p0.second) * SMOOTHING
+        val cp2x = p2.first - (p3.first - p1.first) * SMOOTHING
+        val cp2y = p2.second - (p3.second - p1.second) * SMOOTHING
+
+        cubicTo(cp1x, cp1y, cp2x, cp2y, p2.first, p2.second)
+    }
 }
