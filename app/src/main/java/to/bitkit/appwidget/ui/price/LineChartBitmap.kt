@@ -11,7 +11,7 @@ import androidx.core.graphics.createBitmap
 
 private const val SMOOTHING = 0.2f
 
-fun renderSparklineBitmap(
+fun renderLineChartBitmap(
     values: List<Double>,
     width: Int,
     height: Int,

@@ -59,7 +59,7 @@ class PriceGlanceWidget : GlanceAppWidget() {
             Colors.Red.toArgb()
         }
 
-        return renderSparklineBitmap(
+        return renderLineChartBitmap(
             values = chartData.pastValues,
             width = CHART_WIDTH,
             height = CHART_HEIGHT,
