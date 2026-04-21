@@ -151,22 +151,15 @@ APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be
 Example for dev: `app/build/outputs/apk/dev/release`
 
 ### Build for Release
-
-To build the mainnet flavor for release run:
-
-```sh
-./gradlew assembleMainnetRelease
-```
-
-#### Android App Bundle (AAB)
-
-For Play Store submission, build an AAB instead of APK:
+To build the mainnet binaries (AAB & APKs) for release, run:
 
 ```sh
-./gradlew bundleMainnetRelease
+./gradlew bundleMainnetRelease assembleMainnetRelease
 ```
 
 AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
+APKs are generated in `app/build/outputs/apk/mainnetRelease/`.
+
 
 ### Build for E2E Testing
 
