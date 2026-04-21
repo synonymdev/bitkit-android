@@ -24,6 +24,7 @@ import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.PrimaryButton
@@ -126,7 +127,7 @@ private fun PriceConfigContent(
         ) {
             SecondaryButton(
                 text = stringResource(R.string.common__reset),
-                enabled = prefs != state.pricePreferences,
+                enabled = prefs != PricePreferences(),
                 fullWidth = false,
                 onClick = onReset,
                 modifier = Modifier.weight(1f),
