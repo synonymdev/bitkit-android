@@ -49,8 +49,8 @@ import to.bitkit.env.Env
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
-import to.bitkit.models.msatFloorOf
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError

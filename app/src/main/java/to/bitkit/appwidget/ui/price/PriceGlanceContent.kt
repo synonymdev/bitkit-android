@@ -29,6 +29,7 @@ import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
+import to.bitkit.appwidget.ui.theme.GlanceColors
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
@@ -106,12 +107,12 @@ private fun PriceRow(widget: PriceWidgetData) {
     ) {
         Text(
             text = widget.pair.displayName,
-            style = GlanceTextStyles.footnoteM,
+            style = GlanceTextStyles.bodySB.copy(color = GlanceColors.textSecondary),
             modifier = GlanceModifier.then(WidthModifier(Dimension.Expand)),
         )
         Text(
             text = widget.change.formatted,
-            style = GlanceTextStyles.captionB.copy(
+            style = GlanceTextStyles.bodySB.copy(
                 color = if (widget.change.isPositive) {
                     ColorProvider(day = Colors.Green, night = Colors.Green)
                 } else {
@@ -122,7 +123,7 @@ private fun PriceRow(widget: PriceWidgetData) {
         HorizontalSpacer(16.dp)
         Text(
             text = "${widget.pair.symbol}${widget.price}",
-            style = GlanceTextStyles.bodySSB,
+            style = GlanceTextStyles.bodySB,
         )
     }
 }
