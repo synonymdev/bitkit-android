@@ -1,6 +1,7 @@
 package to.bitkit.appwidget.config
 
 import android.content.Context
+import androidx.compose.runtime.Stable
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -89,6 +90,7 @@ class AppWidgetConfigViewModel @Inject constructor(
     }
 }
 
+@Stable
 data class AppWidgetConfigUiState(
     val appWidgetId: Int = -1,
     val type: AppWidgetType = AppWidgetType.PRICE,

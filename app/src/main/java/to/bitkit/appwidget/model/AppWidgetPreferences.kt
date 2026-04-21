@@ -1,5 +1,6 @@
 package to.bitkit.appwidget.model
 
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
@@ -9,6 +10,7 @@ enum class AppWidgetType {
     PRICE,
 }
 
+@Stable
 @Serializable
 data class AppWidgetEntry(
     val appWidgetId: Int,
@@ -16,12 +18,14 @@ data class AppWidgetEntry(
     val pricePreferences: HomePricePreferences = HomePricePreferences(),
 )
 
+@Stable
 @Serializable
 data class HomePricePreferences(
     val enabledPairs: List<TradingPair> = listOf(TradingPair.BTC_USD),
     val period: GraphPeriod = GraphPeriod.ONE_DAY,
 )
 
+@Stable
 @Serializable
 data class AppWidgetData(
     val entries: List<AppWidgetEntry> = emptyList(),
