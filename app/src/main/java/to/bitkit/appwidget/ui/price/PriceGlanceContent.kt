@@ -21,16 +21,16 @@ import androidx.glance.layout.WidthModifier
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
-import androidx.glance.text.Text
 import androidx.glance.unit.Dimension
 import to.bitkit.R
 import to.bitkit.appwidget.config.AppWidgetConfigActivity
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.components.BodySB
+import to.bitkit.appwidget.ui.components.CaptionB
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
 import to.bitkit.appwidget.ui.theme.GlanceColors
-import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.ui.theme.Colors
@@ -53,10 +53,7 @@ fun PriceGlanceContent(
 
     GlanceWidgetScaffold(onClick = configIntent) {
         if (price == null) {
-            Text(
-                text = context.getString(R.string.appwidget__loading),
-                style = GlanceTextStyles.captionB,
-            )
+            CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold
         }
 
@@ -86,11 +83,9 @@ fun PriceGlanceContent(
                         .fillMaxHeight()
                         .cornerRadius(8.dp),
                 )
-                Text(
+                CaptionB(
                     text = chartWidget.period.value,
-                    style = GlanceTextStyles.captionB.copy(
-                        color = ColorProvider(day = chartColor, night = chartColor),
-                    ),
+                    color = ColorProvider(day = chartColor, night = chartColor),
                     modifier = GlanceModifier.padding(7.dp),
                 )
             }
@@ -105,25 +100,20 @@ private fun PriceRow(widget: PriceWidgetData) {
         modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        BodySB(
             text = widget.pair.displayName,
-            style = GlanceTextStyles.bodySB.copy(color = GlanceColors.textSecondary),
+            color = GlanceColors.textSecondary,
             modifier = GlanceModifier.then(WidthModifier(Dimension.Expand)),
         )
-        Text(
+        BodySB(
             text = widget.change.formatted,
-            style = GlanceTextStyles.bodySB.copy(
-                color = if (widget.change.isPositive) {
-                    ColorProvider(day = Colors.Green, night = Colors.Green)
-                } else {
-                    ColorProvider(day = Colors.Red, night = Colors.Red)
-                },
-            ),
+            color = if (widget.change.isPositive) {
+                ColorProvider(day = Colors.Green, night = Colors.Green)
+            } else {
+                ColorProvider(day = Colors.Red, night = Colors.Red)
+            },
         )
         HorizontalSpacer(16.dp)
-        Text(
-            text = "${widget.pair.symbol}${widget.price}",
-            style = GlanceTextStyles.bodySB,
-        )
+        BodySB(text = "${widget.pair.symbol}${widget.price}")
     }
 }
