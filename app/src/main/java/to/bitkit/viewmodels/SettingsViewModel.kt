@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
@@ -21,6 +22,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
+    private val pubkyRepo: PubkyRepo,
     private val widgetsStore: WidgetsStore,
     private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
@@ -97,6 +99,17 @@ class SettingsViewModel @Inject constructor(
             settingsStore.update { it.copy(hasSeenProfileIntro = value) }
         }
     }
+
+    val hasSeenContactsIntro = settingsStore.data.map { it.hasSeenContactsIntro }
+        .asStateFlow(initialValue = false)
+
+    fun setHasSeenContactsIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(hasSeenContactsIntro = value) }
+        }
+    }
+
+    val isPubkyAuthenticated = pubkyRepo.isAuthenticated
 
     val quickPayIntroSeen = settingsStore.data.map { it.quickPayIntroSeen }
         .asStateFlow(initialValue = false)

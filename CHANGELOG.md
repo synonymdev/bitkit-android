@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-04-07
+
 ### Fixed
 - Fix currency settings and calculator widget consistency with iOS #884
 - Polish Primary, Secondary, and Tertiary buttons to match Figma design specs #887
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Show loading state on Spending tab when node is not running #875
 
 ### Added
+- Pubky profile onboarding with contact sync, import, and editing #824
 - Lightning Connections empty state with onboarding screen #857
 - Unified PIN management screen (enable/disable/change in one place) #857
 - Support entry in drawer menu #857
@@ -26,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mnemonic warning text transitions on reveal #857
 
 ### Changed
+- Show end of address on Receive Bitcoin screen using middle ellipsis truncation #886
 - Update funding screen: replace Advanced with Manual Setup, fix Use Other Wallet navigation to open amount entry, and add Fund Wallet button to no-funds dialog #885
 - Updated design of the success screen in the manual channel setup flow #883
 - Unified send flow with payment method switcher, details toggle, Lightning support for BIP21 payments, and improved fee rate defaults #863
@@ -44,4 +48,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...v2.2.0

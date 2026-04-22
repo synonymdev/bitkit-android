@@ -24,6 +24,7 @@ fun Display(
     fontWeight: FontWeight = FontWeight.Black,
     fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign? = null,
 ) {
     Text(
         text = text.uppercase(),
@@ -32,6 +33,7 @@ fun Display(
             fontSize = fontSize,
             color = color,
         ),
+        textAlign = textAlign,
         modifier = modifier,
     )
 }
@@ -254,12 +256,16 @@ fun BodyS(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     BodyS(
         text = AnnotatedString(text),
-        modifier = modifier,
         color = color,
         textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 
@@ -269,6 +275,8 @@ fun BodyS(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -276,7 +284,9 @@ fun BodyS(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 

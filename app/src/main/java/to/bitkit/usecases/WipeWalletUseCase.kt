@@ -11,6 +11,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
@@ -30,6 +31,7 @@ class WipeWalletUseCase @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val lightningRepo: LightningRepo,
+    private val pubkyRepo: PubkyRepo,
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
 ) {
@@ -43,6 +45,7 @@ class WipeWalletUseCase @Inject constructor(
             backupRepo.reset()
 
             keychain.wipe()
+            pubkyRepo.wipeLocalState()
             firebaseMessaging.deleteToken()
 
             coreService.wipeData()

@@ -61,6 +61,14 @@ dependencyResolutionManagement {
                 password = pass
             }
         }
+        maven {
+            url = uri("https://maven.pkg.github.com/pubky/paykit-rs")
+            credentials {
+                val (user, pass) = getGithubCredentials()
+                username = user
+                password = pass
+            }
+        }
     }
 }
 rootProject.name = "bitkit-android"
