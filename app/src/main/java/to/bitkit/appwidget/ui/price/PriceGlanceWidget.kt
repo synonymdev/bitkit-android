@@ -34,12 +34,13 @@ class PriceGlanceWidget : GlanceAppWidget() {
             val data by store.data.collectAsState(initial = AppWidgetData())
             val entry = data.entries.find { it.appWidgetId == appWidgetId }
                 ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.PRICE)
-            val chartBitmap = remember(data.cachedPrice, entry.pricePreferences) {
-                buildChartBitmap(data.cachedPrice, entry)
+            val price = data.cachedPrices[entry.pricePreferences.period]
+            val chartBitmap = remember(price, entry.pricePreferences) {
+                buildChartBitmap(price, entry)
             }
 
             PriceGlanceContent(
-                price = data.cachedPrice,
+                price = price,
                 entry = entry,
                 chartBitmap = chartBitmap,
             )

@@ -36,12 +36,17 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
 
         for (type in activeTypes) {
             when (type) {
-                AppWidgetType.PRICE -> dataRepository.fetchPriceData()
-                    .onSuccess {
-                        preferencesStore.cachePriceData(it)
-                        PriceGlanceWidget().updateAll(appContext)
+                AppWidgetType.PRICE -> {
+                    val periods = preferencesStore.getActivePricePeriods()
+                    periods.forEach { period ->
+                        dataRepository.fetchPriceData(period)
+                            .onSuccess { preferencesStore.cachePriceData(period, it) }
+                            .onFailure {
+                                Logger.warn("Failed to refresh price for '$period'", it, context = TAG)
+                            }
                     }
-                    .onFailure { Logger.warn("Failed to refresh price", e = it, context = TAG) }
+                    PriceGlanceWidget().updateAll(appContext)
+                }
             }
         }
 

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.map
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.AppWidgetDataSerializer
 import javax.inject.Inject
@@ -69,10 +70,16 @@ class AppWidgetPreferencesStore @Inject constructor(
     suspend fun getActiveWidgetTypes(): Set<AppWidgetType> =
         store.data.first().entries.map { it.type }.toSet()
 
+    suspend fun getActivePricePeriods(): Set<GraphPeriod> =
+        store.data.first().entries
+            .filter { it.type == AppWidgetType.PRICE }
+            .map { it.pricePreferences.period }
+            .toSet()
+
     fun hasWidgetsOfType(type: AppWidgetType): Flow<Boolean> =
         data.map { it.entries.any { entry -> entry.type == type } }
 
-    suspend fun cachePriceData(price: PriceDTO) {
-        store.updateData { it.copy(cachedPrice = price) }
+    suspend fun cachePriceData(period: GraphPeriod, price: PriceDTO) {
+        store.updateData { it.copy(cachedPrices = it.cachedPrices + (period to price)) }
     }
 }

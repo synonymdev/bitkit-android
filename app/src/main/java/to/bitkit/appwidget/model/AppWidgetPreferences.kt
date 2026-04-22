@@ -29,5 +29,5 @@ data class HomePricePreferences(
 @Serializable
 data class AppWidgetData(
     val entries: List<AppWidgetEntry> = emptyList(),
-    val cachedPrice: PriceDTO? = null,
+    val cachedPrices: Map<GraphPeriod, PriceDTO> = emptyMap(),
 )
