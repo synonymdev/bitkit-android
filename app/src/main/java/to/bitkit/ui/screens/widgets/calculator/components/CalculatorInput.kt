@@ -51,7 +51,7 @@ fun CalculatorInput(
             }
         },
         keyboardOptions = KeyboardOptions(
-            keyboardType = keyboardType
+            keyboardType = keyboardType,
         ),
         suffix = { CaptionB(currencyName.uppercase(), color = Colors.Gray1) },
         colors = AppTextFieldDefaults.noIndicatorColors.copy(
