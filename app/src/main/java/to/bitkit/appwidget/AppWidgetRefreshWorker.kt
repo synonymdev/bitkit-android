@@ -69,7 +69,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         val activeTypes = preferencesStore.getActiveWidgetTypes()
         if (activeTypes.isEmpty()) return Result.success()
 
-        Logger.debug("Refreshing data for widget types: $activeTypes", context = TAG)
+        Logger.debug("Refreshing data for widget types: '$activeTypes'", context = TAG)
 
         for (type in activeTypes) {
             when (type) {
