@@ -90,6 +90,26 @@ fun CalculatorCard(
         )
     }
 
+    LaunchedEffect(currencyUiState.selectedCurrency, currencyUiState.displayUnit) {
+        val sourceBtc = btcValue.ifEmpty { calculatorValues.btcValue }
+        if (sourceBtc.isEmpty() || isZeroBtcValue(sourceBtc, currencyUiState.displayUnit)) {
+            return@LaunchedEffect
+        }
+        val convertedFiat = CalculatorFormatter.convertBtcToFiat(
+            btcValue = sourceBtc,
+            displayUnit = currencyUiState.displayUnit,
+            currencyViewModel = currencyViewModel,
+        ).orEmpty()
+        if (convertedFiat.isEmpty()) {
+            return@LaunchedEffect
+        }
+        fiatValue = convertedFiat
+        calculatorViewModel.updateCalculatorValues(
+            fiatValue = convertedFiat,
+            btcValue = sourceBtc,
+        )
+    }
+
     CalculatorCardContent(
         modifier = modifier,
         showWidgetTitle = showWidgetTitle,
