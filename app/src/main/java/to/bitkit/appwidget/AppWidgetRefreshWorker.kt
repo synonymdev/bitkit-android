@@ -18,7 +18,8 @@ import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
 import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.utils.Logger
-import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.toJavaDuration
 
 @HiltWorker
 class AppWidgetRefreshWorker @AssistedInject constructor(
@@ -27,6 +28,37 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
     private val dataRepository: AppWidgetDataRepository,
     private val preferencesStore: AppWidgetPreferencesStore,
 ) : CoroutineWorker(appContext, workerParams) {
+
+    companion object {
+        private const val TAG = "AppWidgetRefreshWorker"
+        private const val WORK_NAME = "appwidget_refresh"
+
+        fun enqueue(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+            val request = PeriodicWorkRequestBuilder<AppWidgetRefreshWorker>(15.minutes.toJavaDuration())
+                .setConstraints(constraints)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                request,
+            )
+        }
+
+        fun cancelIfNoWidgets(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            val hasAny = manager.getAppWidgetIds(
+                ComponentName(context, PriceGlanceReceiver::class.java),
+            ).isNotEmpty()
+            if (!hasAny) {
+                WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+            }
+        }
+    }
 
     override suspend fun doWork(): Result {
         val activeTypes = preferencesStore.getActiveWidgetTypes()
@@ -51,37 +83,5 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         }
 
         return Result.success()
-    }
-
-    companion object {
-        private const val TAG = "AppWidgetRefreshWorker"
-        private const val WORK_NAME = "appwidget_refresh"
-
-        fun enqueue(context: Context) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
-
-            val request = PeriodicWorkRequestBuilder<AppWidgetRefreshWorker>(
-                repeatInterval = 15,
-                repeatIntervalTimeUnit = TimeUnit.MINUTES,
-            ).setConstraints(constraints).build()
-
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
-                request,
-            )
-        }
-
-        fun cancelIfNoWidgets(context: Context) {
-            val manager = AppWidgetManager.getInstance(context)
-            val hasAny = manager.getAppWidgetIds(
-                ComponentName(context, PriceGlanceReceiver::class.java),
-            ).isNotEmpty()
-            if (!hasAny) {
-                WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
-            }
-        }
     }
 }
