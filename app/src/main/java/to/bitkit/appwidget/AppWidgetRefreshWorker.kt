@@ -3,6 +3,7 @@ package to.bitkit.appwidget
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
+import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.updateAll
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
@@ -51,12 +52,16 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
 
         fun cancelIfNoWidgets(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
-            val hasAny = manager.getAppWidgetIds(
-                ComponentName(context, PriceGlanceReceiver::class.java),
-            ).isNotEmpty()
+            val hasAny = AppWidgetType.entries.any { type ->
+                manager.getAppWidgetIds(ComponentName(context, receiverClassFor(type))).isNotEmpty()
+            }
             if (!hasAny) {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
             }
+        }
+
+        private fun receiverClassFor(type: AppWidgetType): Class<out GlanceAppWidgetReceiver> = when (type) {
+            AppWidgetType.PRICE -> PriceGlanceReceiver::class.java
         }
     }
 
