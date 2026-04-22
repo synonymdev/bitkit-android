@@ -59,9 +59,31 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
-import to.bitkit.ui.screens.common.ComingSoonScreen
+import to.bitkit.ui.screens.contacts.AddContactScreen
+import to.bitkit.ui.screens.contacts.AddContactViewModel
+import to.bitkit.ui.screens.contacts.ContactDetailScreen
+import to.bitkit.ui.screens.contacts.ContactDetailViewModel
+import to.bitkit.ui.screens.contacts.ContactImportOverviewScreen
+import to.bitkit.ui.screens.contacts.ContactImportOverviewViewModel
+import to.bitkit.ui.screens.contacts.ContactImportSelectScreen
+import to.bitkit.ui.screens.contacts.ContactImportSelectViewModel
+import to.bitkit.ui.screens.contacts.ContactsIntroScreen
+import to.bitkit.ui.screens.contacts.ContactsScreen
+import to.bitkit.ui.screens.contacts.ContactsViewModel
+import to.bitkit.ui.screens.contacts.EditContactScreen
+import to.bitkit.ui.screens.contacts.EditContactViewModel
+import to.bitkit.ui.screens.contacts.shouldDiscardPendingImport
 import to.bitkit.ui.screens.profile.CreateProfileScreen
+import to.bitkit.ui.screens.profile.CreateProfileViewModel
+import to.bitkit.ui.screens.profile.EditProfileScreen
+import to.bitkit.ui.screens.profile.EditProfileViewModel
+import to.bitkit.ui.screens.profile.PayContactsScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
+import to.bitkit.ui.screens.profile.ProfileScreen
+import to.bitkit.ui.screens.profile.ProfileViewModel
+import to.bitkit.ui.screens.profile.PubkyAuthApprovalSheet
+import to.bitkit.ui.screens.profile.PubkyChoiceScreen
+import to.bitkit.ui.screens.profile.PubkyChoiceViewModel
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
 import to.bitkit.ui.screens.settings.DevSettingsScreen
@@ -360,6 +382,9 @@ fun ContentView(
 
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
+        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
+        val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
 
         Box(
@@ -405,6 +430,11 @@ fun ContentView(
 
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         Sheet.QrScanner -> QrScanningSheet(appViewModel)
+                        is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(
+                            authUrl = sheet.authUrl,
+                            viewModel = hiltViewModel(),
+                            onDismiss = { appViewModel.hideSheet() },
+                        )
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
                                 TimedSheetType.APP_UPDATE -> {
@@ -489,6 +519,14 @@ fun ContentView(
                 rootNavController = navController,
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
+                onBeforeNavigate = { destination ->
+                    if (shouldDiscardPendingImport(navController.currentDestination, destination)) {
+                        appViewModel.clearPendingPubkyImport()
+                    }
+                },
+                hasSeenProfileIntro = hasSeenProfileIntro,
+                hasSeenContactsIntro = hasSeenContactsIntro,
+                isProfileAuthenticated = isProfileAuthenticated,
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }
@@ -522,7 +560,7 @@ private fun RootNavHost(
             navController = navController,
         )
         settings(navController, settingsViewModel)
-        comingSoon(navController)
+        contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
         generalSettingsSubScreens(navController)
@@ -889,39 +927,154 @@ private fun NavGraphBuilder.settings(
     }
 }
 
-private fun NavGraphBuilder.comingSoon(
+@Suppress("LongMethod")
+private fun NavGraphBuilder.contacts(
     navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
+    appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Contacts> {
-        ComingSoonScreen(
-            onWalletOverviewClick = { navController.navigateToHome() },
-            onBackClick = { navController.popBackStack() }
+        val viewModel: ContactsViewModel = hiltViewModel()
+        ContactsScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onClickMyProfile = { navController.navigateTo(Routes.Profile) },
+            onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
+            onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
+            onScanQr = {
+                appViewModel.showScannerSheet { scannedData ->
+                    navController.navigateTo(Routes.AddContact(scannedData))
+                }
+            },
         )
     }
-    composableWithDefaultTransitions<Routes.Profile> {
-        ComingSoonScreen(
-            onWalletOverviewClick = { navController.navigateToHome() },
-            onBackClick = { navController.popBackStack() }
+    composableWithDefaultTransitions<Routes.ContactsIntro> {
+        val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        ContactsIntroScreen(
+            onContinue = {
+                settingsViewModel.setHasSeenContactsIntro(true)
+                val destination = when {
+                    isAuthenticated -> Routes.Contacts
+                    hasSeenProfileIntro -> Routes.PubkyChoice
+                    else -> Routes.ProfileIntro
+                }
+                navController.navigateTo(destination) { popUpTo(Routes.Home) }
+            },
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactDetail> {
+        val viewModel: ContactDetailViewModel = hiltViewModel()
+        ContactDetailScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.AddContact> {
+        val viewModel: AddContactViewModel = hiltViewModel()
+        AddContactScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onContactSaved = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.EditContact> {
+        val viewModel: EditContactViewModel = hiltViewModel()
+        EditContactScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onContactDeleted = {
+                navController.navigateTo(Routes.Contacts) { popUpTo(Routes.Home) }
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactImportOverview> {
+        val viewModel: ContactImportOverviewViewModel = hiltViewModel()
+        ContactImportOverviewScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onNavigateToSelect = { navController.navigateTo(Routes.ContactImportSelect) },
+            onImportComplete = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactImportSelect> {
+        val viewModel: ContactImportSelectViewModel = hiltViewModel()
+        ContactImportSelectScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onImportComplete = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
         )
     }
 }
 
+@Suppress("LongMethod")
 private fun NavGraphBuilder.profile(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
 ) {
+    composableWithDefaultTransitions<Routes.Profile> {
+        val viewModel: ProfileViewModel = hiltViewModel()
+        ProfileScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onEditProfile = { navController.navigateTo(Routes.EditProfile) },
+        )
+    }
     composableWithDefaultTransitions<Routes.ProfileIntro> {
         ProfileIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenProfileIntro(true)
-                navController.navigateTo(Routes.CreateProfile)
+                navController.navigateTo(Routes.PubkyChoice)
             },
-            onBackClick = { navController.popBackStack() }
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.PubkyChoice> {
+        val viewModel: PubkyChoiceViewModel = hiltViewModel()
+        PubkyChoiceScreen(
+            viewModel = viewModel,
+            onNavigateToCreateProfile = { navController.navigateTo(Routes.CreateProfile) },
+            onNavigateToContactImportOverview = {
+                navController.navigateTo(Routes.ContactImportOverview) { popUpTo(Routes.Home) }
+            },
+            onNavigateToPayContacts = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
+            onBackClick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.CreateProfile> {
+        val viewModel: CreateProfileViewModel = hiltViewModel()
         CreateProfileScreen(
-            onBack = { navController.popBackStack() },
+            viewModel = viewModel,
+            onNavigateToPayContacts = {
+                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+            },
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.EditProfile> {
+        val viewModel: EditProfileViewModel = hiltViewModel()
+        EditProfileScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onProfileDeleted = {
+                navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+            },
+        )
+    }
+    composableWithDefaultTransitions<Routes.PayContacts> {
+        PayContactsScreen(
+            onContinue = {
+                navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
+            },
+            onBackClick = { navController.popBackStack() },
         )
     }
 }
@@ -1280,7 +1433,7 @@ private fun NavGraphBuilder.widgets(
             fiatSymbol = LocalCurrencies.current.currencySymbol,
             onBackClick = { navController.popBackStack() },
             showWidgets = showWidgets,
-            onEnableInSettingsClick = { navController.navigate(Routes.WidgetsSettings) },
+            onEnableInSettingsClick = { navController.navigateTo(Routes.WidgetsSettings) },
         )
     }
     composableWithDefaultTransitions<Routes.SuggestionsPreview> {
@@ -1455,6 +1608,15 @@ inline fun <reified T : Any> NavController.navigateTo(
         builder()
         launchSingleTop = true
     }
+}
+
+fun NavController.navigateToProfile(
+    isAuthenticated: Boolean,
+    hasSeenIntro: Boolean,
+) = when {
+    isAuthenticated -> navigateTo(Routes.Profile)
+    hasSeenIntro -> navigateTo(Routes.PubkyChoice)
+    else -> navigateTo(Routes.ProfileIntro)
 }
 
 fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)
@@ -1729,13 +1891,40 @@ sealed interface Routes {
     data object Contacts : Routes
 
     @Serializable
+    data object ContactsIntro : Routes
+
+    @Serializable
+    data class ContactDetail(val publicKey: String) : Routes
+
+    @Serializable
     data object Profile : Routes
 
     @Serializable
     data object ProfileIntro : Routes
 
     @Serializable
+    data object PubkyChoice : Routes
+
+    @Serializable
     data object CreateProfile : Routes
+
+    @Serializable
+    data object EditProfile : Routes
+
+    @Serializable
+    data object PayContacts : Routes
+
+    @Serializable
+    data class AddContact(val publicKey: String) : Routes
+
+    @Serializable
+    data class EditContact(val publicKey: String) : Routes
+
+    @Serializable
+    data object ContactImportOverview : Routes
+
+    @Serializable
+    data object ContactImportSelect : Routes
 
     @Serializable
     data object ShopIntro : Routes

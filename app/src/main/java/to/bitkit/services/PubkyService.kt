@@ -1,0 +1,198 @@
+package to.bitkit.services
+
+import com.synonym.bitkitcore.PubkyProfile
+import com.synonym.bitkitcore.approvePubkyAuth
+import com.synonym.bitkitcore.cancelPubkyAuth
+import com.synonym.bitkitcore.completePubkyAuth
+import com.synonym.bitkitcore.derivePubkySecretKey
+import com.synonym.bitkitcore.fetchPubkyContacts
+import com.synonym.bitkitcore.fetchPubkyFile
+import com.synonym.bitkitcore.fetchPubkyProfile
+import com.synonym.bitkitcore.mnemonicToSeed
+import com.synonym.bitkitcore.parsePubkyAuthUrl
+import com.synonym.bitkitcore.pubkyPublicKeyFromSecret
+import com.synonym.bitkitcore.pubkyPutWithSecretKey
+import com.synonym.bitkitcore.pubkySessionDelete
+import com.synonym.bitkitcore.pubkySessionList
+import com.synonym.bitkitcore.pubkySessionPut
+import com.synonym.bitkitcore.pubkySignIn
+import com.synonym.bitkitcore.pubkySignUp
+import com.synonym.bitkitcore.startPubkyAuth
+import com.synonym.paykit.paykitExportSession
+import com.synonym.paykit.paykitForceSignOut
+import com.synonym.paykit.paykitGetCurrentPublicKey
+import com.synonym.paykit.paykitImportSession
+import com.synonym.paykit.paykitInitialize
+import com.synonym.paykit.paykitIsAuthenticated
+import com.synonym.paykit.paykitSignOut
+import kotlinx.coroutines.CompletableDeferred
+import to.bitkit.async.ServiceQueue
+import to.bitkit.env.Env
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Suppress("TooManyFunctions")
+@Singleton
+class PubkyService @Inject constructor() {
+
+    private val isSetup = CompletableDeferred<Unit>()
+
+    suspend fun initialize() = ServiceQueue.CORE.background {
+        paykitInitialize()
+        isSetup.complete(Unit)
+    }
+
+    // region Session management
+
+    suspend fun importSession(secret: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitImportSession(secret)
+    }
+
+    suspend fun exportSession(): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitExportSession()
+    }
+
+    suspend fun isAuthenticated(): Boolean = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitIsAuthenticated()
+    }
+
+    suspend fun currentPublicKey(): String? = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitGetCurrentPublicKey()
+    }
+
+    suspend fun signOut() = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitSignOut()
+    }
+
+    suspend fun forceSignOut() = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitForceSignOut()
+    }
+
+    // endregion
+
+    // region Key derivation
+
+    suspend fun mnemonicToSeed(mnemonic: String, passphrase: String?): ByteArray =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            mnemonicToSeed(mnemonicPhrase = mnemonic, passphrase = passphrase ?: "")
+        }
+
+    suspend fun deriveSecretKey(seed: ByteArray): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        derivePubkySecretKey(seed)
+    }
+
+    suspend fun publicKeyFromSecret(secretKeyHex: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        pubkyPublicKeyFromSecret(secretKeyHex)
+    }
+
+    // endregion
+
+    // region Homeserver auth
+
+    suspend fun signUp(secretKeyHex: String, homeserverZ32: String, signupCode: String?): String =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            pubkySignUp(secretKeyHex, homeserverZ32, signupCode)
+        }
+
+    suspend fun signIn(secretKeyHex: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        pubkySignIn(secretKeyHex)
+    }
+
+    // endregion
+
+    // region Auth flow (Ring)
+
+    suspend fun startAuth(): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        startPubkyAuth(Env.pubkyCapabilities)
+    }
+
+    suspend fun completeAuth(): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        completePubkyAuth()
+    }
+
+    suspend fun cancelAuth() = ServiceQueue.CORE.background {
+        isSetup.await()
+        cancelPubkyAuth()
+    }
+
+    // endregion
+
+    // region Auth approval
+
+    suspend fun parseAuthUrl(url: String) = ServiceQueue.CORE.background {
+        isSetup.await()
+        parsePubkyAuthUrl(url)
+    }
+
+    suspend fun approveAuth(authUrl: String, secretKeyHex: String) = ServiceQueue.CORE.background {
+        isSetup.await()
+        approvePubkyAuth(authUrl, secretKeyHex)
+    }
+
+    // endregion
+
+    // region File operations
+
+    suspend fun fetchFile(uri: String): ByteArray = ServiceQueue.CORE.background {
+        isSetup.await()
+        fetchPubkyFile(uri)
+    }
+
+    suspend fun fetchFileString(uri: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        fetchPubkyFile(uri).toString(Charsets.UTF_8)
+    }
+
+    suspend fun sessionPut(sessionSecret: String, path: String, content: ByteArray) =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            pubkySessionPut(sessionSecret, path, content)
+        }
+
+    suspend fun sessionDelete(sessionSecret: String, path: String) =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            pubkySessionDelete(sessionSecret, path)
+        }
+
+    suspend fun sessionList(sessionSecret: String, dirPath: String): List<String> =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            pubkySessionList(sessionSecret, dirPath)
+        }
+
+    suspend fun putWithSecretKey(secretKeyHex: String, path: String, content: ByteArray) =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            pubkyPutWithSecretKey(secretKeyHex, path, content)
+        }
+
+    // endregion
+
+    // region Profile & contacts
+
+    suspend fun getProfile(publicKey: String): PubkyProfile = ServiceQueue.CORE.background {
+        isSetup.await()
+        fetchPubkyProfile(publicKey)
+    }
+
+    suspend fun getContacts(publicKey: String): List<String> = ServiceQueue.CORE.background {
+        isSetup.await()
+        fetchPubkyContacts(publicKey)
+    }
+
+    // endregion
+}

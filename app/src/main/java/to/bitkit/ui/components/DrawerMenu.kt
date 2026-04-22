@@ -44,6 +44,7 @@ import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
@@ -68,7 +69,11 @@ fun DrawerMenu(
     rootNavController: NavController,
     hasSeenWidgetsIntro: Boolean,
     hasSeenShopIntro: Boolean,
+    onBeforeNavigate: (Routes?) -> Unit,
     modifier: Modifier = Modifier,
+    hasSeenProfileIntro: Boolean = false,
+    hasSeenContactsIntro: Boolean = false,
+    isProfileAuthenticated: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -104,18 +109,59 @@ fun DrawerMenu(
             drawerState = drawerState,
             onClickAddWidget = {
                 if (!hasSeenWidgetsIntro) {
+                    onBeforeNavigate(Routes.WidgetsIntro)
                     rootNavController.navigateIfNotCurrent(Routes.WidgetsIntro)
                 } else {
+                    onBeforeNavigate(Routes.AddWidget)
                     rootNavController.navigateIfNotCurrent(Routes.AddWidget)
                 }
             },
             onClickShop = {
                 if (!hasSeenShopIntro) {
+                    onBeforeNavigate(Routes.ShopIntro)
                     rootNavController.navigateIfNotCurrent(Routes.ShopIntro)
                 } else {
+                    onBeforeNavigate(Routes.ShopDiscover)
                     rootNavController.navigateIfNotCurrent(Routes.ShopDiscover)
                 }
             },
+            onClickContacts = {
+                when {
+                    !hasSeenContactsIntro -> {
+                        onBeforeNavigate(Routes.ContactsIntro)
+                        rootNavController.navigateIfNotCurrent(Routes.ContactsIntro)
+                    }
+
+                    isProfileAuthenticated -> {
+                        onBeforeNavigate(Routes.Contacts)
+                        rootNavController.navigateIfNotCurrent(Routes.Contacts)
+                    }
+
+                    hasSeenProfileIntro -> {
+                        onBeforeNavigate(Routes.PubkyChoice)
+                        rootNavController.navigateIfNotCurrent(Routes.PubkyChoice)
+                    }
+
+                    else -> {
+                        onBeforeNavigate(Routes.ProfileIntro)
+                        rootNavController.navigateIfNotCurrent(Routes.ProfileIntro)
+                    }
+                }
+            },
+            onClickProfile = {
+                onBeforeNavigate(
+                    when {
+                        isProfileAuthenticated -> Routes.Profile
+                        hasSeenProfileIntro -> Routes.PubkyChoice
+                        else -> Routes.ProfileIntro
+                    }
+                )
+                rootNavController.navigateToProfile(
+                    isAuthenticated = isProfileAuthenticated,
+                    hasSeenIntro = hasSeenProfileIntro,
+                )
+            },
+            onBeforeNavigate = onBeforeNavigate,
         )
     }
 }
@@ -126,6 +172,9 @@ private fun Menu(
     drawerState: DrawerState,
     onClickAddWidget: () -> Unit,
     onClickShop: () -> Unit,
+    onClickContacts: () -> Unit,
+    onClickProfile: () -> Unit,
+    onBeforeNavigate: (Routes?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -143,6 +192,7 @@ private fun Menu(
             iconRes = R.drawable.ic_coins,
             onClick = {
                 val isInHome = rootNavController.currentBackStackEntry?.destination?.hasRoute<Routes.Home>() ?: false
+                onBeforeNavigate(null)
                 if (!isInHome) rootNavController.navigateToHome()
                 scope.launch { drawerState.close() }
             },
@@ -153,6 +203,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__activity),
             iconRes = R.drawable.ic_heartbeat,
             onClick = {
+                onBeforeNavigate(Routes.AllActivity)
                 rootNavController.navigateIfNotCurrent(Routes.AllActivity)
                 scope.launch { drawerState.close() }
             },
@@ -163,7 +214,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__contacts),
             iconRes = R.drawable.ic_users,
             onClick = {
-                rootNavController.navigateIfNotCurrent(Routes.Contacts)
+                onClickContacts()
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerContacts")
@@ -173,7 +224,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__profile),
             iconRes = R.drawable.ic_user_square,
             onClick = {
-                rootNavController.navigateIfNotCurrent(Routes.Profile)
+                onClickProfile()
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerProfile")
@@ -203,6 +254,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__support),
             iconRes = R.drawable.ic_chats_circle,
             onClick = {
+                onBeforeNavigate(Routes.Support)
                 rootNavController.navigateIfNotCurrent(Routes.Support)
                 scope.launch { drawerState.close() }
             },
@@ -213,6 +265,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__settings),
             iconRes = R.drawable.ic_settings,
             onClick = {
+                onBeforeNavigate(Routes.Settings)
                 rootNavController.navigateIfNotCurrent(Routes.Settings)
                 scope.launch { drawerState.close() }
             },
@@ -226,6 +279,7 @@ private fun Menu(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickableAlpha {
+                    onBeforeNavigate(Routes.AppStatus)
                     rootNavController.navigateIfNotCurrent(Routes.AppStatus)
                     scope.launch { drawerState.close() }
                 }
@@ -316,6 +370,7 @@ private fun Preview() {
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
                 hasSeenWidgetsIntro = false,
                 hasSeenShopIntro = false,
+                onBeforeNavigate = {},
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }

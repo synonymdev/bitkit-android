@@ -62,7 +62,6 @@ class WalletViewModel @Inject constructor(
     companion object {
         private const val TAG = "WalletViewModel"
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
-        private const val CHANNEL_RECOVERY_RESTART_DELAY_MS = 500L
     }
 
     val lightningState = lightningRepo.lightningState
