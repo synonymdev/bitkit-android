@@ -3,6 +3,10 @@ package to.bitkit.appwidget.ui.price
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import to.bitkit.appwidget.AppWidgetPreferencesStore
 import to.bitkit.appwidget.AppWidgetRefreshWorker
 
 class PriceGlanceReceiver : GlanceAppWidgetReceiver() {
@@ -11,6 +15,19 @@ class PriceGlanceReceiver : GlanceAppWidgetReceiver() {
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         AppWidgetRefreshWorker.enqueue(context)
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        val pendingResult = goAsync()
+        val store = AppWidgetPreferencesStore.getInstance(context)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                appWidgetIds.forEach { store.unregisterWidget(it) }
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 
     override fun onDisabled(context: Context) {
