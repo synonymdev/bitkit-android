@@ -22,6 +22,13 @@ import to.bitkit.ui.theme.Colors
 
 class PriceGlanceWidget : GlanceAppWidget() {
 
+    companion object {
+        private const val CHART_WIDTH = 600
+        private const val CHART_HEIGHT = 200
+        val COMPACT = DpSize(180.dp, 80.dp)
+        val EXPANDED = DpSize(180.dp, 180.dp)
+    }
+
     override val sizeMode = SizeMode.Responsive(
         setOf(COMPACT, EXPANDED),
     )
@@ -66,12 +73,5 @@ class PriceGlanceWidget : GlanceAppWidget() {
             height = CHART_HEIGHT,
             lineColor = lineColor,
         )
-    }
-
-    companion object {
-        private const val CHART_WIDTH = 600
-        private const val CHART_HEIGHT = 200
-        val COMPACT = DpSize(180.dp, 80.dp)
-        val EXPANDED = DpSize(180.dp, 180.dp)
     }
 }
