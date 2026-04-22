@@ -13,7 +13,8 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
-import to.bitkit.appwidget.AppWidgetPreferencesStore
+import dagger.hilt.android.EntryPointAccessors
+import to.bitkit.appwidget.AppWidgetEntryPoint
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
@@ -34,7 +35,9 @@ class PriceGlanceWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val store = AppWidgetPreferencesStore.getInstance(context)
+        val store = EntryPointAccessors
+            .fromApplication(context, AppWidgetEntryPoint::class.java)
+            .appWidgetPreferencesStore()
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
 
         provideContent {

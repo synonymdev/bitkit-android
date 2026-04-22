@@ -3,7 +3,10 @@ package to.bitkit.appwidget
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -21,22 +24,16 @@ private val Context.appWidgetDataStore: DataStore<AppWidgetData> by dataStore(
     serializer = AppWidgetDataSerializer,
 )
 
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface AppWidgetEntryPoint {
+    fun appWidgetPreferencesStore(): AppWidgetPreferencesStore
+}
+
 @Singleton
 class AppWidgetPreferencesStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    companion object {
-        @Volatile
-        private var instance: AppWidgetPreferencesStore? = null
-
-        fun getInstance(context: Context): AppWidgetPreferencesStore =
-            instance ?: synchronized(this) {
-                instance ?: AppWidgetPreferencesStore(context.applicationContext).also {
-                    instance = it
-                }
-            }
-    }
-
     private val store = context.appWidgetDataStore
 
     val data: Flow<AppWidgetData> = store.data
