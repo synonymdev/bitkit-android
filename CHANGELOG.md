@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Home screen widgets foundation with Glance, including price widget as the first implementation #895
+
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
