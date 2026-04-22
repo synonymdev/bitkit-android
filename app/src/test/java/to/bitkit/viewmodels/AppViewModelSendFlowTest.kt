@@ -32,6 +32,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -71,6 +72,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
     private val keychain = mock<Keychain>()
+    private val pubkyRepo = mock<PubkyRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
 
@@ -96,6 +98,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
+        whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
         whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
@@ -134,6 +137,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             highBalanceSheet = mock(),
             formatMoneyValue = formatMoneyValue,
             widgetsRepo = widgetsRepo,
+            pubkyRepo = pubkyRepo,
         )
     }
 

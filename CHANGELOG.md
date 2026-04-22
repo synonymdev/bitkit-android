@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Transfer from Savings button on empty Spending screen when savings balance exists #882
+- Pubky profile onboarding with contact sync, import, and editing #824
 - Lightning Connections empty state with onboarding screen #857
 - Unified PIN management screen (enable/disable/change in one place) #857
 - Support entry in drawer menu #857

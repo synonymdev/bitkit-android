@@ -3,8 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
+        <package android:name="to.pubky.ring" />
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="pubkyauth" />
         </intent>
     </queries>
 
@@ -100,6 +105,7 @@
                 <data android:scheme="lnurlw" />
                 <data android:scheme="lnurlc" />
                 <data android:scheme="lnurlp" />
+                <data android:scheme="pubkyauth" />
             </intent-filter>
 
             <!-- NFC -->
