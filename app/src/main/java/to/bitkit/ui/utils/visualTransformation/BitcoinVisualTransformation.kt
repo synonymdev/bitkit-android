@@ -15,22 +15,21 @@ class BitcoinVisualTransformation(
 ) : VisualTransformation {
 
     override fun filter(text: AnnotatedString): TransformedText {
-        val originalText = sanitizeInput(text.text)
+        val rawText = text.text
+        val sanitizedText = sanitizeInput(rawText)
 
-        if (originalText.isEmpty()) {
+        if (sanitizedText.isEmpty()) {
             return TransformedText(AnnotatedString(""), OffsetMapping.Identity)
         }
 
         val formattedText = when (displayUnit) {
-            BitcoinDisplayUnit.MODERN -> formatModernDisplay(originalText)
-            BitcoinDisplayUnit.CLASSIC -> formatClassicDisplay(originalText)
+            BitcoinDisplayUnit.MODERN -> formatModernDisplay(sanitizedText)
+            BitcoinDisplayUnit.CLASSIC -> formatClassicDisplay(sanitizedText)
         }
-
-        val offsetMapping = createOffsetMapping(originalText, formattedText)
 
         return TransformedText(
             AnnotatedString(formattedText),
-            offsetMapping
+            createOffsetMapping(rawText, formattedText),
         )
     }
 
@@ -81,42 +80,51 @@ class BitcoinVisualTransformation(
         return if (endsWithDecimal) "$formatted." else formatted
     }
 
-    private fun createOffsetMapping(original: String, transformed: String): OffsetMapping {
+    private fun createOffsetMapping(rawOriginal: String, transformed: String): OffsetMapping {
+        val rawToSanitizedCount = IntArray(rawOriginal.length + 1)
+        var dotSeen = false
+        var sanitizedSoFar = 0
+        for (i in rawOriginal.indices) {
+            val char = rawOriginal[i]
+            val isKept = when {
+                displayUnit == BitcoinDisplayUnit.MODERN -> char.isDigit()
+                char.isDigit() -> true
+                char == '.' && !dotSeen -> {
+                    dotSeen = true
+                    true
+                }
+                else -> false
+            }
+            if (isKept) sanitizedSoFar++
+            rawToSanitizedCount[i + 1] = sanitizedSoFar
+        }
+        val totalSanitized = sanitizedSoFar
+
         return object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
-                val cleanOriginal = original.take(offset).replace(" ", "")
+                val clamped = offset.coerceIn(0, rawOriginal.length)
+                val validCount = rawToSanitizedCount[clamped]
+                if (validCount >= totalSanitized) return transformed.length
                 var transformedOffset = 0
-                var cleanOffset = 0
-
-                for (char in transformed) {
-                    if (char == ' ') {
-                        transformedOffset++
-                    } else {
-                        if (cleanOffset >= cleanOriginal.length) break
-                        cleanOffset++
-                        transformedOffset++
-                    }
+                var counted = 0
+                while (transformedOffset < transformed.length && counted < validCount) {
+                    if (transformed[transformedOffset] != ' ') counted++
+                    transformedOffset++
                 }
-
-                return transformedOffset.coerceAtMost(transformed.length)
+                while (transformedOffset < transformed.length && transformed[transformedOffset] == ' ') {
+                    transformedOffset++
+                }
+                return transformedOffset
             }
 
             override fun transformedToOriginal(offset: Int): Int {
-                val transformedSubstring = transformed.take(offset)
-                val cleanCount = transformedSubstring.count { it != ' ' }
-
-                var originalOffset = 0
-                var cleanOffset = 0
-
-                for (char in original) {
-                    if (char != ' ') {
-                        if (cleanOffset >= cleanCount) break
-                        cleanOffset++
-                    }
-                    originalOffset++
+                val clamped = offset.coerceIn(0, transformed.length)
+                if (clamped >= transformed.length) return rawOriginal.length
+                val validCount = transformed.take(clamped).count { it != ' ' }
+                for (i in 0..rawOriginal.length) {
+                    if (rawToSanitizedCount[i] >= validCount) return i
                 }
-
-                return originalOffset.coerceAtMost(original.length)
+                return rawOriginal.length
             }
         }
     }
