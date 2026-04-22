@@ -20,6 +20,8 @@ internal object Env {
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
+    val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
+    const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
@@ -53,10 +55,11 @@ internal object Env {
 
     val electrumServerUrl: String
         get() {
-            val isE2eLocal = isE2eTest && e2eBackend == "local"
             return when (network) {
                 Network.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
-                Network.REGTEST -> if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+                Network.REGTEST -> {
+                    if (isLocalE2eBackend) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+                }
                 Network.TESTNET -> ElectrumServers.TESTNET
                 else -> TODO("${network.name} network not implemented")
             }
@@ -153,6 +156,42 @@ internal object Env {
     const val BITREFILL_URL = "https://embed.bitrefill.com"
     const val BITREFILL_APP = "Bitkit"
     const val BITREFILL_REF = "AL6dyZYt"
+
+    private val pubkyDomain: String
+        get() = when (network) {
+            Network.BITCOIN -> "bitkit.to"
+            else -> "staging.bitkit.to"
+        }
+
+    val pubkyCapabilities: String
+        get() {
+            val prefix = when (network) {
+                Network.BITCOIN -> ""
+                else -> "staging."
+            }
+            return "/pub/$pubkyDomain/:rw,/pub/${prefix}pubky.app/:r,/pub/${prefix}paykit/v0/:rw"
+        }
+
+    val homegateUrl: String
+        get() {
+            if (isLocalE2eBackend) {
+                return e2eHomegateUrl
+            }
+
+            return when (network) {
+                Network.BITCOIN -> "https://homegate.pubky.app"
+                else -> "https://homegate.staging.pubky.app"
+            }
+        }
+
+    val profilePath: String
+        get() = "/pub/$pubkyDomain/profile.json"
+
+    val contactsBasePath: String
+        get() = "/pub/$pubkyDomain/contacts/"
+
+    val blobsBasePath: String
+        get() = "/pub/$pubkyDomain/blobs/"
 
     val rnBackupServerHost: String
         get() = when (network) {
