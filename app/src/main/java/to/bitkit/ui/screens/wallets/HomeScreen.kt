@@ -151,8 +151,8 @@ import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 private const val SMALL_SCREEN_HEIGHT_DP = 700
-private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
-private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
+private const val SMALL_SCREEN_SLOT_CAPACITY = 3
+private const val LARGE_SCREEN_SLOT_CAPACITY = 4
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
 @Suppress("CyclomaticComplexMethod")
@@ -370,11 +370,14 @@ private fun Content(
 
     val density = LocalDensity.current
     val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp().value.toInt() }
-    val activityCount = if (screenHeightDp < SMALL_SCREEN_HEIGHT_DP) {
-        SMALL_SCREEN_ACTIVITY_COUNT
+    val slotCapacity = if (screenHeightDp < SMALL_SCREEN_HEIGHT_DP) {
+        SMALL_SCREEN_SLOT_CAPACITY
     } else {
-        LARGE_SCREEN_ACTIVITY_COUNT
+        LARGE_SCREEN_SLOT_CAPACITY
     }
+    val nonItemSlots = (if (homeUiState.banners.isNotEmpty()) 1 else 0) +
+        (if (homeUiState.showWidgetsOnboardingHint) 1 else 0)
+    val activityCount = (slotCapacity - nonItemSlots).coerceAtLeast(0)
 
     val paginatedActivities = remember(latestActivities, activityCount) {
         latestActivities?.take(activityCount)?.toImmutableList()
