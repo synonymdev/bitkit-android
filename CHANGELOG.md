@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- Align onboarding slides and Create Wallet screen image size, spacing, and dots layout with iOS
+- Align onboarding slides and Create Wallet screen image size, spacing, and dots layout with iOS #904
 
 ## [2.2.0] - 2026-04-07
 
