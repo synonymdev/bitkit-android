@@ -1,18 +1,24 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import app.cash.turbine.test
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditProfileViewModelTest : BaseUnitTest() {
@@ -21,18 +27,94 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `updateLinkUrl should update existing profile link`() = test {
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
-        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
-
-        val sut = EditProfileViewModel(
-            context = context,
-            pubkyRepo = pubkyRepo,
-        )
+        val sut = createSut()
         advanceUntilIdle()
 
         sut.updateLinkUrl(0, "https://updated.example.com")
 
         assertEquals("https://updated.example.com", sut.uiState.value.links.first().url)
+    }
+
+    @Test
+    fun `deleteProfile should retry after refreshing session`() = test {
+        whenever(pubkyRepo.deleteProfile())
+            .thenReturn(Result.failure(RuntimeException("expired session")))
+            .thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(true))
+
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+
+            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
+        }
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        verify(pubkyRepo, times(2)).deleteProfile()
+    }
+
+    @Test
+    fun `deleteProfile should show retry dialog when delete still fails`() = test {
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.failure(RuntimeException("expired session")))
+        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(false))
+
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isSaving)
+    }
+
+    @Test
+    fun `disconnectProfile should emit disconnect success`() = test {
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.failure(RuntimeException("expired session")))
+        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(false))
+        whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
+
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.disconnectProfile()
+            advanceUntilIdle()
+
+            assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
+        }
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        verify(pubkyRepo).signOut()
+    }
+
+    @Test
+    fun `dismissDeleteFailureDialog should hide retry dialog`() = test {
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.failure(RuntimeException("expired session")))
+        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(false))
+
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        sut.dismissDeleteFailureDialog()
+
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+    }
+
+    private fun createSut(): EditProfileViewModel {
+        whenever(context.getString(any<Int>())).thenReturn("")
+        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
+
+        return EditProfileViewModel(
+            context = context,
+            pubkyRepo = pubkyRepo,
+        )
     }
 
     private fun createProfile() = PubkyProfile(

@@ -35,6 +35,7 @@ import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
@@ -258,13 +259,12 @@ private fun EmptyState(
     onAddContact: () -> Unit,
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        VerticalSpacer(16.dp)
         myProfile?.let {
+            VerticalSpacer(16.dp)
             Text13Up(
                 text = stringResource(R.string.contacts__my_profile),
                 color = Colors.White64,
@@ -277,16 +277,27 @@ private fun EmptyState(
             )
             HorizontalDivider()
         }
-        VerticalSpacer(8.dp)
-        PrimaryButton(
-            text = stringResource(R.string.contacts__intro_add_contact),
-            onClick = onAddContact,
-            modifier = Modifier.testTag("ContactsEmptyAddButton"),
-        )
-        BodyM(
-            text = stringResource(R.string.contacts__empty_state),
-            color = Colors.White64,
-        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(top = 48.dp)
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.contacts__intro_add_contact),
+                onClick = onAddContact,
+                modifier = Modifier.testTag("ContactsEmptyAddButton"),
+            )
+            BodyM(
+                text = stringResource(R.string.contacts__empty_state),
+                color = Colors.White64,
+            )
+        }
+
+        FillHeight()
     }
 }
 

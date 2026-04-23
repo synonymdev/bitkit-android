@@ -14,6 +14,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.of
@@ -24,6 +25,7 @@ import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -42,6 +44,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val backupRepo = mock<BackupRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
+    private val pubkyRepo = mock<PubkyRepo>()
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
 
@@ -59,6 +62,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
+        whenever(migrationService.getRNRemoteBackupTimestamp()).thenReturn(null)
         whenever(connectivityRepo.isOnline).thenReturn(isOnline)
 
         sut = WalletViewModel(
@@ -69,6 +73,7 @@ class WalletViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
         )
@@ -190,6 +195,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onBackupRestoreSuccess should reset restoreState`() = test {
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
         walletState.value = walletState.value.copy(walletExists = true)
         sut.restoreWallet("mnemonic", "passphrase")
@@ -203,6 +209,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `onProceedWithoutRestore should exit restore flow`() = test {
         val testError = Exception("Test error")
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
@@ -215,6 +222,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `restore state should transition as expected`() = test {
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
         whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
         assertEquals(RestoreState.Initial, sut.restoreState.value)
 
@@ -226,6 +234,18 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.onRestoreContinue()
         assertEquals(RestoreState.Settled, sut.restoreState.value)
+    }
+
+    @Test
+    fun `backup restore should reinitialize pubky state after metadata restore`() = test {
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        verifyBlocking(pubkyRepo) { initialize() }
     }
 
     @Test
@@ -264,6 +284,7 @@ class WalletViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
         )
@@ -324,6 +345,7 @@ class WalletViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
         )

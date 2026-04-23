@@ -288,7 +288,7 @@ fun ContentView(
                         navController.navigateToHome()
                         delay(100) // Small delay to ensure navigation completes
                     }
-                    appViewModel.onScanResult(it.data)
+                    appViewModel.onScanResult(it.data, routePubkyKeys = true)
                 }
 
                 else -> Unit
@@ -1060,12 +1060,18 @@ private fun NavGraphBuilder.profile(
         )
     }
     composableWithDefaultTransitions<Routes.EditProfile> {
+        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
         val viewModel: EditProfileViewModel = hiltViewModel()
         EditProfileScreen(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
-            onProfileDeleted = {
-                navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+            onExitProfile = {
+                val nextRoute = if (hasSeenProfileIntro) {
+                    Routes.PubkyChoice
+                } else {
+                    Routes.ProfileIntro
+                }
+                navController.navigateTo(nextRoute) { popUpTo(Routes.Home) }
             },
         )
     }

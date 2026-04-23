@@ -84,6 +84,7 @@ class BackupRepo @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
+    private val pubkyRepo: PubkyRepo,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
     private val clock: Clock,
@@ -267,6 +268,16 @@ class BackupRepo @Inject constructor(
                 }
         }
         dataListenerJobs.add(preActivityMetadataJob)
+
+        val pubkyStateJob = scope.launch {
+            pubkyRepo.backupStateVersion
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.METADATA)
+                }
+        }
+        dataListenerJobs.add(pubkyStateJob)
 
         // BLOCKTANK - Observe blocktank state changes (orders, cjitEntries, info)
         val blocktankJob = scope.launch {
@@ -461,18 +472,7 @@ class BackupRepo @Inject constructor(
             json.encodeToString(payload).toByteArray()
         }
 
-        BackupCategory.METADATA -> {
-            val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
-            val cacheData = cacheStore.data.first()
-
-            val payload = MetadataBackupV1(
-                createdAt = currentTimeMillis(),
-                tagMetadata = preActivityMetadata,
-                cache = cacheData,
-            )
-
-            json.encodeToString(payload).toByteArray()
-        }
+        BackupCategory.METADATA -> getMetadataBackupDataBytes()
 
         BackupCategory.BLOCKTANK -> {
             val blocktankState = blocktankRepo.blocktankState.first()
@@ -505,6 +505,21 @@ class BackupRepo @Inject constructor(
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
     }
 
+    private suspend fun getMetadataBackupDataBytes(): ByteArray {
+        val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
+        val cacheData = cacheStore.data.first()
+        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrThrow()
+
+        val payload = MetadataBackupV1(
+            createdAt = currentTimeMillis(),
+            tagMetadata = preActivityMetadata,
+            cache = cacheData,
+            pubkySession = pubkySession,
+        )
+
+        return json.encodeToString(payload).toByteArray()
+    }
+
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
     ): Result<Unit> = withContext(ioDispatcher) {
@@ -520,6 +535,10 @@ class BackupRepo @Inject constructor(
                 Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
                 onCacheRestored()
                 preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata).getOrNull()
+                pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
+                    .onFailure {
+                        Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
+                    }
                 Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
                 parsed.createdAt
             }

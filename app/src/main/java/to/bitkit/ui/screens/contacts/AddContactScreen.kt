@@ -86,15 +86,15 @@ fun AddContactSheet(
 ) {
     val context = LocalContext.current
     var publicKeyInput by remember { mutableStateOf("") }
-    val trimmedInput = publicKeyInput.trim()
-    val normalizedInput = PubkyPublicKeyFormat.normalized(trimmedInput)
-    val validationMessage = when {
-        trimmedInput.isEmpty() -> null
-        PubkyPublicKeyFormat.matches(trimmedInput, currentPublicKey) ->
-            context.getString(R.string.contacts__add_error_self)
-        normalizedInput == null ->
-            context.getString(R.string.contacts__add_error_invalid_key)
-        else -> null
+    val validationResult = resolveAddContactValidation(
+        input = publicKeyInput,
+        ownPublicKey = currentPublicKey,
+    )
+    val validationMessage = when (validationResult) {
+        AddContactValidationResult.Empty -> null
+        AddContactValidationResult.InvalidKey -> context.getString(R.string.contacts__add_error_invalid_key)
+        AddContactValidationResult.OwnKey -> context.getString(R.string.contacts__add_error_self)
+        is AddContactValidationResult.Valid -> null
     }
 
     BottomSheet(
@@ -104,7 +104,7 @@ fun AddContactSheet(
         AddContactSheetContent(
             publicKeyInput = publicKeyInput,
             validationMessage = validationMessage,
-            isSubmitEnabled = normalizedInput != null && validationMessage == null,
+            isSubmitEnabled = validationResult is AddContactValidationResult.Valid,
             onPublicKeyChange = { publicKeyInput = PubkyPublicKeyFormat.bounded(it) },
             onPaste = {
                 context.getClipboardText()?.trim()?.let {
@@ -112,7 +112,11 @@ fun AddContactSheet(
                 }
             },
             onScanQr = onScanQr,
-            onSubmit = { normalizedInput?.let(onSubmit) },
+            onSubmit = {
+                val normalizedKey = (validationResult as? AddContactValidationResult.Valid)?.normalizedKey
+                    ?: return@AddContactSheetContent
+                onSubmit(normalizedKey)
+            },
         )
     }
 }

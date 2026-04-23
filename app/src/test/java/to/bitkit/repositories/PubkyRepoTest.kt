@@ -22,6 +22,8 @@ import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkySessionBackupKind
+import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -32,6 +34,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import com.synonym.bitkitcore.PubkyProfile as CorePubkyProfile
 
+@Suppress("LargeClass")
 class PubkyRepoTest : BaseUnitTest() {
     companion object {
         // Valid 52-char z-base-32 key (+ "pubky" prefix = 57 chars)
@@ -107,7 +110,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(testPk, sut.publicKey.value)
         assertTrue(sut.isAuthenticated.value)
-        verifyBlocking(keychain) { saveString(Keychain.Key.PAYKIT_SESSION.name, testSecret) }
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, testSecret) }
     }
 
     @Test
@@ -224,6 +227,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut should clear state and keychain`() = test {
         authenticateForTesting()
+        clearInvocations(pubkyStore)
 
         val result = sut.signOut()
 
@@ -337,6 +341,120 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.displayName.test(timeout = 500.milliseconds) {
             assertEquals("Cached", awaitItem())
         }
+    }
+
+    @Test
+    fun `snapshotSessionBackupState should prefer local seed over session secret`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session_secret")
+
+        val result = sut.snapshotSessionBackupState()
+
+        assertEquals(
+            PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed),
+            result.getOrNull(),
+        )
+    }
+
+    @Test
+    fun `snapshotSessionBackupState should use external session when no local seed exists`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session_secret")
+
+        val result = sut.snapshotSessionBackupState()
+
+        assertEquals(
+            PubkySessionBackupV1(
+                kind = PubkySessionBackupKind.ExternalSession,
+                sessionSecret = "session_secret",
+            ),
+            result.getOrNull(),
+        )
+    }
+
+    @Test
+    fun `snapshotSessionBackupState should return null when no pubky credentials exist`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+
+        val result = sut.snapshotSessionBackupState()
+
+        assertNull(result.getOrNull())
+    }
+
+    @Test
+    fun `initialize should restore session from local secret key when saved session is missing`() = test {
+        val secretKey = "local_secret"
+        val session = "new_session"
+        val publicKey = VALID_SELF_KEY
+        val ffiProfile = createFfiProfile(name = "Recovered User")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.signIn(secretKey)).thenReturn(session)
+        whenever(pubkyService.importSession(session)).thenReturn(publicKey)
+        whenever(pubkyService.getProfile(publicKey)).thenReturn(ffiProfile)
+
+        sut.initialize()
+
+        assertEquals(publicKey, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, session) }
+    }
+
+    @Test
+    fun `refreshSessionIfPossible should refresh session when local secret key exists`() = test {
+        val secretKey = "local_secret"
+        val session = "new_session"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.signIn(secretKey)).thenReturn(session)
+        whenever(pubkyService.importSession(session)).thenReturn(VALID_SELF_KEY)
+
+        val result = sut.refreshSessionIfPossible()
+
+        assertEquals(true, result.getOrNull())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, session) }
+    }
+
+    @Test
+    fun `refreshSessionIfPossible should return false when local secret key is missing`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+
+        val result = sut.refreshSessionIfPossible()
+
+        assertEquals(false, result.getOrNull())
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `restoreSessionBackupState should derive local secret key for local seed backups`() = test {
+        val seed = byteArrayOf(1, 2, 3)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
+        whenever(pubkyService.mnemonicToSeed("test mnemonic", null)).thenReturn(seed)
+        whenever(pubkyService.deriveSecretKey(seed)).thenReturn("derived_secret")
+
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed),
+        )
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, "derived_secret") }
+    }
+
+    @Test
+    fun `restoreSessionBackupState should save external session backups`() = test {
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(
+                kind = PubkySessionBackupKind.ExternalSession,
+                sessionSecret = "external_session",
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, "external_session") }
     }
 
     @Test
@@ -650,6 +768,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `wipeLocalState should clear pubky state without server sign out`() = test {
         authenticateForTesting()
+        clearInvocations(pubkyStore)
         val contact = PubkyProfile(
             publicKey = "pubkycontact4",
             name = "Charlie",
