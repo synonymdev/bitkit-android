@@ -508,7 +508,7 @@ class BackupRepo @Inject constructor(
     private suspend fun getMetadataBackupDataBytes(): ByteArray {
         val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
         val cacheData = cacheStore.data.first()
-        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrThrow()
+        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
 
         val payload = MetadataBackupV1(
             createdAt = currentTimeMillis(),
