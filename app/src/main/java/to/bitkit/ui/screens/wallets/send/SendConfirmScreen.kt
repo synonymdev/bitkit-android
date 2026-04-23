@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -102,6 +103,7 @@ import kotlin.time.Duration.Companion.seconds
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val SWIPE_ROTATION_DEGREES = 14f
 private const val IMAGE_FILL_PERCENTAGE = 0.8f
+private val SHOW_DETAILS_BG = Color(0xFF151515)
 
 @Suppress("MagicNumber")
 @Composable
@@ -335,7 +337,7 @@ private fun ContentRunning(
         }
 
         if (!isLnurlPay) {
-            VerticalSpacer(16.dp)
+            FillHeight(min = 16.dp)
 
             PrimaryButton(
                 text = stringResource(
@@ -361,15 +363,17 @@ private fun ContentRunning(
                     )
                 },
                 fullWidth = false,
-                color = Colors.White06,
+                color = SHOW_DETAILS_BG,
                 enableGradient = false,
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .testTag("SendConfirmToggleDetails")
             )
-        }
 
-        FillHeight(min = 16.dp)
+            VerticalSpacer(62.dp)
+        } else {
+            FillHeight(min = 16.dp)
+        }
 
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
