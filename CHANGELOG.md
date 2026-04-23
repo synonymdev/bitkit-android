@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Align top bar back arrow and passphrase input cursor/placeholder with iOS #906
+
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
