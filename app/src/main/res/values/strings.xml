@@ -92,7 +92,7 @@
     <string name="contacts__edit_bio_placeholder">Short note about this contact.</string>
     <string name="contacts__edit_contact_saved">Contact updated</string>
     <string name="contacts__edit_contact_title">Edit Contact</string>
-    <string name="contacts__edit_public_note">Please note contact information is stored in public files.\nChanges you make to a contact in Bitkit will not update their profile.</string>
+    <string name="contacts__edit_public_note">Please note contact information is stored in public files. Changes you make to a contact in Bitkit will not update their profile.</string>
     <string name="contacts__empty_state">You don\'t have any contacts yet.</string>
     <string name="contacts__import_all">Import All</string>
     <string name="contacts__import_friends_count">%1$d friends</string>
