@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,8 +39,10 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
@@ -188,7 +188,7 @@ fun OnboardingTab(
     Column(
         modifier = modifier.fillMaxSize(),
     ) {
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Image(
             painter = painterResource(id = imageResId),
@@ -203,17 +203,17 @@ fun OnboardingTab(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 48.dp)
-                .defaultMinSize(minHeight = 255.dp),
+                .defaultMinSize(minHeight = 255.dp)
         ) {
             Display(text = title.withAccent(accentColor = titleAccentColor))
-            Spacer(modifier = Modifier.height(14.dp))
+            VerticalSpacer(14.dp)
             BodyM(
                 text = text,
                 color = Colors.White64,
                 minLines = 3,
             )
             disclaimerText?.let {
-                Spacer(modifier = Modifier.height(4.dp))
+                VerticalSpacer(4.dp)
                 Footnote(text = it, color = Colors.White32)
             }
         }

@@ -4,10 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.Composable
@@ -25,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -42,9 +41,9 @@ fun CreateWalletScreen(
     Column(
         modifier = modifier
             .screen(insets = null)
-            .fillMaxSize(),
+            .fillMaxSize()
     ) {
-        Spacer(modifier = Modifier.weight(1f))
+        FillHeight()
 
         Image(
             painter = painterResource(id = R.drawable.wallet),
@@ -58,7 +57,7 @@ fun CreateWalletScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 48.dp),
+                .padding(top = 48.dp)
         ) {
             Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
             VerticalSpacer(14.dp)
@@ -73,8 +72,8 @@ fun CreateWalletScreen(
         VerticalSpacer(32.dp)
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
             PrimaryButton(
                 text = stringResource(R.string.onboarding__new_wallet),
@@ -91,7 +90,7 @@ fun CreateWalletScreen(
                     .testTag("RestoreWallet")
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
     }
 }
 
