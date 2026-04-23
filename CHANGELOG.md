@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Improve Pubky profile restore, contact editing, and contact routing flows
+- Improve Pubky profile restore, contact editing, and contact routing flows #905
 
 ## [2.2.0] - 2026-04-07
 
