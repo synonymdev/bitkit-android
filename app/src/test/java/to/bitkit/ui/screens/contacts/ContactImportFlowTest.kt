@@ -7,6 +7,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class ContactImportFlowTest {
+    private companion object {
+        const val VALID_PUBLIC_KEY = "pubkyybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
+        const val OTHER_VALID_PUBLIC_KEY = "pubkya345h769ybndrfg8ejkmcpqxot1uwiszybndrfg8ejkmcpqxot1u"
+    }
+
     @Test
     fun `resolveAddContactValidation returns empty for blank input`() {
         assertEquals(
@@ -86,10 +91,5 @@ class ContactImportFlowTest {
                 contacts = emptyList(),
             ),
         )
-    }
-
-    private companion object {
-        const val VALID_PUBLIC_KEY = "pubkyybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
-        const val OTHER_VALID_PUBLIC_KEY = "pubkya345h769ybndrfg8ejkmcpqxot1uwiszybndrfg8ejkmcpqxot1u"
     }
 }

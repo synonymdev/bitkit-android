@@ -5,7 +5,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
-import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.PeerDetails
@@ -33,6 +32,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
@@ -62,7 +62,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
-        whenever(migrationService.getRNRemoteBackupTimestamp()).thenReturn(null)
+        whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(null)
         whenever(connectivityRepo.isOnline).thenReturn(isOnline)
 
         sut = WalletViewModel(

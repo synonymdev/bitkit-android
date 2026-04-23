@@ -155,7 +155,7 @@ fun ProfileEditForm(
                             painter = painterResource(R.drawable.ic_pencil_simple),
                             contentDescription = null,
                             tint = Colors.White64,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                         IconButton(onClick = { onRemoveLink(index) }) {
                             Icon(
@@ -195,7 +195,7 @@ fun ProfileEditForm(
                         modifier = Modifier.size(16.dp)
                     )
                 },
-                modifier = Modifier.testTag("ProfileEditAddLink"),
+                modifier = Modifier.testTag("ProfileEditAddLink")
             )
         }
 
@@ -237,7 +237,7 @@ fun ProfileEditForm(
                         modifier = Modifier.size(16.dp)
                     )
                 },
-                modifier = Modifier.testTag("ProfileEditAddTag"),
+                modifier = Modifier.testTag("ProfileEditAddTag")
             )
         }
 

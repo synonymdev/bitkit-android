@@ -50,7 +50,7 @@ fun TagButton(
             color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag("Tag-$text"),
+            modifier = Modifier.testTag("Tag-$text")
         )
 
         if (displayIconClose) {
