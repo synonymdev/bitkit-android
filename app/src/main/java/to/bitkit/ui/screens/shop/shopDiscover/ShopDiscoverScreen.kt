@@ -82,7 +82,7 @@ fun ShopDiscoverScreen(
             indicator = {
                 TabRowDefaults.PrimaryIndicator(
                     modifier = Modifier.tabIndicatorOffset(selectedTabIndex),
-                    color = Colors.Yellow,
+                    color = Colors.White,
                     width = Dp.Unspecified,
                 )
             },
