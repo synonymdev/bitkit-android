@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Block numberpad input above max amount on Send, Transfer to Spending, and Receiving Capacity screens, with short toast explaining the limit #908
+
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
