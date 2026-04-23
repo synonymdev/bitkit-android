@@ -60,7 +60,7 @@ fun TermsOfUseScreen(
                         .verticalScroll(rememberScrollState())
                         .testTag("TOS")
                 ) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(48.dp))
                     Display(text = stringResource(R.string.onboarding__tos_header).withAccent())
                     Spacer(modifier = Modifier.height(12.dp))
                     TosContent()
@@ -82,7 +82,7 @@ fun TermsOfUseScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 16.dp)
             ) {
                 TermsText(
                     title = stringResource(R.string.onboarding__tos_checkbox),
