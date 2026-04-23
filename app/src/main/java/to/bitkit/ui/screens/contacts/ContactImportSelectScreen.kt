@@ -171,7 +171,7 @@ private fun SelectableContactRow(
 
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f)
         ) {
             BodyS(
                 text = contact.profile.truncatedPublicKey,
@@ -193,7 +193,7 @@ private fun SelectableContactRow(
                 painter = painterResource(R.drawable.ic_check),
                 contentDescription = null,
                 tint = Colors.PubkyGreen,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(24.dp)
             )
         }
     }
@@ -228,7 +228,7 @@ private fun FooterBar(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     ) {
         BodyMSB(
             text = stringResource(R.string.contacts__import_selected_count, selectedCount),

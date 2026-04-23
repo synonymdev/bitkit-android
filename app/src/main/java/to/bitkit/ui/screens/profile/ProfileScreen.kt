@@ -161,8 +161,8 @@ private fun ProfileBody(
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                modifier = Modifier.fillMaxWidth(),
                 testTag = "QRCode",
+                modifier = Modifier.fillMaxWidth()
             )
             if (profile.imageUrl != null) {
                 Box(
@@ -263,12 +263,12 @@ private fun EmptyState(
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
             onClick = onClickRetry,
-            modifier = Modifier.testTag("ProfileRetry"),
+            modifier = Modifier.testTag("ProfileRetry")
         )
         VerticalSpacer(8.dp)
         TextButton(
             onClick = rememberDebouncedClick(onClick = onClickSignOut),
-            modifier = Modifier.testTag("ProfileEmptySignOut"),
+            modifier = Modifier.testTag("ProfileEmptySignOut")
         ) {
             BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
         }

@@ -108,7 +108,7 @@ private fun Content(
                 ActionButton(
                     onClick = { showAddContactSheet = true },
                     iconRes = R.drawable.ic_plus,
-                    modifier = Modifier.testTag("ContactsAddButton"),
+                    modifier = Modifier.testTag("ContactsAddButton")
                 )
             }
             VerticalSpacer(8.dp)
@@ -165,8 +165,8 @@ private fun ContactsList(
                 )
                 ContactRow(
                     profile = myProfile,
-                    modifier = Modifier.testTag("ContactsMyProfile"),
                     onClick = onClickMyProfile,
+                    modifier = Modifier.testTag("ContactsMyProfile")
                 )
                 HorizontalDivider()
             }
@@ -185,8 +185,8 @@ private fun ContactsList(
             items(contacts, key = { it.publicKey }) { contact ->
                 ContactRow(
                     profile = contact,
-                    modifier = Modifier.testTag("Contact_${contact.publicKey}"),
                     onClick = { onClickContact(contact.publicKey) },
+                    modifier = Modifier.testTag("Contact_${contact.publicKey}")
                 )
                 HorizontalDivider()
             }
@@ -212,7 +212,7 @@ private fun ContactRow(
 
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f)
         ) {
             BodyS(
                 text = profile.truncatedPublicKey,
@@ -280,8 +280,8 @@ private fun EmptyState(
             )
             ContactRow(
                 profile = it,
-                modifier = Modifier.testTag("ContactsMyProfile"),
                 onClick = onClickMyProfile,
+                modifier = Modifier.testTag("ContactsMyProfile")
             )
             HorizontalDivider()
         }
@@ -297,7 +297,7 @@ private fun EmptyState(
             PrimaryButton(
                 text = stringResource(R.string.contacts__intro_add_contact),
                 onClick = onAddContact,
-                modifier = Modifier.testTag("ContactsEmptyAddButton"),
+                modifier = Modifier.testTag("ContactsEmptyAddButton")
             )
             BodyM(
                 text = stringResource(R.string.contacts__empty_state),
