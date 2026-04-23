@@ -523,7 +523,7 @@
     <string name="profile__edit_delete_section">DELETE</string>
     <string name="profile__edit_name_placeholder">YOUR NAME</string>
     <string name="profile__edit_nav_title">Edit Profile</string>
-    <string name="profile__edit_public_note">Please note profile information is stored in public files.\nChanges you make in Bitkit will not update your pubky.app profile.</string>
+    <string name="profile__edit_public_note">Please note profile information is stored in public files. Changes you make in Bitkit will not update your pubky.app profile.</string>
     <string name="profile__edit_save_error">Failed to save profile</string>
     <string name="profile__edit_save_success">Profile saved</string>
     <string name="profile__edit_tags">TAGS</string>
