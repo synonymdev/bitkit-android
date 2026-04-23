@@ -203,11 +203,7 @@ fun ReceiveQrScreen(
             CustomTabRowWithSpacing(
                 tabs = visibleTabs,
                 currentTabIndex = visibleTabs.indexOf(selectedTab),
-                selectedColor = when (selectedTab) {
-                    ReceiveTab.SAVINGS -> Colors.Brand
-                    ReceiveTab.AUTO -> Colors.White
-                    ReceiveTab.SPENDING -> Colors.Purple
-                },
+                selectedColor = Colors.White,
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.indexOf(tab)
