@@ -122,12 +122,15 @@ fun CalculatorCard(
                 sanitizeDecimalInput(rawValue)
             }
             btcValue = sanitized
-            val convertedFiat = CalculatorFormatter.convertBtcToFiat(
-                btcValue = btcValue,
-                displayUnit = currencyUiState.displayUnit,
-                currencyViewModel = currencyViewModel,
-            )
-            fiatValue = convertedFiat.orEmpty()
+            fiatValue = if (sanitized.isEmpty()) {
+                ""
+            } else {
+                CalculatorFormatter.convertBtcToFiat(
+                    btcValue = btcValue,
+                    displayUnit = currencyUiState.displayUnit,
+                    currencyViewModel = currencyViewModel,
+                ).orEmpty()
+            }
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         },
         fiatSymbol = currencyUiState.currencySymbol,
@@ -136,11 +139,15 @@ fun CalculatorCard(
         onFiatChange = { rawValue ->
             val sanitized = sanitizeDecimalInput(rawValue)
             fiatValue = sanitized
-            btcValue = CalculatorFormatter.convertFiatToBtc(
-                fiatValue = fiatValue,
-                displayUnit = currencyUiState.displayUnit,
-                currencyViewModel = currencyViewModel,
-            )
+            btcValue = if (sanitized.isEmpty()) {
+                ""
+            } else {
+                CalculatorFormatter.convertFiatToBtc(
+                    fiatValue = fiatValue,
+                    displayUnit = currencyUiState.displayUnit,
+                    currencyViewModel = currencyViewModel,
+                )
+            }
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         },
     )
