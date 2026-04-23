@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Align tab colors, Show details button, notifications bell figure, and home activity count with iOS
+
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
