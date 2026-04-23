@@ -505,7 +505,7 @@ class BackupRepo @Inject constructor(
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
     }
 
-    private suspend fun getMetadataBackupDataBytes(): ByteArray {
+    private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
         val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
         val cacheData = cacheStore.data.first()
         val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
@@ -517,7 +517,7 @@ class BackupRepo @Inject constructor(
             pubkySession = pubkySession,
         )
 
-        return json.encodeToString(payload).toByteArray()
+        json.encodeToString(payload).toByteArray()
     }
 
     suspend fun performFullRestoreFromLatestBackup(

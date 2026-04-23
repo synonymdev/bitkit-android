@@ -275,6 +275,44 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deleteProfileWithSessionRetry should refresh session and retry delete`() = test {
+        val expiredSession = "expired_session"
+        val newSession = "new_session"
+        val secretKey = "local_secret"
+        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = expiredSession)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(expiredSession, newSession)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.sessionList(expiredSession, Env.contactsBasePath)).thenReturn(emptyList())
+        whenever(pubkyService.sessionList(newSession, Env.contactsBasePath)).thenReturn(emptyList())
+        whenever(pubkyService.sessionDelete(expiredSession, Env.profilePath)).thenThrow(RuntimeException("Expired"))
+        whenever(pubkyService.signIn(secretKey)).thenReturn(newSession)
+        whenever(pubkyService.importSession(newSession)).thenReturn(VALID_SELF_KEY)
+
+        val result = sut.deleteProfileWithSessionRetry()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) { sessionDelete(expiredSession, Env.profilePath) }
+        verifyBlocking(pubkyService) { sessionDelete(newSession, Env.profilePath) }
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, newSession) }
+    }
+
+    @Test
+    fun `deleteProfileWithSessionRetry should return failure when session cannot refresh`() = test {
+        val expiredSession = "expired_session"
+        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = expiredSession)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(expiredSession)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(pubkyService.sessionList(expiredSession, Env.contactsBasePath)).thenReturn(emptyList())
+        whenever(pubkyService.sessionDelete(expiredSession, Env.profilePath)).thenThrow(RuntimeException("Expired"))
+
+        val result = sut.deleteProfileWithSessionRetry()
+
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService) { sessionDelete(expiredSession, Env.profilePath) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+    }
+
+    @Test
     fun `signOut should force sign out when server sign out fails`() = test {
         authenticateForTesting()
         whenever(pubkyService.signOut()).thenThrow(RuntimeException("Server error"))

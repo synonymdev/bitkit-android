@@ -126,7 +126,6 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
-import to.bitkit.ui.screens.contacts.resolvePastedPubkyRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute

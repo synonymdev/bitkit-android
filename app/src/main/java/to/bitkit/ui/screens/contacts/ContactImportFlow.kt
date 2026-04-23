@@ -36,24 +36,6 @@ internal fun resolveAddContactValidation(
     return AddContactValidationResult.Valid(normalizedKey = normalizedKey)
 }
 
-internal fun resolvePastedPubkyRoute(
-    input: String,
-    ownPublicKey: String?,
-    contacts: List<PubkyProfile>,
-): Routes? {
-    val normalizedKey = PubkyPublicKeyFormat.normalized(input) ?: return null
-
-    if (PubkyPublicKeyFormat.matches(normalizedKey, ownPublicKey)) {
-        return Routes.Profile
-    }
-
-    if (contacts.any { PubkyPublicKeyFormat.matches(it.publicKey, normalizedKey) }) {
-        return Routes.ContactDetail(normalizedKey)
-    }
-
-    return Routes.AddContact(normalizedKey)
-}
-
 internal fun shouldDiscardPendingImport(currentDestination: NavDestination?, destination: Routes?): Boolean {
     if (!currentDestination.isContactImportRoute()) {
         return false

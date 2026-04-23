@@ -208,13 +208,13 @@ class EditProfileViewModel @Inject constructor(
 
     fun deleteProfile() {
         viewModelScope.launch {
-            attemptDeleteProfile(allowSessionRefresh = true)
+            attemptDeleteProfile()
         }
     }
 
     fun retryDeleteProfile() {
         viewModelScope.launch {
-            attemptDeleteProfile(allowSessionRefresh = false)
+            attemptDeleteProfile()
         }
     }
 
@@ -242,7 +242,7 @@ class EditProfileViewModel @Inject constructor(
         }
     }
 
-    private suspend fun attemptDeleteProfile(allowSessionRefresh: Boolean) {
+    private suspend fun attemptDeleteProfile() {
         _uiState.update {
             it.copy(
                 showDeleteDialog = false,
@@ -250,7 +250,7 @@ class EditProfileViewModel @Inject constructor(
                 isSaving = true,
             )
         }
-        pubkyRepo.deleteProfile()
+        pubkyRepo.deleteProfileWithSessionRetry()
             .onSuccess {
                 _uiState.update { it.copy(isSaving = false) }
                 ToastEventBus.send(
@@ -261,20 +261,6 @@ class EditProfileViewModel @Inject constructor(
             }
             .onFailure {
                 Logger.error("Failed to delete profile", it, context = TAG)
-
-                if (allowSessionRefresh) {
-                    val refreshedSession = pubkyRepo.refreshSessionIfPossible()
-                        .onFailure {
-                            Logger.error("Failed to refresh pubky session", it, context = TAG)
-                        }
-                        .getOrDefault(false)
-
-                    if (refreshedSession) {
-                        attemptDeleteProfile(allowSessionRefresh = false)
-                        return
-                    }
-                }
-
                 _uiState.update {
                     it.copy(
                         isSaving = false,

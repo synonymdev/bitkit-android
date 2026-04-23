@@ -171,45 +171,45 @@ class PubkyRepo @Inject constructor(
     private suspend fun resolveSessionInitialization(
         savedSessionSecret: String?,
         storedSecretKeyHex: String?,
-    ): InitResult {
+    ): InitResult = withContext(ioDispatcher) {
         if (!savedSessionSecret.isNullOrEmpty()) {
-            return runCatching {
+            runCatching {
                 val publicKey = pubkyService.importSession(savedSessionSecret)
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
                 resolveSignedInSession(savedSessionSecret, storedSecretKeyHex)
             }
+        } else {
+            resolveSignedInSession(savedSessionSecret, storedSecretKeyHex)
         }
-
-        return resolveSignedInSession(savedSessionSecret, storedSecretKeyHex)
     }
 
     private suspend fun resolveSignedInSession(
         savedSessionSecret: String?,
         storedSecretKeyHex: String?,
-    ): InitResult {
+    ): InitResult = withContext(ioDispatcher) {
         if (storedSecretKeyHex.isNullOrEmpty()) {
             if (!savedSessionSecret.isNullOrEmpty()) {
                 Logger.warn("Skipped re-sign-in recovery, no secret key available", context = TAG)
-                return InitResult.RestorationFailed
+                InitResult.RestorationFailed
+            } else {
+                InitResult.NoSession
             }
-
-            return InitResult.NoSession
-        }
-
-        return runCatching {
-            val newSession = pubkyService.signIn(storedSecretKeyHex)
-            keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, newSession)
-            notifyBackupStateChanged()
-            val publicKey = pubkyService.importSession(newSession)
-            Logger.info("Re-signed in and restored session for '$publicKey'", context = TAG)
-            InitResult.Restored(publicKey)
-        }.getOrElse {
-            Logger.error("Failed re-sign-in recovery", it, context = TAG)
-            runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-            notifyBackupStateChanged()
-            InitResult.RestorationFailed
+        } else {
+            runCatching {
+                val newSession = pubkyService.signIn(storedSecretKeyHex)
+                keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, newSession)
+                notifyBackupStateChanged()
+                val publicKey = pubkyService.importSession(newSession)
+                Logger.info("Re-signed in and restored session for '$publicKey'", context = TAG)
+                InitResult.Restored(publicKey)
+            }.getOrElse {
+                Logger.error("Failed re-sign-in recovery", it, context = TAG)
+                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+                notifyBackupStateChanged()
+                InitResult.RestorationFailed
+            }
         }
     }
 
@@ -420,6 +420,16 @@ class PubkyRepo @Inject constructor(
             _profile.update { profile }
             cacheMetadata(profile)
         }
+    }
+
+    suspend fun deleteProfileWithSessionRetry(): Result<Unit> = withContext(ioDispatcher) {
+        val initialResult = deleteProfile()
+        if (initialResult.isSuccess) return@withContext initialResult
+
+        val refreshedSession = refreshSessionIfPossible().getOrDefault(false)
+        if (!refreshedSession) return@withContext initialResult
+
+        deleteProfile()
     }
 
     suspend fun deleteProfile(): Result<Unit> = runCatching {

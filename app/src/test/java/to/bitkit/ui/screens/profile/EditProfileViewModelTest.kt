@@ -9,7 +9,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
@@ -36,11 +35,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteProfile should retry after refreshing session`() = test {
-        whenever(pubkyRepo.deleteProfile())
-            .thenReturn(Result.failure(RuntimeException("expired session")))
-            .thenReturn(Result.success(Unit))
-        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(true))
+    fun `deleteProfile should emit success when repository delete succeeds`() = test {
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
 
         val sut = createSut()
         advanceUntilIdle()
@@ -52,13 +48,31 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo, times(2)).deleteProfile()
+        verify(pubkyRepo).deleteProfileWithSessionRetry()
+    }
+
+    @Test
+    fun `retryDeleteProfile should emit success when repository delete succeeds`() = test {
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.retryDeleteProfile()
+            advanceUntilIdle()
+
+            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
+        }
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        verify(pubkyRepo).deleteProfileWithSessionRetry()
     }
 
     @Test
     fun `deleteProfile should show retry dialog when delete still fails`() = test {
-        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.failure(RuntimeException("expired session")))
-        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(false))
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
+            Result.failure(RuntimeException("expired session")),
+        )
 
         val sut = createSut()
         advanceUntilIdle()
@@ -72,8 +86,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `disconnectProfile should emit disconnect success`() = test {
-        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.failure(RuntimeException("expired session")))
-        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(false))
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
+            Result.failure(RuntimeException("expired session")),
+        )
         whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
 
         val sut = createSut()
@@ -93,8 +108,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `dismissDeleteFailureDialog should hide retry dialog`() = test {
-        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.failure(RuntimeException("expired session")))
-        whenever(pubkyRepo.refreshSessionIfPossible()).thenReturn(Result.success(false))
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
+            Result.failure(RuntimeException("expired session")),
+        )
 
         val sut = createSut()
         advanceUntilIdle()
