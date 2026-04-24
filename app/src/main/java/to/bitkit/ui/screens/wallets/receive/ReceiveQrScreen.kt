@@ -66,6 +66,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -288,43 +289,52 @@ fun ReceiveQrScreen(
 
             AnimatedVisibility(visible = lightningState.nodeLifecycleState.isRunning()) {
                 val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
-                PrimaryButton(
-                    text = stringResource(
-                        when {
-                            showCjitButton -> R.string.wallet__receive__cjit
-                            showDetails -> R.string.wallet__receive_show_qr
-                            else -> R.string.wallet__receive_show_details
-                        }
-                    ),
-                    icon = {
-                        if (showCjitButton) {
+                if (showCjitButton) {
+                    PrimaryButton(
+                        text = stringResource(R.string.wallet__receive__cjit),
+                        icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_lightning_alt),
                                 tint = Colors.Purple,
                                 contentDescription = null
-
                             )
-                        }
-                    },
-                    onClick = {
-                        if (showCjitButton) {
+                        },
+                        onClick = {
                             onClickReceiveCjit()
                             showDetails = false
-                        } else {
-                            showDetails = !showDetails
-                        }
-                    },
-                    fullWidth = true,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .testTag(
-                            if (showDetails) {
-                                "QRCode"
-                            } else {
-                                "ShowDetails"
-                            }
-                        )
-                )
+                        },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("ShowDetails")
+                    )
+                } else if (showDetails) {
+                    PrimaryButton(
+                        text = stringResource(R.string.wallet__receive_show_qr),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_qr_purple),
+                                tint = Colors.White,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        onClick = { showDetails = false },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("QRCode")
+                    )
+                } else {
+                    TertiaryButton(
+                        text = stringResource(R.string.wallet__receive_show_details),
+                        onClick = { showDetails = true },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("ShowDetails")
+                    )
+                }
             }
 
             VerticalSpacer(16.dp)
