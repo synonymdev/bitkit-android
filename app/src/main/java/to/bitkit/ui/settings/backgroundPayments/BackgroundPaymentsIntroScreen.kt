@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -69,16 +72,19 @@ fun BackgroundPaymentsIntroContent(
         Image(
             painter = painterResource(R.drawable.bell),
             contentDescription = null,
+            contentScale = ContentScale.Fit,
             modifier = Modifier
+                .align(Alignment.CenterHorizontally)
                 .fillMaxWidth()
                 .weight(1f)
+                .heightIn(max = 320.dp)
         )
-
+        VerticalSpacer(32.dp)
         Display(
             text = stringResource(R.string.settings__bg__intro_title).withAccent(accentColor = Colors.Purple),
             color = Colors.White,
         )
-        VerticalSpacer(8.dp)
+        VerticalSpacer(14.dp)
         BodyM(text = stringResource(R.string.settings__bg__intro_desc), color = Colors.White64)
         VerticalSpacer(32.dp)
         Row(
