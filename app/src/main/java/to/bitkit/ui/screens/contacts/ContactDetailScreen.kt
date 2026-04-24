@@ -126,7 +126,7 @@ private fun Content(
         AppAlertDialog(
             title = stringResource(R.string.contacts__delete_confirm_title, currentProfile.name),
             text = stringResource(R.string.contacts__delete_confirm_text, currentProfile.name),
-            confirmText = stringResource(R.string.contacts__delete_contact),
+            confirmText = stringResource(R.string.common__delete_yes),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,
         )

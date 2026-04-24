@@ -145,6 +145,11 @@ class ContactDetailViewModel @Inject constructor(
             _uiState.update { it.copy(showDeleteDialog = false) }
             pubkyRepo.removeContact(publicKey)
                 .onSuccess {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.contacts__delete_success),
+                        testTag = "ContactDeletedToast",
+                    )
                     _effects.emit(ContactDetailEffect.DeleteSuccess)
                 }
                 .onFailure {

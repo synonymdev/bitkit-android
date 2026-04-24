@@ -213,6 +213,11 @@ class EditContactViewModel @Inject constructor(
             _uiState.update { it.copy(showDeleteDialog = false, isSaving = true) }
             pubkyRepo.removeContact(publicKey)
                 .onSuccess {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.contacts__delete_success),
+                        testTag = "ContactDeletedToast",
+                    )
                     _effects.emit(EditContactEffect.DeleteSuccess)
                 }
                 .onFailure {

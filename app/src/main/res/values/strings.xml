@@ -87,6 +87,7 @@
     <string name="contacts__delete_confirm_text">Are you sure you want to delete %1$s from your contacts?</string>
     <string name="contacts__delete_confirm_title">Delete %1$s?</string>
     <string name="contacts__delete_contact">Delete Contact</string>
+    <string name="contacts__delete_success">Contact deleted</string>
     <string name="contacts__detail_empty_state">Unable to load contact.</string>
     <string name="contacts__detail_title">Contact</string>
     <string name="contacts__edit_bio_placeholder">Short note about this contact.</string>
