@@ -36,6 +36,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.ScoringFeeParameters
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
@@ -158,6 +159,7 @@ class LightningService @Inject constructor(
         val builder = Builder.fromConfig(config).apply {
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
+            configureScoringFeeParams()
             configureGossipSource(customRgsServerUrl)
             configureScorerSource()
             setAddressType(selectedType)
@@ -232,6 +234,23 @@ class LightningService @Inject constructor(
         val scorerUrl = Env.ldkScorerUrl ?: return
         Logger.info("Using pathfinding scores source: '$scorerUrl'", context = TAG)
         setPathfindingScoresSource(scorerUrl)
+    }
+
+    private fun Builder.configureScoringFeeParams() {
+        setScoringFeeParams(
+            params = ScoringFeeParameters(
+                basePenaltyMsat = 1024u * 500u,
+                basePenaltyAmountMultiplierMsat = 131_072u * 3u,
+                liquidityPenaltyMultiplierMsat = 0u,
+                liquidityPenaltyAmountMultiplierMsat = 0u,
+                historicalLiquidityPenaltyMultiplierMsat = 10_000u,
+                historicalLiquidityPenaltyAmountMultiplierMsat = 1_250u,
+                antiProbingPenaltyMsat = 250u,
+                consideredImpossiblePenaltyMsat = 1_000_000_000_000u,
+                linearSuccessProbability = false,
+                probingDiversityPenaltyMsat = 0u,
+            )
+        )
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
