@@ -46,7 +46,6 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.shared.modifiers.clickableAlpha
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
@@ -66,9 +65,7 @@ fun ShopDiscoverScreen(
     val tabs = remember { ShopDiscoverTab.entries.toImmutableList() }
     var selectedTab by remember { mutableStateOf(ShopDiscoverTab.Shop) }
 
-    ScreenColumn(
-        modifier = Modifier.gradientBackground(),
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.other__shop__discover__nav_title),
             onBackClick = onBack,
