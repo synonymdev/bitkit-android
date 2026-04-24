@@ -375,8 +375,7 @@ private fun Content(
     } else {
         LARGE_SCREEN_SLOT_CAPACITY
     }
-    val nonItemSlots = (if (homeUiState.banners.isNotEmpty()) 1 else 0) +
-        (if (homeUiState.showWidgetsOnboardingHint) 1 else 0)
+    val nonItemSlots = countNonItemSlots(homeUiState)
     val activityCount = (slotCapacity - nonItemSlots).coerceAtLeast(0)
 
     val paginatedActivities = remember(latestActivities, activityCount) {
@@ -440,6 +439,12 @@ private fun Content(
             }
         }
     }
+}
+
+private fun countNonItemSlots(homeUiState: HomeUiState): Int {
+    val bannerSlot = if (homeUiState.banners.isNotEmpty()) 1 else 0
+    val widgetsHintSlot = if (homeUiState.showWidgetsOnboardingHint) 1 else 0
+    return bannerSlot + widgetsHintSlot
 }
 
 @Suppress("MagicNumber")
