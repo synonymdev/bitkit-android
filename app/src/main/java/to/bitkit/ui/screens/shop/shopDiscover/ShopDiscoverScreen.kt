@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.shop.shopDiscover
 import android.annotation.SuppressLint
 import android.view.ViewGroup
 import android.webkit.WebView
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,57 +16,55 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.configureForBasicWebContent
 import to.bitkit.models.BitrefillCategory
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
+import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 
-@OptIn(ExperimentalMaterial3Api::class)
+private enum class ShopDiscoverTab(@StringRes private val titleRes: Int) : TabItem {
+    Shop(R.string.other__shop__discover__tabs__shop),
+    Map(R.string.other__shop__discover__tabs__map);
+
+    override val uiText @Composable get() = stringResource(titleRes)
+}
+
 @Composable
 fun ShopDiscoverScreen(
     onBack: () -> Unit,
     navigateWebView: (String, String) -> Unit, // Page, Title
 ) {
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf(
-        stringResource(R.string.other__shop__discover__tabs__shop),
-        stringResource(R.string.other__shop__discover__tabs__map),
-    )
+    val tabs = remember { ShopDiscoverTab.entries.toImmutableList() }
+    var selectedTab by remember { mutableStateOf(ShopDiscoverTab.Shop) }
 
     ScreenColumn(
         modifier = Modifier.gradientBackground(),
@@ -76,31 +75,17 @@ fun ShopDiscoverScreen(
             actions = { DrawerNavIcon() },
         )
 
-        PrimaryTabRow(
-            selectedTabIndex = selectedTabIndex,
-            containerColor = Color.Transparent,
-            indicator = {
-                TabRowDefaults.PrimaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(selectedTabIndex),
-                    color = Colors.White,
-                    width = Dp.Unspecified,
-                )
-            },
+        CustomTabRowWithSpacing(
+            tabs = tabs,
+            currentTabIndex = tabs.indexOf(selectedTab),
+            selectedColor = Colors.White,
+            onTabChange = { selectedTab = it },
             modifier = Modifier.padding(horizontal = 16.dp),
-        ) {
-            tabTitles.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTabIndex == index,
-                    onClick = { selectedTabIndex = index },
-                    unselectedContentColor = Colors.White64,
-                    text = { CaptionB(title) },
-                )
-            }
-        }
+        )
 
-        when (selectedTabIndex) {
-            0 -> ShopTabContent(navigateWebView = navigateWebView)
-            1 -> MapTabContent()
+        when (selectedTab) {
+            ShopDiscoverTab.Shop -> ShopTabContent(navigateWebView = navigateWebView)
+            ShopDiscoverTab.Map -> MapTabContent()
         }
     }
 }
