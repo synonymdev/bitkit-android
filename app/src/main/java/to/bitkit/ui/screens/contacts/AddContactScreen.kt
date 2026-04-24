@@ -163,7 +163,7 @@ private fun AddContactSheetContent(
             trailingIcon = {
                 IconButton(
                     onClick = onPaste,
-                    modifier = Modifier.testTag("AddContactPaste"),
+                    modifier = Modifier.testTag("AddContactPaste")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_clipboard_text),
@@ -174,7 +174,7 @@ private fun AddContactSheetContent(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("AddContactPubkyField"),
+                .testTag("AddContactPubkyField")
         )
         VerticalSpacer(16.dp)
 
@@ -187,7 +187,7 @@ private fun AddContactSheetContent(
                 onClick = onScanQr,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("AddContactScanQR"),
+                    .testTag("AddContactScanQR")
             )
             PrimaryButton(
                 text = stringResource(R.string.contacts__add_button),
@@ -195,7 +195,7 @@ private fun AddContactSheetContent(
                 enabled = isSubmitEnabled,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("AddContactAdd"),
+                    .testTag("AddContactAdd")
             )
         }
         VerticalSpacer(16.dp)
@@ -418,7 +418,7 @@ private fun ErrorContent(
         SecondaryButton(
             text = stringResource(R.string.common__retry),
             onClick = onRetry,
-            modifier = Modifier.testTag("AddContactRetry"),
+            modifier = Modifier.testTag("AddContactRetry")
         )
     }
 }
@@ -462,7 +462,7 @@ private fun LoadedContent(
                 onClick = onDiscard,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("AddContactDiscard"),
+                    .testTag("AddContactDiscard")
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
@@ -470,7 +470,7 @@ private fun LoadedContent(
                 enabled = !isLoading,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("AddContactSave"),
+                    .testTag("AddContactSave")
             )
         }
         VerticalSpacer(16.dp)

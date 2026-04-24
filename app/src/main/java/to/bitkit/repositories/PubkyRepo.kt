@@ -190,6 +190,8 @@ class PubkyRepo @Inject constructor(
         if (storedSecretKeyHex.isNullOrEmpty()) {
             if (!savedSessionSecret.isNullOrEmpty()) {
                 Logger.warn("Skipped re-sign-in recovery, no secret key available", context = TAG)
+                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+                notifyBackupStateChanged()
                 InitResult.RestorationFailed
             } else {
                 InitResult.NoSession
@@ -755,27 +757,33 @@ class PubkyRepo @Inject constructor(
 
     suspend fun restoreSessionBackupState(backup: PubkySessionBackupV1?): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            pubkyService.forceSignOut()
-            clearAuthenticatedState()
-            runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-            runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
-
-            when (backup?.kind) {
-                null -> Unit
-                PubkySessionBackupKind.LocalSeed -> {
-                    val secretKeyHex = deriveLocalSecretKeyFromWalletSeed()
-                    keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
+            initializeMutex.withLock {
+                if (backup == null) {
+                    notifyBackupStateChanged()
+                    return@withLock
                 }
 
-                PubkySessionBackupKind.ExternalSession -> {
-                    val sessionSecret = requireNotNull(backup.sessionSecret?.takeIf { it.isNotBlank() }) {
-                        "Missing session secret in backup"
+                pubkyService.forceSignOut()
+                clearAuthenticatedState()
+                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+                runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+
+                when (backup.kind) {
+                    PubkySessionBackupKind.LocalSeed -> {
+                        val secretKeyHex = deriveLocalSecretKeyFromWalletSeed()
+                        keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
                     }
-                    keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
-                }
-            }
 
-            notifyBackupStateChanged()
+                    PubkySessionBackupKind.ExternalSession -> {
+                        val sessionSecret = requireNotNull(backup.sessionSecret?.takeIf { it.isNotBlank() }) {
+                            "Missing session secret in backup"
+                        }
+                        keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+                    }
+                }
+
+                notifyBackupStateChanged()
+            }
         }
     }
 
