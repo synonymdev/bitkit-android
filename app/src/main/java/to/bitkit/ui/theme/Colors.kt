@@ -18,6 +18,7 @@ object Colors {
 
     // Gray Base
     val Gray7 = Color(0xFF101010)
+    val Gray65 = Color(0xFF151515)
     val Gray6 = Color(0xFF1C1C1C)
     val Gray5 = Color(0xFF2A2A2A)
     val Gray4 = Color(0xFF3A3A3A)
