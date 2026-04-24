@@ -17,7 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +59,7 @@ fun ContactsScreen(
     onClickContact: (String) -> Unit,
     onAddContact: (String) -> Unit = {},
     onScanQr: () -> Unit = {},
+    openAddContactSheet: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -72,6 +73,7 @@ fun ContactsScreen(
         onSearchTextChange = { viewModel.onSearchTextChange(it) },
         onAddContact = onAddContact,
         onScanQr = onScanQr,
+        openAddContactSheet = openAddContactSheet,
     )
 }
 
@@ -84,8 +86,9 @@ private fun Content(
     onSearchTextChange: (String) -> Unit,
     onAddContact: (String) -> Unit,
     onScanQr: () -> Unit,
+    openAddContactSheet: Boolean,
 ) {
-    var showAddContactSheet by remember { mutableStateOf(false) }
+    var showAddContactSheet by rememberSaveable { mutableStateOf(openAddContactSheet) }
 
     ScreenColumn {
         AppTopBar(
@@ -329,6 +332,7 @@ private fun Preview() {
             onSearchTextChange = {},
             onAddContact = {},
             onScanQr = {},
+            openAddContactSheet = false,
         )
     }
 }

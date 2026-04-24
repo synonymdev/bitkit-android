@@ -217,7 +217,7 @@ private fun ProfileBody(
                 color = Colors.White64,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("ProfileViewTagsHeader"),
+                    .testTag("ProfileViewTagsHeader")
             )
             VerticalSpacer(8.dp)
             @OptIn(ExperimentalLayoutApi::class)

@@ -224,7 +224,7 @@ private fun AvatarSection(
             .clip(CircleShape)
             .background(Colors.Gray5)
             .testTag("EditProfileAvatar")
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
     ) {
         when {
             newAvatarUri != null -> AsyncImage(

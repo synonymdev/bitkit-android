@@ -271,7 +271,7 @@ private fun LoadingContent(publicKey: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -287,7 +287,7 @@ private fun LoadingContent(publicKey: String) {
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(Colors.Gray5),
+                .background(Colors.Gray5)
         ) {
             Display(
                 text = publicKey.take(1).uppercase(),
@@ -306,7 +306,7 @@ private fun LoadingContent(publicKey: String) {
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
         ) {
             RotatingEllipses(modifier = Modifier.size(256.dp))
         }
@@ -391,7 +391,7 @@ private fun RotatingEllipses(modifier: Modifier = Modifier) {
                         style = dashedStroke,
                     )
                 }
-            },
+            }
     ) {
         Image(
             painter = painterResource(R.drawable.card),
@@ -411,7 +411,7 @@ private fun ErrorContent(
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         BodyM(text = error, color = Colors.White64, textAlign = TextAlign.Center)
         VerticalSpacer(16.dp)
@@ -434,7 +434,7 @@ private fun LoadedContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 

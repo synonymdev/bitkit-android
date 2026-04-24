@@ -96,7 +96,7 @@ fun ProfileEditForm(
             colors = AppTextFieldDefaults.transparent,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("ProfileEditName"),
+                .testTag("ProfileEditName")
         )
         HorizontalDivider()
         VerticalSpacer(12.dp)
@@ -128,7 +128,7 @@ fun ProfileEditForm(
             maxLines = 4,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("ProfileEditBio"),
+                .testTag("ProfileEditBio")
         )
 
         VerticalSpacer(16.dp)
@@ -177,7 +177,7 @@ fun ProfileEditForm(
                         color = Colors.White10,
                         shape = AppShapes.small,
                     )
-                    .testTag("ProfileEditLink_$index"),
+                    .testTag("ProfileEditLink_$index")
             )
             VerticalSpacer(8.dp)
         }
@@ -296,7 +296,7 @@ fun ProfileEditForm(
                 onClick = onCancel,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("ProfileEditCancel"),
+                    .testTag("ProfileEditCancel")
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
@@ -304,7 +304,7 @@ fun ProfileEditForm(
                 enabled = isSaveEnabled,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("ProfileEditSave"),
+                    .testTag("ProfileEditSave")
             )
         }
         VerticalSpacer(16.dp)

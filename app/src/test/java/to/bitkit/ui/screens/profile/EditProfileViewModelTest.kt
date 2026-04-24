@@ -15,12 +15,17 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditProfileViewModelTest : BaseUnitTest() {
+    companion object {
+        private const val TEST_PUBLIC_KEY = "pubkyalice"
+    }
+
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
 
@@ -71,7 +76,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `deleteProfile should show retry dialog when delete still fails`() = test {
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
-            Result.failure(RuntimeException("expired session")),
+            Result.failure(TestAppError("expired session")),
         )
 
         val sut = createSut()
@@ -87,7 +92,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `disconnectProfile should emit disconnect success`() = test {
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
-            Result.failure(RuntimeException("expired session")),
+            Result.failure(TestAppError("expired session")),
         )
         whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
 
@@ -109,7 +114,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `dismissDeleteFailureDialog should hide retry dialog`() = test {
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(
-            Result.failure(RuntimeException("expired session")),
+            Result.failure(TestAppError("expired session")),
         )
 
         val sut = createSut()
@@ -142,8 +147,6 @@ class EditProfileViewModelTest : BaseUnitTest() {
         tags = listOf("friend").toImmutableList(),
         status = null,
     )
-
-    companion object {
-        private const val TEST_PUBLIC_KEY = "pubkyalice"
-    }
 }
+
+private class TestAppError(message: String) : AppError(message)

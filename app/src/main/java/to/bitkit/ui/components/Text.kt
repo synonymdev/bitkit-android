@@ -24,6 +24,8 @@ fun Display(
     fontWeight: FontWeight = FontWeight.Black,
     fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
     textAlign: TextAlign? = null,
 ) {
     Text(
@@ -33,6 +35,8 @@ fun Display(
             fontSize = fontSize,
             color = color,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         textAlign = textAlign,
         modifier = modifier,
     )
