@@ -95,6 +95,8 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -2724,3 +2726,21 @@ sealed interface QuickPayData {
     data class LnurlPay(override val sats: ULong, val callback: String, val amountMsats: ULong) : QuickPayData
 }
 // endregion
+
+internal fun resolvePastedPubkyRoute(
+    input: String,
+    ownPublicKey: String?,
+    contacts: List<PubkyProfile>,
+): Routes? {
+    val normalizedKey = PubkyPublicKeyFormat.normalized(input) ?: return null
+
+    if (PubkyPublicKeyFormat.matches(normalizedKey, ownPublicKey)) {
+        return Routes.Profile
+    }
+
+    if (contacts.any { PubkyPublicKeyFormat.matches(it.publicKey, normalizedKey) }) {
+        return Routes.ContactDetail(normalizedKey)
+    }
+
+    return Routes.AddContact(normalizedKey)
+}

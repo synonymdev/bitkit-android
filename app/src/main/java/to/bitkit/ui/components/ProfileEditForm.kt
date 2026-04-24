@@ -159,13 +159,13 @@ fun ProfileEditForm(
                         )
                         IconButton(
                             onClick = { onRemoveLink(index) },
-                            modifier = Modifier.testTag("ProfileEditLinkRemove_$index"),
+                            modifier = Modifier.testTag("ProfileEditLinkRemove_$index")
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_trash),
                                 contentDescription = null,
                                 tint = Colors.White64,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -279,7 +279,7 @@ fun ProfileEditForm(
                                 modifier = Modifier.size(16.dp)
                             )
                         },
-                        modifier = Modifier.testTag("ProfileEditDelete"),
+                        modifier = Modifier.testTag("ProfileEditDelete")
                     )
                 }
             }

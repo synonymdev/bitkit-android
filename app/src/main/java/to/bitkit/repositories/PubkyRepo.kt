@@ -69,9 +69,11 @@ class PubkyRepo @Inject constructor(
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
+    private val serviceInitializeMutex = Mutex()
     private val initializeMutex = Mutex()
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
+    private var isServiceInitialized = false
 
     private val _authState = MutableStateFlow(PubkyAuthState.Idle)
 
@@ -126,11 +128,15 @@ class PubkyRepo @Inject constructor(
     // region Initialization
 
     suspend fun initialize() = withContext(ioDispatcher) {
+        runCatching {
+            ensureServiceInitialized()
+        }.onFailure {
+            Logger.error("Failed to initialize paykit", it, context = TAG)
+        }.getOrNull() ?: return@withContext
+
         initializeMutex.withLock {
             _sessionRestorationFailed.update { false }
             val result = runCatching {
-                pubkyService.initialize()
-
                 val savedSessionSecret = runCatching {
                     keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
                 }.getOrNull()
@@ -162,6 +168,15 @@ class PubkyRepo @Inject constructor(
                     clearAuthenticatedState()
                     _sessionRestorationFailed.update { true }
                 }
+            }
+        }
+    }
+
+    private suspend fun ensureServiceInitialized() = withContext(ioDispatcher) {
+        serviceInitializeMutex.withLock {
+            if (!isServiceInitialized) {
+                pubkyService.initialize()
+                isServiceInitialized = true
             }
         }
     }
@@ -757,12 +772,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun restoreSessionBackupState(backup: PubkySessionBackupV1?): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            initializeMutex.withLock {
-                if (backup == null) {
-                    notifyBackupStateChanged()
-                    return@withLock
-                }
+            if (backup == null) {
+                notifyBackupStateChanged()
+                return@withContext
+            }
 
+            ensureServiceInitialized()
+
+            initializeMutex.withLock {
                 pubkyService.forceSignOut()
                 clearAuthenticatedState()
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
