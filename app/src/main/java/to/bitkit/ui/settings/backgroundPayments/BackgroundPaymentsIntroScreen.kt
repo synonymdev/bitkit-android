@@ -66,7 +66,7 @@ fun BackgroundPaymentsIntroContent(
         )
 
         Display(
-            text = stringResource(R.string.settings__bg__intro_title).withAccent(accentColor = Colors.Blue),
+            text = stringResource(R.string.settings__bg__intro_title).withAccent(accentColor = Colors.Purple),
             color = Colors.White,
         )
         VerticalSpacer(8.dp)
