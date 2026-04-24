@@ -61,11 +61,12 @@ private enum class ShopDiscoverTab(@StringRes private val titleRes: Int) : TabIt
 fun ShopDiscoverScreen(
     onBack: () -> Unit,
     navigateWebView: (String, String) -> Unit, // Page, Title
+    modifier: Modifier = Modifier,
 ) {
     val tabs = remember { ShopDiscoverTab.entries.toImmutableList() }
     var selectedTab by remember { mutableStateOf(ShopDiscoverTab.Shop) }
 
-    ScreenColumn {
+    ScreenColumn(modifier = modifier) {
         AppTopBar(
             titleText = stringResource(R.string.other__shop__discover__nav_title),
             onBackClick = onBack,
@@ -77,7 +78,7 @@ fun ShopDiscoverScreen(
             currentTabIndex = tabs.indexOf(selectedTab),
             selectedColor = Colors.White,
             onTabChange = { selectedTab = it },
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         when (selectedTab) {
@@ -90,9 +91,10 @@ fun ShopDiscoverScreen(
 @Composable
 private fun ShopTabContent(
     navigateWebView: (String, String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.padding(horizontal = 16.dp),
+        modifier = modifier.padding(horizontal = 16.dp)
     ) {
         item {
             VerticalSpacer(16.dp)
@@ -102,31 +104,29 @@ private fun ShopTabContent(
             ) {
                 val title = stringResource(R.string.other__shop__discover__gift_cards__title)
                 SuggestionCard(
-                    modifier = Modifier.weight(1f),
                     gradientColor = Colors.Green24,
                     title = title,
                     description = stringResource(R.string.other__shop__discover__gift_cards__description),
                     icon = R.drawable.gift,
                     captionColor = Colors.Gray1,
-
                     disableGlow = true,
                     onClick = {
                         navigateWebView("gift-cards", title)
                     },
+                    modifier = Modifier.weight(1f)
                 )
                 val title2 = stringResource(R.string.other__shop__discover__esims__title)
                 SuggestionCard(
-                    modifier = Modifier.weight(1f),
                     gradientColor = Colors.Yellow24,
                     title = title2,
                     description = stringResource(R.string.other__shop__discover__esims__description),
                     icon = R.drawable.globe,
                     captionColor = Colors.Gray1,
-
                     disableGlow = true,
                     onClick = {
                         navigateWebView("esims", title2)
                     },
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -137,31 +137,29 @@ private fun ShopTabContent(
             ) {
                 val title = stringResource(R.string.other__shop__discover__refill__title)
                 SuggestionCard(
-                    modifier = Modifier.weight(1f),
                     gradientColor = Colors.Purple24,
                     title = title,
                     description = stringResource(R.string.other__shop__discover__refill__description),
                     icon = R.drawable.phone,
                     captionColor = Colors.Gray1,
-
                     disableGlow = true,
                     onClick = {
                         navigateWebView("refill", title)
                     },
+                    modifier = Modifier.weight(1f)
                 )
                 val title2 = stringResource(R.string.other__shop__discover__travel__title)
                 SuggestionCard(
-                    modifier = Modifier.weight(1f),
                     gradientColor = Colors.Red24,
                     title = title2,
                     description = stringResource(R.string.other__shop__discover__travel__description),
                     icon = R.drawable.rocket_2,
-
                     disableGlow = true,
                     captionColor = Colors.Gray1,
                     onClick = {
                         navigateWebView("buy/travel", title2)
                     },
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -175,38 +173,38 @@ private fun ShopTabContent(
         items(items = BitrefillCategory.entries.toList(), key = { it.name }) { item ->
             Column {
                 Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clickableAlpha {
                             navigateWebView(item.route, item.title)
                         }
-                        .padding(top = 8.5.dp, bottom = 10.5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(top = 8.5.dp, bottom = 10.5.dp)
                 ) {
                     Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .clip(CircleShape)
                             .size(32.dp)
-                            .background(Colors.White10),
-                        contentAlignment = Alignment.Center,
+                            .background(Colors.White10)
                     ) {
                         Icon(
                             imageVector = item.icon,
                             contentDescription = null,
                             tint = Colors.White64,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                     BodyM(
                         text = item.title,
                         modifier = Modifier
                             .weight(1f)
-                            .padding(horizontal = 8.dp),
+                            .padding(horizontal = 8.dp)
                     )
                     Icon(
                         painter = painterResource(R.drawable.ic_chevron_right),
                         contentDescription = null,
                         tint = Colors.White64,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(24.dp)
                     )
                 }
                 HorizontalDivider()
@@ -217,7 +215,9 @@ private fun ShopTabContent(
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun MapTabContent() {
+private fun MapTabContent(
+    modifier: Modifier = Modifier,
+) {
     var isLoading by remember { mutableStateOf(true) }
 
     val webViewClient = remember {
@@ -227,13 +227,12 @@ private fun MapTabContent() {
     }
 
     Box(
-        modifier = Modifier
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
-            .clip(Shapes.medium),
         contentAlignment = Alignment.Center,
+        modifier = modifier
+            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+            .clip(Shapes.medium)
     ) {
         AndroidView(
-            modifier = Modifier.fillMaxWidth(),
             factory = { context ->
                 WebView(context).apply {
                     layoutParams = ViewGroup.LayoutParams(
@@ -246,6 +245,7 @@ private fun MapTabContent() {
                     loadUrl(Env.BTC_MAP_URL)
                 }
             },
+            modifier = Modifier.fillMaxWidth()
         )
 
         if (isLoading) {
