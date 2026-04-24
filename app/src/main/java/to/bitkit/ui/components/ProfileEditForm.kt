@@ -157,12 +157,15 @@ fun ProfileEditForm(
                             tint = Colors.White64,
                             modifier = Modifier.size(16.dp)
                         )
-                        IconButton(onClick = { onRemoveLink(index) }) {
+                        IconButton(
+                            onClick = { onRemoveLink(index) },
+                            modifier = Modifier.testTag("ProfileEditLinkRemove_$index"),
+                        ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_trash),
                                 contentDescription = null,
                                 tint = Colors.White64,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(16.dp),
                             )
                         }
                     }
@@ -252,7 +255,7 @@ fun ProfileEditForm(
         }
 
         if (onDelete != null) {
-            Column(modifier = Modifier.testTag("ProfileEditDelete")) {
+            Column {
                 VerticalSpacer(16.dp)
                 HorizontalDivider()
                 VerticalSpacer(16.dp)
@@ -276,6 +279,7 @@ fun ProfileEditForm(
                                 modifier = Modifier.size(16.dp)
                             )
                         },
+                        modifier = Modifier.testTag("ProfileEditDelete"),
                     )
                 }
             }

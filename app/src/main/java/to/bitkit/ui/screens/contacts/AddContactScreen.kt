@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -160,7 +161,10 @@ private fun AddContactSheetContent(
                 }
             },
             trailingIcon = {
-                IconButton(onClick = onPaste) {
+                IconButton(
+                    onClick = onPaste,
+                    modifier = Modifier.testTag("AddContactPaste"),
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_clipboard_text),
                         contentDescription = null,
@@ -168,7 +172,9 @@ private fun AddContactSheetContent(
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("AddContactPubkyField"),
         )
         VerticalSpacer(16.dp)
 
@@ -179,13 +185,17 @@ private fun AddContactSheetContent(
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_scan_qr),
                 onClick = onScanQr,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactScanQR"),
             )
             PrimaryButton(
                 text = stringResource(R.string.contacts__add_button),
                 onClick = onSubmit,
                 enabled = isSubmitEnabled,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactAdd"),
             )
         }
         VerticalSpacer(16.dp)
@@ -408,6 +418,7 @@ private fun ErrorContent(
         SecondaryButton(
             text = stringResource(R.string.common__retry),
             onClick = onRetry,
+            modifier = Modifier.testTag("AddContactRetry"),
         )
     }
 }
@@ -449,13 +460,17 @@ private fun LoadedContent(
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_discard),
                 onClick = onDiscard,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactDiscard"),
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = !isLoading,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactSave"),
             )
         }
         VerticalSpacer(16.dp)

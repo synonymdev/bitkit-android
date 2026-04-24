@@ -161,8 +161,8 @@ private fun ProfileBody(
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                testTag = "QRCode",
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "ProfileQRCode",
             )
             if (profile.imageUrl != null) {
                 Box(
