@@ -199,6 +199,7 @@ class EditContactViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.contacts__edit_contact_saved),
+                    testTag = "ContactUpdatedToast",
                 )
                 _effects.emit(EditContactEffect.SaveSuccess)
             }.onFailure {
