@@ -154,7 +154,7 @@ class PubkyRepo @Inject constructor(
                 is InitResult.Restored -> {
                     _publicKey.update { result.publicKey }
                     _authState.update { PubkyAuthState.Authenticated }
-                    Logger.info("Paykit session restored for '${result.publicKey}'", context = TAG)
+                    Logger.info("Restored paykit session for '${result.publicKey}'", context = TAG)
                     loadProfile()
                     loadContacts()
                 }
@@ -172,7 +172,7 @@ class PubkyRepo @Inject constructor(
     ): InitResult = withContext(ioDispatcher) {
         if (!savedSessionSecret.isNullOrEmpty()) {
             runCatching {
-                val publicKey = pubkyService.importSession(savedSessionSecret)
+                val publicKey = pubkyService.importSession(savedSessionSecret).ensurePubkyPrefix()
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
@@ -199,7 +199,7 @@ class PubkyRepo @Inject constructor(
                 val newSession = pubkyService.signIn(storedSecretKeyHex)
                 keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, newSession)
                 notifyBackupStateChanged()
-                val publicKey = pubkyService.importSession(newSession)
+                val publicKey = pubkyService.importSession(newSession).ensurePubkyPrefix()
                 Logger.info("Re-signed in and restored session for '$publicKey'", context = TAG)
                 InitResult.Restored(publicKey)
             }.getOrElse {
@@ -232,7 +232,7 @@ class PubkyRepo @Inject constructor(
         return runCatching {
             withContext(ioDispatcher) {
                 val sessionSecret = pubkyService.completeAuth()
-                val pk = pubkyService.importSession(sessionSecret)
+                val pk = pubkyService.importSession(sessionSecret).ensurePubkyPrefix()
 
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
                 keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
@@ -245,7 +245,7 @@ class PubkyRepo @Inject constructor(
         }.onSuccess { pk ->
             _publicKey.update { pk }
             _authState.update { PubkyAuthState.Authenticated }
-            Logger.info("Pubky auth completed for '$pk'", context = TAG)
+            Logger.info("Completed pubky auth for '$pk'", context = TAG)
             loadProfile()
         }.map { }
     }
@@ -253,7 +253,7 @@ class PubkyRepo @Inject constructor(
     suspend fun cancelAuthentication() {
         runCatching {
             withContext(ioDispatcher) { pubkyService.cancelAuth() }
-        }.onFailure { Logger.warn("Cancel auth failed", it, context = TAG) }
+        }.onFailure { Logger.warn("Failed to cancel auth", it, context = TAG) }
         _authState.update { PubkyAuthState.Idle }
     }
 
@@ -343,7 +343,7 @@ class PubkyRepo @Inject constructor(
             val session = runCatching {
                 pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
             }.getOrElse {
-                Logger.warn("signUp failed (likely already registered), trying signIn", it, context = TAG)
+                Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
                 pubkyService.signIn(secretKeyHex)
             }
 
@@ -357,7 +357,7 @@ class PubkyRepo @Inject constructor(
 
             _publicKey.update { publicKeyZ32 }
             _authState.update { PubkyAuthState.Authenticated }
-            Logger.info("Identity created for '$publicKeyZ32'", context = TAG)
+            Logger.info("Created identity for '$publicKeyZ32'", context = TAG)
             loadProfile()
             loadContacts()
         }
