@@ -117,7 +117,7 @@ fun ReceiveQrScreen(
         walletState.bolt11,
         walletState.onchainAddress,
         cjitInvoice,
-        lightningState.nodeLifecycleState
+        lightningState.nodeLifecycleState,
     ) {
         visibleTabs.associateWith { tab ->
             getInvoiceForTab(
@@ -126,7 +126,7 @@ fun ReceiveQrScreen(
                 bolt11 = walletState.bolt11,
                 cjitInvoice = cjitInvoice,
                 isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
-                onchainAddress = walletState.onchainAddress
+                onchainAddress = walletState.onchainAddress,
             )
         }
     }
@@ -137,7 +137,7 @@ fun ReceiveQrScreen(
 
     val snapBehavior = rememberSnapFlingBehavior(
         lazyListState = lazyListState,
-        snapPosition = SnapPosition.Center
+        snapPosition = SnapPosition.Center,
     )
 
     // Calculate current tab based on scroll position for smooth indicator and color updates
@@ -306,7 +306,7 @@ fun ReceiveQrScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_lightning_alt),
                                     tint = Colors.Purple,
-                                    contentDescription = null
+                                    contentDescription = null,
                                 )
                             },
                             onClick = {
@@ -407,7 +407,7 @@ private fun ReceiveQrView(
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
                     text = stringResource(R.string.wallet__receive_copied),
-                    tooltipState = qrButtonTooltipState
+                    tooltipState = qrButtonTooltipState,
                 ) {
                     PrimaryButton(
                         text = stringResource(R.string.common__copy),
@@ -457,11 +457,11 @@ private fun ReceiveQrView(
 @Composable
 fun CjitOnBoardingView(modifier: Modifier = Modifier) {
     Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clip(AppShapes.small)
             .background(color = Colors.Black)
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(32.dp)
     ) {
         Display(stringResource(R.string.wallet__receive_onboarding_title).withAccent(accentColor = Colors.Purple))
         VerticalSpacer(8.dp)
@@ -733,8 +733,8 @@ private fun PreviewAutoMode() {
             cltvExpiryDelta = 0u,
             maxDustHtlcExposure = org.lightningdevkit.ldknode.MaxDustHtlcExposure.FeeRateMultiplier(0uL),
             forceCloseAvoidanceMaxFeeSatoshis = 0uL,
-            acceptUnderpayingHtlcs = false
-        )
+            acceptUnderpayingHtlcs = false,
+        ),
     )
 
     AppThemeSurface {
@@ -804,8 +804,8 @@ private fun PreviewSpendingMode() {
             cltvExpiryDelta = 0u,
             maxDustHtlcExposure = org.lightningdevkit.ldknode.MaxDustHtlcExposure.FeeRateMultiplier(0uL),
             forceCloseAvoidanceMaxFeeSatoshis = 0uL,
-            acceptUnderpayingHtlcs = false
-        )
+            acceptUnderpayingHtlcs = false,
+        ),
     )
 
     AppThemeSurface {
