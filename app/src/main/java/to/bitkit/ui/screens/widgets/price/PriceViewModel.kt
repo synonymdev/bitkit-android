@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
-import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.PricePreferences
@@ -68,8 +67,6 @@ class PriceViewModel @Inject constructor(
     private val _customPreferences = MutableStateFlow(PricePreferences())
     val customPreferences: StateFlow<PricePreferences> = _customPreferences.asStateFlow()
 
-    private val _allPeriodsUsd = MutableStateFlow<ImmutableList<PriceWidgetData>>(persistentListOf())
-    val allPeriodsUsd: StateFlow<ImmutableList<PriceWidgetData>> = _allPeriodsUsd.asStateFlow()
     private val _allPrices = MutableStateFlow<ImmutableList<PriceDTO>>(persistentListOf())
 
     private val _previewPrice: MutableStateFlow<PriceDTO?> = MutableStateFlow(null)
@@ -94,18 +91,8 @@ class PriceViewModel @Inject constructor(
         _previewPrice.update { _allPrices.value.firstOrNull { it.widgets.firstOrNull()?.period == period } }
     }
 
-    fun toggleTradingPair(pair: TradingPair) {
-        if (pair in _customPreferences.value.enabledPairs) {
-            _customPreferences.update { it.copy(enabledPairs = it.enabledPairs - pair) }
-        } else {
-            _customPreferences.update { it.copy(enabledPairs = it.enabledPairs + pair) }
-        }
-    }
-
-    fun toggleShowSource() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showSource = !preferences.showSource)
-        }
+    fun selectTradingPair(pair: TradingPair) {
+        _customPreferences.update { it.copy(enabledPairs = listOf(pair)) }
     }
 
     fun resetCustomPreferences() {
@@ -152,7 +139,6 @@ class PriceViewModel @Inject constructor(
             _isLoading.update { true }
             widgetsRepo.fetchAllPeriods().onSuccess { data ->
                 _allPrices.update { data.toImmutableList() }
-                _allPeriodsUsd.update { data.map { priceDTO -> priceDTO.widgets.first() }.toImmutableList() }
                 _isLoading.update { false }
             }.onFailure {
                 Logger.warn("collectAllPeriodPrices error. Trying again in 1 second", context = TAG)

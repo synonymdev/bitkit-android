@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="appwidget__loading">Loading…</string>
+    <string name="appwidget__price__currency">Currency</string>
+    <string name="appwidget__price__day">Day</string>
     <string name="appwidget__price__description">Bitcoin price tracker</string>
-    <string name="appwidget__price__period">Time period</string>
-    <string name="appwidget__price__trading_pairs">Trading pairs</string>
+    <string name="appwidget__price__month">Month</string>
+    <string name="appwidget__price__timeframe">Timeframe</string>
+    <string name="appwidget__price__week">Week</string>
+    <string name="appwidget__price__year">Year</string>
     <string name="cards__backupSeedPhrase__description">Store your bitcoin</string>
     <string name="cards__backupSeedPhrase__title">Back up</string>
     <string name="cards__buyBitcoin__description">Buy some bitcoin</string>

@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.widgets.price
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,17 +28,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
-import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
-import to.bitkit.data.dto.price.PriceDTO
-import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -55,8 +50,6 @@ fun PriceEditScreen(
     navigatePreview: () -> Unit,
 ) {
     val customPreferences by viewModel.customPreferences.collectAsStateWithLifecycle()
-    val currentPrice by viewModel.currentPrice.collectAsStateWithLifecycle()
-    val allPeriodsUsd by viewModel.allPeriodsUsd.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     PriceEditContent(
@@ -64,39 +57,26 @@ fun PriceEditScreen(
         preferences = customPreferences,
         onClickReset = { viewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
-        allPeriodsUsd = allPeriodsUsd,
-        priceModel = currentPrice ?: PriceDTO(
-            widgets = listOf(),
-            source = ""
-        ),
-        onClickTradingPair = { pair ->
-            viewModel.toggleTradingPair(pair = pair)
-        },
-        onClickGraph = { period ->
-            viewModel.setPeriod(period = period)
-        },
+        onSelectTradingPair = { viewModel.selectTradingPair(pair = it) },
+        onSelectPeriod = { viewModel.setPeriod(period = it) },
         isLoading = isLoading,
-        onClickSource = {
-            viewModel.toggleShowSource()
-        }
     )
 }
 
 @Composable
 fun PriceEditContent(
     onBack: () -> Unit,
-    priceModel: PriceDTO,
-    allPeriodsUsd: ImmutableList<PriceWidgetData>,
     onClickReset: () -> Unit,
-    onClickGraph: (GraphPeriod) -> Unit,
-    onClickTradingPair: (TradingPair) -> Unit,
+    onSelectPeriod: (GraphPeriod) -> Unit,
+    onSelectTradingPair: (TradingPair) -> Unit,
     onClickPreview: () -> Unit,
-    onClickSource: () -> Unit,
     preferences: PricePreferences,
     isLoading: Boolean,
 ) {
+    val selectedPair = preferences.enabledPairs.firstOrNull() ?: TradingPair.BTC_USD
+
     ScreenColumn(
-        modifier = Modifier.testTag("weather_edit_screen")
+        modifier = Modifier.testTag("price_edit_screen")
     ) {
         Box(
             modifier = Modifier
@@ -112,45 +92,37 @@ fun PriceEditContent(
             ) {
                 VerticalSpacer(82.dp)
 
-                BodyM(
-                    text = stringResource(R.string.widgets__widget__edit_description).replace(
-                        "{name}",
-                        stringResource(R.string.widgets__price__name)
-                    ),
+                Caption13Up(
+                    text = stringResource(R.string.appwidget__price__currency),
                     color = Colors.White64,
-                    modifier = Modifier.testTag("edit_description")
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                VerticalSpacer(32.dp)
-
-                priceModel.widgets.map { data ->
-                    PriceEditOptionRow(
-                        label = data.pair.displayName,
-                        value = data.price,
-                        isEnabled = data.pair in preferences.enabledPairs,
-                        onClick = {
-                            onClickTradingPair(data.pair)
-                        },
-                        testTagPrefix = data.pair.displayName,
+                for (pair in TradingPair.entries) {
+                    SelectableRow(
+                        label = pair.displayName,
+                        isSelected = pair == selectedPair,
+                        onClick = { onSelectTradingPair(pair) },
+                        testTagPrefix = pair.displayName,
                     )
                 }
 
-                allPeriodsUsd.map { priceData ->
-                    PriceChartOptionRow(
-                        widgetData = priceData,
-                        isEnabled = priceData.period == preferences.period,
-                        onClick = onClickGraph,
-                        testTagPrefix = priceData.period.value,
+                VerticalSpacer(16.dp)
+
+                Caption13Up(
+                    text = stringResource(R.string.appwidget__price__timeframe),
+                    color = Colors.White64,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+
+                for (period in GraphPeriod.entries) {
+                    SelectableRow(
+                        label = period.label(),
+                        isSelected = period == preferences.period,
+                        onClick = { onSelectPeriod(period) },
+                        testTagPrefix = period.value,
                     )
                 }
-
-                PriceEditOptionRow(
-                    label = stringResource(R.string.widgets__widget__source),
-                    value = priceModel.source,
-                    isEnabled = preferences.showSource,
-                    onClick = onClickSource,
-                    testTagPrefix = "showSource",
-                )
             }
 
             Column {
@@ -162,10 +134,10 @@ fun PriceEditContent(
                         Brush.verticalGradient(
                             colors = listOf(
                                 MaterialTheme.colorScheme.background,
-                                Color.Transparent
+                                Color.Transparent,
                             ),
-                            tileMode = TileMode.Decal
-                        )
+                            tileMode = TileMode.Decal,
+                        ),
                     )
                 )
             }
@@ -202,10 +174,9 @@ fun PriceEditContent(
 }
 
 @Composable
-private fun PriceEditOptionRow(
+private fun SelectableRow(
     label: String,
-    value: String,
-    isEnabled: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
     testTagPrefix: String,
 ) {
@@ -214,34 +185,23 @@ private fun PriceEditOptionRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(vertical = 16.dp)
                 .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 14.dp)
                 .testTag("${testTagPrefix}_setting_row")
         ) {
             BodySSB(
                 text = label,
-                color = Colors.White64,
+                color = if (isSelected) Colors.White else Colors.White64,
                 modifier = Modifier
                     .weight(1f)
                     .testTag("${testTagPrefix}_label")
             )
-
-            if (value.isNotEmpty()) {
-                BodySSB(
-                    text = value,
-                    color = Colors.White,
-                    modifier = Modifier.testTag("${testTagPrefix}_text")
-                )
-            }
-
-            IconButton(
-                onClick = onClick,
-                modifier = Modifier.testTag("WidgetEditField-$testTagPrefix")
-            ) {
+            if (isSelected) {
                 Icon(
                     painter = painterResource(R.drawable.ic_checkmark),
                     contentDescription = null,
-                    tint = if (isEnabled) Colors.Brand else Colors.White50,
+                    tint = Colors.Brand,
                     modifier = Modifier
                         .size(32.dp)
                         .testTag("${testTagPrefix}_toggle_icon")
@@ -256,96 +216,27 @@ private fun PriceEditOptionRow(
 }
 
 @Composable
-private fun PriceChartOptionRow(
-    widgetData: PriceWidgetData,
-    isEnabled: Boolean,
-    onClick: (GraphPeriod) -> Unit,
-    testTagPrefix: String,
-) {
-    Column {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(vertical = 21.dp)
-                .fillMaxWidth()
-                .testTag("${testTagPrefix}_setting_row")
-        ) {
-            ChartComponent(
-                widgetData = widgetData,
-                modifier = Modifier.weight(1f)
-            )
+private fun GraphPeriod.label(): String = stringResource(
+    when (this) {
+        GraphPeriod.ONE_DAY -> R.string.appwidget__price__day
+        GraphPeriod.ONE_WEEK -> R.string.appwidget__price__week
+        GraphPeriod.ONE_MONTH -> R.string.appwidget__price__month
+        GraphPeriod.ONE_YEAR -> R.string.appwidget__price__year
+    },
+)
 
-            IconButton(
-                onClick = { onClick(widgetData.period) },
-                modifier = Modifier.testTag("WidgetEditField-$testTagPrefix")
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_checkmark),
-                    contentDescription = null,
-                    tint = if (isEnabled) Colors.Brand else Colors.White50,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .testTag("${testTagPrefix}_toggle_icon"),
-                )
-            }
-        }
-
-        HorizontalDivider(
-            modifier = Modifier.testTag("${testTagPrefix}_divider")
-        )
-    }
-}
-
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
         PriceEditContent(
             onBack = {},
-            priceModel = PriceDTO(
-                widgets = listOf(
-                    PriceWidgetData(
-                        pair = TradingPair.BTC_USD,
-                        period = GraphPeriod.ONE_DAY,
-                        change = Change(isPositive = true, formatted = "+2.5%"),
-                        price = "$97,500",
-                        pastValues = listOf(95000.0, 96000.0, 95500.0, 97000.0, 97500.0)
-                    ),
-                    PriceWidgetData(
-                        pair = TradingPair.BTC_EUR,
-                        period = GraphPeriod.ONE_DAY,
-                        change = Change(isPositive = true, formatted = "+2.3%"),
-                        price = "€89,000",
-                        pastValues = listOf(87000.0, 88000.0, 87500.0, 88500.0, 89000.0)
-                    )
-                ),
-                source = "Kraken"
-            ),
-            allPeriodsUsd = persistentListOf(
-                PriceWidgetData(
-                    pair = TradingPair.BTC_USD,
-                    period = GraphPeriod.ONE_DAY,
-                    change = Change(isPositive = true, formatted = "+2.5%"),
-                    price = "$97,500",
-                    pastValues = listOf(95000.0, 96000.0, 95500.0, 97000.0, 97500.0)
-                ),
-                PriceWidgetData(
-                    pair = TradingPair.BTC_USD,
-                    period = GraphPeriod.ONE_WEEK,
-                    change = Change(isPositive = true, formatted = "+5.0%"),
-                    price = "$97,500",
-                    pastValues = listOf(93000.0, 94000.0, 95000.0, 96000.0, 97500.0)
-                )
-            ),
             onClickReset = {},
-            onClickGraph = {},
-            onClickTradingPair = {},
+            onSelectPeriod = {},
+            onSelectTradingPair = {},
             onClickPreview = {},
-            onClickSource = {},
             preferences = PricePreferences(),
-            isLoading = false
+            isLoading = false,
         )
     }
 }
