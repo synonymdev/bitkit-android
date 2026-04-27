@@ -50,13 +50,6 @@ class PriceViewModel @Inject constructor(
             initialValue = false
         )
 
-    val showWidgetTitles: StateFlow<Boolean> = widgetsRepo.showWidgetTitles
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
-            initialValue = true
-        )
-
     val currentPrice: StateFlow<PriceDTO?> = widgetsRepo.priceFlow
         .stateIn(
             scope = viewModelScope,
@@ -92,7 +85,7 @@ class PriceViewModel @Inject constructor(
     }
 
     fun selectTradingPair(pair: TradingPair) {
-        _customPreferences.update { it.copy(enabledPairs = listOf(pair)) }
+        _customPreferences.update { it.copy(enabledPairs = persistentListOf(pair)) }
     }
 
     fun resetCustomPreferences() {
