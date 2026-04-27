@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,7 +49,7 @@ class AppWidgetConfigViewModel @Inject constructor(
 
     fun selectPricePair(pair: TradingPair) {
         _uiState.update {
-            it.copy(pricePreferences = it.pricePreferences.copy(enabledPairs = listOf(pair)))
+            it.copy(pricePreferences = it.pricePreferences.copy(enabledPairs = persistentListOf(pair)))
         }
     }
 
