@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -27,8 +28,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ir.ehsannarmani.compose_charts.LineChart
 import ir.ehsannarmani.compose_charts.models.DividerProperties
 import ir.ehsannarmani.compose_charts.models.DrawStyle
@@ -45,7 +48,7 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.BodySB
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -55,25 +58,30 @@ fun PriceCard(
     modifier: Modifier = Modifier,
     showWidgetTitle: Boolean,
     pricePreferences: PricePreferences,
-    priceDTO: PriceDTO
+    priceDTO: PriceDTO,
 ) {
+    val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
+        priceDTO.widgets.firstOrNull { it.pair in pricePreferences.enabledPairs }
+            ?: priceDTO.widgets.firstOrNull()
+    } ?: return
+
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(Colors.White10),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (showWidgetTitle) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .padding(bottom = 8.dp)
-                        .testTag("price_card_widget_title_row")
+                        .testTag("price_card_widget_title_row"),
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.widget_chart_line),
@@ -81,64 +89,59 @@ fun PriceCard(
                         modifier = Modifier
                             .size(32.dp)
                             .testTag("price_card_widget_title_icon"),
-                        tint = Color.Unspecified
+                        tint = Color.Unspecified,
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     BodyMSB(
                         text = stringResource(R.string.widgets__price__name),
-                        modifier = Modifier.testTag("price_card_widget_title_text")
+                        modifier = Modifier.testTag("price_card_widget_title_text"),
                     )
                 }
             }
 
-            val enabledPairs = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
-                priceDTO.widgets.filter { widgetData -> widgetData.pair in pricePreferences.enabledPairs }
-            }
-
-            enabledPairs.map { widgetData ->
-                Row(
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("price_card_pair_row_${widgetData.pair.displayName}"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Caption13Up(
+                    text = "${widgetData.pair.displayName}  ${widgetData.period.value}",
+                    color = Colors.White64,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("price_card_pair_row_${widgetData.pair.displayName}"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    BodySB(
-                        text = widgetData.pair.displayName,
-                        color = Colors.White64,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("PriceWidgetRow-${widgetData.pair.displayName}")
-                    )
-
-                    BodySB(
-                        text = widgetData.change.formatted,
-                        color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                        modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
-                    )
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    BodySB(
-                        text = widgetData.price,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("price_card_pair_price_${widgetData.pair}")
-                    )
-                }
-            }
-
-            val chartData = remember(enabledPairs, pricePreferences.period) {
-                enabledPairs.firstOrNull() ?: priceDTO.widgets.firstOrNull()
-            }
-
-            chartData?.let { firstPriceData ->
-                ChartComponent(
-                    widgetData = firstPriceData,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.63.dp)
-                        .testTag("price_card_chart")
+                        .weight(1f)
+                        .testTag("PriceWidgetRow-${widgetData.pair.displayName}"),
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = widgetData.change.formatted,
+                    color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
+                    fontSize = 22.sp,
+                    lineHeight = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}"),
                 )
             }
+
+            Text(
+                text = "${widgetData.pair.symbol} ${widgetData.price}",
+                color = Colors.White,
+                fontSize = 34.sp,
+                lineHeight = 34.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("price_card_pair_price_${widgetData.pair}"),
+            )
+
+            ChartComponent(
+                widgetData = widgetData,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .padding(top = 8.dp)
+                    .testTag("price_card_chart"),
+            )
 
             if (pricePreferences.showSource) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -147,17 +150,17 @@ fun PriceCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("PriceWidgetSource")
+                        .testTag("PriceWidgetSource"),
                 ) {
                     CaptionB(
                         text = stringResource(R.string.widgets__widget__source),
                         color = Colors.White64,
-                        modifier = Modifier.testTag("source_label")
+                        modifier = Modifier.testTag("source_label"),
                     )
                     CaptionB(
                         text = priceDTO.source,
                         color = Colors.White64,
-                        modifier = Modifier.testTag("source_text")
+                        modifier = Modifier.testTag("source_text"),
                     )
                 }
             }
@@ -168,7 +171,7 @@ fun PriceCard(
 @Composable
 fun ChartComponent(
     widgetData: PriceWidgetData,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val baseColor = if (widgetData.change.isPositive) Colors.Green else Colors.Red
 
@@ -180,9 +183,7 @@ fun ChartComponent(
     }
 
     Box(
-        modifier = modifier
-            .height(96.dp)
-            .clip(ShapeDefaults.Small)
+        modifier = modifier.clip(ShapeDefaults.Small),
     ) {
         LineChart(
             modifier = Modifier.fillMaxSize(),
@@ -192,43 +193,35 @@ fun ChartComponent(
                         label = widgetData.pair.displayName,
                         values = widgetData.pastValues,
                         color = SolidColor(baseColor),
-                        firstGradientFillColor = baseColor.copy(alpha = 0.8f),
-                        secondGradientFillColor = baseColor.copy(alpha = 0.3f),
                         strokeAnimationSpec = tween(1000, easing = EaseInOutCubic),
                         gradientAnimationDelay = 1000,
                         drawStyle = DrawStyle.Stroke(width = 1.dp),
-                        curvedEdges = true
-                    )
+                        curvedEdges = true,
+                    ),
                 )
             },
             labelProperties = LabelProperties(
-                enabled = false
+                enabled = false,
             ),
             labelHelperProperties = LabelHelperProperties(
-                enabled = false
+                enabled = false,
             ),
             gridProperties = GridProperties(
-                enabled = false
+                enabled = false,
             ),
             indicatorProperties = HorizontalIndicatorProperties(
-                enabled = false
+                enabled = false,
             ),
             dividerProperties = DividerProperties(
-                enabled = false
+                enabled = false,
             ),
             minValue = minValue,
-            maxValue = maxValue
-        )
-
-        CaptionB(
-            text = widgetData.period.value,
-            color = baseColor,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(7.dp)
+            maxValue = maxValue,
         )
     }
 }
+
+private val SAMPLE_PAST_VALUES = listOf(1.0, 2.0, 1.5, 3.0, 2.5, 4.0)
 
 @Preview(showBackground = true)
 @Composable
@@ -238,13 +231,13 @@ private fun FullBlockCardPreview() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PriceCard(
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = true,
                 pricePreferences = PricePreferences(
-                    showSource = true
+                    showSource = true,
                 ),
                 priceDTO = PriceDTO(
                     source = "Bitfinex.com",
@@ -253,34 +246,14 @@ private fun FullBlockCardPreview() {
                             pair = TradingPair.BTC_USD,
                             change = Change(
                                 isPositive = true,
-                                formatted = "$ 20,326"
+                                formatted = "+1.24%",
                             ),
-                            price = "$20,326",
-                            pastValues = listOf(
-                                1.0,
-                                2.0,
-                                3.0,
-                                4.0,
-                            ),
-                            period = GraphPeriod.ONE_DAY,
-                        ),
-                        PriceWidgetData(
-                            pair = TradingPair.BTC_USD,
-                            change = Change(
-                                isPositive = false,
-                                formatted = "€ 20,326"
-                            ),
-                            price = "€ 20,326",
-                            pastValues = listOf(
-                                1.0,
-                                2.0,
-                                3.0,
-                                4.0,
-                            ),
+                            price = "75,326",
+                            pastValues = SAMPLE_PAST_VALUES,
                             period = GraphPeriod.ONE_DAY,
                         ),
                     ),
-                )
+                ),
             )
         }
     }

@@ -2,10 +2,8 @@ package to.bitkit.appwidget.ui.price
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.Shader
 import androidx.annotation.ColorInt
 import androidx.core.graphics.createBitmap
 
@@ -46,24 +44,6 @@ fun renderLineChartBitmap(
         strokeJoin = Paint.Join.ROUND
     }
     canvas.drawPath(linePath, linePaint)
-
-    val fillPath = Path(linePath).apply {
-        lineTo(points.last().first, height.toFloat())
-        lineTo(points.first().first, height.toFloat())
-        close()
-    }
-
-    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        shader = LinearGradient(
-            0f, padding,
-            0f, height.toFloat(),
-            (lineColor and 0x00FFFFFF) or 0xCC000000.toInt(),
-            (lineColor and 0x00FFFFFF) or 0x4D000000,
-            Shader.TileMode.CLAMP,
-        )
-        style = Paint.Style.FILL
-    }
-    canvas.drawPath(fillPath, fillPaint)
 
     return bitmap
 }
