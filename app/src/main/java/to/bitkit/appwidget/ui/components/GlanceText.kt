@@ -14,7 +14,7 @@ fun Subtitle(
     color: ColorProvider? = null,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    Text(text = text, modifier = modifier, style = GlanceTextStyles.subtitle.withColor(color), maxLines = maxLines)
+    Text(text = text, style = GlanceTextStyles.subtitle.withColor(color), maxLines = maxLines, modifier = modifier)
 }
 
 @Composable
@@ -24,7 +24,7 @@ fun BodyMSB(
     color: ColorProvider? = null,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    Text(text = text, modifier = modifier, style = GlanceTextStyles.bodyMSB.withColor(color), maxLines = maxLines)
+    Text(text = text, style = GlanceTextStyles.bodyMSB.withColor(color), maxLines = maxLines, modifier = modifier)
 }
 
 @Composable
@@ -34,7 +34,7 @@ fun BodySSB(
     color: ColorProvider? = null,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    Text(text = text, modifier = modifier, style = GlanceTextStyles.bodySSB.withColor(color), maxLines = maxLines)
+    Text(text = text, style = GlanceTextStyles.bodySSB.withColor(color), maxLines = maxLines, modifier = modifier)
 }
 
 @Composable
@@ -44,7 +44,7 @@ fun BodySB(
     color: ColorProvider? = null,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    Text(text = text, modifier = modifier, style = GlanceTextStyles.bodySB.withColor(color), maxLines = maxLines)
+    Text(text = text, style = GlanceTextStyles.bodySB.withColor(color), maxLines = maxLines, modifier = modifier)
 }
 
 @Composable
@@ -54,7 +54,7 @@ fun CaptionB(
     color: ColorProvider? = null,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    Text(text = text, modifier = modifier, style = GlanceTextStyles.captionB.withColor(color), maxLines = maxLines)
+    Text(text = text, style = GlanceTextStyles.captionB.withColor(color), maxLines = maxLines, modifier = modifier)
 }
 
 @Composable
@@ -64,7 +64,7 @@ fun FootnoteM(
     color: ColorProvider? = null,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    Text(text = text, modifier = modifier, style = GlanceTextStyles.footnoteM.withColor(color), maxLines = maxLines)
+    Text(text = text, style = GlanceTextStyles.footnoteM.withColor(color), maxLines = maxLines, modifier = modifier)
 }
 
 private fun TextStyle.withColor(color: ColorProvider?): TextStyle =
