@@ -68,11 +68,11 @@ fun PriceGlanceContent(
             val chartWidget = displayWidgets.first()
             val chartColor = if (chartWidget.change.isPositive) Colors.Green else Colors.Red
             Box(
+                contentAlignment = Alignment.BottomStart,
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
-                    .then(HeightModifier(Dimension.Expand)),
-                contentAlignment = Alignment.BottomStart,
+                    .then(HeightModifier(Dimension.Expand))
             ) {
                 Image(
                     provider = ImageProvider(chartBitmap),
@@ -81,12 +81,12 @@ fun PriceGlanceContent(
                     modifier = GlanceModifier
                         .fillMaxWidth()
                         .fillMaxHeight()
-                        .cornerRadius(8.dp),
+                        .cornerRadius(8.dp)
                 )
                 CaptionB(
                     text = chartWidget.period.value,
                     color = ColorProvider(day = chartColor, night = chartColor),
-                    modifier = GlanceModifier.padding(7.dp),
+                    modifier = GlanceModifier.padding(7.dp)
                 )
             }
         }
@@ -97,13 +97,13 @@ fun PriceGlanceContent(
 @Composable
 private fun PriceRow(widget: PriceWidgetData) {
     Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
+        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
         BodySB(
             text = widget.pair.displayName,
             color = GlanceColors.textSecondary,
-            modifier = GlanceModifier.then(WidthModifier(Dimension.Expand)),
+            modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
         )
         BodySB(
             text = widget.change.formatted,

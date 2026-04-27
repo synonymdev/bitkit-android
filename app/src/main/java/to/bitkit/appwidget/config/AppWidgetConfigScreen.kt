@@ -73,7 +73,7 @@ private fun PriceConfigContent(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .weight(1f)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
         ) {
             VerticalSpacer(26.dp)
 
@@ -118,17 +118,17 @@ private fun PriceConfigContent(
         }
 
         Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .padding(vertical = 21.dp, horizontal = 16.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .fillMaxWidth()
         ) {
             SecondaryButton(
                 text = stringResource(R.string.common__reset),
                 enabled = prefs != PricePreferences(),
                 fullWidth = false,
                 onClick = onReset,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
@@ -136,7 +136,7 @@ private fun PriceConfigContent(
                 enabled = !state.isSaving,
                 fullWidth = false,
                 onClick = onSave,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -154,19 +154,19 @@ private fun ConfigToggleRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .padding(vertical = 12.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
         ) {
             BodySSB(
                 text = label,
                 color = Colors.White64,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
             IconButton(onClick = onClick) {
                 Icon(
                     painter = painterResource(R.drawable.ic_checkmark),
                     contentDescription = null,
                     tint = if (isEnabled) Colors.Brand else Colors.White50,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(32.dp)
                 )
             }
         }
