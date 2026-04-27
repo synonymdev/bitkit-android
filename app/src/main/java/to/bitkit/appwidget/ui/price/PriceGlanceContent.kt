@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
@@ -16,11 +15,12 @@ import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.ContentScale
+import androidx.glance.layout.HeightModifier
 import androidx.glance.layout.Row
 import androidx.glance.layout.WidthModifier
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
+import androidx.glance.layout.padding
 import androidx.glance.text.Text
 import androidx.glance.unit.Dimension
 import to.bitkit.R
@@ -95,7 +95,7 @@ private fun WideContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
         modifier = GlanceModifier.fillMaxWidth(),
     )
     VerticalSpacer(8.dp)
-    ChartBox(chartBitmap = chartBitmap, height = 48.dp)
+    ChartBox(chartBitmap = chartBitmap)
 }
 
 @Suppress("RestrictedApi")
@@ -127,18 +127,18 @@ private fun CompactContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
             color = ColorProvider(day = changeColor, night = changeColor),
         ),
     )
-    VerticalSpacer(16.dp)
-    ChartBox(chartBitmap = chartBitmap, height = 64.dp)
+    ChartBox(chartBitmap = chartBitmap)
 }
 
 @Suppress("RestrictedApi")
 @Composable
-private fun ChartBox(chartBitmap: Bitmap?, height: Dp) {
+private fun ChartBox(chartBitmap: Bitmap?) {
     if (chartBitmap == null) return
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .height(height),
+            .then(HeightModifier(Dimension.Expand))
+            .padding(vertical = 16.dp),
     ) {
         Image(
             provider = ImageProvider(chartBitmap),
