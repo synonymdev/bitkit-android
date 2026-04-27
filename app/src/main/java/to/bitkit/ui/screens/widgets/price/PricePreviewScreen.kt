@@ -145,7 +145,6 @@ fun PricePreviewContent(
                     pricePreferences = pricePreferences,
                     priceDTO = priceDTO,
                     modifier = Modifier
-                        .weight(1f)
                         .fillMaxWidth(),
                 )
             } else {
@@ -155,7 +154,12 @@ fun PricePreviewContent(
 
         Row(
             modifier = Modifier
-                .padding(16.dp)
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = 16.dp,
+                    top = 22.dp,
+                )
                 .fillMaxWidth()
                 .testTag("buttons_row"),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -246,7 +250,7 @@ private fun WidgetCarousel(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
 
-        VerticalSpacer(8.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             modifier = Modifier
