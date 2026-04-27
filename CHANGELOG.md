@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 - Connection issues overlay with connectivity fixes across Send, Receive, and Transfer flows #878
 
+### Fixed
+- Polish Terms of Use screen padding to match iOS #903
+
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
