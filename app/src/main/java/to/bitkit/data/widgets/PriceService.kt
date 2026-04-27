@@ -38,9 +38,9 @@ class PriceService @Inject constructor(
     override val refreshInterval = 1.minutes
     private val sourceLabel = "Bitfinex.com"
 
-    override suspend fun fetchData(): Result<PriceDTO> {
+    override suspend fun fetchData(): Result<PriceDTO> = runCatching {
         val period = widgetsStore.data.first().pricePreferences.period ?: GraphPeriod.ONE_DAY
-        return fetchData(period)
+        fetchData(period).getOrThrow()
     }
 
     suspend fun fetchData(period: GraphPeriod): Result<PriceDTO> = runCatching {
