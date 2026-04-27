@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Polish Terms of Use screen padding to match iOS #903
+
 ### Added
 - Home screen widgets foundation with Glance, including price widget as the first implementation #895
 
