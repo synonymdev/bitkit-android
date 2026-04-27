@@ -150,7 +150,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
-private const val SMALL_SCREEN_HEIGHT_DP = 700
+private const val SMALL_SCREEN_HEIGHT_DP = 800
 private const val SMALL_SCREEN_SLOT_CAPACITY = 3
 private const val LARGE_SCREEN_SLOT_CAPACITY = 4
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
@@ -370,11 +370,8 @@ private fun Content(
 
     val density = LocalDensity.current
     val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp().value.toInt() }
-    val slotCapacity = if (screenHeightDp < SMALL_SCREEN_HEIGHT_DP) {
-        SMALL_SCREEN_SLOT_CAPACITY
-    } else {
-        LARGE_SCREEN_SLOT_CAPACITY
-    }
+    val isSmallScreen = screenHeightDp < SMALL_SCREEN_HEIGHT_DP
+    val slotCapacity = if (isSmallScreen) SMALL_SCREEN_SLOT_CAPACITY else LARGE_SCREEN_SLOT_CAPACITY
     val nonItemSlots = countNonItemSlots(homeUiState)
     val activityCount = (slotCapacity - nonItemSlots).coerceAtLeast(0)
 
@@ -419,6 +416,7 @@ private fun Content(
                     homeUiState = homeUiState,
                     latestActivities = paginatedActivities,
                     balances = balances,
+                    isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
                     onNavigateToSettingUp = onNavigateToSettingUp,
                     onNavigateToAllActivity = onNavigateToAllActivity,
@@ -455,6 +453,7 @@ private fun WalletPage(
     homeUiState: HomeUiState,
     latestActivities: ImmutableList<Activity>?,
     balances: BalanceState,
+    isSmallScreen: Boolean,
     onRefresh: () -> Unit,
     onNavigateToSettingUp: () -> Unit,
     onNavigateToAllActivity: () -> Unit,
@@ -550,6 +549,7 @@ private fun WalletPage(
         if (homeUiState.showEmptyState) {
             EmptyStateView(
                 text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
+                isSmallScreen = isSmallScreen,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
             )

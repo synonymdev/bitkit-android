@@ -42,11 +42,14 @@ fun Display(
 fun Display(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
+    fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
         text = text.toUpperCase(),
         style = AppTextStyles.Display.merge(
+            fontSize = fontSize,
+            lineHeight = fontSize,
             color = color,
         ),
         modifier = modifier,
