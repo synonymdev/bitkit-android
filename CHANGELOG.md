@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Improve Pubky profile restore, contact editing, and contact routing flows #905
 
+### Fixed
+- Polish Terms of Use screen padding to match iOS #903
+
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
