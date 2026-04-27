@@ -169,6 +169,77 @@ fun PriceCard(
 }
 
 @Composable
+fun PriceCardSmall(
+    modifier: Modifier = Modifier,
+    pricePreferences: PricePreferences,
+    priceDTO: PriceDTO,
+) {
+    val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
+        priceDTO.widgets.firstOrNull { it.pair in pricePreferences.enabledPairs }
+            ?: priceDTO.widgets.firstOrNull()
+    } ?: return
+
+    Box(
+        modifier = modifier
+            .clip(shape = MaterialTheme.shapes.medium)
+            .background(Colors.White10),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("price_card_small_pair_row_${widgetData.pair.displayName}"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Caption13Up(
+                        text = widgetData.pair.displayName,
+                        color = Colors.White64,
+                    )
+                    Caption13Up(
+                        text = widgetData.period.value,
+                        color = Colors.White64,
+                    )
+                }
+                Text(
+                    text = "${widgetData.pair.symbol} ${widgetData.price}",
+                    color = Colors.White,
+                    fontSize = 22.sp,
+                    lineHeight = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("price_card_small_pair_price_${widgetData.pair}"),
+                )
+                Text(
+                    text = widgetData.change.formatted,
+                    color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.testTag("price_card_small_pair_change_${widgetData.pair}"),
+                )
+            }
+
+            ChartComponent(
+                widgetData = widgetData,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .testTag("price_card_small_chart"),
+            )
+        }
+    }
+}
+
+@Composable
 fun ChartComponent(
     widgetData: PriceWidgetData,
     modifier: Modifier = Modifier,
