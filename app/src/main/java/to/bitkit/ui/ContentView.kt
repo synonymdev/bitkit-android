@@ -290,7 +290,7 @@ fun ContentView(
                         navController.navigateToHome()
                         delay(100) // Small delay to ensure navigation completes
                     }
-                    appViewModel.onScanResult(it.data)
+                    appViewModel.onScanResult(it.data, routePubkyKeys = true)
                 }
 
                 else -> Unit
@@ -387,6 +387,7 @@ fun ContentView(
         val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+        val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
 
         Box(
@@ -530,6 +531,7 @@ fun ContentView(
                 },
                 hasSeenProfileIntro = hasSeenProfileIntro,
                 hasSeenContactsIntro = hasSeenContactsIntro,
+                hasContacts = hasPubkyContacts,
                 isProfileAuthenticated = isProfileAuthenticated,
                 modifier = Modifier.align(Alignment.TopEnd)
             )
@@ -951,7 +953,8 @@ private fun NavGraphBuilder.contacts(
     settingsViewModel: SettingsViewModel,
     appViewModel: AppViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.Contacts> {
+    composableWithDefaultTransitions<Routes.Contacts> { backStackEntry ->
+        val route = backStackEntry.toRoute<Routes.Contacts>()
         val viewModel: ContactsViewModel = hiltViewModel()
         ContactsScreen(
             viewModel = viewModel,
@@ -964,6 +967,7 @@ private fun NavGraphBuilder.contacts(
                     navController.navigateTo(Routes.AddContact(scannedData))
                 }
             },
+            openAddContactSheet = route.showAddContactSheet,
         )
     }
     composableWithDefaultTransitions<Routes.ContactsIntro> {
@@ -972,12 +976,14 @@ private fun NavGraphBuilder.contacts(
         ContactsIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenContactsIntro(true)
-                val destination = when {
-                    isAuthenticated -> Routes.Contacts
-                    hasSeenProfileIntro -> Routes.PubkyChoice
-                    else -> Routes.ProfileIntro
+                when {
+                    isAuthenticated -> navController.navigateTo(
+                        Routes.Contacts(showAddContactSheet = true)
+                    ) { popUpTo(Routes.Home) }
+
+                    hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+                    else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
                 }
-                navController.navigateTo(destination) { popUpTo(Routes.Home) }
             },
             onBackClick = { navController.popBackStack() },
         )
@@ -1004,7 +1010,7 @@ private fun NavGraphBuilder.contacts(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
             onContactDeleted = {
-                navController.navigateTo(Routes.Contacts) { popUpTo(Routes.Home) }
+                navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
             },
         )
     }
@@ -1078,12 +1084,18 @@ private fun NavGraphBuilder.profile(
         )
     }
     composableWithDefaultTransitions<Routes.EditProfile> {
+        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
         val viewModel: EditProfileViewModel = hiltViewModel()
         EditProfileScreen(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
-            onProfileDeleted = {
-                navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+            onExitProfile = {
+                val nextRoute = if (hasSeenProfileIntro) {
+                    Routes.PubkyChoice
+                } else {
+                    Routes.ProfileIntro
+                }
+                navController.navigateTo(nextRoute) { popUpTo(Routes.Home) }
             },
         )
     }
@@ -1906,7 +1918,7 @@ sealed interface Routes {
     data object LanguageSettings : Routes
 
     @Serializable
-    data object Contacts : Routes
+    data class Contacts(val showAddContactSheet: Boolean = false) : Routes
 
     @Serializable
     data object ContactsIntro : Routes

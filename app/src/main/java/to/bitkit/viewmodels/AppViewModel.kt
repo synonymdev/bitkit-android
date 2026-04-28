@@ -91,15 +91,17 @@ import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.FeeRate
-import to.bitkit.models.msatFloorOf
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
@@ -1039,7 +1041,12 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun launchScan(source: ScanSource, data: String, startDelay: Duration = Duration.ZERO) {
+    private fun launchScan(
+        source: ScanSource,
+        data: String,
+        startDelay: Duration = Duration.ZERO,
+        routePubkyKeys: Boolean = false,
+    ) {
         val normalized = data.removeLightningSchemes()
         val scanId = if (data.length > 24) "${data.take(11)}…${data.takeLast(11)}" else data
 
@@ -1057,7 +1064,7 @@ class AppViewModel @Inject constructor(
         Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
         activeScanJob = viewModelScope.launch {
             if (startDelay > Duration.ZERO) delay(startDelay)
-            handleScan(data)
+            handleScan(data, routePubkyKeys)
         }.also { it.invokeOnCompletion { if (activeScanInput == normalized) activeScanInput = null } }
     }
 
@@ -1276,11 +1283,23 @@ class AppViewModel @Inject constructor(
         setSendEffect(SendEffect.NavigateToScan)
     }
 
-    fun onScanResult(data: String, startDelay: Duration = Duration.ZERO) {
-        launchScan(source = ScanSource.SCAN_RESULT, data = data, startDelay = startDelay)
+    fun onScanResult(
+        data: String,
+        startDelay: Duration = Duration.ZERO,
+        routePubkyKeys: Boolean = false,
+    ) {
+        launchScan(
+            source = ScanSource.SCAN_RESULT,
+            data = data,
+            startDelay = startDelay,
+            routePubkyKeys = routePubkyKeys,
+        )
     }
 
-    private suspend fun handleScan(result: String) = withContext(bgDispatcher) {
+    private suspend fun handleScan(
+        result: String,
+        routePubkyKeys: Boolean,
+    ) = withContext(bgDispatcher) {
         // always reset state on new scan
         resetSendState()
         resetQuickPay()
@@ -1302,6 +1321,19 @@ class AppViewModel @Inject constructor(
         if (input.startsWith("$PUBKYAUTH_SCHEME://")) {
             handlePubkyAuth(input)
             return@withContext
+        }
+
+        if (routePubkyKeys) {
+            val route = resolvePastedPubkyRoute(
+                input = input,
+                ownPublicKey = pubkyRepo.publicKey.value,
+                contacts = pubkyRepo.contacts.value,
+            )
+
+            if (route != null) {
+                mainScreenEffect(MainScreenEffect.Navigate(route))
+                return@withContext
+            }
         }
 
         val scan = runCatching { coreService.decode(input) }
@@ -2275,7 +2307,12 @@ class AppViewModel @Inject constructor(
                 handler(data)
             }
         } else {
-            launchScan(source = ScanSource.SCANNER_SHEET, data = data, startDelay = SCREEN_TRANSITION_DELAY)
+            launchScan(
+                source = ScanSource.SCANNER_SHEET,
+                data = data,
+                startDelay = SCREEN_TRANSITION_DELAY,
+                routePubkyKeys = true,
+            )
         }
     }
 
@@ -2711,3 +2748,21 @@ sealed interface QuickPayData {
     data class LnurlPay(override val sats: ULong, val callback: String, val amountMsats: ULong) : QuickPayData
 }
 // endregion
+
+internal fun resolvePastedPubkyRoute(
+    input: String,
+    ownPublicKey: String?,
+    contacts: List<PubkyProfile>,
+): Routes? {
+    val normalizedKey = PubkyPublicKeyFormat.normalized(input) ?: return null
+
+    if (PubkyPublicKeyFormat.matches(normalizedKey, ownPublicKey)) {
+        return Routes.Profile
+    }
+
+    if (contacts.any { PubkyPublicKeyFormat.matches(it.publicKey, normalizedKey) }) {
+        return Routes.ContactDetail(normalizedKey)
+    }
+
+    return Routes.AddContact(normalizedKey)
+}

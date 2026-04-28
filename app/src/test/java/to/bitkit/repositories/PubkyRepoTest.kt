@@ -22,8 +22,11 @@ import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkySessionBackupKind
+import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -32,6 +35,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import com.synonym.bitkitcore.PubkyProfile as CorePubkyProfile
 
+@Suppress("LargeClass")
 class PubkyRepoTest : BaseUnitTest() {
     companion object {
         // Valid 52-char z-base-32 key (+ "pubky" prefix = 57 chars)
@@ -81,7 +85,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `startAuthentication should reset state on failure`() = test {
-        whenever(pubkyService.startAuth()).thenThrow(RuntimeException("Auth failed"))
+        whenever(pubkyService.startAuth()).thenAnswer { throw TestAppError("Auth failed") }
 
         val result = sut.startAuthentication()
 
@@ -94,30 +98,30 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `completeAuthentication should save session and update state`() = test {
         val testSecret = "session_secret"
-        val testPk = "completed_pk"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
         whenever(pubkyService.completeAuth()).thenReturn(testSecret)
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
 
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("User")
-        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
 
         val result = sut.completeAuthentication()
 
         assertTrue(result.isSuccess)
-        assertEquals(testPk, sut.publicKey.value)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         assertTrue(sut.isAuthenticated.value)
-        verifyBlocking(keychain) { saveString(Keychain.Key.PAYKIT_SESSION.name, testSecret) }
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, testSecret) }
     }
 
     @Test
     fun `completeAuthentication should clear managed secret key`() = test {
         val testSecret = "session_secret"
-        val testPk = "completed_pk"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
         whenever(pubkyService.completeAuth()).thenReturn(testSecret)
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
         val ffiProfile = createFfiProfile(name = "User")
-        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
 
         val result = sut.completeAuthentication()
 
@@ -128,11 +132,11 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `completeAuthentication should not load contacts automatically`() = test {
         val testSecret = "session_secret"
-        val testPk = "completed_pk"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
         whenever(pubkyService.completeAuth()).thenReturn(testSecret)
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
         val ffiProfile = createFfiProfile(name = "User")
-        whenever(pubkyService.getProfile(testPk)).thenReturn(ffiProfile)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
 
         val result = sut.completeAuthentication()
 
@@ -142,7 +146,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `completeAuthentication should reset state on failure`() = test {
-        whenever(pubkyService.completeAuth()).thenThrow(RuntimeException("Failed"))
+        whenever(pubkyService.completeAuth()).thenAnswer { throw TestAppError("Failed") }
 
         val result = sut.completeAuthentication()
 
@@ -190,7 +194,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNotNull(existingProfile)
 
         val pk = checkNotNull(sut.publicKey.value) { "publicKey should be set after authentication" }
-        whenever(pubkyService.getProfile(pk)).thenThrow(RuntimeException("Network error"))
+        whenever(pubkyService.getProfile(pk)).thenAnswer { throw TestAppError("Network error") }
 
         sut.loadProfile()
 
@@ -224,6 +228,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut should clear state and keychain`() = test {
         authenticateForTesting()
+        clearInvocations(pubkyStore)
 
         val result = sut.signOut()
 
@@ -262,8 +267,8 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `deleteProfile should fail when signOut fails`() = test {
         authenticateForTesting()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
-        whenever(pubkyService.signOut()).thenThrow(RuntimeException("Sign out failed"))
-        whenever(pubkyService.forceSignOut()).thenThrow(RuntimeException("Force sign out failed"))
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Sign out failed") }
+        whenever(pubkyService.forceSignOut()).thenAnswer { throw TestAppError("Force sign out failed") }
 
         val result = sut.deleteProfile()
 
@@ -271,9 +276,55 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deleteProfileWithSessionRetry should refresh session and retry delete`() = test {
+        val expiredSession = "expired_session"
+        val newSession = "new_session"
+        val secretKey = "local_secret"
+        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = expiredSession)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(expiredSession, newSession)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.sessionList(expiredSession, Env.contactsBasePath)).thenReturn(emptyList())
+        whenever(pubkyService.sessionList(newSession, Env.contactsBasePath)).thenReturn(emptyList())
+        whenever(
+            pubkyService.sessionDelete(expiredSession, Env.profilePath)
+        ).thenAnswer {
+            throw TestAppError("Expired")
+        }
+        whenever(pubkyService.signIn(secretKey)).thenReturn(newSession)
+        whenever(pubkyService.importSession(newSession)).thenReturn(VALID_SELF_KEY)
+
+        val result = sut.deleteProfileWithSessionRetry()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) { sessionDelete(expiredSession, Env.profilePath) }
+        verifyBlocking(pubkyService) { sessionDelete(newSession, Env.profilePath) }
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, newSession) }
+    }
+
+    @Test
+    fun `deleteProfileWithSessionRetry should return failure when session cannot refresh`() = test {
+        val expiredSession = "expired_session"
+        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = expiredSession)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(expiredSession)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(pubkyService.sessionList(expiredSession, Env.contactsBasePath)).thenReturn(emptyList())
+        whenever(
+            pubkyService.sessionDelete(expiredSession, Env.profilePath)
+        ).thenAnswer {
+            throw TestAppError("Expired")
+        }
+
+        val result = sut.deleteProfileWithSessionRetry()
+
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService) { sessionDelete(expiredSession, Env.profilePath) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+    }
+
+    @Test
     fun `signOut should force sign out when server sign out fails`() = test {
         authenticateForTesting()
-        whenever(pubkyService.signOut()).thenThrow(RuntimeException("Server error"))
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
         val result = sut.signOut()
 
@@ -340,6 +391,165 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `snapshotSessionBackupState should prefer local seed over session secret`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session_secret")
+
+        val result = sut.snapshotSessionBackupState()
+
+        assertEquals(
+            PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed),
+            result.getOrNull(),
+        )
+    }
+
+    @Test
+    fun `snapshotSessionBackupState should use external session when no local seed exists`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session_secret")
+
+        val result = sut.snapshotSessionBackupState()
+
+        assertEquals(
+            PubkySessionBackupV1(
+                kind = PubkySessionBackupKind.ExternalSession,
+                sessionSecret = "session_secret",
+            ),
+            result.getOrNull(),
+        )
+    }
+
+    @Test
+    fun `snapshotSessionBackupState should return null when no pubky credentials exist`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+
+        val result = sut.snapshotSessionBackupState()
+
+        assertNull(result.getOrNull())
+    }
+
+    @Test
+    fun `initialize should restore saved session with prefixed public key`() = test {
+        val session = "saved_session"
+        val unprefixedPublicKey = VALID_SELF_KEY.removePrefix("pubky")
+        val ffiProfile = createFfiProfile(name = "Restored User")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(pubkyService.importSession(session)).thenReturn(unprefixedPublicKey)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+
+        sut.initialize()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `initialize should restore session from local secret key when saved session is missing`() = test {
+        val secretKey = "local_secret"
+        val session = "new_session"
+        val publicKey = VALID_SELF_KEY.removePrefix("pubky")
+        val ffiProfile = createFfiProfile(name = "Recovered User")
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.signIn(secretKey)).thenReturn(session)
+        whenever(pubkyService.importSession(session)).thenReturn(publicKey)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+
+        sut.initialize()
+
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, session) }
+    }
+
+    @Test
+    fun `initialize should delete stale saved session when re-sign-in is unavailable`() = test {
+        val session = "stale_session"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+        whenever(pubkyService.importSession(session)).thenAnswer { throw TestAppError("Expired") }
+
+        sut.initialize()
+
+        assertTrue(sut.sessionRestorationFailed.value)
+        assertFalse(sut.isAuthenticated.value)
+        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+    }
+
+    @Test
+    fun `refreshSessionIfPossible should refresh session when local secret key exists`() = test {
+        val secretKey = "local_secret"
+        val session = "new_session"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.signIn(secretKey)).thenReturn(session)
+        whenever(pubkyService.importSession(session)).thenReturn(VALID_SELF_KEY)
+
+        val result = sut.refreshSessionIfPossible()
+
+        assertEquals(true, result.getOrNull())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, session) }
+    }
+
+    @Test
+    fun `refreshSessionIfPossible should return false when local secret key is missing`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+
+        val result = sut.refreshSessionIfPossible()
+
+        assertEquals(false, result.getOrNull())
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `restoreSessionBackupState should derive local secret key for local seed backups`() = test {
+        val seed = byteArrayOf(1, 2, 3)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
+        whenever(pubkyService.mnemonicToSeed("test mnemonic", null)).thenReturn(seed)
+        whenever(pubkyService.deriveSecretKey(seed)).thenReturn("derived_secret")
+
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed),
+        )
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, "derived_secret") }
+    }
+
+    @Test
+    fun `restoreSessionBackupState should save external session backups`() = test {
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(
+                kind = PubkySessionBackupKind.ExternalSession,
+                sessionSecret = "external_session",
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PAYKIT_SESSION.name, "external_session") }
+    }
+
+    @Test
+    fun `restoreSessionBackupState should keep current session when backup has no pubky state`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        clearInvocations(pubkyService, keychain)
+
+        val result = sut.restoreSessionBackupState(null)
+
+        assertTrue(result.isSuccess)
+        assertTrue(sut.isAuthenticated.value)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { forceSignOut() }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
     fun `loadContacts should populate contacts on success`() = test {
         authenticateForTesting()
         val contactKey = "pubkycontact1"
@@ -403,14 +613,14 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(newSecret)
         whenever(pubkyService.sessionList(newSecret, Env.contactsBasePath)).thenReturn(emptyList())
         val staleProfile = createFfiProfile(name = "Stale Old")
-        whenever(pubkyService.getProfile(oldPublicKey)).thenAnswer {
+        whenever(pubkyService.getProfile(oldPublicKey.ensurePubkyPrefixForTest())).thenAnswer {
             runBlocking { sut.completeAuthentication() }
             staleProfile
         }
 
         sut.loadProfile()
 
-        assertEquals(newPublicKey, sut.publicKey.value)
+        assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
         assertEquals("Initial Old", sut.profile.value?.name)
     }
 
@@ -443,7 +653,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.completeAuth()).thenReturn(newSecret)
         whenever(pubkyService.importSession(newSecret)).thenReturn(newPublicKey)
         val newProfile = createFfiProfile(name = "New User")
-        whenever(pubkyService.getProfile(newPublicKey)).thenReturn(newProfile)
+        whenever(pubkyService.getProfile(newPublicKey.ensurePubkyPrefixForTest())).thenReturn(newProfile)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(oldSecret)
         whenever(pubkyService.sessionList(oldSecret, Env.contactsBasePath)).thenReturn(listOf(staleContactPath))
         whenever(pubkyService.fetchFileString(staleContactUri)).thenAnswer {
@@ -454,7 +664,7 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.loadContacts()
 
         val contacts = sut.contacts.value
-        assertEquals(newPublicKey, sut.publicKey.value)
+        assertEquals(newPublicKey.ensurePubkyPrefixForTest(), sut.publicKey.value)
         assertEquals(1, contacts.size)
         assertEquals(existingContact.publicKey, contacts.first().publicKey)
         assertEquals(existingContact.name, contacts.first().name)
@@ -479,7 +689,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val pk = checkNotNull(sut.publicKey.value)
         val strippedPk = pk.removePrefix("pubky")
         whenever(pubkyService.fetchFileString("pubky://$strippedPk${Env.contactsBasePath}$contactKey"))
-            .thenThrow(RuntimeException("Network error"))
+            .thenAnswer { throw TestAppError("Network error") }
 
         sut.loadContacts()
 
@@ -494,7 +704,7 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
         whenever(pubkyService.sessionList("test_secret", Env.contactsBasePath))
-            .thenThrow(RuntimeException("Directory Not Found (404)"))
+            .thenAnswer { throw TestAppError("Directory Not Found (404)") }
 
         sut.loadContacts()
 
@@ -523,7 +733,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val strippedKey = contactKey.removePrefix("pubky")
         val contactProfile = mock<CorePubkyProfile>()
         whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
-            .thenThrow(RuntimeException("Missing bitkit profile"))
+            .thenAnswer { throw TestAppError("Missing bitkit profile") }
         whenever(contactProfile.name).thenReturn("Bob")
         whenever(contactProfile.bio).thenReturn("Bio")
         whenever(pubkyService.getProfile(contactKey)).thenReturn(contactProfile)
@@ -539,8 +749,8 @@ class PubkyRepoTest : BaseUnitTest() {
         val contactKey = VALID_CONTACT_KEY_A
         val strippedKey = contactKey.removePrefix("pubky")
         whenever(pubkyService.fetchFileString("pubky://$strippedKey${Env.profilePath}"))
-            .thenThrow(RuntimeException("Missing bitkit profile"))
-        whenever(pubkyService.getProfile(contactKey)).thenThrow(RuntimeException("Profile not found"))
+            .thenAnswer { throw TestAppError("Missing bitkit profile") }
+        whenever(pubkyService.getProfile(contactKey)).thenAnswer { throw TestAppError("Profile not found") }
 
         val result = sut.fetchContactProfile(contactKey)
 
@@ -650,6 +860,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `wipeLocalState should clear pubky state without server sign out`() = test {
         authenticateForTesting()
+        clearInvocations(pubkyStore)
         val contact = PubkyProfile(
             publicKey = "pubkycontact4",
             name = "Charlie",
@@ -698,10 +909,11 @@ class PubkyRepoTest : BaseUnitTest() {
         secret: String = "test_secret",
         profileName: String = "Test",
     ) {
+        val prefixedPublicKey = publicKey.ensurePubkyPrefixForTest()
         whenever { pubkyService.completeAuth() }.thenReturn(secret)
         whenever { pubkyService.importSession(secret) }.thenReturn(publicKey)
         val ffiProfile = createFfiProfile(name = profileName)
-        whenever { pubkyService.getProfile(publicKey) }.thenReturn(ffiProfile)
+        whenever { pubkyService.getProfile(prefixedPublicKey) }.thenReturn(ffiProfile)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(secret)
         whenever { pubkyService.sessionList(secret, Env.contactsBasePath) }.thenReturn(emptyList())
 
@@ -717,3 +929,8 @@ class PubkyRepoTest : BaseUnitTest() {
         return ffiProfile
     }
 }
+
+private class TestAppError(message: String) : AppError(message)
+
+private fun String.ensurePubkyPrefixForTest(): String =
+    if (startsWith("pubky")) this else "pubky$this"
