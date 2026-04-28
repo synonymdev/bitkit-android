@@ -450,11 +450,115 @@ jobs:
         if: failure()
         uses: jwalton/gh-docker-logs@v2
 
+  e2e-tests-16kb:
+    if: github.event.pull_request.draft == false && needs.detect-changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: [detect-changes, build-local, e2e-branch]
+
+    name: e2e-tests-16kb
+
+    steps:
+      - name: Show selected E2E branch
+        env:
+          E2E_BRANCH: ${{ needs.e2e-branch.outputs.branch }}
+        run: echo $E2E_BRANCH
+
+      - name: Clone E2E tests
+        uses: actions/checkout@v6
+        with:
+          repository: synonymdev/bitkit-e2e-tests
+          path: bitkit-e2e-tests
+          ref: ${{ needs.e2e-branch.outputs.branch }}
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: AVD cache
+        uses: actions/cache@v5
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-35-ps16k-x86_64-pixel_8
+
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_8
+          api-level: 35
+          target: google_apis_ps16k
+          arch: x86_64
+          avd-name: Pixel_8_16KB
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          disable-animations: false
+          script: echo "Generated 16 KB AVD snapshot for caching."
+
+      - name: Download APK
+        uses: actions/download-artifact@v6
+        with:
+          name: bitkit-e2e-apk_${{ github.run_number }}
+          path: bitkit-e2e-tests/aut
+
+      - name: List APK directory contents
+        run: ls -l bitkit-e2e-tests/aut
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Cache npm cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        working-directory: bitkit-e2e-tests
+        run: npm ci
+
+      - name: Run 16 KB E2E check
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          profile: pixel_8
+          api-level: 35
+          target: google_apis_ps16k
+          arch: x86_64
+          avd-name: Pixel_8_16KB
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
+          script: |
+            page_size=$(adb shell getconf PAGE_SIZE | tr -d '\r')
+            test "$page_size" = "16384"
+            cd bitkit-e2e-tests
+            ./ci_run_android.sh --mochaOpts.grep "@onboarding"
+        env:
+          ANDROID_DEVICE_NAME: Pixel_8_16KB
+          ANDROID_PLATFORM_VERSION: "15.0"
+          RECORD_VIDEO: true
+          ATTEMPT: 16kb
+
+      - name: Upload 16 KB E2E Artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-artifacts-16kb_${{ github.run_number }}
+          path: bitkit-e2e-tests/artifacts/
+
   e2e-status:
     if: always() && github.event.pull_request.draft == false
     name: e2e-status
     runs-on: ubuntu-latest
-    needs: [detect-changes, e2e-tests-local, e2e-tests-staging]
+    needs: [detect-changes, e2e-tests-local, e2e-tests-staging, e2e-tests-16kb]
     steps:
       - name: E2E skipped - no code changes
         if: needs.detect-changes.outputs.code != 'true'
@@ -467,4 +571,4 @@ jobs:
             echo "❌ Some E2E shards failed."
             exit 1
           fi
-          echo "✅ All E2E shards passed!"
+          echo "✅ All required E2E shards passed!"
