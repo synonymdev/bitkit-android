@@ -24,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.persistentListOf
@@ -44,7 +45,7 @@ import to.bitkit.ui.theme.Colors
 fun EditProfileScreen(
     viewModel: EditProfileViewModel,
     onBackClick: () -> Unit,
-    onProfileDeleted: () -> Unit,
+    onExitProfile: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -52,7 +53,9 @@ fun EditProfileScreen(
         viewModel.effects.collect {
             when (it) {
                 EditProfileEffect.SaveSuccess -> onBackClick()
-                EditProfileEffect.DeleteSuccess -> onProfileDeleted()
+                EditProfileEffect.DeleteSuccess,
+                EditProfileEffect.DisconnectSuccess,
+                -> onExitProfile()
             }
         }
     }
@@ -72,6 +75,9 @@ fun EditProfileScreen(
         onDelete = viewModel::showDeleteConfirmation,
         onDismissDeleteDialog = viewModel::dismissDeleteDialog,
         onConfirmDelete = viewModel::deleteProfile,
+        onRetryDelete = viewModel::retryDeleteProfile,
+        onDismissDeleteFailureDialog = viewModel::dismissDeleteFailureDialog,
+        onDisconnectProfile = viewModel::disconnectProfile,
         onDismissAddLinkSheet = viewModel::dismissAddLinkSheet,
         onSaveLink = viewModel::addLink,
         onDismissAddTagSheet = viewModel::dismissAddTagSheet,
@@ -96,6 +102,9 @@ private fun Content(
     onDelete: () -> Unit,
     onDismissDeleteDialog: () -> Unit,
     onConfirmDelete: () -> Unit,
+    onRetryDelete: () -> Unit,
+    onDismissDeleteFailureDialog: () -> Unit,
+    onDisconnectProfile: () -> Unit,
     onDismissAddLinkSheet: () -> Unit,
     onSaveLink: (String, String) -> Unit,
     onDismissAddTagSheet: () -> Unit,
@@ -171,6 +180,22 @@ private fun Content(
         )
     }
 
+    if (uiState.showDeleteFailureDialog) {
+        AppAlertDialog(
+            title = stringResource(R.string.profile__delete_error_title),
+            text = stringResource(R.string.profile__delete_error_description),
+            confirmText = stringResource(R.string.common__retry),
+            dismissText = stringResource(R.string.profile__sign_out),
+            onConfirm = onRetryDelete,
+            onDismiss = onDisconnectProfile,
+            onDismissRequest = onDismissDeleteFailureDialog,
+            properties = DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true,
+            ),
+        )
+    }
+
     if (uiState.showAddLinkSheet) {
         AddLinkSheet(
             onDismiss = onDismissAddLinkSheet,
@@ -199,7 +224,7 @@ private fun AvatarSection(
             .clip(CircleShape)
             .background(Colors.Gray5)
             .testTag("EditProfileAvatar")
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
     ) {
         when {
             newAvatarUri != null -> AsyncImage(
@@ -243,6 +268,9 @@ private fun Preview() {
             onDelete = {},
             onDismissDeleteDialog = {},
             onConfirmDelete = {},
+            onRetryDelete = {},
+            onDismissDeleteFailureDialog = {},
+            onDisconnectProfile = {},
             onDismissAddLinkSheet = {},
             onSaveLink = { _, _ -> },
             onDismissAddTagSheet = {},

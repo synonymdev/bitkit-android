@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Improve Pubky profile restore, contact editing, and contact routing flows #905
+
 ### Fixed
 - Align tab colors, Show details button, notifications bell figure, and home activity count with iOS #907
 - Polish Terms of Use screen padding to match iOS #903
