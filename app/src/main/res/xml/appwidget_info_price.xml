@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:minWidth="@dimen/appwidget_min_width"
     android:minHeight="@dimen/appwidget_min_height"
+    android:minResizeWidth="@dimen/appwidget_min_resize_width"
+    android:minResizeHeight="@dimen/appwidget_min_resize_height"
     android:targetCellWidth="@integer/appwidget_target_cell_width"
     android:targetCellHeight="@integer/appwidget_target_cell_height"
     android:resizeMode="horizontal|vertical"
