@@ -191,9 +191,9 @@ fun PricePreviewContent(
 
 @Composable
 private fun WidgetCarousel(
+    modifier: Modifier = Modifier,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
-    modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
 

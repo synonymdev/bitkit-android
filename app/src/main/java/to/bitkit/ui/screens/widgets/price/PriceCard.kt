@@ -139,7 +139,6 @@ fun PriceCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .padding(top = 8.dp)
                     .testTag("price_card_chart")
             )
 
