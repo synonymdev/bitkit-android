@@ -178,16 +178,16 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-33-x86_64-pixel_6
+          key: avd-36-x86_64-pixel_8
 
       - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           disable-animations: false
@@ -240,14 +240,16 @@ jobs:
         id: test1
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
+          ANDROID_DEVICE_NAME: Pixel_8
+          ANDROID_PLATFORM_VERSION: "16.0"
           RECORD_VIDEO: true
           ATTEMPT: 1
 
@@ -257,14 +259,16 @@ jobs:
         if: steps.test1.outcome != 'success'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
+          ANDROID_DEVICE_NAME: Pixel_8
+          ANDROID_PLATFORM_VERSION: "16.0"
           RECORD_VIDEO: true
           ATTEMPT: 2
 
@@ -273,14 +277,16 @@ jobs:
         if: steps.test1.outcome != 'success' && steps.test2.outcome != 'success'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
+          ANDROID_DEVICE_NAME: Pixel_8
+          ANDROID_PLATFORM_VERSION: "16.0"
           RECORD_VIDEO: true
           ATTEMPT: 3
 
@@ -334,16 +340,16 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-33-x86_64-pixel_6
+          key: avd-36-x86_64-pixel_8
 
       - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           disable-animations: false
@@ -380,14 +386,16 @@ jobs:
         id: test1
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
+          ANDROID_DEVICE_NAME: Pixel_8
+          ANDROID_PLATFORM_VERSION: "16.0"
           BACKEND: regtest
           RECORD_VIDEO: true
           ATTEMPT: 1
@@ -398,14 +406,16 @@ jobs:
         if: steps.test1.outcome != 'success'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
+          ANDROID_DEVICE_NAME: Pixel_8
+          ANDROID_PLATFORM_VERSION: "16.0"
           BACKEND: regtest
           RECORD_VIDEO: true
           ATTEMPT: 2
@@ -415,14 +425,16 @@ jobs:
         if: steps.test1.outcome != 'success' && steps.test2.outcome != 'success'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          profile: pixel_6
-          api-level: 33
+          profile: pixel_8
+          api-level: 36
           arch: x86_64
-          avd-name: Pixel_6
+          avd-name: Pixel_8
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front none
           script: cd bitkit-e2e-tests && ./ci_run_android.sh --mochaOpts.grep "${{ matrix.shard.grep }}"
         env:
+          ANDROID_DEVICE_NAME: Pixel_8
+          ANDROID_PLATFORM_VERSION: "16.0"
           BACKEND: regtest
           RECORD_VIDEO: true
           ATTEMPT: 3
