@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -34,7 +33,6 @@ import ir.ehsannarmani.compose_charts.models.HorizontalIndicatorProperties
 import ir.ehsannarmani.compose_charts.models.LabelHelperProperties
 import ir.ehsannarmani.compose_charts.models.LabelProperties
 import ir.ehsannarmani.compose_charts.models.Line
-import to.bitkit.R
 import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
@@ -42,9 +40,7 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
-import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -112,28 +108,6 @@ fun PriceCard(
                     .height(48.dp)
                     .testTag("price_card_chart")
             )
-
-            if (pricePreferences.showSource) {
-                VerticalSpacer(8.dp)
-
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("PriceWidgetSource")
-                ) {
-                    CaptionB(
-                        text = stringResource(R.string.widgets__widget__source),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("source_label")
-                    )
-                    CaptionB(
-                        text = priceDTO.source,
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("source_text")
-                    )
-                }
-            }
         }
     }
 }
@@ -279,7 +253,6 @@ private fun FullBlockCardPreview() {
                     showSource = true,
                 ),
                 priceDTO = PriceDTO(
-                    source = "Bitfinex.com",
                     widgets = listOf(
                         PriceWidgetData(
                             pair = TradingPair.BTC_USD,

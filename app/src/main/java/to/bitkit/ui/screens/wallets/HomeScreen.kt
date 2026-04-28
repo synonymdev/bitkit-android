@@ -981,7 +981,6 @@ private val previewArticle = ArticleModel(
 )
 
 private val previewPrice = PriceDTO(
-    source = "Bitfinex.com",
     widgets = listOf(
         PriceWidgetData(
             pair = TradingPair.BTC_USD,

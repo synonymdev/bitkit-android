@@ -311,7 +311,6 @@ private fun PreviewWithDelete() {
 }
 
 private val SAMPLE_PRICE_DTO = PriceDTO(
-    source = "Bitfinex.com",
     widgets = listOf(
         PriceWidgetData(
             pair = TradingPair.BTC_USD,
