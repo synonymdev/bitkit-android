@@ -54,18 +54,18 @@ private const val PAGE_COUNT = LAST_PAGE_INDEX + 1
 
 @Composable
 fun OnboardingSlidesScreen(
-    currentTab: Int = 0,
     isGeoBlocked: Boolean,
     onAdvancedSetupClick: () -> Unit,
     onCreateClick: () -> Unit,
     onRestoreClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    currentTab: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = currentTab, pageCount = { PAGE_COUNT })
 
     Box(
-        modifier = Modifier
-            .screen()
+        modifier = modifier.screen()
     ) {
         HorizontalPager(
             state = pagerState,
@@ -186,7 +186,7 @@ fun OnboardingTab(
     disclaimerText: String? = null,
 ) {
     Column(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize()
     ) {
         FillHeight()
 
