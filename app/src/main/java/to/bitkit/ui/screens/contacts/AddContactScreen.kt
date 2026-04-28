@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -86,15 +87,15 @@ fun AddContactSheet(
 ) {
     val context = LocalContext.current
     var publicKeyInput by remember { mutableStateOf("") }
-    val trimmedInput = publicKeyInput.trim()
-    val normalizedInput = PubkyPublicKeyFormat.normalized(trimmedInput)
-    val validationMessage = when {
-        trimmedInput.isEmpty() -> null
-        PubkyPublicKeyFormat.matches(trimmedInput, currentPublicKey) ->
-            context.getString(R.string.contacts__add_error_self)
-        normalizedInput == null ->
-            context.getString(R.string.contacts__add_error_invalid_key)
-        else -> null
+    val validationResult = resolveAddContactValidation(
+        input = publicKeyInput,
+        ownPublicKey = currentPublicKey,
+    )
+    val validationMessage = when (validationResult) {
+        AddContactValidationResult.Empty -> null
+        AddContactValidationResult.InvalidKey -> context.getString(R.string.contacts__add_error_invalid_key)
+        AddContactValidationResult.OwnKey -> context.getString(R.string.contacts__add_error_self)
+        is AddContactValidationResult.Valid -> null
     }
 
     BottomSheet(
@@ -104,7 +105,7 @@ fun AddContactSheet(
         AddContactSheetContent(
             publicKeyInput = publicKeyInput,
             validationMessage = validationMessage,
-            isSubmitEnabled = normalizedInput != null && validationMessage == null,
+            isSubmitEnabled = validationResult is AddContactValidationResult.Valid,
             onPublicKeyChange = { publicKeyInput = PubkyPublicKeyFormat.bounded(it) },
             onPaste = {
                 context.getClipboardText()?.trim()?.let {
@@ -112,7 +113,11 @@ fun AddContactSheet(
                 }
             },
             onScanQr = onScanQr,
-            onSubmit = { normalizedInput?.let(onSubmit) },
+            onSubmit = {
+                val normalizedKey = (validationResult as? AddContactValidationResult.Valid)?.normalizedKey
+                    ?: return@AddContactSheetContent
+                onSubmit(normalizedKey)
+            },
         )
     }
 }
@@ -156,7 +161,10 @@ private fun AddContactSheetContent(
                 }
             },
             trailingIcon = {
-                IconButton(onClick = onPaste) {
+                IconButton(
+                    onClick = onPaste,
+                    modifier = Modifier.testTag("AddContactPaste")
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_clipboard_text),
                         contentDescription = null,
@@ -164,7 +172,9 @@ private fun AddContactSheetContent(
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("AddContactPubkyField")
         )
         VerticalSpacer(16.dp)
 
@@ -175,13 +185,17 @@ private fun AddContactSheetContent(
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_scan_qr),
                 onClick = onScanQr,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactScanQR")
             )
             PrimaryButton(
                 text = stringResource(R.string.contacts__add_button),
                 onClick = onSubmit,
                 enabled = isSubmitEnabled,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactAdd")
             )
         }
         VerticalSpacer(16.dp)
@@ -257,7 +271,7 @@ private fun LoadingContent(publicKey: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -273,7 +287,7 @@ private fun LoadingContent(publicKey: String) {
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(Colors.Gray5),
+                .background(Colors.Gray5)
         ) {
             Display(
                 text = publicKey.take(1).uppercase(),
@@ -292,7 +306,7 @@ private fun LoadingContent(publicKey: String) {
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
         ) {
             RotatingEllipses(modifier = Modifier.size(256.dp))
         }
@@ -377,7 +391,7 @@ private fun RotatingEllipses(modifier: Modifier = Modifier) {
                         style = dashedStroke,
                     )
                 }
-            },
+            }
     ) {
         Image(
             painter = painterResource(R.drawable.card),
@@ -397,13 +411,14 @@ private fun ErrorContent(
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         BodyM(text = error, color = Colors.White64, textAlign = TextAlign.Center)
         VerticalSpacer(16.dp)
         SecondaryButton(
             text = stringResource(R.string.common__retry),
             onClick = onRetry,
+            modifier = Modifier.testTag("AddContactRetry")
         )
     }
 }
@@ -419,7 +434,7 @@ private fun LoadedContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -445,13 +460,17 @@ private fun LoadedContent(
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_discard),
                 onClick = onDiscard,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactDiscard")
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = !isLoading,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactSave")
             )
         }
         VerticalSpacer(16.dp)

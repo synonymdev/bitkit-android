@@ -86,6 +86,7 @@ class AddContactViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,
                         title = context.getString(R.string.contacts__add_contact_saved),
+                        testTag = "ContactSavedToast",
                     )
                     _effects.emit(AddContactEffect.ContactSaved)
                 }

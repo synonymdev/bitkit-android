@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -34,7 +35,7 @@ fun CenteredProfileHeader(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier,
+        modifier = modifier
     ) {
         Text13Up(
             text = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
@@ -52,13 +53,13 @@ fun CenteredProfileHeader(
                 modifier = Modifier
                     .size(100.dp)
                     .clip(CircleShape)
-                    .background(Colors.Gray5),
+                    .background(Colors.Gray5)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_user_square),
                     contentDescription = null,
                     tint = Colors.White32,
-                    modifier = Modifier.size(50.dp),
+                    modifier = Modifier.size(50.dp)
                 )
             }
         }
@@ -67,7 +68,10 @@ fun CenteredProfileHeader(
 
         Display(
             text = name,
-            modifier = if (nameTestTag != null) Modifier.testTag(nameTestTag) else Modifier,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = if (nameTestTag != null) Modifier.testTag(nameTestTag) else Modifier
         )
 
         if (bio.isNotEmpty()) {
@@ -76,7 +80,7 @@ fun CenteredProfileHeader(
                 text = bio,
                 color = Colors.White64,
                 textAlign = TextAlign.Center,
-                modifier = if (notesTestTag != null) Modifier.testTag(notesTestTag) else Modifier,
+                modifier = if (notesTestTag != null) Modifier.testTag(notesTestTag) else Modifier
             )
         }
     }
