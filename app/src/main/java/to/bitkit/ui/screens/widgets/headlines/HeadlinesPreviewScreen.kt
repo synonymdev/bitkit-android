@@ -47,7 +47,6 @@ fun HeadlinesPreviewScreen(
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
 ) {
-    val showWidgetTitles by headlinesViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
     val isHeadlinesImplemented by headlinesViewModel.isNewsWidgetEnabled.collectAsStateWithLifecycle()
@@ -60,7 +59,6 @@ fun HeadlinesPreviewScreen(
         onBack = onBack,
         isHeadlinesImplemented = isHeadlinesImplemented,
         headlinePreferences = customHeadlinePreferences,
-        showWidgetTitles = showWidgetTitles,
         article = article,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
@@ -80,7 +78,6 @@ fun HeadlinesPreviewContent(
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
     isHeadlinesImplemented: Boolean,
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel,
@@ -158,16 +155,15 @@ fun HeadlinesPreviewContent(
             )
 
             HeadlineCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("headline_card"),
-                showWidgetTitle = showWidgetTitles,
                 showTime = headlinePreferences.showTime,
                 showSource = headlinePreferences.showSource,
                 time = article.timeAgo,
                 headline = article.title,
                 source = article.publisher,
-                link = article.link
+                link = article.link,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("headline_card")
             )
 
             Row(
@@ -207,7 +203,6 @@ private fun Preview() {
     AppThemeSurface {
         HeadlinesPreviewContent(
             onBack = {},
-            showWidgetTitles = true,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
@@ -229,7 +224,6 @@ private fun Preview2() {
     AppThemeSurface {
         HeadlinesPreviewContent(
             onBack = {},
-            showWidgetTitles = false,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},

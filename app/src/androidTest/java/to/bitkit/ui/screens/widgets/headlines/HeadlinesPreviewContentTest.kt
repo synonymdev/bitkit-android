@@ -42,7 +42,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -97,7 +96,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = false,
                     isHeadlinesImplemented = false,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -134,7 +132,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = customPreferences,
                     article = mockArticle
@@ -158,7 +155,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -194,7 +190,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -219,7 +214,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = false,
                     isHeadlinesImplemented = false,
                     headlinePreferences = minimalPreferences,
                     article = mockArticle
