@@ -74,13 +74,13 @@ private fun WideContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
     val periodLabel = LocalContext.current.getString(widget.period.labelRes())
 
     Row(
-        modifier = GlanceModifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
+        modifier = GlanceModifier.fillMaxWidth()
     ) {
         Text(
             text = "${widget.pair.displayName}  $periodLabel".uppercase(),
             style = GlanceTextStyles.captionUp,
-            modifier = GlanceModifier.then(WidthModifier(Dimension.Expand)),
+            modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
         )
         HorizontalSpacer(16.dp)
         Text(
@@ -94,7 +94,7 @@ private fun WideContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
     Text(
         text = "${widget.pair.symbol} ${widget.price}",
         style = GlanceTextStyles.headline34,
-        modifier = GlanceModifier.fillMaxWidth(),
+        modifier = GlanceModifier.fillMaxWidth()
     )
     VerticalSpacer(8.dp)
     ChartBox(chartBitmap = chartBitmap)
@@ -110,7 +110,7 @@ private fun CompactContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
         Text(
             text = widget.pair.displayName.uppercase(),
             style = GlanceTextStyles.captionUp,
-            modifier = GlanceModifier.then(WidthModifier(Dimension.Expand)),
+            modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
         )
         Text(
             text = periodLabel.uppercase(),
@@ -121,7 +121,7 @@ private fun CompactContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
     Text(
         text = "${widget.pair.symbol} ${widget.price}",
         style = GlanceTextStyles.title22,
-        modifier = GlanceModifier.fillMaxWidth(),
+        modifier = GlanceModifier.fillMaxWidth()
     )
     VerticalSpacer(8.dp)
     Text(
@@ -141,7 +141,7 @@ private fun ChartBox(chartBitmap: Bitmap?) {
         modifier = GlanceModifier
             .fillMaxWidth()
             .then(HeightModifier(Dimension.Expand))
-            .padding(vertical = 16.dp),
+            .padding(vertical = 16.dp)
     ) {
         Image(
             provider = ImageProvider(chartBitmap),
@@ -150,7 +150,7 @@ private fun ChartBox(chartBitmap: Bitmap?) {
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .cornerRadius(8.dp),
+                .cornerRadius(8.dp)
         )
     }
 }

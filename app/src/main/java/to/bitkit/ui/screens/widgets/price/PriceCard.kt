@@ -68,49 +68,49 @@ fun PriceCard(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10),
+            .background(Colors.White10)
     ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(16.dp)
         ) {
             if (showWidgetTitle) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .padding(bottom = 8.dp)
-                        .testTag("price_card_widget_title_row"),
+                        .testTag("price_card_widget_title_row")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.widget_chart_line),
                         contentDescription = null,
+                        tint = Color.Unspecified,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("price_card_widget_title_icon"),
-                        tint = Color.Unspecified,
+                            .testTag("price_card_widget_title_icon")
                     )
                     HorizontalSpacer(16.dp)
                     BodyMSB(
                         text = stringResource(R.string.widgets__price__name),
-                        modifier = Modifier.testTag("price_card_widget_title_text"),
+                        modifier = Modifier.testTag("price_card_widget_title_text")
                     )
                 }
             }
 
             Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("price_card_pair_row_${widgetData.pair.displayName}"),
-                verticalAlignment = Alignment.CenterVertically,
+                    .testTag("price_card_pair_row_${widgetData.pair.displayName}")
             ) {
                 Caption13Up(
                     text = "${widgetData.pair.displayName}  ${widgetData.period.value}",
                     color = Colors.White64,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("PriceWidgetRow-${widgetData.pair.displayName}"),
+                        .testTag("PriceWidgetRow-${widgetData.pair.displayName}")
                 )
                 HorizontalSpacer(16.dp)
                 Text(
@@ -119,7 +119,7 @@ fun PriceCard(
                     fontSize = 22.sp,
                     lineHeight = 26.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}"),
+                    modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
                 )
             }
 
@@ -131,7 +131,7 @@ fun PriceCard(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("price_card_pair_price_${widgetData.pair}"),
+                    .testTag("price_card_pair_price_${widgetData.pair}")
             )
 
             ChartComponent(
@@ -140,7 +140,7 @@ fun PriceCard(
                     .fillMaxWidth()
                     .height(48.dp)
                     .padding(top = 8.dp)
-                    .testTag("price_card_chart"),
+                    .testTag("price_card_chart")
             )
 
             if (pricePreferences.showSource) {
@@ -150,17 +150,17 @@ fun PriceCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("PriceWidgetSource"),
+                        .testTag("PriceWidgetSource")
                 ) {
                     CaptionB(
                         text = stringResource(R.string.widgets__widget__source),
                         color = Colors.White64,
-                        modifier = Modifier.testTag("source_label"),
+                        modifier = Modifier.testTag("source_label")
                     )
                     CaptionB(
                         text = priceDTO.source,
                         color = Colors.White64,
-                        modifier = Modifier.testTag("source_text"),
+                        modifier = Modifier.testTag("source_text")
                     )
                 }
             }
@@ -182,22 +182,22 @@ fun PriceCardSmall(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10),
+            .background(Colors.White10)
     ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(16.dp)
         ) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("price_card_small_pair_row_${widgetData.pair.displayName}"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .testTag("price_card_small_pair_row_${widgetData.pair.displayName}")
                 ) {
                     Caption13Up(
                         text = widgetData.pair.displayName,
@@ -216,7 +216,7 @@ fun PriceCardSmall(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("price_card_small_pair_price_${widgetData.pair}"),
+                        .testTag("price_card_small_pair_price_${widgetData.pair}")
                 )
                 Text(
                     text = widgetData.change.formatted,
@@ -224,7 +224,7 @@ fun PriceCardSmall(
                     fontSize = 15.sp,
                     lineHeight = 20.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.testTag("price_card_small_pair_change_${widgetData.pair}"),
+                    modifier = Modifier.testTag("price_card_small_pair_change_${widgetData.pair}")
                 )
             }
 
@@ -233,7 +233,7 @@ fun PriceCardSmall(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .testTag("price_card_small_chart"),
+                    .testTag("price_card_small_chart")
             )
         }
     }
@@ -254,10 +254,9 @@ fun ChartComponent(
     }
 
     Box(
-        modifier = modifier.clip(ShapeDefaults.Small),
+        modifier = modifier.clip(ShapeDefaults.Small)
     ) {
         LineChart(
-            modifier = Modifier.fillMaxSize(),
             data = remember(widgetData.pastValues, baseColor) {
                 listOf(
                     Line(
@@ -288,6 +287,7 @@ fun ChartComponent(
             ),
             minValue = minValue,
             maxValue = maxValue,
+            modifier = Modifier.fillMaxSize()
         )
     }
 }
@@ -299,13 +299,12 @@ private val SAMPLE_PAST_VALUES = listOf(1.0, 2.0, 1.5, 3.0, 2.5, 4.0)
 private fun FullBlockCardPreview() {
     AppThemeSurface {
         Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(16.dp)
         ) {
             PriceCard(
-                modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = true,
                 pricePreferences = PricePreferences(
                     showSource = true,
@@ -325,6 +324,7 @@ private fun FullBlockCardPreview() {
                         ),
                     ),
                 ),
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

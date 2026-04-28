@@ -102,7 +102,7 @@ fun PricePreviewContent(
     isLoading: Boolean,
 ) {
     ScreenColumn(
-        modifier = Modifier.testTag("price_preview_screen"),
+        modifier = Modifier.testTag("price_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__price__name),
@@ -112,20 +112,20 @@ fun PricePreviewContent(
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .weight(1f),
+                .weight(1f)
         ) {
             VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.widgets__price__description),
                 color = Colors.White64,
-                modifier = Modifier.testTag("widget_description"),
+                modifier = Modifier.testTag("widget_description")
             )
 
             VerticalSpacer(16.dp)
 
             HorizontalDivider(
-                modifier = Modifier.testTag("divider"),
+                modifier = Modifier.testTag("divider")
             )
 
             SettingsButtonRow(
@@ -138,7 +138,7 @@ fun PricePreviewContent(
                     },
                 ),
                 onClick = onClickEdit,
-                modifier = Modifier.testTag("WidgetEdit"),
+                modifier = Modifier.testTag("WidgetEdit")
             )
 
             if (priceDTO != null) {
@@ -146,7 +146,7 @@ fun PricePreviewContent(
                     pricePreferences = pricePreferences,
                     priceDTO = priceDTO,
                     modifier = Modifier
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
                 )
             } else {
                 Box(modifier = Modifier.weight(1f))
@@ -154,6 +154,7 @@ fun PricePreviewContent(
         }
 
         Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .padding(
                     start = 16.dp,
@@ -162,8 +163,7 @@ fun PricePreviewContent(
                     top = 22.dp,
                 )
                 .fillMaxWidth()
-                .testTag("buttons_row"),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .testTag("buttons_row")
         ) {
             if (isPriceWidgetEnabled) {
                 SecondaryButton(
@@ -172,7 +172,7 @@ fun PricePreviewContent(
                     onClick = onClickDelete,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetDelete"),
+                        .testTag("WidgetDelete")
                 )
             }
 
@@ -183,7 +183,7 @@ fun PricePreviewContent(
                 onClick = onClickSave,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("WidgetSave"),
+                    .testTag("WidgetSave")
             )
         }
     }
@@ -198,37 +198,37 @@ private fun WidgetCarousel(
     val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
 
     Column(
-        modifier = modifier.testTag("price_preview_carousel"),
         verticalArrangement = Arrangement.Center,
+        modifier = modifier.testTag("price_preview_carousel")
     ) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .testTag("price_preview_pager"),
+                .testTag("price_preview_pager")
         ) { page ->
             Box(
-                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 when (page) {
                     PAGE_SMALL -> PriceCardSmall(
+                        pricePreferences = pricePreferences,
+                        priceDTO = priceDTO,
                         modifier = Modifier
                             .width(163.dp)
                             .height(192.dp)
-                            .testTag("price_card_small"),
-                        pricePreferences = pricePreferences,
-                        priceDTO = priceDTO,
+                            .testTag("price_card_small")
                     )
 
                     PAGE_WIDE -> PriceCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("price_card_wide"),
                         showWidgetTitle = false,
                         pricePreferences = pricePreferences,
                         priceDTO = priceDTO,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("price_card_wide")
                     )
                 }
             }
