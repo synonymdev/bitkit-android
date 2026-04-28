@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.material3.Text
@@ -21,10 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,7 +41,6 @@ import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
-import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -56,7 +51,6 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun PriceCard(
     modifier: Modifier = Modifier,
-    showWidgetTitle: Boolean,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
 ) {
@@ -76,29 +70,6 @@ fun PriceCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            if (showWidgetTitle) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .testTag("price_card_widget_title_row")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.widget_chart_line),
-                        contentDescription = null,
-                        tint = Color.Unspecified,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("price_card_widget_title_icon")
-                    )
-                    HorizontalSpacer(16.dp)
-                    BodyMSB(
-                        text = stringResource(R.string.widgets__price__name),
-                        modifier = Modifier.testTag("price_card_widget_title_text")
-                    )
-                }
-            }
-
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -304,7 +275,6 @@ private fun FullBlockCardPreview() {
                 .padding(16.dp)
         ) {
             PriceCard(
-                showWidgetTitle = true,
                 pricePreferences = PricePreferences(
                     showSource = true,
                 ),

@@ -223,7 +223,6 @@ private fun WidgetCarousel(
                     )
 
                     PAGE_WIDE -> PriceCard(
-                        showWidgetTitle = false,
                         pricePreferences = pricePreferences,
                         priceDTO = priceDTO,
                         modifier = Modifier
