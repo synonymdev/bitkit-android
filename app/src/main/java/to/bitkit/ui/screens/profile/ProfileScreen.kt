@@ -46,6 +46,7 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
@@ -154,12 +155,14 @@ private fun ProfileBody(
 
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickableAlpha(onClick = onClickCopy)
         ) {
             QrCodeImage(
                 content = profile.publicKey,
                 modifier = Modifier.fillMaxWidth(),
-                testTag = "QRCode",
+                testTag = "ProfileQRCode",
             )
             if (profile.imageUrl != null) {
                 Box(
@@ -214,7 +217,7 @@ private fun ProfileBody(
                 color = Colors.White64,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("ProfileViewTagsHeader"),
+                    .testTag("ProfileViewTagsHeader")
             )
             VerticalSpacer(8.dp)
             @OptIn(ExperimentalLayoutApi::class)
@@ -260,12 +263,12 @@ private fun EmptyState(
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
             onClick = onClickRetry,
-            modifier = Modifier.testTag("ProfileRetry"),
+            modifier = Modifier.testTag("ProfileRetry")
         )
         VerticalSpacer(8.dp)
         TextButton(
             onClick = rememberDebouncedClick(onClick = onClickSignOut),
-            modifier = Modifier.testTag("ProfileEmptySignOut"),
+            modifier = Modifier.testTag("ProfileEmptySignOut")
         ) {
             BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
         }

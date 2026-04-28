@@ -3,7 +3,6 @@ package to.bitkit.ui.onboarding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -60,11 +59,11 @@ fun TermsOfUseScreen(
                         .verticalScroll(rememberScrollState())
                         .testTag("TOS")
                 ) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    VerticalSpacer(48.dp)
                     Display(text = stringResource(R.string.onboarding__tos_header).withAccent())
-                    Spacer(modifier = Modifier.height(12.dp))
+                    VerticalSpacer(12.dp)
                     TosContent()
-                    Spacer(modifier = Modifier.height(20.dp))
+                    VerticalSpacer(20.dp)
                 }
                 Box(
                     modifier = Modifier
@@ -82,7 +81,7 @@ fun TermsOfUseScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 16.dp)
             ) {
                 TermsText(
                     title = stringResource(R.string.onboarding__tos_checkbox),
@@ -100,7 +99,7 @@ fun TermsOfUseScreen(
                         .testTag("Check2")
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                VerticalSpacer(24.dp)
 
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
