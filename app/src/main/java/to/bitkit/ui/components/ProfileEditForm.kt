@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -22,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -31,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
@@ -59,13 +63,17 @@ fun ProfileEditForm(
     modifier: Modifier = Modifier,
     avatarContent: @Composable () -> Unit = {},
     publicKeyLabel: String? = null,
+    bioPlaceholder: String? = null,
     footerNote: String? = null,
     showFooterNote: Boolean = true,
     onDelete: (() -> Unit)? = null,
     deleteLabel: String = "",
 ) {
     val resolvedPublicKeyLabel = publicKeyLabel ?: stringResource(R.string.profile__your_pubky)
+    val resolvedBioPlaceholder = bioPlaceholder ?: stringResource(R.string.profile__edit_bio_placeholder)
     val resolvedFooterNote = footerNote ?: stringResource(R.string.profile__edit_public_note)
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -88,7 +96,7 @@ fun ProfileEditForm(
             colors = AppTextFieldDefaults.transparent,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("ProfileEditName"),
+                .testTag("ProfileEditName")
         )
         HorizontalDivider()
         VerticalSpacer(12.dp)
@@ -115,12 +123,12 @@ fun ProfileEditForm(
         TextInput(
             value = bio,
             onValueChange = { onBioChange(it.take(BIO_MAX_LENGTH)) },
-            placeholder = stringResource(R.string.profile__edit_bio_placeholder),
+            placeholder = resolvedBioPlaceholder,
             minLines = 2,
             maxLines = 4,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("ProfileEditBio"),
+                .testTag("ProfileEditBio")
         )
 
         VerticalSpacer(16.dp)
@@ -139,25 +147,48 @@ fun ProfileEditForm(
                 placeholder = stringResource(R.string.profile__add_link_url_placeholder),
                 singleLine = true,
                 trailingIcon = {
-                    IconButton(onClick = { onRemoveLink(index) }) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_trash),
+                            painter = painterResource(R.drawable.ic_pencil_simple),
                             contentDescription = null,
                             tint = Colors.White64,
                             modifier = Modifier.size(16.dp)
                         )
+                        IconButton(
+                            onClick = { onRemoveLink(index) },
+                            modifier = Modifier.testTag("ProfileEditLinkRemove_$index")
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_trash),
+                                contentDescription = null,
+                                tint = Colors.White64,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("ProfileEditLink_$index"),
+                    .border(
+                        width = 1.dp,
+                        color = Colors.White10,
+                        shape = AppShapes.small,
+                    )
+                    .testTag("ProfileEditLink_$index")
             )
             VerticalSpacer(8.dp)
         }
         Row(modifier = Modifier.fillMaxWidth()) {
             PrimaryButton(
                 text = stringResource(R.string.profile__add_link),
-                onClick = onAddLink,
+                onClick = {
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                    onAddLink()
+                },
                 size = ButtonSize.Small,
                 fullWidth = false,
                 icon = {
@@ -167,7 +198,7 @@ fun ProfileEditForm(
                         modifier = Modifier.size(16.dp)
                     )
                 },
-                modifier = Modifier.testTag("ProfileEditAddLink"),
+                modifier = Modifier.testTag("ProfileEditAddLink")
             )
         }
 
@@ -195,7 +226,11 @@ fun ProfileEditForm(
         Row(modifier = Modifier.fillMaxWidth()) {
             PrimaryButton(
                 text = stringResource(R.string.profile__add_tag),
-                onClick = onAddTag,
+                onClick = {
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                    onAddTag()
+                },
                 size = ButtonSize.Small,
                 fullWidth = false,
                 icon = {
@@ -205,12 +240,14 @@ fun ProfileEditForm(
                         modifier = Modifier.size(16.dp)
                     )
                 },
-                modifier = Modifier.testTag("ProfileEditAddTag"),
+                modifier = Modifier.testTag("ProfileEditAddTag")
             )
         }
 
         VerticalSpacer(16.dp)
         if (showFooterNote) {
+            HorizontalDivider(color = Colors.White10)
+            VerticalSpacer(16.dp)
             BodyS(
                 text = resolvedFooterNote,
                 color = Colors.White64,
@@ -218,7 +255,7 @@ fun ProfileEditForm(
         }
 
         if (onDelete != null) {
-            Column(modifier = Modifier.testTag("ProfileEditDelete")) {
+            Column {
                 VerticalSpacer(16.dp)
                 HorizontalDivider()
                 VerticalSpacer(16.dp)
@@ -242,6 +279,7 @@ fun ProfileEditForm(
                                 modifier = Modifier.size(16.dp)
                             )
                         },
+                        modifier = Modifier.testTag("ProfileEditDelete")
                     )
                 }
             }
@@ -258,7 +296,7 @@ fun ProfileEditForm(
                 onClick = onCancel,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("ProfileEditCancel"),
+                    .testTag("ProfileEditCancel")
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
@@ -266,7 +304,7 @@ fun ProfileEditForm(
                 enabled = isSaveEnabled,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("ProfileEditSave"),
+                    .testTag("ProfileEditSave")
             )
         }
         VerticalSpacer(16.dp)

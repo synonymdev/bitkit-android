@@ -208,26 +208,66 @@ class EditProfileViewModel @Inject constructor(
 
     fun deleteProfile() {
         viewModelScope.launch {
-            _uiState.update { it.copy(showDeleteDialog = false, isSaving = true) }
-            pubkyRepo.deleteProfile()
+            attemptDeleteProfile()
+        }
+    }
+
+    fun retryDeleteProfile() {
+        viewModelScope.launch {
+            attemptDeleteProfile()
+        }
+    }
+
+    fun dismissDeleteFailureDialog() {
+        _uiState.update { it.copy(showDeleteFailureDialog = false) }
+    }
+
+    fun disconnectProfile() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
+            pubkyRepo.signOut()
                 .onSuccess {
                     _uiState.update { it.copy(isSaving = false) }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.profile__delete_success),
-                    )
-                    _effects.emit(EditProfileEffect.DeleteSuccess)
+                    _effects.emit(EditProfileEffect.DisconnectSuccess)
                 }
                 .onFailure {
-                    Logger.error("Failed to delete profile", it, context = TAG)
+                    Logger.error("Failed to disconnect profile", it, context = TAG)
                     _uiState.update { it.copy(isSaving = false) }
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.profile__delete_error),
+                        title = context.getString(R.string.profile__disconnect_error),
                         description = it.message,
                     )
                 }
         }
+    }
+
+    private suspend fun attemptDeleteProfile() {
+        _uiState.update {
+            it.copy(
+                showDeleteDialog = false,
+                showDeleteFailureDialog = false,
+                isSaving = true,
+            )
+        }
+        pubkyRepo.deleteProfileWithSessionRetry()
+            .onSuccess {
+                _uiState.update { it.copy(isSaving = false) }
+                ToastEventBus.send(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.profile__delete_success),
+                )
+                _effects.emit(EditProfileEffect.DeleteSuccess)
+            }
+            .onFailure {
+                Logger.error("Failed to delete profile", it, context = TAG)
+                _uiState.update {
+                    it.copy(
+                        isSaving = false,
+                        showDeleteFailureDialog = true,
+                    )
+                }
+            }
     }
 }
 
@@ -244,6 +284,7 @@ data class EditProfileUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val showDeleteDialog: Boolean = false,
+    val showDeleteFailureDialog: Boolean = false,
     val showAddLinkSheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
 )
@@ -251,4 +292,5 @@ data class EditProfileUiState(
 sealed interface EditProfileEffect {
     data object SaveSuccess : EditProfileEffect
     data object DeleteSuccess : EditProfileEffect
+    data object DisconnectSuccess : EditProfileEffect
 }

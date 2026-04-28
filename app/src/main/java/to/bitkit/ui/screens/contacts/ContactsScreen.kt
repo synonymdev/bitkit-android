@@ -17,13 +17,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +36,7 @@ import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
@@ -57,6 +59,7 @@ fun ContactsScreen(
     onClickContact: (String) -> Unit,
     onAddContact: (String) -> Unit = {},
     onScanQr: () -> Unit = {},
+    openAddContactSheet: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -70,6 +73,7 @@ fun ContactsScreen(
         onSearchTextChange = { viewModel.onSearchTextChange(it) },
         onAddContact = onAddContact,
         onScanQr = onScanQr,
+        openAddContactSheet = openAddContactSheet,
     )
 }
 
@@ -82,8 +86,9 @@ private fun Content(
     onSearchTextChange: (String) -> Unit,
     onAddContact: (String) -> Unit,
     onScanQr: () -> Unit,
+    openAddContactSheet: Boolean,
 ) {
-    var showAddContactSheet by remember { mutableStateOf(false) }
+    var showAddContactSheet by rememberSaveable { mutableStateOf(openAddContactSheet) }
 
     ScreenColumn {
         AppTopBar(
@@ -106,7 +111,7 @@ private fun Content(
                 ActionButton(
                     onClick = { showAddContactSheet = true },
                     iconRes = R.drawable.ic_plus,
-                    modifier = Modifier.testTag("ContactsAddButton"),
+                    modifier = Modifier.testTag("ContactsAddButton")
                 )
             }
             VerticalSpacer(8.dp)
@@ -163,8 +168,8 @@ private fun ContactsList(
                 )
                 ContactRow(
                     profile = myProfile,
-                    modifier = Modifier.testTag("ContactsMyProfile"),
                     onClick = onClickMyProfile,
+                    modifier = Modifier.testTag("ContactsMyProfile")
                 )
                 HorizontalDivider()
             }
@@ -183,8 +188,8 @@ private fun ContactsList(
             items(contacts, key = { it.publicKey }) { contact ->
                 ContactRow(
                     profile = contact,
-                    modifier = Modifier.testTag("Contact_${contact.publicKey}"),
                     onClick = { onClickContact(contact.publicKey) },
+                    modifier = Modifier.testTag("Contact_${contact.publicKey}")
                 )
                 HorizontalDivider()
             }
@@ -208,14 +213,21 @@ private fun ContactRow(
     ) {
         ContactAvatar(profile = profile)
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.weight(1f)
+        ) {
             BodyS(
                 text = profile.truncatedPublicKey,
                 color = Colors.White64,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             BodySSB(
                 text = profile.name,
                 color = Colors.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -258,13 +270,12 @@ private fun EmptyState(
     onAddContact: () -> Unit,
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        VerticalSpacer(16.dp)
         myProfile?.let {
+            VerticalSpacer(16.dp)
             Text13Up(
                 text = stringResource(R.string.contacts__my_profile),
                 color = Colors.White64,
@@ -272,21 +283,32 @@ private fun EmptyState(
             )
             ContactRow(
                 profile = it,
-                modifier = Modifier.testTag("ContactsMyProfile"),
                 onClick = onClickMyProfile,
+                modifier = Modifier.testTag("ContactsMyProfile")
             )
             HorizontalDivider()
         }
-        VerticalSpacer(8.dp)
-        PrimaryButton(
-            text = stringResource(R.string.contacts__intro_add_contact),
-            onClick = onAddContact,
-            modifier = Modifier.testTag("ContactsEmptyAddButton"),
-        )
-        BodyM(
-            text = stringResource(R.string.contacts__empty_state),
-            color = Colors.White64,
-        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(top = 48.dp)
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.contacts__intro_add_contact),
+                onClick = onAddContact,
+                modifier = Modifier.testTag("ContactsEmptyAddButton")
+            )
+            BodyM(
+                text = stringResource(R.string.contacts__empty_state),
+                color = Colors.White64,
+            )
+        }
+
+        FillHeight()
     }
 }
 
@@ -310,6 +332,7 @@ private fun Preview() {
             onSearchTextChange = {},
             onAddContact = {},
             onScanQr = {},
+            openAddContactSheet = false,
         )
     }
 }
