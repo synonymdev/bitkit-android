@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.PreActivityMetadata
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.SettingsData
@@ -26,7 +27,23 @@ data class MetadataBackupV1(
     val createdAt: Long,
     val tagMetadata: List<PreActivityMetadata>,
     val cache: AppCacheData,
+    val pubkySession: PubkySessionBackupV1? = null,
 )
+
+@Serializable
+data class PubkySessionBackupV1(
+    val kind: PubkySessionBackupKind,
+    val sessionSecret: String? = null,
+)
+
+@Serializable
+enum class PubkySessionBackupKind {
+    @SerialName("localSeed")
+    LocalSeed,
+
+    @SerialName("externalSession")
+    ExternalSession,
+}
 
 @Serializable
 data class BlocktankBackupV1(
