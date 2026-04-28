@@ -4,14 +4,14 @@ import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
+import androidx.glance.ImageProvider
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.action.actionStartActivity
-import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Column
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.padding
-import to.bitkit.appwidget.ui.theme.GlanceColors
+import to.bitkit.R
 
 @Composable
 fun GlanceWidgetScaffold(
@@ -20,8 +20,7 @@ fun GlanceWidgetScaffold(
 ) {
     val modifier = GlanceModifier
         .fillMaxSize()
-        .cornerRadius(16.dp)
-        .background(GlanceColors.cardBackgroundProvider)
+        .background(ImageProvider(R.drawable.appwidget_background))
         .padding(16.dp)
         .let { mod ->
             if (onClick != null) mod.clickable(actionStartActivity(onClick)) else mod
