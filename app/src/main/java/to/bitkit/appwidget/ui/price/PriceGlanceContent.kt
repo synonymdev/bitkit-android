@@ -32,12 +32,11 @@ import to.bitkit.appwidget.ui.components.CaptionB
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
 import to.bitkit.appwidget.ui.components.VerticalSpacer
+import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.ui.theme.Colors
-
-private val WIDE_LAYOUT_MIN_WIDTH = 280.dp
 
 @Suppress("RestrictedApi")
 @Composable
@@ -60,7 +59,7 @@ fun PriceGlanceContent(
             return@GlanceWidgetScaffold
         }
 
-        if (LocalSize.current.width >= WIDE_LAYOUT_MIN_WIDTH) {
+        if (LocalSize.current.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH) {
             WideContent(widget = widget, chartBitmap = chartBitmap)
         } else {
             CompactContent(widget = widget, chartBitmap = chartBitmap)

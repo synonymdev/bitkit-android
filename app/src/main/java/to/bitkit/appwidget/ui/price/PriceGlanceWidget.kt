@@ -6,8 +6,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -18,6 +16,7 @@ import to.bitkit.appwidget.AppWidgetEntryPoint
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.ui.theme.Colors
@@ -27,12 +26,10 @@ class PriceGlanceWidget : GlanceAppWidget() {
     companion object {
         private const val CHART_WIDTH = 600
         private const val CHART_HEIGHT = 200
-        val COMPACT = DpSize(163.dp, 192.dp)
-        val WIDE = DpSize(343.dp, 152.dp)
     }
 
     override val sizeMode = SizeMode.Responsive(
-        setOf(COMPACT, WIDE),
+        setOf(GlanceLayoutDimens.COMPACT_WIDGET_SIZE, GlanceLayoutDimens.WIDE_WIDGET_SIZE),
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
