@@ -97,6 +97,8 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.PubkyRingAuthCallback
+import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -2527,6 +2529,11 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
+        PubkyRingAuthCallback.parse(uri)?.let {
+            handlePubkyRingAuthCallback(it)
+            return@launch
+        }
+
         if (uri.scheme == PUBKYAUTH_SCHEME) {
             handlePubkyAuth(uri.toString())
             return@launch
@@ -2546,6 +2553,27 @@ class AppViewModel @Inject constructor(
             return
         }
         showSheet(Sheet.PubkyAuth(authUrl))
+    }
+
+    private suspend fun handlePubkyRingAuthCallback(callback: PubkyRingAuthCallback) {
+        when (val result = pubkyRepo.handleAuthCallback(callback)) {
+            is PubkyRingAuthCallbackHandlingResult.TrustedError -> {
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__auth_error_title),
+                    description = result.message ?: context.getString(R.string.other__qr_error_text),
+                )
+            }
+            PubkyRingAuthCallbackHandlingResult.UntrustedError -> {
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__auth_error_title),
+                )
+            }
+            PubkyRingAuthCallbackHandlingResult.Handled,
+            PubkyRingAuthCallbackHandlingResult.Ignored,
+            -> Unit
+        }
     }
 
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70

@@ -22,6 +22,8 @@ import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyRingAuthCallback
+import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PubkyService
@@ -80,7 +82,8 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.startAuthentication()
 
         assertTrue(result.isSuccess)
-        assertEquals(authUri, result.getOrNull())
+        assertEquals(authUri, result.getOrNull()?.authUrl)
+        assertNotNull(result.getOrNull()?.callbackNonce)
     }
 
     @Test
@@ -163,6 +166,69 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.cancelAuthentication()
 
         assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `cancelAuthentication should keep restored profile authenticated`() = test {
+        authenticateForTesting()
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        sut.startAuthentication()
+
+        sut.cancelAuthentication()
+
+        assertTrue(sut.isAuthenticated.value)
+        assertNotNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `handleAuthCallback should reject invalid success nonce`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        sut.startAuthentication()
+
+        val result = sut.handleAuthCallback(PubkyRingAuthCallback.Success(nonce = "invalid"))
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Ignored, result)
+        verifyBlocking(pubkyService, never()) { cancelAuth() }
+    }
+
+    @Test
+    fun `handleAuthCallback should clear invalid cancel nonce`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        sut.startAuthentication()
+
+        val result = sut.handleAuthCallback(PubkyRingAuthCallback.Cancel(nonce = "invalid"))
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Handled, result)
+        assertFalse(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService, never()) { cancelAuth() }
+    }
+
+    @Test
+    fun `handleAuthCallback should not trust invalid error message`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        sut.startAuthentication()
+
+        val result = sut.handleAuthCallback(
+            PubkyRingAuthCallback.Error(message = "Forged error", nonce = "invalid"),
+        )
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.UntrustedError, result)
+        verifyBlocking(pubkyService, never()) { cancelAuth() }
+    }
+
+    @Test
+    fun `handleAuthCallback should trust matching error nonce`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        val authRequest = checkNotNull(sut.startAuthentication().getOrNull()) {
+            "Auth request should be returned"
+        }
+
+        val result = sut.handleAuthCallback(
+            PubkyRingAuthCallback.Error(message = "Ring failed", nonce = authRequest.callbackNonce),
+        )
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.TrustedError("Ring failed"), result)
+        verifyBlocking(pubkyService) { cancelAuth() }
     }
 
     @Test

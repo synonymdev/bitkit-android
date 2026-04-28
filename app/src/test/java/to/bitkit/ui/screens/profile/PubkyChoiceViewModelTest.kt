@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.profile
 import android.content.Context
 import android.content.pm.PackageManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -28,6 +29,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     private val packageManager: PackageManager = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+    private val authCancelEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     private lateinit var sut: PubkyChoiceViewModel
 
@@ -37,6 +39,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
         whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
+        whenever(pubkyRepo.authCancelEvents).thenReturn(authCancelEvents)
         sut = PubkyChoiceViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
