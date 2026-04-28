@@ -155,6 +155,32 @@ class LdkDebugViewModel @Inject constructor(
         }
     }
 
+    fun exportScorer(onFileReady: (File) -> Unit) {
+        viewModelScope.launch(bgDispatcher) {
+            _uiState.update { it.copy(isLoading = true) }
+            val outputDir = File(context.cacheDir, DIR_EXPORTS).apply { mkdirs() }.absolutePath
+            lightningRepo.exportPathfindingScoresToFile(outputDir).onSuccess { file ->
+                Logger.info(
+                    "Pathfinding scores exported to '${file.absolutePath}' (${file.length()} bytes)",
+                    context = TAG,
+                )
+                ToastEventBus.send(
+                    type = Toast.ToastType.INFO,
+                    title = "Scorer exported (${file.length()} bytes)",
+                )
+                onFileReady(file)
+            }.onFailure { e ->
+                Logger.error("Failed to export pathfinding scores", e, context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Failed to export scorer",
+                    description = e.message,
+                )
+            }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
     fun restartNode() {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }

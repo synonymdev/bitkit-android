@@ -1050,6 +1050,14 @@ class LightningService @Inject constructor(
         return loggerLdk.exportNetworkGraphToFile(node, outputDir, fileName)
     }
 
+    suspend fun exportPathfindingScoresToFile(
+        outputDir: String,
+        fileName: String = "pathfinding_scores.bin",
+    ): Result<File> {
+        val node = this.node ?: return Result.failure(ServiceError.NodeNotSetup())
+        return loggerLdk.exportPathfindingScoresToFile(node, outputDir, fileName)
+    }
+
     // endregion
 }
 

@@ -57,6 +57,7 @@ fun LdkDebugScreen(
         onPasteAndAddPeer = viewModel::pasteAndAddPeer,
         onLogNetworkGraphInfo = viewModel::logNetworkGraphInfo,
         onExportNetworkGraph = viewModel::exportNetworkGraph,
+        onExportScorer = viewModel::exportScorer,
         onRestartNode = viewModel::restartNode,
     )
 }
@@ -70,6 +71,7 @@ private fun LdkDebugContent(
     onPasteAndAddPeer: () -> Unit,
     onLogNetworkGraphInfo: () -> Unit,
     onExportNetworkGraph: (onFileReady: (File) -> Unit) -> Unit,
+    onExportScorer: (onFileReady: (File) -> Unit) -> Unit,
     onRestartNode: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -143,6 +145,20 @@ private fun LdkDebugContent(
                 },
             )
 
+            SectionHeader("PATHFINDING SCORER")
+            SettingsTextButtonRow(
+                title = "Export Scorer",
+                iconRes = R.drawable.ic_share,
+                iconSize = 24.dp,
+                enabled = !uiState.isLoading,
+                onClick = {
+                    onExportScorer { file ->
+                        val uri = FileProvider.getUriForFile(context, Env.FILE_PROVIDER_AUTHORITY, file)
+                        context.shareFile(uri, "application/octet-stream")
+                    }
+                },
+            )
+
             SectionHeader("NODE")
             SettingsTextButtonRow(
                 title = "Restart",
@@ -171,6 +187,7 @@ private fun Preview() {
             onPasteAndAddPeer = {},
             onLogNetworkGraphInfo = {},
             onExportNetworkGraph = {},
+            onExportScorer = {},
             onRestartNode = {},
         )
     }

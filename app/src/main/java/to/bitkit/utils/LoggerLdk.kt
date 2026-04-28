@@ -191,6 +191,25 @@ class LoggerLdk @Inject constructor(
             Logger.error("Failed to export network graph to file", it, context = TAG)
         }
     }
+
+    suspend fun exportPathfindingScoresToFile(
+        node: Node,
+        outputDir: String,
+        fileName: String = "pathfinding_scores.bin",
+    ): Result<File> = withContext(ioDispatcher) {
+        runCatching {
+            val bytes = node.exportPathfindingScores()
+            val outputFile = File(outputDir, fileName)
+            outputFile.writeBytes(bytes)
+            Logger.info(
+                "Exported pathfinding scores '${bytes.size}' bytes to '${outputFile.absolutePath}'",
+                context = TAG,
+            )
+            outputFile
+        }.onFailure {
+            Logger.error("Failed to export pathfinding scores to file", it, context = TAG)
+        }
+    }
 }
 
 class LdkLogWriter(

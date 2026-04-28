@@ -1360,6 +1360,11 @@ class LightningRepo @Inject constructor(
         executeWhenNodeRunning("exportNetworkGraphToFile") {
             lightningService.exportNetworkGraphToFile(outputDir)
         }
+
+    suspend fun exportPathfindingScoresToFile(outputDir: String): Result<File> =
+        executeWhenNodeRunning("exportPathfindingScoresToFile") {
+            lightningService.exportPathfindingScoresToFile(outputDir)
+        }
     // endregion
 
     // region probing

@@ -76,7 +76,6 @@ internal object Env {
     val ldkScorerUrl
         get() = when (network) {
             Network.BITCOIN -> "https://api.blocktank.to/scorer-prod"
-            Network.REGTEST -> "https://api.stag0.blocktank.to/scorer"
             else -> null
         }
 
