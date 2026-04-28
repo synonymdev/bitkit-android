@@ -34,7 +34,7 @@ fun renderLineChartBitmap(
         x to y
     }
 
-    val linePath = buildSmoothPath(points)
+    val linePath = buildSmoothPath(points, yMin = padding, yMax = padding + drawHeight)
 
     val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = lineColor
@@ -48,7 +48,11 @@ fun renderLineChartBitmap(
     return bitmap
 }
 
-private fun buildSmoothPath(points: List<Pair<Float, Float>>): Path = Path().apply {
+private fun buildSmoothPath(
+    points: List<Pair<Float, Float>>,
+    yMin: Float,
+    yMax: Float,
+): Path = Path().apply {
     moveTo(points[0].first, points[0].second)
     for (i in 0 until points.size - 1) {
         val p0 = points[(i - 1).coerceAtLeast(0)]
@@ -57,9 +61,9 @@ private fun buildSmoothPath(points: List<Pair<Float, Float>>): Path = Path().app
         val p3 = points[(i + 2).coerceAtMost(points.lastIndex)]
 
         val cp1x = p1.first + (p2.first - p0.first) * SMOOTHING
-        val cp1y = p1.second + (p2.second - p0.second) * SMOOTHING
+        val cp1y = (p1.second + (p2.second - p0.second) * SMOOTHING).coerceIn(yMin, yMax)
         val cp2x = p2.first - (p3.first - p1.first) * SMOOTHING
-        val cp2y = p2.second - (p3.second - p1.second) * SMOOTHING
+        val cp2y = (p2.second - (p3.second - p1.second) * SMOOTHING).coerceIn(yMin, yMax)
 
         cubicTo(cp1x, cp1y, cp2x, cp2y, p2.first, p2.second)
     }
