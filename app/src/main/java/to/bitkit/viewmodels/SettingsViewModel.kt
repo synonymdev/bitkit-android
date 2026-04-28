@@ -110,6 +110,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isPubkyAuthenticated = pubkyRepo.isAuthenticated
+    val hasPubkyContacts = pubkyRepo.contacts.map { it.isNotEmpty() }
+        .asStateFlow(initialValue = false)
 
     val quickPayIntroSeen = settingsStore.data.map { it.quickPayIntroSeen }
         .asStateFlow(initialValue = false)

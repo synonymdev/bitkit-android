@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -170,10 +171,19 @@ private fun SelectableContactRow(
 
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f)
         ) {
-            BodyS(text = contact.profile.truncatedPublicKey, color = Colors.White64)
-            BodyMSB(text = contact.profile.name)
+            BodyS(
+                text = contact.profile.truncatedPublicKey,
+                color = Colors.White64,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            BodyMSB(
+                text = contact.profile.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
         HorizontalSpacer(16.dp)
@@ -183,7 +193,7 @@ private fun SelectableContactRow(
                 painter = painterResource(R.drawable.ic_check),
                 contentDescription = null,
                 tint = Colors.PubkyGreen,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(24.dp)
             )
         }
     }
@@ -218,7 +228,7 @@ private fun FooterBar(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     ) {
         BodyMSB(
             text = stringResource(R.string.contacts__import_selected_count, selectedCount),

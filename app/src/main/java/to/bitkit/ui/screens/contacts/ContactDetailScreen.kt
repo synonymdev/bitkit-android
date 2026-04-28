@@ -125,8 +125,8 @@ private fun Content(
     if (uiState.showDeleteDialog && currentProfile != null) {
         AppAlertDialog(
             title = stringResource(R.string.contacts__delete_confirm_title, currentProfile.name),
-            text = stringResource(R.string.contacts__delete_confirm_text),
-            confirmText = stringResource(R.string.contacts__delete_contact),
+            text = stringResource(R.string.contacts__delete_confirm_text, currentProfile.name),
+            confirmText = stringResource(R.string.common__delete_yes),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,
         )
@@ -174,27 +174,27 @@ private fun ContactBody(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             ActionButton(
                 onClick = onClickCopy,
                 iconRes = R.drawable.ic_copy,
-                modifier = Modifier.testTag("ContactCopy"),
+                modifier = Modifier.testTag("ContactCopy")
             )
             ActionButton(
                 onClick = onClickShare,
                 iconRes = R.drawable.ic_share,
-                modifier = Modifier.testTag("ContactShare"),
+                modifier = Modifier.testTag("ContactShare")
             )
             ActionButton(
                 onClick = onClickEdit,
                 iconRes = R.drawable.ic_edit,
-                modifier = Modifier.testTag("ContactEdit"),
+                modifier = Modifier.testTag("ContactEdit")
             )
             ActionButton(
                 onClick = onClickDelete,
                 iconRes = R.drawable.ic_trash,
-                modifier = Modifier.testTag("ContactDelete"),
+                modifier = Modifier.testTag("ContactDelete")
             )
         }
 
@@ -210,13 +210,13 @@ private fun ContactBody(
             color = Colors.White64,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("ContactViewTagsHeader"),
+                .testTag("ContactViewTagsHeader")
         )
         VerticalSpacer(8.dp)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             tags.forEachIndexed { index, tag ->
                 TagButton(
@@ -233,7 +233,7 @@ private fun ContactBody(
                 onClick = onAddTag,
                 icon = painterResource(R.drawable.ic_tag),
                 displayIconClose = true,
-                modifier = Modifier.testTag("ContactAddTag"),
+                modifier = Modifier.testTag("ContactAddTag")
             )
         }
     }
@@ -263,7 +263,7 @@ private fun EmptyState(onClickRetry: () -> Unit) {
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
             onClick = onClickRetry,
-            modifier = Modifier.testTag("ContactRetry"),
+            modifier = Modifier.testTag("ContactRetry")
         )
     }
 }

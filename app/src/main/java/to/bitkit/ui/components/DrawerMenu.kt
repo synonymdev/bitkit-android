@@ -73,6 +73,7 @@ fun DrawerMenu(
     modifier: Modifier = Modifier,
     hasSeenProfileIntro: Boolean = false,
     hasSeenContactsIntro: Boolean = false,
+    hasContacts: Boolean = false,
     isProfileAuthenticated: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
@@ -127,14 +128,14 @@ fun DrawerMenu(
             },
             onClickContacts = {
                 when {
-                    !hasSeenContactsIntro -> {
+                    !hasSeenContactsIntro && !hasContacts -> {
                         onBeforeNavigate(Routes.ContactsIntro)
                         rootNavController.navigateIfNotCurrent(Routes.ContactsIntro)
                     }
 
                     isProfileAuthenticated -> {
-                        onBeforeNavigate(Routes.Contacts)
-                        rootNavController.navigateIfNotCurrent(Routes.Contacts)
+                        onBeforeNavigate(Routes.Contacts())
+                        rootNavController.navigateIfNotCurrent(Routes.Contacts())
                     }
 
                     hasSeenProfileIntro -> {

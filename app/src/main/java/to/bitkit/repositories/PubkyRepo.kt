@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.keychain.Keychain
@@ -32,6 +33,8 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.PubkySessionBackupKind
+import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -66,8 +69,11 @@ class PubkyRepo @Inject constructor(
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
+    private val serviceInitializeMutex = Mutex()
+    private val initializeMutex = Mutex()
     private val loadProfileMutex = Mutex()
     private val loadContactsMutex = Mutex()
+    private var isServiceInitialized = false
 
     private val _authState = MutableStateFlow(PubkyAuthState.Idle)
 
@@ -95,6 +101,9 @@ class PubkyRepo @Inject constructor(
     private val _pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     val pendingImportContacts: StateFlow<List<PubkyProfile>> = _pendingImportContacts.asStateFlow()
 
+    private val _backupStateVersion = MutableStateFlow(0L)
+    val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
+
     val isAuthenticated: StateFlow<Boolean> = _authState.map { it == PubkyAuthState.Authenticated }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -118,67 +127,104 @@ class PubkyRepo @Inject constructor(
 
     // region Initialization
 
-    private suspend fun initialize() {
-        val result = runCatching {
-            withContext(ioDispatcher) {
-                pubkyService.initialize()
-
-                val savedSecret = runCatching {
-                    keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
-                }.getOrNull()
-
-                if (savedSecret.isNullOrEmpty()) {
-                    return@withContext InitResult.NoSession
-                }
-
-                runCatching {
-                    val pk = pubkyService.importSession(savedSecret)
-                    InitResult.Restored(pk)
-                }.getOrElse { importError ->
-                    Logger.warn("Failed to restore paykit session, attempting re-sign-in", importError, context = TAG)
-                    tryReSignIn()
-                }
-            }
+    suspend fun initialize() = withContext(ioDispatcher) {
+        runCatching {
+            ensureServiceInitialized()
         }.onFailure {
             Logger.error("Failed to initialize paykit", it, context = TAG)
-        }.getOrNull() ?: return
+        }.getOrNull() ?: return@withContext
 
-        when (result) {
-            is InitResult.NoSession -> Logger.debug("Found no saved paykit session", context = TAG)
-            is InitResult.Restored -> {
-                _publicKey.update { result.publicKey }
-                _authState.update { PubkyAuthState.Authenticated }
-                Logger.info("Paykit session restored for '${result.publicKey}'", context = TAG)
-                loadProfile()
-                loadContacts()
-            }
-            is InitResult.RestorationFailed -> {
-                _sessionRestorationFailed.update { true }
+        initializeMutex.withLock {
+            _sessionRestorationFailed.update { false }
+            val result = runCatching {
+                val savedSessionSecret = runCatching {
+                    keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+                }.getOrNull()
+                val storedSecretKeyHex = runCatching {
+                    keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+                }.getOrNull()
+
+                resolveSessionInitialization(
+                    savedSessionSecret = savedSessionSecret,
+                    storedSecretKeyHex = storedSecretKeyHex,
+                )
+            }.onFailure {
+                Logger.error("Failed to initialize paykit", it, context = TAG)
+            }.getOrNull() ?: return@withLock
+
+            when (result) {
+                is InitResult.NoSession -> {
+                    clearAuthenticatedState()
+                    Logger.debug("Found no saved paykit session", context = TAG)
+                }
+                is InitResult.Restored -> {
+                    _publicKey.update { result.publicKey }
+                    _authState.update { PubkyAuthState.Authenticated }
+                    Logger.info("Restored paykit session for '${result.publicKey}'", context = TAG)
+                    loadProfile()
+                    loadContacts()
+                }
+                is InitResult.RestorationFailed -> {
+                    clearAuthenticatedState()
+                    _sessionRestorationFailed.update { true }
+                }
             }
         }
     }
 
-    private suspend fun tryReSignIn(): InitResult {
-        val secretKeyHex = runCatching {
-            keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-        }.getOrNull()
-
-        if (secretKeyHex.isNullOrEmpty()) {
-            Logger.warn("Skipped re-sign-in recovery, no secret key available", context = TAG)
-            return InitResult.RestorationFailed
+    private suspend fun ensureServiceInitialized() = withContext(ioDispatcher) {
+        serviceInitializeMutex.withLock {
+            if (!isServiceInitialized) {
+                pubkyService.initialize()
+                isServiceInitialized = true
+            }
         }
+    }
 
-        return runCatching {
-            val newSession = pubkyService.signIn(secretKeyHex)
-            runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-            keychain.saveString(Keychain.Key.PAYKIT_SESSION.name, newSession)
-            val pk = pubkyService.importSession(newSession)
-            Logger.info("Re-signed in and restored session for '$pk'", context = TAG)
-            InitResult.Restored(pk)
-        }.getOrElse {
-            Logger.error("Re-sign-in recovery failed", it, context = TAG)
-            runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-            InitResult.RestorationFailed
+    private suspend fun resolveSessionInitialization(
+        savedSessionSecret: String?,
+        storedSecretKeyHex: String?,
+    ): InitResult = withContext(ioDispatcher) {
+        if (!savedSessionSecret.isNullOrEmpty()) {
+            runCatching {
+                val publicKey = pubkyService.importSession(savedSessionSecret).ensurePubkyPrefix()
+                InitResult.Restored(publicKey)
+            }.getOrElse {
+                Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
+                resolveSignedInSession(savedSessionSecret, storedSecretKeyHex)
+            }
+        } else {
+            resolveSignedInSession(savedSessionSecret, storedSecretKeyHex)
+        }
+    }
+
+    private suspend fun resolveSignedInSession(
+        savedSessionSecret: String?,
+        storedSecretKeyHex: String?,
+    ): InitResult = withContext(ioDispatcher) {
+        if (storedSecretKeyHex.isNullOrEmpty()) {
+            if (!savedSessionSecret.isNullOrEmpty()) {
+                Logger.warn("Skipped re-sign-in recovery, no secret key available", context = TAG)
+                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+                notifyBackupStateChanged()
+                InitResult.RestorationFailed
+            } else {
+                InitResult.NoSession
+            }
+        } else {
+            runCatching {
+                val newSession = pubkyService.signIn(storedSecretKeyHex)
+                keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, newSession)
+                notifyBackupStateChanged()
+                val publicKey = pubkyService.importSession(newSession).ensurePubkyPrefix()
+                Logger.info("Re-signed in and restored session for '$publicKey'", context = TAG)
+                InitResult.Restored(publicKey)
+            }.getOrElse {
+                Logger.error("Failed re-sign-in recovery", it, context = TAG)
+                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+                notifyBackupStateChanged()
+                InitResult.RestorationFailed
+            }
         }
     }
 
@@ -203,11 +249,11 @@ class PubkyRepo @Inject constructor(
         return runCatching {
             withContext(ioDispatcher) {
                 val sessionSecret = pubkyService.completeAuth()
-                val pk = pubkyService.importSession(sessionSecret)
+                val pk = pubkyService.importSession(sessionSecret).ensurePubkyPrefix()
 
-                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
-                keychain.saveString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+                keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+                notifyBackupStateChanged()
 
                 pk
             }
@@ -216,7 +262,7 @@ class PubkyRepo @Inject constructor(
         }.onSuccess { pk ->
             _publicKey.update { pk }
             _authState.update { PubkyAuthState.Authenticated }
-            Logger.info("Pubky auth completed for '$pk'", context = TAG)
+            Logger.info("Completed pubky auth for '$pk'", context = TAG)
             loadProfile()
         }.map { }
     }
@@ -224,7 +270,7 @@ class PubkyRepo @Inject constructor(
     suspend fun cancelAuthentication() {
         runCatching {
             withContext(ioDispatcher) { pubkyService.cancelAuth() }
-        }.onFailure { Logger.warn("Cancel auth failed", it, context = TAG) }
+        }.onFailure { Logger.warn("Failed to cancel auth", it, context = TAG) }
         _authState.update { PubkyAuthState.Idle }
     }
 
@@ -289,12 +335,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun deriveKeys(): Result<Pair<String, String>> = runCatching {
         withContext(ioDispatcher) {
-            val mnemonic = requireNotNull(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)) {
-                "BIP39 mnemonic not found in keychain"
-            }
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-            val seed = pubkyService.mnemonicToSeed(mnemonic, passphrase)
-            val secretKeyHex = pubkyService.deriveSecretKey(seed)
+            val secretKeyHex = deriveLocalSecretKeyFromWalletSeed()
             val rawKey = pubkyService.publicKeyFromSecret(secretKeyHex)
             val publicKeyZ32 = rawKey.ensurePubkyPrefix()
             Pair(publicKeyZ32, secretKeyHex)
@@ -319,12 +360,13 @@ class PubkyRepo @Inject constructor(
             val session = runCatching {
                 pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
             }.getOrElse {
-                Logger.warn("signUp failed (likely already registered), trying signIn", it, context = TAG)
+                Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
                 pubkyService.signIn(secretKeyHex)
             }
 
             keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
             keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, session)
+            notifyBackupStateChanged()
             pubkyService.importSession(session)
 
             val imageUrl = avatarBytes?.let { uploadAvatar(it, secretKeyHex).getOrNull() }
@@ -332,7 +374,7 @@ class PubkyRepo @Inject constructor(
 
             _publicKey.update { publicKeyZ32 }
             _authState.update { PubkyAuthState.Authenticated }
-            Logger.info("Identity created for '$publicKeyZ32'", context = TAG)
+            Logger.info("Created identity for '$publicKeyZ32'", context = TAG)
             loadProfile()
             loadContacts()
         }
@@ -395,13 +437,30 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun deleteProfileWithSessionRetry(): Result<Unit> = withContext(ioDispatcher) {
+        val initialResult = deleteProfile()
+        if (initialResult.isSuccess) return@withContext initialResult
+
+        val refreshedSession = refreshSessionIfPossible().getOrDefault(false)
+        if (!refreshedSession) return@withContext initialResult
+
+        deleteProfile()
+    }
+
     suspend fun deleteProfile(): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
             val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
             deleteAllContacts(session)
-            pubkyService.sessionDelete(session, Env.profilePath)
+            runCatching {
+                pubkyService.sessionDelete(session, Env.profilePath)
+            }.getOrElse {
+                if (!it.isMissingPubkyData()) {
+                    throw it
+                }
+                Logger.info("Continuing sign out, bitkit profile storage already missing", context = TAG)
+            }
         }
         signOut().getOrThrow()
     }
@@ -664,7 +723,7 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun clearPendingImport() {
+    suspend fun clearPendingImport() = withContext(ioDispatcher) {
         _pendingImportProfile.update { null }
         _pendingImportContacts.update { emptyList() }
     }
@@ -685,6 +744,80 @@ class PubkyRepo @Inject constructor(
                 "No secret key available — use Ring to manage authorizations"
             }
             pubkyService.approveAuth(authUrl, secretKeyHex)
+        }
+    }
+
+    // endregion
+
+    // region Backup state
+
+    suspend fun snapshotSessionBackupState(): Result<PubkySessionBackupV1?> = runCatching {
+        withContext(ioDispatcher) {
+            val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+            if (!secretKeyHex.isNullOrEmpty()) {
+                return@withContext PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed)
+            }
+
+            val sessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+            if (!sessionSecret.isNullOrEmpty()) {
+                return@withContext PubkySessionBackupV1(
+                    kind = PubkySessionBackupKind.ExternalSession,
+                    sessionSecret = sessionSecret,
+                )
+            }
+
+            null
+        }
+    }
+
+    suspend fun restoreSessionBackupState(backup: PubkySessionBackupV1?): Result<Unit> = runCatching {
+        withContext(ioDispatcher) {
+            if (backup == null) {
+                notifyBackupStateChanged()
+                return@withContext
+            }
+
+            ensureServiceInitialized()
+
+            initializeMutex.withLock {
+                pubkyService.forceSignOut()
+                clearAuthenticatedState()
+                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+                runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+
+                when (backup.kind) {
+                    PubkySessionBackupKind.LocalSeed -> {
+                        val secretKeyHex = deriveLocalSecretKeyFromWalletSeed()
+                        keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
+                    }
+
+                    PubkySessionBackupKind.ExternalSession -> {
+                        val sessionSecret = requireNotNull(backup.sessionSecret?.takeIf { it.isNotBlank() }) {
+                            "Missing session secret in backup"
+                        }
+                        keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+                    }
+                }
+
+                notifyBackupStateChanged()
+            }
+        }
+    }
+
+    suspend fun refreshSessionIfPossible(): Result<Boolean> = runCatching {
+        withContext(ioDispatcher) {
+            val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+                ?: return@withContext false
+
+            val sessionSecret = pubkyService.signIn(storedSecretKeyHex)
+            val publicKey = pubkyService.importSession(sessionSecret).ensurePubkyPrefix()
+
+            keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+            notifyBackupStateChanged()
+            _publicKey.update { publicKey }
+            _authState.update { PubkyAuthState.Authenticated }
+
+            true
         }
     }
 
@@ -752,17 +885,35 @@ class PubkyRepo @Inject constructor(
         null
     }
 
-    private suspend fun clearLocalState() {
-        runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) } }
-        runCatching { withContext(ioDispatcher) { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) } }
+    private suspend fun deriveLocalSecretKeyFromWalletSeed(): String = withContext(ioDispatcher) {
+        val mnemonic = requireNotNull(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)) {
+            "BIP39 mnemonic not found in keychain"
+        }
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val seed = pubkyService.mnemonicToSeed(mnemonic, passphrase)
+        pubkyService.deriveSecretKey(seed)
+    }
+
+    private fun notifyBackupStateChanged() {
+        _backupStateVersion.update { it + 1 }
+    }
+
+    private suspend fun clearAuthenticatedState() = withContext(ioDispatcher) {
         evictPubkyImages()
-        runCatching { withContext(ioDispatcher) { pubkyStore.reset() } }
+        runCatching { pubkyStore.reset() }
         _publicKey.update { null }
         _profile.update { null }
         _contacts.update { emptyList() }
         clearPendingImport()
         _sessionRestorationFailed.update { false }
         _authState.update { PubkyAuthState.Idle }
+    }
+
+    private suspend fun clearLocalState() = withContext(ioDispatcher) {
+        runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
+        runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        notifyBackupStateChanged()
+        clearAuthenticatedState()
     }
 
     private fun requireAddableContactPublicKey(publicKey: String): String {
