@@ -216,7 +216,7 @@ private fun SelectableRow(
 }
 
 @Composable
-private fun GraphPeriod.label(): String = stringResource(
+fun GraphPeriod.label(): String = stringResource(
     when (this) {
         GraphPeriod.ONE_DAY -> R.string.appwidget__price__day
         GraphPeriod.ONE_WEEK -> R.string.appwidget__price__week

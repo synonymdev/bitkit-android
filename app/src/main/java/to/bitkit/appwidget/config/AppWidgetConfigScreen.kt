@@ -31,6 +31,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.widgets.price.label
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -166,13 +167,3 @@ private fun SelectableRow(
         HorizontalDivider()
     }
 }
-
-@Composable
-private fun GraphPeriod.label(): String = stringResource(
-    when (this) {
-        GraphPeriod.ONE_DAY -> R.string.appwidget__price__day
-        GraphPeriod.ONE_WEEK -> R.string.appwidget__price__week
-        GraphPeriod.ONE_MONTH -> R.string.appwidget__price__month
-        GraphPeriod.ONE_YEAR -> R.string.appwidget__price__year
-    },
-)
