@@ -17,6 +17,10 @@ value class USat(val value: ULong) : Comparable<USat> {
     /** Saturating addition: caps at ULong.MAX_VALUE if result would overflow. */
     operator fun plus(other: USat): ULong =
         if (value <= ULong.MAX_VALUE - other.value) value + other.value else ULong.MAX_VALUE
+
+    /** Saturating multiplication: caps at ULong.MAX_VALUE if result would overflow. */
+    operator fun times(other: USat): ULong =
+        if (other.value == 0uL || value <= ULong.MAX_VALUE / other.value) value * other.value else ULong.MAX_VALUE
 }
 
 /**
