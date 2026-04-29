@@ -10,6 +10,7 @@ import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.HeightModifier
 import androidx.glance.layout.Row
 import androidx.glance.layout.WidthModifier
 import androidx.glance.layout.fillMaxWidth
@@ -69,14 +70,15 @@ private fun WideContent(article: ArticleModel, preferences: HomeHeadlinePreferen
     Text(
         text = article.title,
         style = GlanceTextStyles.title22,
-        maxLines = 2,
-        modifier = GlanceModifier.fillMaxWidth()
+        maxLines = 4,
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .then(HeightModifier(Dimension.Expand))
     )
 
     val timeVisible = preferences.showTime && article.timeAgo.isNotEmpty()
     if (!preferences.showSource && !timeVisible) return
 
-    VerticalSpacer(16.dp)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = GlanceModifier.fillMaxWidth()
