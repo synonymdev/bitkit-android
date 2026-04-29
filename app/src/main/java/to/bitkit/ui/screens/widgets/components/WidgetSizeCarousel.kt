@@ -23,9 +23,9 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.Colors
 
-const val PAGE_SMALL = 0
-const val PAGE_WIDE = 1
-const val PAGE_COUNT = 2
+private const val PAGE_SMALL = 0
+private const val PAGE_WIDE = 1
+private const val PAGE_COUNT = 2
 
 @Composable
 fun WidgetSizeCarousel(
