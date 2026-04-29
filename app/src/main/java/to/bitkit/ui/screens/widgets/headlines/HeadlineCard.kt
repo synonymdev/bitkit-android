@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -100,7 +101,7 @@ fun HeadlineCardSmall(
 
     Box(
         modifier = modifier
-            .size(width = 163.dp, height = 192.dp)
+            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
             .clickableAlpha {

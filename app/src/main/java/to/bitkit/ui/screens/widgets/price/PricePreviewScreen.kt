@@ -6,9 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +33,7 @@ import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -141,8 +141,7 @@ fun PricePreviewContent(
                             pricePreferences = pricePreferences,
                             priceDTO = priceDTO,
                             modifier = Modifier
-                                .width(163.dp)
-                                .height(192.dp)
+                                .size(WidgetCardDimens.COMPACT_CARD_SIZE)
                                 .testTag("price_card_small")
                         )
                     },
