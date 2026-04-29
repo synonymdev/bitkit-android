@@ -106,7 +106,9 @@ private fun CompactContent(article: ArticleModel, preferences: HomeHeadlinePrefe
         text = article.title,
         style = GlanceTextStyles.title22,
         maxLines = 4,
-        modifier = GlanceModifier.fillMaxWidth()
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .then(HeightModifier(Dimension.Expand))
     )
 
     val timeVisible = preferences.showTime && article.timeAgo.isNotEmpty()
