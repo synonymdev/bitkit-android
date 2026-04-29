@@ -723,17 +723,18 @@ private fun Widgets(
                 WidgetType.BLOCK -> {
                     homeUiState.currentBlock?.run {
                         BlockCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             showBlock = homeUiState.blocksPreferences.showBlock,
                             showTime = homeUiState.blocksPreferences.showTime,
                             showDate = homeUiState.blocksPreferences.showDate,
                             showTransactions = homeUiState.blocksPreferences.showTransactions,
                             showSize = homeUiState.blocksPreferences.showSize,
+                            showFees = homeUiState.blocksPreferences.showFees,
                             showSource = homeUiState.blocksPreferences.showSource,
                             time = time,
                             date = date,
                             transactions = transactionCount,
                             size = size,
+                            fees = fees,
                             source = source,
                             block = height,
                             modifier = Modifier

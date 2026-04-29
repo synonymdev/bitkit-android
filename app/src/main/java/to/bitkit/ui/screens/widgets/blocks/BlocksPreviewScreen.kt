@@ -47,7 +47,6 @@ fun BlocksPreviewScreen(
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
 ) {
-    val showWidgetTitles by blocksViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customBlocksPreferences by blocksViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentBlock by blocksViewModel.currentBlock.collectAsStateWithLifecycle()
     val isBlocksWidgetEnabled by blocksViewModel.isBlocksWidgetEnabled.collectAsStateWithLifecycle()
@@ -60,7 +59,6 @@ fun BlocksPreviewScreen(
         onBack = onBack,
         isBlocksWidgetEnabled = isBlocksWidgetEnabled,
         blocksPreferences = customBlocksPreferences,
-        showWidgetTitles = showWidgetTitles,
         block = currentBlock,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
@@ -80,7 +78,6 @@ fun BlocksPreviewContent(
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
     isBlocksWidgetEnabled: Boolean,
     blocksPreferences: BlocksPreferences,
     block: BlockModel?,
@@ -159,22 +156,23 @@ fun BlocksPreviewContent(
 
             block?.let {
                 BlockCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("block_card"),
-                    showWidgetTitle = showWidgetTitles,
                     showBlock = blocksPreferences.showBlock,
                     showTime = blocksPreferences.showTime,
                     showDate = blocksPreferences.showDate,
                     showTransactions = blocksPreferences.showTransactions,
                     showSize = blocksPreferences.showSize,
+                    showFees = blocksPreferences.showFees,
                     showSource = blocksPreferences.showSource,
                     block = block.height,
                     time = block.time,
                     date = block.date,
                     transactions = block.transactionCount,
                     size = block.size,
+                    fees = block.fees,
                     source = block.source,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("block_card")
                 )
             }
 
@@ -215,7 +213,6 @@ private fun Preview() {
     AppThemeSurface {
         BlocksPreviewContent(
             onBack = {},
-            showWidgetTitles = true,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
@@ -240,7 +237,6 @@ private fun Preview2() {
     AppThemeSurface {
         BlocksPreviewContent(
             onBack = {},
-            showWidgetTitles = false,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},

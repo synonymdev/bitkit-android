@@ -1,50 +1,51 @@
 package to.bitkit.ui.screens.widgets.blocks
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
-import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun BlockCard(
     modifier: Modifier = Modifier,
-    showWidgetTitle: Boolean,
     showBlock: Boolean,
     showTime: Boolean,
     showDate: Boolean,
     showTransactions: Boolean,
     showSize: Boolean,
+    showFees: Boolean,
     showSource: Boolean,
     block: String,
     time: String,
     date: String,
     transactions: String,
     size: String,
+    fees: String,
     source: String,
 ) {
     Box(
@@ -53,225 +54,308 @@ fun BlockCard(
             .background(Colors.White10)
     ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
         ) {
-            if (showWidgetTitle) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .testTag("block_card_widget_title_row")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.widget_cube),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("block_card_widget_title_icon"),
-                        tint = Color.Unspecified
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    BodyMSB(
-                        text = stringResource(R.string.widgets__blocks__name),
-                        modifier = Modifier.testTag("block_card_widget_title_text")
-                    )
-                }
-            }
-
             if (showBlock && block.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("block_card_block_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BodySSB(
-                        text = "Block",
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_block_label")
-                    )
-
-                    BodyMSB(
-                        text = block,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("block_card_block_text")
-                    )
-                }
+                WidgetDataRow(
+                    icon = R.drawable.ic_cube,
+                    label = stringResource(R.string.widgets__blocks__field__block),
+                    value = block,
+                    testTagPrefix = "block",
+                )
             }
-
             if (showTime && time.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("block_card_time_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BodySSB(
-                        text = "Time",
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_time_label")
-                    )
-
-                    BodyMSB(
-                        text = time,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("block_card_time_text")
-                    )
-                }
+                WidgetDataRow(
+                    icon = R.drawable.ic_clock,
+                    label = stringResource(R.string.widgets__blocks__field__time),
+                    value = time,
+                    testTagPrefix = "time",
+                )
             }
-
             if (showDate && date.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("block_card_date_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BodySSB(
-                        text = "Date",
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_date_label")
-                    )
-
-                    BodyMSB(
-                        text = date,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("block_card_date_text")
-                    )
-                }
+                WidgetDataRow(
+                    icon = R.drawable.ic_calendar,
+                    label = stringResource(R.string.widgets__blocks__field__date),
+                    value = date,
+                    testTagPrefix = "date",
+                )
             }
-
             if (showTransactions && transactions.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("block_card_transactions_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BodySSB(
-                        text = "Transactions",
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_transactions_label")
-                    )
-
-                    BodyMSB(
-                        text = transactions,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("block_card_transactions_text")
-                    )
-                }
+                WidgetDataRow(
+                    icon = R.drawable.ic_transfer,
+                    label = stringResource(R.string.widgets__blocks__field__transactions),
+                    value = transactions,
+                    testTagPrefix = "transactions",
+                )
             }
-
             if (showSize && size.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("block_card_size_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BodySSB(
-                        text = "Size",
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_size_label")
-                    )
-
-                    BodyMSB(
-                        text = size,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("block_card_size_text")
-                    )
-                }
+                WidgetDataRow(
+                    icon = R.drawable.ic_file_text,
+                    label = stringResource(R.string.widgets__blocks__field__size),
+                    value = size,
+                    testTagPrefix = "size",
+                )
             }
-
+            if (showFees && fees.isNotEmpty()) {
+                WidgetDataRow(
+                    icon = R.drawable.ic_coins,
+                    label = stringResource(R.string.widgets__blocks__field__fees),
+                    value = fees,
+                    testTagPrefix = "fees",
+                )
+            }
             if (showSource && source.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .testTag("block_card_source_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    CaptionB(
-                        text = stringResource(R.string.widgets__widget__source),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_source_label")
-                    )
-
-                    CaptionB(
-                        text = source,
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_source_text")
-                    )
-                }
+                WidgetDataRow(
+                    icon = R.drawable.ic_globe,
+                    label = stringResource(R.string.widgets__widget__source),
+                    value = source,
+                    testTagPrefix = "source",
+                )
             }
         }
     }
 }
 
-@Preview(showBackground = true)
+@Suppress("CyclomaticComplexMethod")
 @Composable
-private fun FullBlockCardPreview() {
-    AppThemeSurface {
+fun BlockCardSmall(
+    modifier: Modifier = Modifier,
+    showBlock: Boolean,
+    showTime: Boolean,
+    showDate: Boolean,
+    showTransactions: Boolean,
+    showSize: Boolean,
+    showFees: Boolean,
+    showSource: Boolean,
+    block: String,
+    time: String,
+    date: String,
+    transactions: String,
+    size: String,
+    fees: String,
+    source: String,
+) {
+    Box(
+        modifier = modifier
+            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .clip(shape = MaterialTheme.shapes.medium)
+            .background(Colors.White10)
+    ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
+        ) {
+            if (showBlock && block.isNotEmpty()) {
+                SmallDataRow(
+                    icon = R.drawable.ic_cube,
+                    value = block,
+                    testTagPrefix = "block",
+                )
+            }
+            if (showTime && time.isNotEmpty()) {
+                SmallDataRow(
+                    icon = R.drawable.ic_clock,
+                    value = time,
+                    testTagPrefix = "time",
+                )
+            }
+            if (showDate && date.isNotEmpty()) {
+                SmallDataRow(
+                    icon = R.drawable.ic_calendar,
+                    value = date,
+                    testTagPrefix = "date",
+                )
+            }
+            if (showTransactions && transactions.isNotEmpty()) {
+                SmallDataRow(
+                    icon = R.drawable.ic_transfer,
+                    value = transactions,
+                    testTagPrefix = "transactions",
+                )
+            }
+            if (showSize && size.isNotEmpty()) {
+                SmallDataRow(
+                    icon = R.drawable.ic_file_text,
+                    value = size,
+                    testTagPrefix = "size",
+                )
+            }
+            if (showFees && fees.isNotEmpty()) {
+                SmallDataRow(
+                    icon = R.drawable.ic_coins,
+                    value = fees,
+                    testTagPrefix = "fees",
+                )
+            }
+            if (showSource && source.isNotEmpty()) {
+                SmallDataRow(
+                    icon = R.drawable.ic_globe,
+                    value = source,
+                    testTagPrefix = "source",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WidgetDataRow(
+    @DrawableRes icon: Int,
+    label: String,
+    value: String,
+    testTagPrefix: String,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("${testTagPrefix}_row")
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = Colors.Brand,
+            modifier = Modifier
+                .size(20.dp)
+                .testTag("${testTagPrefix}_icon")
+        )
+        BodyM(
+            text = label,
+            color = Colors.White80,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("${testTagPrefix}_label")
+        )
+        BodyMSB(
+            text = value,
+            color = Colors.White,
+            modifier = Modifier.testTag("${testTagPrefix}_text")
+        )
+    }
+}
+
+@Composable
+private fun SmallDataRow(
+    @DrawableRes icon: Int,
+    value: String,
+    testTagPrefix: String,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("${testTagPrefix}_row")
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = Colors.Brand,
+            modifier = Modifier
+                .size(20.dp)
+                .testTag("${testTagPrefix}_icon")
+        )
+        BodySSB(
+            text = value,
+            color = Colors.White,
+            modifier = Modifier.testTag("${testTagPrefix}_text")
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewLargeAll() {
+    AppThemeSurface {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
             BlockCard(
-                showWidgetTitle = true,
                 showBlock = true,
                 showTime = true,
                 showDate = true,
                 showTransactions = true,
                 showSize = true,
+                showFees = true,
                 showSource = true,
                 block = "761,405",
                 time = "01:31:42 UTC",
                 date = "11/2/2022",
                 transactions = "2,175",
                 size = "1,606Kb",
+                fees = "25 059 357",
                 source = "mempool.io",
+                modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
 
+@Preview(showBackground = true)
+@Composable
+private fun PreviewLargeDefault() {
+    AppThemeSurface {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
             BlockCard(
-                showWidgetTitle = false,
                 showBlock = true,
                 showTime = true,
                 showDate = true,
                 showTransactions = true,
-                showSize = true,
+                showSize = false,
+                showFees = false,
                 showSource = false,
                 block = "761,405",
                 time = "01:31:42 UTC",
                 date = "11/2/2022",
                 transactions = "2,175",
-                size = "1,606Kb",
-                source = "mempool.io", // Source text is still provided but won't be shown
+                size = "",
+                fees = "",
+                source = "",
+                modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
 
-            BlockCard(
-                showWidgetTitle = true,
+@Preview(showBackground = true)
+@Composable
+private fun PreviewSmall() {
+    AppThemeSurface {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            BlockCardSmall(
                 showBlock = true,
-                showTime = false,
-                showDate = false,
-                showTransactions = false,
+                showTime = true,
+                showDate = true,
+                showTransactions = true,
                 showSize = false,
+                showFees = false,
                 showSource = false,
                 block = "761,405",
-                time = "",
-                date = "",
-                transactions = "",
+                time = "01:31:42 UTC",
+                date = "11/2/2022",
+                transactions = "2,175",
                 size = "",
-                source = "",
+                fees = "",
+                source = ""
             )
         }
     }
