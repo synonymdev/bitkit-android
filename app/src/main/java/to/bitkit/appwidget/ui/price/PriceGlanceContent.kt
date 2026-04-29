@@ -29,10 +29,10 @@ import to.bitkit.appwidget.config.AppWidgetConfigActivity
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.components.CaptionB
+import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
 import to.bitkit.appwidget.ui.components.VerticalSpacer
-import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceWidgetData
