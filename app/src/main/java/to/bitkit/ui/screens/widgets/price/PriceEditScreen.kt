@@ -76,7 +76,10 @@ fun PriceEditContent(
     val selectedPair = preferences.enabledPairs.firstOrNull() ?: TradingPair.BTC_USD
 
     ScreenColumn(
-        modifier = Modifier.testTag("price_edit_screen")
+        noBackground = true,
+        modifier = Modifier
+            .background(Colors.Gray7)
+            .testTag("price_edit_screen")
     ) {
         Box(
             modifier = Modifier

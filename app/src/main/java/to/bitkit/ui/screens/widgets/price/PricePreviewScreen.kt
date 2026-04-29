@@ -102,7 +102,10 @@ fun PricePreviewContent(
     isLoading: Boolean,
 ) {
     ScreenColumn(
-        modifier = Modifier.testTag("price_preview_screen")
+        noBackground = true,
+        modifier = Modifier
+            .background(Colors.Gray7)
+            .testTag("price_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__price__name),
