@@ -13,9 +13,11 @@ import kotlinx.coroutines.launch
 import to.bitkit.appwidget.AppWidgetDataRepository
 import to.bitkit.appwidget.AppWidgetPreferencesStore
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.model.HomeHeadlinePreferences
 import to.bitkit.appwidget.model.HomePricePreferences
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -42,6 +44,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                     appWidgetId = appWidgetId,
                     type = type,
                     pricePreferences = entry?.pricePreferences?.toInApp() ?: PricePreferences(),
+                    headlinePreferences = entry?.headlinePreferences?.toInApp() ?: HeadlinePreferences(),
                 )
             }
         }
@@ -59,26 +62,69 @@ class AppWidgetConfigViewModel @Inject constructor(
         }
     }
 
+    fun toggleShowTime() {
+        _uiState.update {
+            it.copy(
+                headlinePreferences = it.headlinePreferences.copy(showTime = !it.headlinePreferences.showTime),
+            )
+        }
+    }
+
+    fun toggleShowSource() {
+        _uiState.update {
+            it.copy(
+                headlinePreferences = it.headlinePreferences.copy(showSource = !it.headlinePreferences.showSource),
+            )
+        }
+    }
+
     fun resetPreferences() {
-        _uiState.update { it.copy(pricePreferences = PricePreferences()) }
+        _uiState.update {
+            when (it.type) {
+                AppWidgetType.PRICE -> it.copy(pricePreferences = PricePreferences())
+                AppWidgetType.HEADLINES -> it.copy(headlinePreferences = HeadlinePreferences())
+            }
+        }
     }
 
     fun saveAndFinish(onComplete: suspend () -> Unit) {
         viewModelScope.launch {
-            val appWidgetId = _uiState.value.appWidgetId
-            val pricePreferences = _uiState.value.pricePreferences
+            val state = _uiState.value
             _uiState.update { it.copy(isSaving = true) }
-            preferencesStore.registerWidget(appWidgetId, AppWidgetType.PRICE)
-            preferencesStore.updateEntry(appWidgetId) { entry ->
-                entry.copy(pricePreferences = pricePreferences.toHome())
+
+            when (state.type) {
+                AppWidgetType.PRICE -> savePrice(state)
+                AppWidgetType.HEADLINES -> saveHeadlines(state)
             }
-            val period = pricePreferences.period ?: GraphPeriod.ONE_DAY
-            dataRepository.fetchPriceData(period)
-                .onSuccess { preferencesStore.cachePriceData(period, it) }
-                .onFailure { Logger.warn("Failed to fetch initial price data", it, context = TAG) }
+
             onComplete()
             _uiState.update { it.copy(isSaving = false) }
         }
+    }
+
+    private suspend fun savePrice(state: AppWidgetConfigUiState) {
+        val appWidgetId = state.appWidgetId
+        val pricePreferences = state.pricePreferences
+        preferencesStore.registerWidget(appWidgetId, AppWidgetType.PRICE)
+        preferencesStore.updateEntry(appWidgetId) { entry ->
+            entry.copy(pricePreferences = pricePreferences.toHome())
+        }
+        val period = pricePreferences.period ?: GraphPeriod.ONE_DAY
+        dataRepository.fetchPriceData(period)
+            .onSuccess { preferencesStore.cachePriceData(period, it) }
+            .onFailure { Logger.warn("Failed to fetch initial price data", it, context = TAG) }
+    }
+
+    private suspend fun saveHeadlines(state: AppWidgetConfigUiState) {
+        val appWidgetId = state.appWidgetId
+        val headlinePreferences = state.headlinePreferences
+        preferencesStore.registerWidget(appWidgetId, AppWidgetType.HEADLINES)
+        preferencesStore.updateEntry(appWidgetId) { entry ->
+            entry.copy(headlinePreferences = headlinePreferences.toHome())
+        }
+        dataRepository.fetchArticles()
+            .onSuccess { preferencesStore.cacheArticles(it) }
+            .onFailure { Logger.warn("Failed to fetch initial articles", it, context = TAG) }
     }
 }
 
@@ -87,6 +133,7 @@ data class AppWidgetConfigUiState(
     val appWidgetId: Int = -1,
     val type: AppWidgetType = AppWidgetType.PRICE,
     val pricePreferences: PricePreferences = PricePreferences(),
+    val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val isSaving: Boolean = false,
 )
 
@@ -98,4 +145,14 @@ private fun HomePricePreferences.toInApp() = PricePreferences(
 private fun PricePreferences.toHome() = HomePricePreferences(
     enabledPairs = enabledPairs,
     period = period ?: GraphPeriod.ONE_DAY,
+)
+
+private fun HomeHeadlinePreferences.toInApp() = HeadlinePreferences(
+    showTime = showTime,
+    showSource = showSource,
+)
+
+private fun HeadlinePreferences.toHome() = HomeHeadlinePreferences(
+    showTime = showTime,
+    showSource = showSource,
 )

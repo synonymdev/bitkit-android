@@ -204,6 +204,19 @@
                 android:resource="@xml/appwidget_info_price" />
         </receiver>
 
+        <!-- Headlines Widget -->
+        <receiver
+            android:name=".appwidget.ui.headlines.HeadlinesGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__news__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_headlines" />
+        </receiver>
+
     </application>
 
 </manifest>

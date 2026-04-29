@@ -11,6 +11,9 @@ import androidx.glance.appwidget.updateAll
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
+import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
+import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
 import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.ui.theme.AppThemeSurface
 
@@ -38,9 +41,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
             return
         }
 
-        val typeName = intent?.getStringExtra(EXTRA_WIDGET_TYPE)
-        val type = typeName?.let { runCatching { AppWidgetType.valueOf(it) }.getOrNull() }
-            ?: AppWidgetType.PRICE
+        val type = resolveWidgetType(appWidgetId)
 
         viewModel.init(appWidgetId, type)
 
@@ -49,7 +50,10 @@ class AppWidgetConfigActivity : ComponentActivity() {
                 AppWidgetConfigScreen(
                     viewModel = viewModel,
                     onConfirm = {
-                        PriceGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                        when (viewModel.uiState.value.type) {
+                            AppWidgetType.PRICE -> PriceGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                            AppWidgetType.HEADLINES -> HeadlinesGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                        }
                         AppWidgetRefreshWorker.enqueue(this@AppWidgetConfigActivity)
                         val result = Intent().putExtra(
                             AppWidgetManager.EXTRA_APPWIDGET_ID,
@@ -61,6 +65,20 @@ class AppWidgetConfigActivity : ComponentActivity() {
                     onCancel = { finish() },
                 )
             }
+        }
+    }
+
+    private fun resolveWidgetType(appWidgetId: Int): AppWidgetType {
+        val extraType = intent?.getStringExtra(EXTRA_WIDGET_TYPE)
+            ?.let { runCatching { AppWidgetType.valueOf(it) }.getOrNull() }
+        if (extraType != null) return extraType
+
+        val providerClass = AppWidgetManager.getInstance(this)
+            .getAppWidgetInfo(appWidgetId)?.provider?.className
+        return when (providerClass) {
+            HeadlinesGlanceReceiver::class.java.name -> AppWidgetType.HEADLINES
+            PriceGlanceReceiver::class.java.name -> AppWidgetType.PRICE
+            else -> AppWidgetType.PRICE
         }
     }
 }
