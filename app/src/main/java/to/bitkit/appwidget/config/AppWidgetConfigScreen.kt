@@ -263,12 +263,13 @@ private fun ToggleRow(
     content: @Composable RowScope.() -> Unit,
     isEnabled: Boolean,
     onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
     toggleEnabled: Boolean = true,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .padding(vertical = 8.dp)
             .fillMaxWidth()
     ) {
