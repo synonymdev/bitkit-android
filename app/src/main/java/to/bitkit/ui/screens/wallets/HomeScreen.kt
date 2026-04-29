@@ -970,6 +970,7 @@ private val previewBlock = BlockModel(
     transactionCount = "2,175",
     size = "1,606kB",
     source = "mempool.io",
+    fees = "25 059 357",
 )
 
 private val previewArticle = ArticleModel(

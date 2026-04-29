@@ -21,7 +21,8 @@ class BlocksPreviewContentTest {
         date = "2023-01-01",
         transactionCount = "2,175",
         size = "1,606kB",
-        source = "mempool.space"
+        source = "mempool.space",
+        fees = "25 059 357",
     )
     private val defaultPreferences = BlocksPreferences()
 

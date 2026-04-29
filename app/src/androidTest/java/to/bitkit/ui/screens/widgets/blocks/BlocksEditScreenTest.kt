@@ -22,7 +22,8 @@ class BlocksEditScreenTest {
         date = "11/2/2022",
         transactionCount = "2,175",
         size = "1,606Kb",
-        source = "mempool.io"
+        source = "mempool.io",
+        fees = "25 059 357",
     )
 
     private val defaultPreferences = BlocksPreferences()
@@ -36,6 +37,7 @@ class BlocksEditScreenTest {
         var dateClicked = false
         var transactionsClicked = false
         var sizeClicked = false
+        var feesClicked = false
         var sourceClicked = false
         var resetClicked = false
         var previewClicked = false
@@ -50,6 +52,7 @@ class BlocksEditScreenTest {
                     onClickShowDate = { dateClicked = true },
                     onClickShowTransactions = { transactionsClicked = true },
                     onClickShowSize = { sizeClicked = true },
+                    onClickShowFees = { feesClicked = true },
                     onClickShowSource = { sourceClicked = true },
                     onClickReset = { resetClicked = true },
                     onClickPreview = { previewClicked = true },
@@ -63,13 +66,14 @@ class BlocksEditScreenTest {
         composeTestRule.onNodeWithTag("blocks_edit_screen").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditScrollView").assertExists()
 
-        // Verify description
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
+        // Verify section header
+        composeTestRule.onNodeWithTag("data_section_header").assertExists()
 
         // Verify all setting rows exist
-        listOf("block", "time", "date", "transactions", "size", "source").forEach { prefix ->
+        listOf("block", "time", "date", "transactions", "size", "fees", "source").forEach { prefix ->
             composeTestRule.onNodeWithTag("${prefix}_setting_row").assertExists()
             composeTestRule.onNodeWithTag("${prefix}_label").assertExists()
+            composeTestRule.onNodeWithTag("${prefix}_leading_icon", useUnmergedTree = true).assertExists()
             if (testBlock.getFieldValue(prefix).isNotEmpty()) {
                 composeTestRule.onNodeWithTag("${prefix}_text").assertExists()
             }
@@ -115,6 +119,7 @@ class BlocksEditScreenTest {
                     onClickShowDate = {},
                     onClickShowTransactions = {},
                     onClickShowSize = {},
+                    onClickShowFees = {},
                     onClickShowSource = {},
                     onClickReset = { resetClicked = true },
                     onClickPreview = {},
@@ -146,6 +151,7 @@ class BlocksEditScreenTest {
                     onClickShowDate = {},
                     onClickShowTransactions = {},
                     onClickShowSize = {},
+                    onClickShowFees = {},
                     onClickShowSource = {},
                     onClickReset = {},
                     onClickPreview = {},
@@ -167,6 +173,7 @@ class BlocksEditScreenTest {
             showDate = false,
             showTransactions = false,
             showSize = false,
+            showFees = false,
             showSource = false
         )
 
@@ -179,6 +186,7 @@ class BlocksEditScreenTest {
                     onClickShowDate = {},
                     onClickShowTransactions = {},
                     onClickShowSize = {},
+                    onClickShowFees = {},
                     onClickShowSource = {},
                     onClickReset = {},
                     onClickPreview = {},
@@ -199,6 +207,7 @@ class BlocksEditScreenTest {
         var dateClicked = false
         var transactionsClicked = false
         var sizeClicked = false
+        var feesClicked = false
         var sourceClicked = false
         var resetClicked = false
         var previewClicked = false
@@ -209,6 +218,7 @@ class BlocksEditScreenTest {
             showDate = false,
             showTransactions = false,
             showSize = true,
+            showFees = false,
             showSource = true
         )
 
@@ -221,6 +231,7 @@ class BlocksEditScreenTest {
                     onClickShowDate = { dateClicked = true },
                     onClickShowTransactions = { transactionsClicked = true },
                     onClickShowSize = { sizeClicked = true },
+                    onClickShowFees = { feesClicked = true },
                     onClickShowSource = { sourceClicked = true },
                     onClickReset = { resetClicked = true },
                     onClickPreview = { previewClicked = true },
@@ -246,6 +257,9 @@ class BlocksEditScreenTest {
         composeTestRule.onNodeWithTag("size_toggle_button").performClick()
         assert(sizeClicked)
 
+        composeTestRule.onNodeWithTag("fees_toggle_button").performClick()
+        assert(feesClicked)
+
         composeTestRule.onNodeWithTag("source_toggle_button").performClick()
         assert(sourceClicked)
 
@@ -265,7 +279,8 @@ class BlocksEditScreenTest {
             date = "",
             transactionCount = "",
             size = "",
-            source = ""
+            source = "",
+            fees = "",
         )
 
         composeTestRule.setContent {
@@ -277,6 +292,7 @@ class BlocksEditScreenTest {
                     onClickShowDate = {},
                     onClickShowTransactions = {},
                     onClickShowSize = {},
+                    onClickShowFees = {},
                     onClickShowSource = {},
                     onClickReset = {},
                     onClickPreview = {},
@@ -287,7 +303,7 @@ class BlocksEditScreenTest {
         }
 
         // Assert that text elements don't exist when values are empty
-        listOf("block", "time", "date", "transactions", "size", "source").forEach { prefix ->
+        listOf("block", "time", "date", "transactions", "size", "fees", "source").forEach { prefix ->
             composeTestRule.onNodeWithTag("${prefix}_text").assertDoesNotExist()
         }
     }
@@ -304,6 +320,7 @@ class BlocksEditScreenTest {
                     onClickShowDate = {},
                     onClickShowTransactions = {},
                     onClickShowSize = {},
+                    onClickShowFees = {},
                     onClickShowSource = {},
                     onClickReset = {},
                     onClickPreview = {},
@@ -313,6 +330,7 @@ class BlocksEditScreenTest {
                         showDate = false,
                         showTransactions = false,
                         showSize = true,
+                        showFees = false,
                         showSource = true
                     ),
                     block = testBlock
@@ -323,11 +341,12 @@ class BlocksEditScreenTest {
         // Assert all tagged elements exist
         composeTestRule.onNodeWithTag("blocks_edit_screen").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditScrollView").assertExists()
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
+        composeTestRule.onNodeWithTag("data_section_header").assertExists()
 
-        listOf("block", "time", "date", "transactions", "size", "source").forEach { prefix ->
+        listOf("block", "time", "date", "transactions", "size", "fees", "source").forEach { prefix ->
             composeTestRule.onNodeWithTag("${prefix}_setting_row").assertExists()
             composeTestRule.onNodeWithTag("${prefix}_label").assertExists()
+            composeTestRule.onNodeWithTag("${prefix}_leading_icon", useUnmergedTree = true).assertExists()
             composeTestRule.onNodeWithTag("${prefix}_toggle_button").assertExists()
             composeTestRule.onNodeWithTag("${prefix}_toggle_icon", useUnmergedTree = true).assertExists()
             composeTestRule.onNodeWithTag("${prefix}_divider").assertExists()
@@ -347,6 +366,7 @@ private fun BlockModel.getFieldValue(prefix: String): String {
         "date" -> date
         "transactions" -> transactionCount
         "size" -> size
+        "fees" -> fees
         "source" -> source
         else -> ""
     }
