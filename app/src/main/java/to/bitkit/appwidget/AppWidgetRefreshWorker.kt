@@ -94,6 +94,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                         .onFailure {
                             Logger.warn("Failed to refresh headlines", it, context = TAG)
                         }
+                    preferencesStore.bumpArticleRotationTick()
                     HeadlinesGlanceWidget().updateAll(appContext)
                 }
             }

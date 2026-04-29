@@ -41,4 +41,5 @@ data class AppWidgetData(
     val entries: List<AppWidgetEntry> = emptyList(),
     val cachedPrices: Map<GraphPeriod, PriceDTO> = emptyMap(),
     val cachedArticles: List<ArticleDTO> = emptyList(),
+    val articleRotationTick: Int = 0,
 )

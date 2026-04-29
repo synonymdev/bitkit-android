@@ -33,8 +33,8 @@ class HeadlinesGlanceWidget : GlanceAppWidget() {
             val data by store.data.collectAsState(initial = AppWidgetData())
             val entry = data.entries.find { it.appWidgetId == appWidgetId }
                 ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.HEADLINES)
-            val article = remember(data.cachedArticles) {
-                data.cachedArticles.firstOrNull()?.toArticleModel()
+            val article = remember(data.cachedArticles, data.articleRotationTick) {
+                data.cachedArticles.randomOrNull()?.toArticleModel()
             }
 
             HeadlinesGlanceContent(
