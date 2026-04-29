@@ -1175,6 +1175,8 @@
     <string name="widgets__widget__edit_default">Default</string>
     <string name="widgets__widget__edit_description">Please select which fields you want to display in the {name} widget.</string>
     <string name="widgets__widget__nav_title">Widget</string>
+    <string name="widgets__widget__save">Save Widget</string>
+    <string name="widgets__widget__settings">Widget Settings</string>
     <string name="widgets__widget__size_small">Small</string>
     <string name="widgets__widget__size_wide">Wide</string>
     <string name="widgets__widget__source">Source</string>

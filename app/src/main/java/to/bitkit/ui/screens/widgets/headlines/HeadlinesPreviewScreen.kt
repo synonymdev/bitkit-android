@@ -1,42 +1,33 @@
 package to.bitkit.ui.screens.widgets.headlines
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ext.spaceToNewline
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -83,116 +74,108 @@ fun HeadlinesPreviewContent(
     article: ArticleModel,
 ) {
     ScreenColumn(
-        modifier = Modifier.testTag("headlines_preview_screen")
+        noBackground = true,
+        modifier = Modifier
+            .background(Colors.Gray7)
+            .testTag("headlines_preview_screen")
     ) {
         AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__nav_title),
+            titleText = stringResource(R.string.widgets__news__name),
             onBackClick = onBack,
-            actions = { DrawerNavIcon() },
         )
 
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .testTag("main_content")
+                .weight(1f)
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("header_row"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__news__name).spaceToNewline()),
-                    modifier = Modifier.testTag("widget_title"),
-                )
-                Icon(
-                    painter = painterResource(R.drawable.widget_newspaper),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .testTag("widget_icon")
-                )
-            }
+            VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.widgets__news__description),
                 color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("widget_description")
+                modifier = Modifier.testTag("widget_description")
             )
+
+            VerticalSpacer(16.dp)
 
             HorizontalDivider(
                 modifier = Modifier.testTag("divider")
             )
 
             SettingsButtonRow(
-                title = stringResource(R.string.widgets__widget__edit),
+                title = stringResource(R.string.widgets__widget__settings),
                 value = SettingsButtonValue.StringValue(
                     if (headlinePreferences == HeadlinePreferences()) {
                         stringResource(R.string.widgets__widget__edit_default)
                     } else {
                         stringResource(R.string.widgets__widget__edit_custom)
-                    }
+                    },
                 ),
                 onClick = onClickEdit,
                 modifier = Modifier.testTag("WidgetEdit")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            Text13Up(
-                stringResource(R.string.common__preview),
-                color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("preview_label")
-            )
-
-            HeadlineCard(
-                showTime = headlinePreferences.showTime,
-                showSource = headlinePreferences.showSource,
-                time = article.timeAgo,
-                headline = article.title,
-                source = article.publisher,
-                link = article.link,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("headline_card")
-            )
-
-            Row(
-                modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("buttons_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                if (isHeadlinesImplemented) {
-                    SecondaryButton(
-                        text = stringResource(R.string.common__delete),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("WidgetDelete"),
-                        fullWidth = false,
-                        onClick = onClickDelete
+            WidgetSizeCarousel(
+                smallContent = {
+                    HeadlineCardSmall(
+                        showTime = headlinePreferences.showTime,
+                        time = article.timeAgo,
+                        headline = article.title,
+                        link = article.link,
+                        modifier = Modifier.testTag("headline_card_small")
                     )
-                }
+                },
+                wideContent = {
+                    HeadlineCard(
+                        showTime = headlinePreferences.showTime,
+                        showSource = headlinePreferences.showSource,
+                        time = article.timeAgo,
+                        headline = article.title,
+                        source = article.publisher,
+                        link = article.link,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("headline_card_wide")
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("headlines_preview_carousel")
+            )
+        }
 
-                PrimaryButton(
-                    text = stringResource(R.string.common__save),
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = 16.dp,
+                    top = 22.dp,
+                )
+                .fillMaxWidth()
+                .testTag("buttons_row")
+        ) {
+            if (isHeadlinesImplemented) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__delete),
+                    fullWidth = false,
+                    onClick = onClickDelete,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetSave"),
-                    fullWidth = false,
-                    onClick = onClickSave
+                        .testTag("WidgetDelete")
                 )
             }
+
+            PrimaryButton(
+                text = stringResource(R.string.widgets__widget__save),
+                fullWidth = false,
+                onClick = onClickSave,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("WidgetSave")
+            )
         }
     }
 }
