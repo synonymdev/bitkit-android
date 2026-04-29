@@ -38,7 +38,6 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -132,7 +131,6 @@ fun PriceEditContent(
                 AppTopBar(
                     titleText = stringResource(R.string.widgets__widget__edit),
                     onBackClick = onBack,
-                    actions = { DrawerNavIcon() },
                     modifier = Modifier.background(
                         Brush.verticalGradient(
                             colors = listOf(
