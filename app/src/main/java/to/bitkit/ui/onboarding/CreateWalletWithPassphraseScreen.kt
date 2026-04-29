@@ -10,11 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,13 +32,13 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.HighlightLabel
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.mainRectHeight
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.util.screen
-import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.TopBarHeight
@@ -98,12 +95,10 @@ fun CreateWalletWithPassphraseScreen(
                 color = Colors.White64,
             )
             Spacer(modifier = Modifier.height(32.dp))
-            OutlinedTextField(
+            TextInput(
                 value = bip39Passphrase,
                 onValueChange = { bip39Passphrase = it },
-                placeholder = { Text(text = stringResource(R.string.onboarding__passphrase)) },
-                shape = RoundedCornerShape(8.dp),
-                colors = AppTextFieldDefaults.semiTransparent,
+                placeholder = stringResource(R.string.onboarding__passphrase),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     autoCorrectEnabled = false,
