@@ -31,7 +31,6 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -40,7 +39,7 @@ import to.bitkit.ui.theme.Colors
 fun HeadlinesEditScreen(
     headlinesViewModel: HeadlinesViewModel,
     onBack: () -> Unit,
-    navigatePreview: () -> Unit
+    navigatePreview: () -> Unit,
 ) {
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
@@ -72,7 +71,7 @@ fun HeadlinesEditContent(
     onClickPreview: () -> Unit,
     onClickShowSource: () -> Unit,
     headlinePreferences: HeadlinePreferences,
-    article: ArticleModel
+    article: ArticleModel,
 ) {
     ScreenColumn(
         noBackground = true,
@@ -83,7 +82,6 @@ fun HeadlinesEditContent(
         AppTopBar(
             titleText = stringResource(R.string.widgets__news__name),
             onBackClick = onBack,
-            actions = { DrawerNavIcon() },
         )
 
         Column(
