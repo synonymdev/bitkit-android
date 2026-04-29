@@ -1169,6 +1169,7 @@
     <string name="widgets__weather__description">Find out when it’s a good time to transact on the Bitcoin blockchain.</string>
     <string name="widgets__weather__name">Bitcoin Weather</string>
     <string name="widgets__weather__next_block">Next block inclusion</string>
+    <string name="widgets__widget__content">CONTENT</string>
     <string name="widgets__widget__edit">Widget Feed</string>
     <string name="widgets__widget__edit_custom">Custom</string>
     <string name="widgets__widget__edit_default">Default</string>
