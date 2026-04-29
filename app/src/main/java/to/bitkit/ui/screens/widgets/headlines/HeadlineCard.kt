@@ -44,6 +44,7 @@ fun HeadlineCard(
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
             .clickableAlpha {
+                if (link.isEmpty()) return@clickableAlpha
                 val intent = Intent(Intent.ACTION_VIEW, link.toUri())
                 context.startActivity(intent)
             }
@@ -105,6 +106,7 @@ fun HeadlineCardSmall(
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
             .clickableAlpha {
+                if (link.isEmpty()) return@clickableAlpha
                 val intent = Intent(Intent.ACTION_VIEW, link.toUri())
                 context.startActivity(intent)
             }
