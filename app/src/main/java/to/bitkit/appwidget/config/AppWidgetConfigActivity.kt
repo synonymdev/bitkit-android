@@ -11,6 +11,8 @@ import androidx.glance.appwidget.updateAll
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.blocks.BlocksGlanceReceiver
+import to.bitkit.appwidget.ui.blocks.BlocksGlanceWidget
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
 import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
@@ -53,6 +55,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
                         when (viewModel.uiState.value.type) {
                             AppWidgetType.PRICE -> PriceGlanceWidget().updateAll(this@AppWidgetConfigActivity)
                             AppWidgetType.HEADLINES -> HeadlinesGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                            AppWidgetType.BLOCKS -> BlocksGlanceWidget().updateAll(this@AppWidgetConfigActivity)
                         }
                         AppWidgetRefreshWorker.enqueue(this@AppWidgetConfigActivity)
                         val result = Intent().putExtra(
@@ -78,6 +81,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
         return when (providerClass) {
             HeadlinesGlanceReceiver::class.java.name -> AppWidgetType.HEADLINES
             PriceGlanceReceiver::class.java.name -> AppWidgetType.PRICE
+            BlocksGlanceReceiver::class.java.name -> AppWidgetType.BLOCKS
             else -> AppWidgetType.PRICE
         }
     }

@@ -13,16 +13,19 @@ import kotlinx.coroutines.launch
 import to.bitkit.appwidget.AppWidgetDataRepository
 import to.bitkit.appwidget.AppWidgetPreferencesStore
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.model.HomeBlocksPreferences
 import to.bitkit.appwidget.model.HomeHeadlinePreferences
 import to.bitkit.appwidget.model.HomePricePreferences
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
+@Suppress("TooManyFunctions")
 class AppWidgetConfigViewModel @Inject constructor(
     private val preferencesStore: AppWidgetPreferencesStore,
     private val dataRepository: AppWidgetDataRepository,
@@ -45,6 +48,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                     type = type,
                     pricePreferences = entry?.pricePreferences?.toInApp() ?: PricePreferences(),
                     headlinePreferences = entry?.headlinePreferences?.toInApp() ?: HeadlinePreferences(),
+                    blocksPreferences = entry?.blocksPreferences?.toInApp() ?: BlocksPreferences(),
                 )
             }
         }
@@ -78,11 +82,58 @@ class AppWidgetConfigViewModel @Inject constructor(
         }
     }
 
+    fun toggleBlockShowBlock() {
+        _uiState.update {
+            it.copy(blocksPreferences = it.blocksPreferences.copy(showBlock = !it.blocksPreferences.showBlock))
+        }
+    }
+
+    fun toggleBlockShowTime() {
+        _uiState.update {
+            it.copy(blocksPreferences = it.blocksPreferences.copy(showTime = !it.blocksPreferences.showTime))
+        }
+    }
+
+    fun toggleBlockShowDate() {
+        _uiState.update {
+            it.copy(blocksPreferences = it.blocksPreferences.copy(showDate = !it.blocksPreferences.showDate))
+        }
+    }
+
+    fun toggleBlockShowTransactions() {
+        _uiState.update {
+            it.copy(
+                blocksPreferences = it.blocksPreferences.copy(
+                    showTransactions = !it.blocksPreferences.showTransactions,
+                ),
+            )
+        }
+    }
+
+    fun toggleBlockShowSize() {
+        _uiState.update {
+            it.copy(blocksPreferences = it.blocksPreferences.copy(showSize = !it.blocksPreferences.showSize))
+        }
+    }
+
+    fun toggleBlockShowFees() {
+        _uiState.update {
+            it.copy(blocksPreferences = it.blocksPreferences.copy(showFees = !it.blocksPreferences.showFees))
+        }
+    }
+
+    fun toggleBlockShowSource() {
+        _uiState.update {
+            it.copy(blocksPreferences = it.blocksPreferences.copy(showSource = !it.blocksPreferences.showSource))
+        }
+    }
+
     fun resetPreferences() {
         _uiState.update {
             when (it.type) {
                 AppWidgetType.PRICE -> it.copy(pricePreferences = PricePreferences())
                 AppWidgetType.HEADLINES -> it.copy(headlinePreferences = HeadlinePreferences())
+                AppWidgetType.BLOCKS -> it.copy(blocksPreferences = BlocksPreferences())
             }
         }
     }
@@ -95,6 +146,7 @@ class AppWidgetConfigViewModel @Inject constructor(
             when (state.type) {
                 AppWidgetType.PRICE -> savePrice(state)
                 AppWidgetType.HEADLINES -> saveHeadlines(state)
+                AppWidgetType.BLOCKS -> saveBlocks(state)
             }
 
             onComplete()
@@ -126,6 +178,18 @@ class AppWidgetConfigViewModel @Inject constructor(
             .onSuccess { preferencesStore.cacheArticles(it) }
             .onFailure { Logger.warn("Failed to fetch initial articles", it, context = TAG) }
     }
+
+    private suspend fun saveBlocks(state: AppWidgetConfigUiState) {
+        val appWidgetId = state.appWidgetId
+        val blocksPreferences = state.blocksPreferences
+        preferencesStore.registerWidget(appWidgetId, AppWidgetType.BLOCKS)
+        preferencesStore.updateEntry(appWidgetId) { entry ->
+            entry.copy(blocksPreferences = blocksPreferences.toHome())
+        }
+        dataRepository.fetchBlock()
+            .onSuccess { preferencesStore.cacheBlock(it) }
+            .onFailure { Logger.warn("Failed to fetch initial block", it, context = TAG) }
+    }
 }
 
 @Stable
@@ -134,6 +198,7 @@ data class AppWidgetConfigUiState(
     val type: AppWidgetType = AppWidgetType.PRICE,
     val pricePreferences: PricePreferences = PricePreferences(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
+    val blocksPreferences: BlocksPreferences = BlocksPreferences(),
     val isSaving: Boolean = false,
 )
 
@@ -154,5 +219,25 @@ private fun HomeHeadlinePreferences.toInApp() = HeadlinePreferences(
 
 private fun HeadlinePreferences.toHome() = HomeHeadlinePreferences(
     showTime = showTime,
+    showSource = showSource,
+)
+
+private fun HomeBlocksPreferences.toInApp() = BlocksPreferences(
+    showBlock = showBlock,
+    showTime = showTime,
+    showDate = showDate,
+    showTransactions = showTransactions,
+    showSize = showSize,
+    showFees = showFees,
+    showSource = showSource,
+)
+
+private fun BlocksPreferences.toHome() = HomeBlocksPreferences(
+    showBlock = showBlock,
+    showTime = showTime,
+    showDate = showDate,
+    showTransactions = showTransactions,
+    showSize = showSize,
+    showFees = showFees,
     showSource = showSource,
 )

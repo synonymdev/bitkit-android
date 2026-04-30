@@ -14,6 +14,7 @@ import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.ArticleDTO
+import to.bitkit.data.dto.BlockDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.AppWidgetDataSerializer
@@ -32,6 +33,7 @@ interface AppWidgetEntryPoint {
 }
 
 @Singleton
+@Suppress("TooManyFunctions")
 class AppWidgetPreferencesStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
@@ -87,5 +89,9 @@ class AppWidgetPreferencesStore @Inject constructor(
 
     suspend fun bumpArticleRotationTick() {
         store.updateData { it.copy(articleRotationTick = it.articleRotationTick + 1) }
+    }
+
+    suspend fun cacheBlock(block: BlockDTO) {
+        store.updateData { it.copy(cachedBlock = block) }
     }
 }
