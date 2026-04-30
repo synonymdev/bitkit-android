@@ -11,8 +11,6 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
-import androidx.glance.appwidget.lazy.LazyColumn
-import androidx.glance.appwidget.lazy.items
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
@@ -83,8 +81,8 @@ fun BlocksGlanceContent(
 @Suppress("RestrictedApi")
 @Composable
 private fun WideContent(rows: List<BlockRow>) {
-    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-        items(rows) { row ->
+    Column(modifier = GlanceModifier.fillMaxSize()) {
+        rows.forEach { row ->
             WideRow(row = row, modifier = GlanceModifier.padding(vertical = 6.dp))
         }
     }
