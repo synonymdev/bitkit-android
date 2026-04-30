@@ -36,6 +36,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
@@ -49,8 +50,8 @@ import to.bitkit.env.Env
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
-import to.bitkit.models.msatFloorOf
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
@@ -135,6 +136,7 @@ class LightningService @Inject constructor(
                 trustedPeersNoReserve = trustedPeerNodeIds,
                 perChannelReserveSats = 1u,
             ),
+            probingLiquidityLimitMultiplier = 1uL,
             includeUntrustedPendingInSpendable = true,
         )
     }
@@ -721,7 +723,7 @@ class LightningService @Inject constructor(
     // endregion
 
     // region probing
-    suspend fun sendProbes(bolt11: String): Result<Unit> {
+    suspend fun sendProbes(bolt11: String): Result<Set<PaymentId>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
@@ -735,8 +737,8 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbes(bolt11Invoice, null)
-                Result.success(Unit)
+                val handles = node.bolt11Payment().sendProbes(bolt11Invoice, null)
+                Result.success(handles.map { it.paymentId }.toSet())
             }.getOrElse {
                 dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
@@ -744,7 +746,7 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Unit> {
+    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Set<PaymentId>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
@@ -759,10 +761,28 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
-                Result.success(Unit)
+                val handles = node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
+                Result.success(handles.map { it.paymentId }.toSet())
             }.getOrElse {
                 dumpNetworkGraphInfo(bolt11)
+                Result.failure(if (it is NodeException) LdkError(it) else it)
+            }
+        }
+    }
+
+    suspend fun sendKeysendProbe(nodeId: PublicKey, amountMsat: ULong): Result<Set<PaymentId>> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        Logger.debug(
+            "Sending keysend probe to nodeId='$nodeId' amountMsat='$amountMsat' (${msatFloorOf(amountMsat)} sats)",
+            context = TAG,
+        )
+
+        return ServiceQueue.LDK.background {
+            runCatching {
+                val handles = node.spontaneousPayment().sendProbes(amountMsat, nodeId)
+                Result.success(handles.map { it.paymentId }.toSet())
+            }.getOrElse {
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }

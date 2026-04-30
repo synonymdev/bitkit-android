@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve Pubky profile restore, contact editing, and contact routing flows #905
 
 ### Fixed
+- Fix probe results and add keysend probes #920
 - Align top bar back arrow and passphrase input cursor/placeholder with iOS #906
 - Polish Terms of Use screen padding to match iOS #903
 
