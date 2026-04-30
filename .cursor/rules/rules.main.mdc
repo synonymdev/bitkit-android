@@ -63,12 +63,14 @@ alwaysApply: true
 ---
 
 ## Changelog rules:
-- add an entry under `## [Unreleased]` in `CHANGELOG.md` for `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
-- use standard Keep a Changelog categories: `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`
-- append `#PR_NUMBER` at the end of each changelog entry when the PR number is known
-- place new entries at the top of their category section (newest first)
-- never modify released version sections — only edit `## [Unreleased]`
-- create category headings on demand (don't add empty stubs)
+- never edit `CHANGELOG.md` in normal feature/fix PRs; release automation collects changelog fragments into it
+- add exactly one changelog fragment for user-facing `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
+- put normal release fragments in `changelog.d/next/` and hotfix fragments in `changelog.d/hotfix/`
+- name fragments `<issue-or-pr>.<category>.md`, where category is one of `added`, `changed`, `deprecated`, `removed`, `fixed`, or `security`
+- write the fragment as one polished user-facing sentence without a leading bullet and without a PR number
+- never add multiple changelog fragments for the same PR — summarize all changes in one concise fragment
+- release commits consume fragments with `scripts/collect-changelog.sh --target next|hotfix`, update `CHANGELOG.md`, and delete consumed fragment files
+- never modify released version sections manually
 
 ---
 
