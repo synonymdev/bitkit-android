@@ -634,7 +634,10 @@ class PubkyRepo @Inject constructor(
             val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            val prefixedKey = requireAddableContactPublicKey(publicKey)
+            val prefixedKey = requireAddableContactPublicKey(
+                publicKey = publicKey,
+                allowExisting = existingProfile != null,
+            )
             val profile = existingProfile?.copy(publicKey = prefixedKey) ?: run {
                 val ffiProfile = pubkyService.getProfile(prefixedKey)
                 PubkyProfile.fromFfi(prefixedKey, ffiProfile)
@@ -946,16 +949,16 @@ class PubkyRepo @Inject constructor(
         clearAuthenticatedState()
     }
 
-    private fun requireAddableContactPublicKey(publicKey: String): String {
+    private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {
         val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
-        contactValidationError(prefixedKey)?.let { throw it }
+        contactValidationError(prefixedKey, allowExisting)?.let { throw it }
         return checkNotNull(prefixedKey) { "Normalized pubky key is required" }
     }
 
-    private fun contactValidationError(prefixedKey: String?): PubkyContactError? {
+    private fun contactValidationError(prefixedKey: String?, allowExisting: Boolean = false): PubkyContactError? {
         if (prefixedKey == null) return PubkyContactError.InvalidFormat
         if (_publicKey.value == prefixedKey) return PubkyContactError.CannotAddSelf
-        if (_contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, prefixedKey) }) {
+        if (!allowExisting && _contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, prefixedKey) }) {
             return PubkyContactError.AlreadyExists
         }
         return null
