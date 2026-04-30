@@ -1,6 +1,5 @@
 package to.bitkit.viewmodels
 
-import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
@@ -14,12 +13,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.ProbeError
+import to.bitkit.repositories.ProbeOutcome
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -47,9 +49,7 @@ class ProbingToolViewModel @Inject constructor(
     }
 
     fun pasteInvoice() {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clipData = clipboard.primaryClip
-        val pastedInvoice = clipData?.getItemAt(0)?.text?.toString()?.trim()
+        val pastedInvoice = context.getClipboardText()?.trim()
 
         if (pastedInvoice.isNullOrEmpty()) {
             viewModelScope.launch {
@@ -64,11 +64,12 @@ class ProbingToolViewModel @Inject constructor(
         updateInvoice(pastedInvoice)
     }
 
+    @Suppress("CyclomaticComplexMethod", "LongMethod", "ReturnCount")
     fun sendProbe() {
         val input = _uiState.value.invoice.trim()
         if (input.isEmpty()) {
             viewModelScope.launch {
-                ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Please enter an invoice")
+                ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Please enter an invoice or node ID")
             }
             return
         }
@@ -76,97 +77,147 @@ class ProbingToolViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true, probeResult = null) }
 
-            val userAmount = _uiState.value.amountSats.toULongOrNull()
-            val amountSats = userAmount ?: 1uL.takeIf { _uiState.value.isZeroAmountInvoice }
+            try {
+                val state = _uiState.value
+                val userAmount = state.amountSats.toULongOrNull()
+                val nodeId = extractNodeId(input)
+                val isNodeIdTarget = nodeId != null
 
-            val bolt11 = extractBolt11Invoice(input, amountSats)
-            if (bolt11 == null) {
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = "Invalid invoice format",
-                    description = "Could not extract Lightning invoice",
-                )
+                if (isNodeIdTarget && (userAmount == null || userAmount == 0uL)) {
+                    ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Please enter an amount")
+                    return@launch
+                }
+
+                if (state.isLnurlPay && (userAmount == null || userAmount == 0uL)) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = "Please enter an amount",
+                    )
+                    return@launch
+                }
+
+                val amountSats = when {
+                    isNodeIdTarget -> userAmount
+                    state.isLnurlPay -> userAmount
+                    else -> userAmount ?: 1uL.takeIf { state.isZeroAmountInvoice }
+                }
+
+                val bolt11 = if (isNodeIdTarget) null else extractBolt11Invoice(input, amountSats)
+                if (!isNodeIdTarget && bolt11 == null) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = "Invalid target",
+                        description = "Could not extract Lightning invoice",
+                    )
+                    return@launch
+                }
+
+                if (!isNodeIdTarget && bolt11 != null) {
+                    val effectiveAmount = amountSats ?: getInvoiceAmount(input)
+                    if (effectiveAmount != null && effectiveAmount > 0uL) {
+                        val outbound = lightningRepo.lightningState.value.channels
+                            .totalNextOutboundHtlcLimitSats()
+                        val estimatedFee = getEstimatedFee(bolt11, amountSats)
+
+                        val nearCapacityThreshold = outbound * 95uL / 100uL
+                        if (estimatedFee == null && effectiveAmount >= nearCapacityThreshold) {
+                            ToastEventBus.send(
+                                type = Toast.ToastType.WARNING,
+                                title = "Amount too close to capacity",
+                                description = "Available: $BITCOIN_SYMBOL $outbound. " +
+                                    "Reduce amount to leave room for routing fees.",
+                            )
+                            return@launch
+                        }
+
+                        val totalRequired = effectiveAmount + (estimatedFee ?: 0uL)
+                        if (!lightningRepo.canSend(totalRequired)) {
+                            ToastEventBus.send(
+                                type = Toast.ToastType.WARNING,
+                                title = "Amount + fees exceed capacity",
+                                description = "Needed: $BITCOIN_SYMBOL $totalRequired" +
+                                    "(includes ~${estimatedFee ?: 0uL} fee), " +
+                                    "available: $BITCOIN_SYMBOL $outbound",
+                            )
+                            return@launch
+                        }
+                    }
+                }
+
+                val startTime = System.currentTimeMillis()
+                val dispatch = if (isNodeIdTarget) {
+                    lightningRepo.sendProbeForNode(requireNotNull(nodeId), requireNotNull(amountSats))
+                } else {
+                    lightningRepo.sendProbeForInvoice(requireNotNull(bolt11), amountSats)
+                }
+
+                dispatch
+                    .onSuccess { probe ->
+                        lightningRepo.waitForProbeOutcome(probe.paymentIds)
+                            .onSuccess { handleProbeOutcome(startTime, it, bolt11, amountSats) }
+                            .onFailure { handleProbeFailure(startTime, it) }
+                    }
+                    .onFailure { handleProbeFailure(startTime, it) }
+            } finally {
                 _uiState.update { it.copy(isLoading = false) }
-                return@launch
             }
-
-            val effectiveAmount = amountSats ?: getInvoiceAmount(input)
-            if (effectiveAmount != null && effectiveAmount > 0uL) {
-                val outbound = lightningRepo.lightningState.value.channels
-                    .totalNextOutboundHtlcLimitSats()
-                val estimatedFee = getEstimatedFee(bolt11, amountSats)
-
-                val nearCapacityThreshold = outbound * 95uL / 100uL
-                if (estimatedFee == null && effectiveAmount >= nearCapacityThreshold) {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = "Amount too close to capacity",
-                        description = "Available: $BITCOIN_SYMBOL $outbound. " +
-                            "Reduce amount to leave room for routing fees.",
-                    )
-                    _uiState.update { it.copy(isLoading = false) }
-                    return@launch
-                }
-
-                val totalRequired = effectiveAmount + (estimatedFee ?: 0uL)
-                if (!lightningRepo.canSend(totalRequired)) {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = "Amount + fees exceed capacity",
-                        description = "Needed: $BITCOIN_SYMBOL $totalRequired" +
-                            "(includes ~${estimatedFee ?: 0uL} fee), " +
-                            "available: $BITCOIN_SYMBOL $outbound",
-                    )
-                    _uiState.update { it.copy(isLoading = false) }
-                    return@launch
-                }
-            }
-
-            val startTime = System.currentTimeMillis()
-
-            lightningRepo.sendProbeForInvoice(bolt11, amountSats)
-                .onSuccess { handleProbeSuccess(startTime, bolt11, amountSats) }
-                .onFailure { handleProbeFailure(startTime, it) }
-
-            _uiState.update { it.copy(isLoading = false) }
         }
     }
 
     private fun detectInputType(input: String) {
         viewModelScope.launch(bgDispatcher) {
-            val data = runCatching { coreService.decode(input.trim()) }.getOrNull()
+            val trimmed = input.trim()
+            if (extractNodeId(trimmed) != null) {
+                updateInputType(isNodeId = true)
+                return@launch
+            }
+
+            val data = runCatching { coreService.decode(trimmed) }.getOrNull()
             when (data) {
                 is Scanner.LnurlPay -> {
                     val min = data.data.minSendableSat()
                     val max = data.data.maxSendableSat()
                     val isFixed = min == max && min > 0uL
-                    _uiState.update {
-                        it.copy(
-                            isLnurlPay = true,
-                            isZeroAmountInvoice = false,
-                            amountSats = if (isFixed) min.toString() else it.amountSats,
-                        )
-                    }
+                    updateInputType(isLnurlPay = true, amountSats = min.toString().takeIf { isFixed })
                 }
 
                 is Scanner.Lightning if data.invoice.amountSatoshis == 0uL -> {
-                    _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = true) }
+                    updateInputType(isZeroAmountInvoice = true)
                 }
 
                 is Scanner.OnChain -> {
-                    val lightningParam = data.invoice.params?.get("lightning")
-                    val lightning = lightningParam?.let {
-                        runCatching { coreService.decode(it) }.getOrNull() as? Scanner.Lightning
-                    }
-                    val isZeroAmount = lightning?.invoice?.amountSatoshis == 0uL
-                    _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = isZeroAmount) }
+                    updateInputType(isZeroAmountInvoice = data.hasZeroAmountLightningParam())
                 }
 
                 else -> {
-                    _uiState.update { it.copy(isLnurlPay = false, isZeroAmountInvoice = false) }
+                    updateInputType()
                 }
             }
         }
+    }
+
+    private fun updateInputType(
+        isNodeId: Boolean = false,
+        isLnurlPay: Boolean = false,
+        isZeroAmountInvoice: Boolean = false,
+        amountSats: String? = null,
+    ) {
+        _uiState.update {
+            it.copy(
+                isNodeId = isNodeId,
+                isLnurlPay = isLnurlPay,
+                isZeroAmountInvoice = isZeroAmountInvoice,
+                amountSats = amountSats ?: it.amountSats,
+            )
+        }
+    }
+
+    private suspend fun Scanner.OnChain.hasZeroAmountLightningParam(): Boolean {
+        val lightningParam = invoice.params?.get("lightning")
+        val lightning = lightningParam?.let {
+            runCatching { coreService.decode(it) }.getOrNull() as? Scanner.Lightning
+        }
+        return lightning?.invoice?.amountSatoshis == 0uL
     }
 
     private suspend fun extractBolt11Invoice(input: String, amountSats: ULong?): String? = runCatching {
@@ -186,24 +237,68 @@ class ProbingToolViewModel @Inject constructor(
         }
     }.getOrNull()
 
-    private suspend fun handleProbeSuccess(startTime: Long, invoice: String, amountSats: ULong?) {
+    private suspend fun handleProbeOutcome(
+        startTime: Long,
+        outcome: ProbeOutcome,
+        invoice: String?,
+        amountSats: ULong?,
+    ) {
         val durationMs = System.currentTimeMillis() - startTime
-        Logger.info("Probe successful for invoice in ${durationMs}ms", context = TAG)
+        when (outcome) {
+            is ProbeOutcome.Success -> {
+                Logger.info(
+                    "Received successful probe outcome for paymentId='${outcome.paymentId}' in '${durationMs}ms'",
+                    context = TAG,
+                )
 
-        val estimatedFee = getEstimatedFee(invoice, amountSats)
-        _uiState.update {
-            it.copy(probeResult = ProbeResult(success = true, durationMs = durationMs, estimatedFeeSats = estimatedFee))
+                val estimatedFee = invoice?.let { getEstimatedFee(it, amountSats) }
+                _uiState.update {
+                    it.copy(
+                        probeResult = ProbeResult(
+                            success = true,
+                            durationMs = durationMs,
+                            estimatedFeeSats = estimatedFee,
+                        )
+                    )
+                }
+                ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = "Probe successful")
+            }
+
+            is ProbeOutcome.Failure -> {
+                Logger.info(
+                    "Received failed probe outcome for paymentId='${outcome.paymentId}' " +
+                        "paymentHash='${outcome.paymentHash}' shortChannelId='${outcome.shortChannelId}'",
+                    context = TAG,
+                )
+
+                val message = outcome.shortChannelId?.let { "No route found (SCID: $it)" } ?: "No route found"
+                _uiState.update {
+                    it.copy(
+                        probeResult = ProbeResult(
+                            success = false,
+                            durationMs = durationMs,
+                            errorMessage = message,
+                        )
+                    )
+                }
+                ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Probe failed", description = message)
+            }
         }
-        ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = "Probe successful")
     }
 
     private suspend fun handleProbeFailure(startTime: Long, error: Throwable) {
         val durationMs = System.currentTimeMillis() - startTime
-        Logger.error("Probe failed in ${durationMs}ms", error, context = TAG)
+        Logger.error("Failed probe in '${durationMs}ms'", error, context = TAG)
 
         val friendlyMessage = getFriendlyErrorMessage(error)
         _uiState.update {
-            it.copy(probeResult = ProbeResult(success = false, durationMs = durationMs, errorMessage = friendlyMessage))
+            it.copy(
+                probeResult = ProbeResult(
+                    success = false,
+                    durationMs = durationMs,
+                    errorMessage = friendlyMessage,
+                )
+            )
         }
         ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Probe failed", description = friendlyMessage)
     }
@@ -225,8 +320,12 @@ class ProbingToolViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "ProbingToolViewModel"
+        private const val NODE_ID_HEX_LENGTH = 66
 
         private fun getFriendlyErrorMessage(error: Throwable): String {
+            if (error is ProbeError.NoProbeHandles) return "Probe was likely skipped"
+            if (error is ProbeError.TimedOut) return "Probe timed out"
+
             val msg = error.message ?: return "Unknown error"
             return when {
                 msg.contains("RouteNotFound", ignoreCase = true) -> "No route found to destination"
@@ -236,6 +335,15 @@ class ProbingToolViewModel @Inject constructor(
                 else -> msg
             }
         }
+
+        private fun extractNodeId(input: String): String? {
+            val trimmed = input.trim()
+            val nodeId = trimmed.substringBefore("@")
+            return nodeId.takeIf { it.length == NODE_ID_HEX_LENGTH && it.all(::isHexChar) }
+        }
+
+        private fun isHexChar(value: Char): Boolean =
+            value.isDigit() || value.lowercaseChar() in 'a'..'f'
     }
 }
 
@@ -244,6 +352,7 @@ data class ProbingToolUiState(
     val invoice: String = "",
     val amountSats: String = "",
     val isLoading: Boolean = false,
+    val isNodeId: Boolean = false,
     val isLnurlPay: Boolean = false,
     val isZeroAmountInvoice: Boolean = false,
     val probeResult: ProbeResult? = null,

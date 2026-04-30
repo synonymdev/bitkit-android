@@ -53,18 +53,9 @@ If "Previous tag": ask `"Which tag?"` with a text input (default: `v{oldVersionN
 
 If "master" or if the release is minor/major: `{baseRef} = master`.
 
-### 2c. Finalize Changelog
-
-Read `CHANGELOG.md` and check whether `## [Unreleased]` has any entries beneath it.
-
-**If entries exist:**
-1. Replace `## [Unreleased]` with `## [{newVersionName}] - {YYYY-MM-DD}` (today's date)
-2. Insert a fresh empty `## [Unreleased]` section above the new version heading
-3. Update the compare link references at the bottom of the file:
-   - Change `[Unreleased]` link to compare from `v{newVersionName}...HEAD`
-   - Add a new `[{newVersionName}]` link comparing `v{oldVersionName}...v{newVersionName}`
-
-**If no entries:** Print `⚠ CHANGELOG.md has no unreleased entries — continuing without changelog update.` and proceed.
+Set `{changelogTarget}`:
+- If `{baseRef}` is `master`: `next`
+- Otherwise: `hotfix`
 
 ### 3. Create Release Branch & Bump Version
 
@@ -86,18 +77,34 @@ Cherry-pick the commits you need onto this branch now, then continue.
 ```
 Wait for the user to confirm they are done cherry-picking before proceeding.
 
+Finalize changelog after the release branch contains all release commits:
+
+```bash
+scripts/collect-changelog.sh --target {changelogTarget}
+```
+
+Read `CHANGELOG.md` and check whether `## [Unreleased]` has any entries beneath it after collecting fragments.
+
+**If entries exist:**
+1. Replace `## [Unreleased]` with `## [{newVersionName}] - {YYYY-MM-DD}` (today's date)
+2. Insert a fresh empty `## [Unreleased]` section above the new version heading
+3. Update the compare link references at the bottom of the file:
+   - Change `[Unreleased]` link to compare from `v{newVersionName}...HEAD`
+   - Add a new `[{newVersionName}]` link comparing `v{oldVersionName}...v{newVersionName}`
+
+**If no entries:** Print `⚠ CHANGELOG.md has no unreleased entries — continuing without changelog update.` and proceed.
+
 Edit `app/build.gradle.kts`:
 - Change `versionCode = {old}` to `versionCode = {newVersionCode}`
 - Change `versionName = "{old}"` to `versionName = "{newVersionName}"`
 
 ```bash
 git add app/build.gradle.kts
-# Only stage CHANGELOG.md if step 2c modified it (i.e. unreleased entries were found)
 git commit -m "chore: version {newVersionName}"
 git push -u origin release-{newVersionName}
 ```
 
-If step 2c updated `CHANGELOG.md`, also `git add CHANGELOG.md` before the commit.
+If changelog collection updated `CHANGELOG.md` or deleted consumed fragments, run `git add CHANGELOG.md changelog.d` before the commit.
 
 ### 4. Create Version Bump PR
 
