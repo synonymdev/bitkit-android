@@ -2579,9 +2579,9 @@ class AppViewModel @Inject constructor(
 
     private fun syncContactForActivity(paymentHashOrTxId: String) {
         val contactContext = synchronized(contactPaymentContextLock) {
-            val context = pendingContactPaymentContexts.remove(paymentHashOrTxId)
-                ?: activeContactPaymentContext
-            if (context != null) {
+            val pendingContext = pendingContactPaymentContexts.remove(paymentHashOrTxId)
+            val context = pendingContext ?: activeContactPaymentContext
+            if (pendingContext == null && context != null) {
                 activeContactPaymentContext = null
             }
             context

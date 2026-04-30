@@ -21,6 +21,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -30,6 +31,9 @@ class ContactActivityViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "ContactActivityViewModel"
+    }
 
     private val publicKey: String = checkNotNull(
         savedStateHandle["publicKey"],
@@ -59,6 +63,7 @@ class ContactActivityViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
+                    Logger.warn("Failed to load contact activity for '$publicKey'", it, context = TAG)
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -78,6 +83,7 @@ class ContactActivityViewModel @Inject constructor(
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile -> _uiState.update { it.copy(profile = profile) } }
                 .onFailure {
+                    Logger.warn("Failed to load contact profile for '$publicKey'", it, context = TAG)
                     _uiState.update { it.copy(profile = PubkyProfile.placeholder(publicKey)) }
                 }
         }
