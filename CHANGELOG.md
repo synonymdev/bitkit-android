@@ -15,12 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Align top bar back arrow and passphrase input cursor/placeholder with iOS #906
 - Polish Terms of Use screen padding to match iOS #903
 
-### Added
-- Home screen widgets foundation with Glance, including price widget as the first implementation #895
-
-### Changed
-- Redesign price widget with v61 wide and compact layouts, new preview and edit screens, and tap-to-edit behavior #914
-
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
