@@ -125,7 +125,7 @@ fun HeadlinesEditContent(
                         tint = Colors.Brand,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("title_toggle_icon"),
+                            .testTag("title_toggle_icon")
                     )
                 }
             }
@@ -160,7 +160,7 @@ fun HeadlinesEditContent(
                         tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White50,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("source_toggle_icon"),
+                            .testTag("source_toggle_icon")
                     )
                 }
             }
@@ -195,7 +195,7 @@ fun HeadlinesEditContent(
                         tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White50,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("time_toggle_icon"),
+                            .testTag("time_toggle_icon")
                     )
                 }
             }
@@ -215,21 +215,21 @@ fun HeadlinesEditContent(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__reset),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("WidgetEditReset"),
                     enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
                     fullWidth = false,
-                    onClick = onClickReset
+                    onClick = onClickReset,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("WidgetEditReset")
                 )
 
                 PrimaryButton(
                     text = stringResource(R.string.common__preview),
+                    fullWidth = false,
+                    onClick = onClickPreview,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetEditPreview"),
-                    fullWidth = false,
-                    onClick = onClickPreview
+                        .testTag("WidgetEditPreview")
                 )
             }
         }
