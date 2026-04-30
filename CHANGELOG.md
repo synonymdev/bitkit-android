@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Polish Terms of Use screen padding to match iOS #903
 
 ### Added
+- Bitcoin Blocks home screen widget with v61 wide and compact layouts, including redesigned in-app preview and edit screens #922
 - Headlines home screen widget with v61 wide and compact layouts, including redesigned in-app preview and edit screens #919
 - Home screen widgets foundation with Glance, including price widget as the first implementation #895
 
