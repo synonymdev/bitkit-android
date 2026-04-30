@@ -63,7 +63,6 @@ class ContactActivityViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
-                    Logger.warn("Failed to load contact activity for '$publicKey'", it, context = TAG)
                     _uiState.update {
                         it.copy(
                             isLoading = false,
