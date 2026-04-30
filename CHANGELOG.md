@@ -7,7 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 - Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
-- Connection issues overlay with connectivity fixes across Send, Receive, and Transfer flows #878
 
 ### Changed
 - Improve Pubky profile restore, contact editing, and contact routing flows #905
