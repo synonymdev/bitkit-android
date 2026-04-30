@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Align onboarding slides and Create Wallet screen image size, spacing, and dots layout with iOS #904
+- Fix probe results and add keysend probes #920
+- Align top bar back arrow and passphrase input cursor/placeholder with iOS #906
 - Polish Terms of Use screen padding to match iOS #903
 
 ## [2.2.0] - 2026-04-07
