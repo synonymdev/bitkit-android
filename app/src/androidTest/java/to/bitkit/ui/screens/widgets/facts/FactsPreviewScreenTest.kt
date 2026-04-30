@@ -33,7 +33,6 @@ class FactsPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = true,
                     isFactsWidgetEnabled = true,
                     factsPreferences = defaultPreferences,
                     fact = testFact
@@ -88,7 +87,6 @@ class FactsPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = false,
                     isFactsWidgetEnabled = false,
                     factsPreferences = defaultPreferences,
                     fact = testFact
@@ -122,7 +120,6 @@ class FactsPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isFactsWidgetEnabled = true,
                     factsPreferences = customPreferences,
                     fact = testFact
@@ -146,7 +143,6 @@ class FactsPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isFactsWidgetEnabled = true,
                     factsPreferences = defaultPreferences,
                     fact = testFact
@@ -182,7 +178,6 @@ class FactsPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isFactsWidgetEnabled = true,
                     factsPreferences = defaultPreferences,
                     fact = testFact
@@ -206,7 +201,6 @@ class FactsPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = false,
                     isFactsWidgetEnabled = false,
                     factsPreferences = minimalPreferences,
                     fact = testFact
@@ -231,7 +225,6 @@ class FactsPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isFactsWidgetEnabled = true,
                     factsPreferences = defaultPreferences,
                     fact = testFact
@@ -256,7 +249,6 @@ class FactsPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isFactsWidgetEnabled = true,
                     factsPreferences = customPreferences,
                     fact = testFact

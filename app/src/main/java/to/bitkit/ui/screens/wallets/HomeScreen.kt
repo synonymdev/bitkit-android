@@ -757,8 +757,6 @@ private fun Widgets(
                 WidgetType.FACTS -> {
                     homeUiState.currentFact?.run {
                         FactsCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
-                            showSource = homeUiState.factsPreferences.showSource,
                             headline = homeUiState.currentFact,
                             modifier = Modifier.fillMaxWidth()
                         )

@@ -46,7 +46,6 @@ fun FactsPreviewScreen(
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
 ) {
-    val showWidgetTitles by factsViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customFactsPreferences by factsViewModel.customPreferences.collectAsStateWithLifecycle()
     val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
     val isFactsWidgetEnabled by factsViewModel.isFactsWidgetEnabled.collectAsStateWithLifecycle()
@@ -59,7 +58,6 @@ fun FactsPreviewScreen(
         onBack = onBack,
         isFactsWidgetEnabled = isFactsWidgetEnabled,
         factsPreferences = customFactsPreferences,
-        showWidgetTitles = showWidgetTitles,
         fact = fact,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
@@ -79,7 +77,6 @@ fun FactsPreviewContent(
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
     isFactsWidgetEnabled: Boolean,
     factsPreferences: FactsPreferences,
     fact: String,
@@ -157,12 +154,10 @@ fun FactsPreviewContent(
             )
 
             FactsCard(
+                headline = fact,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("fact_card"),
-                showWidgetTitle = showWidgetTitles,
-                showSource = factsPreferences.showSource,
-                headline = fact,
+                    .testTag("fact_card")
             )
 
             Row(
@@ -202,7 +197,6 @@ private fun Preview() {
     AppThemeSurface {
         FactsPreviewContent(
             onBack = {},
-            showWidgetTitles = true,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
@@ -219,7 +213,6 @@ private fun Preview2() {
     AppThemeSurface {
         FactsPreviewContent(
             onBack = {},
-            showWidgetTitles = false,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},

@@ -11,6 +11,7 @@ object Colors {
     val Red = Color(0xFFE95164)
     val Yellow = Color(0xFFFFD200)
     val PubkyGreen = Color(0xFFBEFF00)
+    val Bitcoin = Color(0xFFF7931A)
 
     // Base
     val Black = Color(0xFF000000)

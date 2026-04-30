@@ -5,13 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -21,22 +19,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.Title
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun FactsCard(
     modifier: Modifier = Modifier,
-    showWidgetTitle: Boolean = true,
-    showSource: Boolean = true,
     headline: String,
 ) {
     Box(
@@ -44,89 +39,109 @@ fun FactsCard(
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
     ) {
-        Column(
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalAlignment = Alignment.Top,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            if (showWidgetTitle) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.testTag("widget_title_row")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.widget_lightbulb),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("widget_title_icon"),
-                        tint = Color.Unspecified
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    BodyMSB(
-                        text = stringResource(R.string.widgets__facts__name),
-                        modifier = Modifier.testTag("widget_title_text")
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            BodyMB(
+            Title(
                 text = headline,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("headline_text")
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("headline_text")
             )
+            BitcoinBadge()
+        }
+    }
+}
 
-            if (showSource) {
-                Spacer(modifier = Modifier.height(16.dp))
+@Composable
+fun FactsCardSmall(
+    modifier: Modifier = Modifier,
+    headline: String,
+) {
+    Box(
+        modifier = modifier
+            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .clip(shape = MaterialTheme.shapes.medium)
+            .background(Colors.White10)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            BodyMSB(
+                text = headline,
+                maxLines = 5,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("headline_text")
+            )
+            BitcoinBadge(modifier = Modifier.align(Alignment.End))
+        }
+    }
+}
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("source_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    BodyS(
-                        text = stringResource(R.string.widgets__widget__source),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("source_label")
-                    )
-                    BodyS(
-                        text = "synonym.to",
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("source_text")
-                    )
-                }
-            }
+@Composable
+private fun BitcoinBadge(modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(Colors.Bitcoin)
+            .testTag("bitcoin_badge")
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_bitcoin),
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewWide() {
+    AppThemeSurface {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FactsCard(
+                headline = "Bitcoin doesn’t need your personal information",
+            )
+            FactsCard(
+                headline = "Priced in Bitcoin, products can become cheaper over time.",
+            )
         }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-private fun Preview() {
+private fun PreviewSmall() {
     AppThemeSurface {
-        Column(
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
         ) {
-            FactsCard(
-                showWidgetTitle = true,
-                showSource = true,
-                headline = "Priced in Bitcoin, products can become cheaper over time.",
+            FactsCardSmall(
+                headline = "Bitcoin doesn’t need your personal information",
             )
-            FactsCard(
-                showWidgetTitle = true,
-                showSource = false,
-                headline = "Priced in Bitcoin, products can become cheaper over time.",
-            )
-            FactsCard(
-                showWidgetTitle = false,
-                showSource = false,
-                headline = "Priced in Bitcoin, products can become cheaper over time.",
+            FactsCardSmall(
+                headline = "Priced in Bitcoin",
             )
         }
     }
