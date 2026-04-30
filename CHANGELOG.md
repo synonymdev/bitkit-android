@@ -7,9 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Support public Paykit contact payments #924
-
 ### Changed
 - Improve Pubky profile restore, contact editing, and contact routing flows #905
 

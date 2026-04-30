@@ -1,12 +1,13 @@
 package to.bitkit.repositories
 
 import org.junit.Test
+import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class PublicPaykitRepoTest {
+class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `parseEndpoint accepts Paykit JSON payloads`() {
         val endpoint = PublicPaykitRepo.parseEndpoint(
