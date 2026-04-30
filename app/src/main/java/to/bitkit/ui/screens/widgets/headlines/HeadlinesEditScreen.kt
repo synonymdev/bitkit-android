@@ -4,9 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
@@ -27,9 +25,11 @@ import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
@@ -89,7 +89,7 @@ fun HeadlinesEditContent(
                 .padding(horizontal = 16.dp)
                 .testTag("WidgetEditScrollView")
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             Caption13Up(
                 text = stringResource(R.string.widgets__widget__content),
@@ -125,7 +125,7 @@ fun HeadlinesEditContent(
                         tint = Colors.Brand,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("title_toggle_icon"),
+                            .testTag("title_toggle_icon")
                     )
                 }
             }
@@ -160,7 +160,7 @@ fun HeadlinesEditContent(
                         tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White50,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("source_toggle_icon"),
+                            .testTag("source_toggle_icon")
                     )
                 }
             }
@@ -195,7 +195,7 @@ fun HeadlinesEditContent(
                         tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White50,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("time_toggle_icon"),
+                            .testTag("time_toggle_icon")
                     )
                 }
             }
@@ -204,7 +204,7 @@ fun HeadlinesEditContent(
                 modifier = Modifier.testTag("time_divider")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             Row(
                 modifier = Modifier
@@ -215,21 +215,21 @@ fun HeadlinesEditContent(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__reset),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("WidgetEditReset"),
                     enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
                     fullWidth = false,
-                    onClick = onClickReset
+                    onClick = onClickReset,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("WidgetEditReset")
                 )
 
                 PrimaryButton(
                     text = stringResource(R.string.common__preview),
+                    fullWidth = false,
+                    onClick = onClickPreview,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetEditPreview"),
-                    fullWidth = false,
-                    onClick = onClickPreview
+                        .testTag("WidgetEditPreview")
                 )
             }
         }
