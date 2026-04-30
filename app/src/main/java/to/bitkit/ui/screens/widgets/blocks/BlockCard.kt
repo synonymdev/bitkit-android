@@ -138,6 +138,17 @@ fun BlockCardSmall(
     fees: String,
     source: String,
 ) {
+    val rows = listOfNotNull(
+        SmallRowData(R.drawable.ic_cube, block, "block").takeIf { showBlock && block.isNotEmpty() },
+        SmallRowData(R.drawable.ic_clock, time, "time").takeIf { showTime && time.isNotEmpty() },
+        SmallRowData(R.drawable.ic_calendar, date, "date").takeIf { showDate && date.isNotEmpty() },
+        SmallRowData(R.drawable.ic_transfer, transactions, "transactions")
+            .takeIf { showTransactions && transactions.isNotEmpty() },
+        SmallRowData(R.drawable.ic_file_text, size, "size").takeIf { showSize && size.isNotEmpty() },
+        SmallRowData(R.drawable.ic_coins, fees, "fees").takeIf { showFees && fees.isNotEmpty() },
+        SmallRowData(R.drawable.ic_globe, source, "source").takeIf { showSource && source.isNotEmpty() },
+    ).take(MAX_SMALL_ROWS)
+
     Box(
         modifier = modifier
             .size(WidgetCardDimens.COMPACT_CARD_SIZE)
@@ -150,58 +161,24 @@ fun BlockCardSmall(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            if (showBlock && block.isNotEmpty()) {
+            rows.forEach { row ->
                 SmallDataRow(
-                    icon = R.drawable.ic_cube,
-                    value = block,
-                    testTagPrefix = "block",
-                )
-            }
-            if (showTime && time.isNotEmpty()) {
-                SmallDataRow(
-                    icon = R.drawable.ic_clock,
-                    value = time,
-                    testTagPrefix = "time",
-                )
-            }
-            if (showDate && date.isNotEmpty()) {
-                SmallDataRow(
-                    icon = R.drawable.ic_calendar,
-                    value = date,
-                    testTagPrefix = "date",
-                )
-            }
-            if (showTransactions && transactions.isNotEmpty()) {
-                SmallDataRow(
-                    icon = R.drawable.ic_transfer,
-                    value = transactions,
-                    testTagPrefix = "transactions",
-                )
-            }
-            if (showSize && size.isNotEmpty()) {
-                SmallDataRow(
-                    icon = R.drawable.ic_file_text,
-                    value = size,
-                    testTagPrefix = "size",
-                )
-            }
-            if (showFees && fees.isNotEmpty()) {
-                SmallDataRow(
-                    icon = R.drawable.ic_coins,
-                    value = fees,
-                    testTagPrefix = "fees",
-                )
-            }
-            if (showSource && source.isNotEmpty()) {
-                SmallDataRow(
-                    icon = R.drawable.ic_globe,
-                    value = source,
-                    testTagPrefix = "source",
+                    icon = row.icon,
+                    value = row.value,
+                    testTagPrefix = row.testTagPrefix,
                 )
             }
         }
     }
 }
+
+private const val MAX_SMALL_ROWS = 4
+
+private data class SmallRowData(
+    @DrawableRes val icon: Int,
+    val value: String,
+    val testTagPrefix: String,
+)
 
 @Composable
 private fun WidgetDataRow(
