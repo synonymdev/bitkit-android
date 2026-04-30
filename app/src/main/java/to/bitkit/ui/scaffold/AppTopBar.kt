@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,7 +37,7 @@ fun AppTopBar(
     onBackClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     @DrawableRes icon: Int? = null,
-    actions: @Composable (RowScope.() -> Unit) = {}
+    actions: @Composable (RowScope.() -> Unit) = {},
 ) {
     CenterAlignedTopAppBar(
         navigationIcon = {
@@ -84,7 +82,7 @@ fun BackNavIcon(
         modifier = modifier.testTag("NavigationBack")
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Default.ArrowBack,
+            painter = painterResource(R.drawable.ic_arrow_left),
             contentDescription = stringResource(R.string.common__back),
             modifier = Modifier.size(24.dp)
         )

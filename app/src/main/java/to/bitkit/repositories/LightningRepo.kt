@@ -24,8 +24,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -44,6 +47,7 @@ import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -61,6 +65,7 @@ import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.MSat
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
@@ -122,6 +127,8 @@ class LightningRepo @Inject constructor(
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
+    private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
+    private val probeOutcomeSignal = MutableSharedFlow<ProbeOutcome>(extraBufferCapacity = 64)
 
     private val syncMutex = Mutex()
     private val syncPending = AtomicBoolean(false)
@@ -425,6 +432,7 @@ class LightningRepo @Inject constructor(
 
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
+        recordProbeOutcome(event)
         _eventHandlers.toList().forEach {
             runCatching { it.invoke(event) }
         }
@@ -446,12 +454,14 @@ class LightningRepo @Inject constructor(
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         lifecycleMutex.withLock {
             if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
+                clearProbeOutcomes()
                 return@withLock Result.success(Unit)
             }
 
             runCatching {
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
                 lightningService.stop()
+                clearProbeOutcomes()
                 _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
             }.onFailure {
                 Logger.error("Node stop error", it, context = TAG)
@@ -538,6 +548,21 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    private suspend fun recordProbeOutcome(event: Event) {
+        val outcome = when (event) {
+            is Event.ProbeSuccessful -> ProbeOutcome.Success(event.paymentId, event.paymentHash)
+            is Event.ProbeFailed -> ProbeOutcome.Failure(event.paymentId, event.paymentHash, event.shortChannelId)
+            else -> return
+        }
+
+        probeOutcomeCache[outcome.paymentId] = outcome
+        probeOutcomeSignal.emit(outcome)
+    }
+
+    private fun clearProbeOutcomes() {
+        probeOutcomeCache.clear()
+    }
+
     private suspend fun registerClosedChannel(channelId: String, reason: ClosureReason?) = withContext(bgDispatcher) {
         runCatching {
             val channel = channelCache[channelId] ?: run {
@@ -591,6 +616,7 @@ class LightningRepo @Inject constructor(
         stop().mapCatching {
             Logger.debug("node stopped, calling wipeStorage", context = TAG)
             lightningService.wipeStorage(walletIndex)
+            clearProbeOutcomes()
             _lightningState.update {
                 LightningState(
                     nodeStatus = it.nodeStatus,
@@ -1372,23 +1398,74 @@ class LightningRepo @Inject constructor(
     // endregion
 
     // region probing
-    suspend fun sendProbeForInvoice(bolt11: String, amountSats: ULong? = null): Result<Unit> =
+    suspend fun sendProbeForInvoice(bolt11: String, amountSats: ULong? = null): Result<ProbeDispatch> =
         executeWhenNodeRunning("sendProbeForInvoice") {
             Logger.debug(
-                "sendProbeForInvoice: amountSats=${amountSats ?: "null (using invoice amount)"}",
-                context = TAG
+                "sendProbeForInvoice: amountSats='${amountSats ?: "null (using invoice amount)"}'",
+                context = TAG,
             )
-            runCatching {
-                if (amountSats != null) {
-                    val amountMsat = amountSats * 1000u
-                    lightningService.sendProbesUsingAmount(bolt11, amountMsat)
-                } else {
-                    lightningService.sendProbes(bolt11)
-                }
-            }.getOrElse {
-                Result.failure(it)
+            val result = if (amountSats != null) {
+                val amountMsat = amountSats.safe() * MSat.PER_SAT.safe()
+                lightningService.sendProbesUsingAmount(bolt11, amountMsat)
+            } else {
+                lightningService.sendProbes(bolt11)
+            }
+
+            result.map { ProbeDispatch(paymentIds = it) }
+        }
+
+    suspend fun sendProbeForNode(nodeId: String, amountSats: ULong): Result<ProbeDispatch> =
+        executeWhenNodeRunning("sendProbeForNode") {
+            Logger.debug(
+                "Sending keysend probe to nodeId='$nodeId' amountSats='$amountSats'",
+                context = TAG,
+            )
+            val amountMsat = amountSats.safe() * MSat.PER_SAT.safe()
+            lightningService.sendKeysendProbe(nodeId, amountMsat).map {
+                ProbeDispatch(paymentIds = it)
             }
         }
+
+    suspend fun waitForProbeOutcome(
+        paymentIds: Set<PaymentId>,
+        timeout: Duration = PROBE_TIMEOUT,
+    ): Result<ProbeOutcome> = withContext(bgDispatcher) {
+        if (paymentIds.isEmpty()) {
+            return@withContext Result.failure(ProbeError.NoProbeHandles())
+        }
+
+        val trackedIds = paymentIds.toSet()
+        val outcome = withTimeoutOrNull(timeout) {
+            val pending = trackedIds.toMutableSet()
+            var lastFailure: ProbeOutcome.Failure? = null
+
+            probeOutcomeSignal
+                .onSubscription {
+                    trackedIds.forEach { id ->
+                        probeOutcomeCache[id]?.let { emit(it) }
+                    }
+                }
+                .filter { it.paymentId in trackedIds }
+                .mapNotNull { probeOutcome ->
+                    if (!pending.remove(probeOutcome.paymentId)) return@mapNotNull null
+
+                    probeOutcomeCache.remove(probeOutcome.paymentId)
+                    when (probeOutcome) {
+                        is ProbeOutcome.Success -> probeOutcome
+                        is ProbeOutcome.Failure -> {
+                            lastFailure = probeOutcome
+                            if (pending.isEmpty()) lastFailure else null
+                        }
+                    }
+                }
+                .first()
+        }
+
+        trackedIds.forEach { probeOutcomeCache.remove(it) }
+
+        outcome?.let { Result.success(it) }
+            ?: Result.failure(ProbeError.TimedOut())
+    }
     // endregion
 
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
@@ -1412,6 +1489,7 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
         val SEND_LN_TIMEOUT = 10.seconds
+        private val PROBE_TIMEOUT = 60.seconds
     }
 }
 
@@ -1421,6 +1499,10 @@ class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
+sealed class ProbeError(message: String) : AppError(message) {
+    class NoProbeHandles : ProbeError("No probe handles returned")
+    class TimedOut : ProbeError("Probe timed out")
+}
 
 @Stable
 data class LightningState(
@@ -1443,4 +1525,24 @@ data class LightningState(
      */
     val isSyncHealthy: Boolean
         get() = lastSyncError == null && lastSuccessfulSyncAt != null
+}
+
+data class ProbeDispatch(
+    val paymentIds: Set<PaymentId>,
+)
+
+sealed interface ProbeOutcome {
+    val paymentId: PaymentId
+    val paymentHash: PaymentHash
+
+    data class Success(
+        override val paymentId: PaymentId,
+        override val paymentHash: PaymentHash,
+    ) : ProbeOutcome
+
+    data class Failure(
+        override val paymentId: PaymentId,
+        override val paymentHash: PaymentHash,
+        val shortChannelId: ULong?,
+    ) : ProbeOutcome
 }

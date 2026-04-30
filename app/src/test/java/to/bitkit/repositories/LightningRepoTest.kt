@@ -17,6 +17,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -50,13 +51,16 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
+import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.UrlValidator
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LargeClass")
 class LightningRepoTest : BaseUnitTest() {
@@ -74,6 +78,11 @@ class LightningRepoTest : BaseUnitTest() {
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
     private val urlValidator = UrlValidator { Result.success(Unit) }
+    private val probePaymentA = "probe-payment-a"
+    private val probePaymentB = "probe-payment-b"
+    private val probeHashA = "probe-hash-a"
+    private val probeHashB = "probe-hash-b"
+    private val probeNodeId = "02abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef12"
 
     @Before
     fun setUp() = runBlocking {
@@ -111,6 +120,18 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         // Simulate successful sync to set isSyncHealthy = true
         sut.sync()
+    }
+
+    private suspend fun startNodeAndCaptureEvents(): NodeEventHandler {
+        var capturedHandler: NodeEventHandler? = null
+        whenever { lightningService.start(anyOrNull(), any()) }.thenAnswer {
+            @Suppress("UNCHECKED_CAST")
+            capturedHandler = it.arguments[1] as NodeEventHandler
+            Unit
+        }
+
+        startNodeForTesting()
+        return requireNotNull(capturedHandler)
     }
 
     @Test
@@ -1157,6 +1178,121 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         // Verify rollback happened (update called twice: once for new, once for rollback)
         verifyBlocking(settingsStore, times(2)) { update(any()) }
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns success when ProbeSuccessful arrives after subscription`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA)) }
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Success>(outcome)
+        assertEquals(probePaymentA, outcome.paymentId)
+        assertEquals(probeHashA, outcome.paymentHash)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns cached success when event arrives before wait`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+
+        val outcome = sut.waitForProbeOutcome(setOf(probePaymentA)).getOrThrow()
+
+        assertIs<ProbeOutcome.Success>(outcome)
+        assertEquals(probePaymentA, outcome.paymentId)
+        assertEquals(probeHashA, outcome.paymentHash)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns last failure only after all tracked probes fail`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
+
+        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
+        onEvent(Event.ProbeFailed(paymentId = probePaymentB, paymentHash = probeHashB, shortChannelId = 2uL))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Failure>(outcome)
+        assertEquals(probePaymentB, outcome.paymentId)
+        assertEquals(probeHashB, outcome.paymentHash)
+        assertEquals(2uL, outcome.shortChannelId)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns first success even when another path already failed`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
+
+        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentB, paymentHash = probeHashB))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Success>(outcome)
+        assertEquals(probePaymentB, outcome.paymentId)
+        assertEquals(probeHashB, outcome.paymentHash)
+    }
+
+    @Test
+    fun `waitForProbeOutcome does not hang on partial cached failures`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
+
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
+        onEvent(Event.ProbeFailed(paymentId = probePaymentB, paymentHash = probeHashB, shortChannelId = 2uL))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Failure>(outcome)
+        assertEquals(probePaymentB, outcome.paymentId)
+        assertEquals(2uL, outcome.shortChannelId)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns timeout error when no matching event arrives`() = test {
+        startNodeAndCaptureEvents()
+
+        val result = sut.waitForProbeOutcome(setOf(probePaymentA), timeout = 1.seconds)
+
+        assertTrue(result.isFailure)
+        assertIs<ProbeError.TimedOut>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `stop clears probe cache`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+
+        sut.stop()
+        val result = sut.waitForProbeOutcome(setOf(probePaymentA), timeout = 1.seconds)
+
+        assertTrue(result.isFailure)
+        assertIs<ProbeError.TimedOut>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `sendProbeForInvoice returns ProbeDispatch with payment IDs`() = test {
+        startNodeForTesting()
+        whenever(lightningService.sendProbes("lnbc1")).thenReturn(Result.success(setOf(probePaymentA, probePaymentB)))
+
+        val result = sut.sendProbeForInvoice("lnbc1")
+
+        assertTrue(result.isSuccess)
+        assertEquals(setOf(probePaymentA, probePaymentB), result.getOrThrow().paymentIds)
+    }
+
+    @Test
+    fun `sendProbeForNode delegates to keysend probe and returns payment IDs`() = test {
+        startNodeForTesting()
+        whenever(lightningService.sendKeysendProbe(probeNodeId, 42_000uL))
+            .thenReturn(Result.success(setOf(probePaymentA)))
+
+        val result = sut.sendProbeForNode(probeNodeId, amountSats = 42uL)
+
+        assertTrue(result.isSuccess)
+        assertEquals(setOf(probePaymentA), result.getOrThrow().paymentIds)
+        verifyBlocking(lightningService) { sendKeysendProbe(probeNodeId, 42_000uL) }
     }
 
     @Test
