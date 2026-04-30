@@ -29,9 +29,9 @@ private const val PAGE_COUNT = 2
 
 @Composable
 fun WidgetSizeCarousel(
-    modifier: Modifier = Modifier,
     smallContent: @Composable () -> Unit,
     wideContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
 
