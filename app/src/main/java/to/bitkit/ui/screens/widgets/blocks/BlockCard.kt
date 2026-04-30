@@ -332,7 +332,7 @@ private fun PreviewSmall() {
                 transactions = "2,175",
                 size = "",
                 fees = "",
-                source = ""
+                source = "",
             )
         }
     }

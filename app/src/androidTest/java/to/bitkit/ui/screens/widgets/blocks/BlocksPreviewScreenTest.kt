@@ -42,7 +42,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = true,
                     isBlocksWidgetEnabled = true,
                     blocksPreferences = defaultPreferences,
                     block = testBlock
@@ -97,7 +96,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = false,
                     isBlocksWidgetEnabled = false,
                     blocksPreferences = defaultPreferences,
                     block = testBlock
@@ -138,7 +136,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isBlocksWidgetEnabled = true,
                     blocksPreferences = customPreferences,
                     block = testBlock
@@ -162,7 +159,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isBlocksWidgetEnabled = true,
                     blocksPreferences = defaultPreferences,
                     block = testBlock
@@ -198,7 +194,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isBlocksWidgetEnabled = true,
                     blocksPreferences = defaultPreferences,
                     block = testBlock
@@ -229,7 +224,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = false,
                     isBlocksWidgetEnabled = false,
                     blocksPreferences = minimalPreferences,
                     block = testBlock
@@ -254,7 +248,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isBlocksWidgetEnabled = true,
                     blocksPreferences = defaultPreferences,
                     block = testBlock
@@ -286,7 +279,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isBlocksWidgetEnabled = true,
                     blocksPreferences = customPreferences,
                     block = testBlock
@@ -308,7 +300,6 @@ class BlocksPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isBlocksWidgetEnabled = true,
                     blocksPreferences = defaultPreferences,
                     block = null
