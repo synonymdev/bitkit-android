@@ -269,7 +269,7 @@ private fun WidgetCarousel(
                         .background(
                             color = if (pagerState.currentPage == index) Colors.White else Colors.White32,
                             shape = CircleShape,
-                        ),
+                        )
                 )
             }
         }
