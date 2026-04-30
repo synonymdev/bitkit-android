@@ -153,14 +153,16 @@ for fragment in fragments:
 changelog = CHANGELOG.read_text()
 start, end = unreleased_bounds(changelog)
 body = changelog[start:end]
+existing_entries = set(body.splitlines())
 
 inserted = 0
 for category in CATEGORY_ORDER:
-    entries = [entry for entry in entries_by_category[category] if entry not in body]
+    entries = [entry for entry in entries_by_category[category] if entry not in existing_entries]
     if not entries:
         continue
 
     body = insert_entries(body, category, entries)
+    existing_entries.update(entries)
     inserted += len(entries)
 
 CHANGELOG.write_text(changelog[:start] + body + changelog[end:])

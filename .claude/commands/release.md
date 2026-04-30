@@ -100,13 +100,11 @@ Edit `app/build.gradle.kts`:
 
 ```bash
 git add app/build.gradle.kts
-# If changelog collection updated files:
-git add CHANGELOG.md changelog.d
 git commit -m "chore: version {newVersionName}"
 git push -u origin release-{newVersionName}
 ```
 
-Only stage `CHANGELOG.md` and `changelog.d` if changelog collection updated `CHANGELOG.md` or deleted consumed fragments.
+If changelog collection updated `CHANGELOG.md` or deleted consumed fragments, run `git add CHANGELOG.md changelog.d` before the commit.
 
 ### 4. Create Version Bump PR
 
