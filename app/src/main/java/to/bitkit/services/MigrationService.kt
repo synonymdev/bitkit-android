@@ -58,7 +58,6 @@ import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
-import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
@@ -1210,23 +1209,6 @@ class MigrationService @Inject constructor(
                 Logger.error("Failed to migrate blocks preferences: $it", it, context = TAG)
             }
         }
-
-        widgetOptions["facts"]?.let { factsData ->
-            runCatching {
-                val factsJson = json.decodeFromString<JsonObject>(
-                    factsData.decodeToString()
-                )
-                val showSource = factsJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-
-                widgetsStore.updateFactsPreferences(
-                    FactsPreferences(
-                        showSource = showSource
-                    )
-                )
-            }.onFailure {
-                Logger.error("Failed to migrate facts preferences: $it", it, context = TAG)
-            }
-        }
     }
 
     private suspend fun migrateMMKVData() {
@@ -2125,15 +2107,6 @@ class MigrationService @Inject constructor(
                 put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["blocks"] = blocksOptions.toString().encodeToByteArray()
-        }
-
-        val factsPrefs = widgetsDict["factsPreferences"]?.jsonObject
-            ?: widgetsDict["facts"]?.jsonObject
-        factsPrefs?.let { prefs ->
-            val factsOptions = buildJsonObject {
-                put("showSource", getBool(prefs, "showSource", defaultValue = false))
-            }
-            result["facts"] = factsOptions.toString().encodeToByteArray()
         }
 
         return result
