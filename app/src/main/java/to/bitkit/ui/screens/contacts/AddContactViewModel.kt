@@ -19,6 +19,8 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitPaymentResult
+import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -27,6 +29,7 @@ import javax.inject.Inject
 class AddContactViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val publicPaykitRepo: PublicPaykitRepo,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -54,16 +57,26 @@ class AddContactViewModel @Inject constructor(
 
     fun fetchProfile(publicKey: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, publicKeyInput = publicKey) }
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    error = null,
+                    publicKeyInput = publicKey,
+                    hasPublicPaymentEndpoint = false,
+                )
+            }
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile ->
                     _uiState.update { it.copy(fetchedProfile = profile, isLoading = false) }
+                    loadPaymentEndpoint(profile.publicKey)
                 }
                 .onFailure { error ->
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
                             error = when (error) {
+                                PubkyContactError.AlreadyExists ->
+                                    context.getString(R.string.contacts__add_error_existing)
                                 PubkyContactError.CannotAddSelf ->
                                     context.getString(R.string.contacts__add_error_self)
                                 PubkyContactError.InvalidFormat ->
@@ -75,6 +88,47 @@ class AddContactViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    private fun loadPaymentEndpoint(publicKey: String) {
+        viewModelScope.launch {
+            publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
+                .onSuccess { hasEndpoint ->
+                    _uiState.update { it.copy(hasPublicPaymentEndpoint = hasEndpoint) }
+                }
+                .onFailure {
+                    Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
+                }
+        }
+    }
+
+    fun payContact() {
+        val profile = _uiState.value.fetchedProfile ?: return
+        viewModelScope.launch {
+            publicPaykitRepo.beginPayment(profile.publicKey)
+                .onSuccess { result ->
+                    when (result) {
+                        is PublicPaykitPaymentResult.Opened ->
+                            _effects.emit(AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey))
+                        PublicPaykitPaymentResult.NoEndpoint ->
+                            showPayError(R.string.slashtags__error_pay_empty_msg)
+                        PublicPaykitPaymentResult.NotOpened ->
+                            showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                    }
+                }
+                .onFailure {
+                    Logger.warn("Failed to begin public Paykit payment for '${profile.publicKey}'", it, context = TAG)
+                    showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                }
+        }
+    }
+
+    private suspend fun showPayError(messageRes: Int) {
+        ToastEventBus.send(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.slashtags__error_pay_title),
+            description = context.getString(messageRes),
+        )
     }
 
     fun saveContact() {
@@ -108,9 +162,11 @@ data class AddContactUiState(
     val publicKeyInput: String = "",
     val fetchedProfile: PubkyProfile? = null,
     val isLoading: Boolean = false,
+    val hasPublicPaymentEndpoint: Boolean = false,
     val error: String? = null,
 )
 
 sealed interface AddContactEffect {
     data object ContactSaved : AddContactEffect
+    data class OpenPayment(val paymentRequest: String, val publicKey: String) : AddContactEffect
 }

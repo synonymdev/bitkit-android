@@ -169,7 +169,7 @@ internal object Env {
                 Network.BITCOIN -> ""
                 else -> "staging."
             }
-            return "/pub/$pubkyDomain/:rw,/pub/${prefix}pubky.app/:r,/pub/${prefix}paykit/v0/:rw"
+            return "/pub/$pubkyDomain/:rw,/pub/${prefix}pubky.app/:r,/pub/paykit/v0/:rw"
         }
 
     val homegateUrl: String

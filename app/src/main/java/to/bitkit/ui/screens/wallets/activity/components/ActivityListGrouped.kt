@@ -45,6 +45,7 @@ fun ActivityListGrouped(
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(top = 20.dp),
+    titleProvider: @Composable (Activity) -> String? = { null },
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -97,7 +98,12 @@ fun ActivityListGrouped(
                                         placementSpec = tween(durationMillis = 300)
                                     )
                             ) {
-                                ActivityRow(item, onActivityItemClick, testTag = "Activity-$index")
+                                ActivityRow(
+                                    item = item,
+                                    onClick = onActivityItemClick,
+                                    testTag = "Activity-$index",
+                                    title = titleProvider(item),
+                                )
                                 VerticalSpacer(16.dp)
                             }
                         }

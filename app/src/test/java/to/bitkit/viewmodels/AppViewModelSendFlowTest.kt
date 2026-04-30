@@ -33,6 +33,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -73,6 +74,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val coreService = mock<CoreService>()
     private val keychain = mock<Keychain>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
 
@@ -130,6 +132,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             transferRepo = transferRepo,
             migrationService = migrationService,
             coreService = coreService,
+            publicPaykitRepo = publicPaykitRepo,
             appUpdateSheet = mock(),
             backupSheet = mock(),
             notificationsSheet = mock(),

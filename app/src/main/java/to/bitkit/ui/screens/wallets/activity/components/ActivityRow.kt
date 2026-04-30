@@ -67,6 +67,7 @@ fun ActivityRow(
     item: Activity,
     onClick: (String) -> Unit,
     testTag: String,
+    title: String? = null,
 ) {
     val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(null)
@@ -119,7 +120,8 @@ fun ActivityRow(
                 isLightning = isLightning,
                 status = status,
                 isTransfer = isTransfer,
-                isCpfpChild = isCpfpChild
+                isCpfpChild = isCpfpChild,
+                title = title,
             )
             val context = LocalContext.current
             val subtitleText = when (item) {
@@ -178,7 +180,13 @@ private fun TransactionStatusText(
     status: PaymentState?,
     isTransfer: Boolean,
     isCpfpChild: Boolean = false,
+    title: String? = null,
 ) {
+    if (title != null) {
+        BodyMSB(text = title)
+        return
+    }
+
     when {
         isTransfer -> BodyMSB(text = stringResource(R.string.wallet__activity_transfer))
         isCpfpChild -> BodyMSB(text = stringResource(R.string.wallet__activity_boost_fee))

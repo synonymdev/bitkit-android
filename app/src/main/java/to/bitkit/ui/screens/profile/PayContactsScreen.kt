@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -19,6 +17,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
@@ -34,22 +33,35 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun PayContactsScreen(
+    viewModel: PayContactsViewModel,
     onContinue: () -> Unit,
     onBackClick: () -> Unit,
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.effects.collect {
+            when (it) {
+                PayContactsEffect.Continue -> onContinue()
+            }
+        }
+    }
+
     Content(
-        onContinue = onContinue,
+        uiState = uiState,
+        onPaymentSharingChange = { viewModel.setPaymentSharingEnabled(it) },
+        onContinue = { viewModel.continueToProfile() },
         onBackClick = onBackClick,
     )
 }
 
 @Composable
 private fun Content(
+    uiState: PayContactsUiState,
+    onPaymentSharingChange: (Boolean) -> Unit,
     onContinue: () -> Unit,
     onBackClick: () -> Unit,
 ) {
-    var isPaymentSharingEnabled by remember { mutableStateOf(true) }
-
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.profile__pay_contacts_title),
@@ -91,8 +103,8 @@ private fun Content(
                 )
                 HorizontalSpacer(16.dp)
                 Switch(
-                    checked = isPaymentSharingEnabled,
-                    onCheckedChange = { isPaymentSharingEnabled = it },
+                    checked = uiState.isPaymentSharingEnabled,
+                    onCheckedChange = onPaymentSharingChange,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Colors.White,
                         checkedTrackColor = Colors.PubkyGreen,
@@ -101,7 +113,7 @@ private fun Content(
                         uncheckedTrackColor = Colors.Gray4,
                         uncheckedBorderColor = Colors.Gray4,
                     ),
-                    modifier = Modifier.testTag("PayContactsToggle"),
+                    modifier = Modifier.testTag("PayContactsToggle")
                 )
             }
 
@@ -109,7 +121,8 @@ private fun Content(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
-                modifier = Modifier.testTag("PayContactsContinue"),
+                enabled = !uiState.isLoading,
+                modifier = Modifier.testTag("PayContactsContinue")
             )
             VerticalSpacer(16.dp)
         }
@@ -121,6 +134,8 @@ private fun Content(
 private fun Preview() {
     AppThemeSurface {
         Content(
+            uiState = PayContactsUiState(),
+            onPaymentSharingChange = {},
             onContinue = {},
             onBackClick = {},
         )

@@ -23,6 +23,8 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitPaymentResult
+import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -31,6 +33,7 @@ import javax.inject.Inject
 class ContactDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val publicPaykitRepo: PublicPaykitRepo,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -50,6 +53,7 @@ class ContactDetailViewModel @Inject constructor(
 
     init {
         loadContact()
+        loadPaymentEndpoint()
         observeContactUpdates()
     }
 
@@ -86,6 +90,46 @@ class ContactDetailViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    private fun loadPaymentEndpoint() {
+        viewModelScope.launch {
+            publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
+                .onSuccess { hasEndpoint ->
+                    _uiState.update { it.copy(hasPublicPaymentEndpoint = hasEndpoint) }
+                }
+                .onFailure {
+                    Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
+                }
+        }
+    }
+
+    fun payContact() {
+        viewModelScope.launch {
+            publicPaykitRepo.beginPayment(publicKey)
+                .onSuccess { result ->
+                    when (result) {
+                        is PublicPaykitPaymentResult.Opened ->
+                            _effects.emit(ContactDetailEffect.OpenPayment(result.paymentRequest, publicKey))
+                        PublicPaykitPaymentResult.NoEndpoint ->
+                            showPayError(R.string.slashtags__error_pay_empty_msg)
+                        PublicPaykitPaymentResult.NotOpened ->
+                            showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                    }
+                }
+                .onFailure {
+                    Logger.warn("Failed to begin public Paykit payment for '$publicKey'", it, context = TAG)
+                    showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                }
+        }
+    }
+
+    private suspend fun showPayError(messageRes: Int) {
+        ToastEventBus.send(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.slashtags__error_pay_title),
+            description = context.getString(messageRes),
+        )
     }
 
     private fun observeContactUpdates() {
@@ -180,10 +224,12 @@ data class ContactDetailUiState(
     val profile: PubkyProfile? = null,
     val tags: ImmutableList<String> = persistentListOf(),
     val isLoading: Boolean = false,
+    val hasPublicPaymentEndpoint: Boolean = false,
     val showAddTagSheet: Boolean = false,
     val showDeleteDialog: Boolean = false,
 )
 
 sealed interface ContactDetailEffect {
     data object DeleteSuccess : ContactDetailEffect
+    data class OpenPayment(val paymentRequest: String, val publicKey: String) : ContactDetailEffect
 }

@@ -61,6 +61,8 @@ import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.contacts.AddContactScreen
 import to.bitkit.ui.screens.contacts.AddContactViewModel
+import to.bitkit.ui.screens.contacts.ContactActivityScreen
+import to.bitkit.ui.screens.contacts.ContactActivityViewModel
 import to.bitkit.ui.screens.contacts.ContactDetailScreen
 import to.bitkit.ui.screens.contacts.ContactDetailViewModel
 import to.bitkit.ui.screens.contacts.ContactImportOverviewScreen
@@ -78,6 +80,7 @@ import to.bitkit.ui.screens.profile.CreateProfileViewModel
 import to.bitkit.ui.screens.profile.EditProfileScreen
 import to.bitkit.ui.screens.profile.EditProfileViewModel
 import to.bitkit.ui.screens.profile.PayContactsScreen
+import to.bitkit.ui.screens.profile.PayContactsViewModel
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.profile.ProfileScreen
 import to.bitkit.ui.screens.profile.ProfileViewModel
@@ -975,7 +978,19 @@ private fun NavGraphBuilder.contacts(
         ContactDetailScreen(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
+            onPayContact = { paymentRequest, publicKey ->
+                appViewModel.openContactPayment(paymentRequest, publicKey)
+            },
+            onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
             onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ContactActivity> {
+        val viewModel: ContactActivityViewModel = hiltViewModel()
+        ContactActivityScreen(
+            viewModel = viewModel,
+            onBackClick = { navController.popBackStack() },
+            onActivityItemClick = { navController.navigateToActivityItem(it) },
         )
     }
     composableWithDefaultTransitions<Routes.AddContact> {
@@ -984,6 +999,9 @@ private fun NavGraphBuilder.contacts(
             viewModel = viewModel,
             onBackClick = { navController.popBackStack() },
             onContactSaved = { navController.popBackStack() },
+            onPayContact = { paymentRequest, publicKey ->
+                appViewModel.openContactPayment(paymentRequest, publicKey)
+            },
         )
     }
     composableWithDefaultTransitions<Routes.EditContact> {
@@ -1082,7 +1100,9 @@ private fun NavGraphBuilder.profile(
         )
     }
     composableWithDefaultTransitions<Routes.PayContacts> {
+        val viewModel: PayContactsViewModel = hiltViewModel()
         PayContactsScreen(
+            viewModel = viewModel,
             onContinue = {
                 navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
             },
@@ -1907,6 +1927,9 @@ sealed interface Routes {
 
     @Serializable
     data class ContactDetail(val publicKey: String) : Routes
+
+    @Serializable
+    data class ContactActivity(val publicKey: String) : Routes
 
     @Serializable
     data object Profile : Routes

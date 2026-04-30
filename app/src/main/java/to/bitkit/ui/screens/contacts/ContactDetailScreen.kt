@@ -51,6 +51,8 @@ import to.bitkit.ui.theme.Colors
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     onBackClick: () -> Unit,
+    onPayContact: (String, String) -> Unit,
+    onActivityClick: (String) -> Unit,
     onEditContact: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -60,6 +62,7 @@ fun ContactDetailScreen(
         viewModel.effects.collect {
             when (it) {
                 ContactDetailEffect.DeleteSuccess -> onBackClick()
+                is ContactDetailEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
             }
         }
     }
@@ -69,6 +72,8 @@ fun ContactDetailScreen(
         onBackClick = onBackClick,
         onClickEdit = { uiState.profile?.publicKey?.let { onEditContact(it) } },
         onClickCopy = { viewModel.copyPublicKey() },
+        onClickPay = { viewModel.payContact() },
+        onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
         onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickRetry = { viewModel.loadContact() },
@@ -87,6 +92,8 @@ private fun Content(
     onBackClick: () -> Unit,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
+    onClickPay: () -> Unit,
+    onClickActivity: () -> Unit,
     onClickShare: () -> Unit,
     onClickDelete: () -> Unit,
     onClickRetry: () -> Unit,
@@ -111,8 +118,11 @@ private fun Content(
             currentProfile != null -> ContactBody(
                 profile = currentProfile,
                 tags = uiState.tags,
+                hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
+                onClickPay = onClickPay,
+                onClickActivity = onClickActivity,
                 onClickShare = onClickShare,
                 onClickDelete = onClickDelete,
                 onAddTag = onAddTag,
@@ -145,8 +155,11 @@ private fun Content(
 private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
+    hasPublicPaymentEndpoint: Boolean,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
+    onClickPay: () -> Unit,
+    onClickActivity: () -> Unit,
     onClickShare: () -> Unit,
     onClickDelete: () -> Unit,
     onAddTag: () -> Unit,
@@ -172,14 +185,27 @@ private fun ContactBody(
 
         VerticalSpacer(24.dp)
 
-        Row(
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             ActionButton(
                 onClick = onClickCopy,
                 iconRes = R.drawable.ic_copy,
                 modifier = Modifier.testTag("ContactCopy")
+            )
+            if (hasPublicPaymentEndpoint) {
+                ActionButton(
+                    onClick = onClickPay,
+                    iconRes = R.drawable.ic_coins,
+                    modifier = Modifier.testTag("ContactPay")
+                )
+            }
+            ActionButton(
+                onClick = onClickActivity,
+                iconRes = R.drawable.ic_list_dashes,
+                modifier = Modifier.testTag("ContactActivity")
             )
             ActionButton(
                 onClick = onClickShare,
@@ -291,6 +317,8 @@ private fun Preview() {
             onBackClick = {},
             onClickEdit = {},
             onClickCopy = {},
+            onClickPay = {},
+            onClickActivity = {},
             onClickShare = {},
             onClickDelete = {},
             onClickRetry = {},

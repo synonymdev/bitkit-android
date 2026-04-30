@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
+import com.synonym.paykit.FfiPaymentEntry
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -46,6 +47,7 @@ import kotlin.math.min
 enum class PubkyAuthState { Idle, Authenticating, Authenticated }
 
 sealed class PubkyContactError(message: String) : AppError(message) {
+    data object AlreadyExists : PubkyContactError("Contact already exists")
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
 }
@@ -276,6 +278,34 @@ class PubkyRepo @Inject constructor(
 
     fun cancelAuthenticationSync() {
         scope.launch { cancelAuthentication() }
+    }
+
+    // endregion
+
+    // region Payment endpoints
+
+    suspend fun getPaymentList(publicKey: String): Result<List<FfiPaymentEntry>> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.getPaymentList(publicKey.ensurePubkyPrefix())
+        }
+    }
+
+    suspend fun setPaymentEndpoint(methodId: String, endpointData: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.setPaymentEndpoint(methodId, endpointData)
+        }
+    }
+
+    suspend fun removePaymentEndpoint(methodId: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.removePaymentEndpoint(methodId)
+        }
+    }
+
+    suspend fun currentPublicKey(): Result<String?> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.currentPublicKey()?.ensurePubkyPrefix()
+        }
     }
 
     // endregion
@@ -918,11 +948,17 @@ class PubkyRepo @Inject constructor(
 
     private fun requireAddableContactPublicKey(publicKey: String): String {
         val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
-            ?: throw PubkyContactError.InvalidFormat
-        if (_publicKey.value == prefixedKey) {
-            throw PubkyContactError.CannotAddSelf
+        contactValidationError(prefixedKey)?.let { throw it }
+        return checkNotNull(prefixedKey) { "Normalized pubky key is required" }
+    }
+
+    private fun contactValidationError(prefixedKey: String?): PubkyContactError? {
+        if (prefixedKey == null) return PubkyContactError.InvalidFormat
+        if (_publicKey.value == prefixedKey) return PubkyContactError.CannotAddSelf
+        if (_contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, prefixedKey) }) {
+            return PubkyContactError.AlreadyExists
         }
-        return prefixedKey
+        return null
     }
 
     private fun String.ensurePubkyPrefix(): String =

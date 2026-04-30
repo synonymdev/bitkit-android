@@ -18,12 +18,16 @@ import com.synonym.bitkitcore.pubkySessionPut
 import com.synonym.bitkitcore.pubkySignIn
 import com.synonym.bitkitcore.pubkySignUp
 import com.synonym.bitkitcore.startPubkyAuth
+import com.synonym.paykit.FfiPaymentEntry
 import com.synonym.paykit.paykitExportSession
 import com.synonym.paykit.paykitForceSignOut
 import com.synonym.paykit.paykitGetCurrentPublicKey
+import com.synonym.paykit.paykitGetPaymentList
 import com.synonym.paykit.paykitImportSession
 import com.synonym.paykit.paykitInitialize
 import com.synonym.paykit.paykitIsAuthenticated
+import com.synonym.paykit.paykitRemovePaymentEndpoint
+import com.synonym.paykit.paykitSetPaymentEndpoint
 import com.synonym.paykit.paykitSignOut
 import kotlinx.coroutines.CompletableDeferred
 import to.bitkit.async.ServiceQueue
@@ -72,6 +76,25 @@ class PubkyService @Inject constructor() {
     suspend fun forceSignOut() = ServiceQueue.CORE.background {
         isSetup.await()
         paykitForceSignOut()
+    }
+
+    // endregion
+
+    // region Payment endpoints
+
+    suspend fun getPaymentList(publicKey: String): List<FfiPaymentEntry> = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitGetPaymentList(publicKey)
+    }
+
+    suspend fun setPaymentEndpoint(methodId: String, endpointData: String) = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitSetPaymentEndpoint(methodId, endpointData)
+    }
+
+    suspend fun removePaymentEndpoint(methodId: String) = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitRemovePaymentEndpoint(methodId)
     }
 
     // endregion
