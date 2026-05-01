@@ -51,9 +51,9 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PriceCard(
-    modifier: Modifier = Modifier,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
+    modifier: Modifier = Modifier,
 ) {
     val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
         priceDTO.resolveWidget(pricePreferences)
@@ -112,9 +112,9 @@ fun PriceCard(
 
 @Composable
 fun PriceCardSmall(
-    modifier: Modifier = Modifier,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
+    modifier: Modifier = Modifier,
 ) {
     val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
         priceDTO.resolveWidget(pricePreferences)

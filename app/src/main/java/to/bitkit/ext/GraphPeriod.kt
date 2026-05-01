@@ -1,6 +1,8 @@
 package to.bitkit.ext
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import to.bitkit.R
 import to.bitkit.data.dto.price.GraphPeriod
 
@@ -11,3 +13,6 @@ fun GraphPeriod.labelRes(): Int = when (this) {
     GraphPeriod.ONE_MONTH -> R.string.appwidget__price__month
     GraphPeriod.ONE_YEAR -> R.string.appwidget__price__year
 }
+
+@Composable
+fun GraphPeriod.label(): String = stringResource(labelRes())

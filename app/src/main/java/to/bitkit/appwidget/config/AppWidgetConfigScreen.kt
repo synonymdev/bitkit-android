@@ -24,6 +24,7 @@ import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.ext.label
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
@@ -32,7 +33,6 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.widgets.price.label
 import to.bitkit.ui.theme.Colors
 
 @Composable
