@@ -19,7 +19,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
+import to.bitkit.models.widget.safeBrowserUri
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
@@ -44,8 +44,8 @@ fun HeadlineCard(
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
             .clickableAlpha {
-                if (link.isEmpty()) return@clickableAlpha
-                val intent = Intent(Intent.ACTION_VIEW, link.toUri())
+                val uri = safeBrowserUri(link) ?: return@clickableAlpha
+                val intent = Intent(Intent.ACTION_VIEW, uri)
                 context.startActivity(intent)
             }
     ) {
@@ -106,8 +106,8 @@ fun HeadlineCardSmall(
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
             .clickableAlpha {
-                if (link.isEmpty()) return@clickableAlpha
-                val intent = Intent(Intent.ACTION_VIEW, link.toUri())
+                val uri = safeBrowserUri(link) ?: return@clickableAlpha
+                val intent = Intent(Intent.ACTION_VIEW, uri)
                 context.startActivity(intent)
             }
     ) {

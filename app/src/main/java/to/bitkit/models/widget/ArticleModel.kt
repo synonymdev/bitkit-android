@@ -24,7 +24,9 @@ data class ArticleModel(
     val publisher: String
 )
 
-fun ArticleModel.safeBrowserUri(): Uri? {
+fun ArticleModel.safeBrowserUri(): Uri? = safeBrowserUri(link)
+
+fun safeBrowserUri(link: String): Uri? {
     if (link.isEmpty()) return null
     val uri = runCatching { link.toUri() }.getOrNull() ?: return null
     val scheme = uri.scheme?.lowercase(Locale.ROOT)

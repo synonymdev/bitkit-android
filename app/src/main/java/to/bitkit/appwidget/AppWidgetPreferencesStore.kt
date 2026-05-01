@@ -82,6 +82,7 @@ class AppWidgetPreferencesStore @Inject constructor(
     }
 
     suspend fun cacheArticlesAndRotate(articles: List<ArticleDTO>) {
+        if (articles.isEmpty()) return
         store.updateData {
             it.copy(
                 cachedArticles = articles,
