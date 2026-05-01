@@ -31,8 +31,8 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun FactsCard(
-    modifier: Modifier = Modifier,
     headline: String,
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
@@ -61,8 +61,8 @@ fun FactsCard(
 
 @Composable
 fun FactsCardSmall(
-    modifier: Modifier = Modifier,
     headline: String,
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
