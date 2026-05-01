@@ -31,7 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
-import to.bitkit.ext.labelRes
+import to.bitkit.ext.label
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
@@ -216,9 +216,6 @@ private fun SelectableRow(
         )
     }
 }
-
-@Composable
-fun GraphPeriod.label(): String = stringResource(labelRes())
 
 @Preview(showSystemUi = true)
 @Composable
