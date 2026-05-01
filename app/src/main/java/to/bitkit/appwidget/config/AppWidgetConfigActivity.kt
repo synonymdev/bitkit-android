@@ -82,7 +82,8 @@ class AppWidgetConfigActivity : ComponentActivity() {
             PriceGlanceReceiver::class.java.name -> AppWidgetType.PRICE
             else -> {
                 Logger.warn(
-                    "Unknown provider class '$providerClass' for appWidgetId='$appWidgetId', defaulting to PRICE",
+                    "Encountered unknown provider class '$providerClass' " +
+                        "for appWidgetId='$appWidgetId', defaulting to PRICE",
                     context = TAG,
                 )
                 AppWidgetType.PRICE

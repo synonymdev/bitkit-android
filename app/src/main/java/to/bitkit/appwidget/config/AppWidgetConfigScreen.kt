@@ -164,9 +164,9 @@ private fun HeadlinesConfigContent(
 ) {
     val prefs = state.headlinePreferences
     val previewArticle = ArticleModel(
-        title = "How Bitcoin changed El Salvador in more ways",
-        timeAgo = "21 minutes ago",
-        publisher = "bitcoinmagazine.com",
+        title = stringResource(R.string.widgets__headline__preview_title),
+        timeAgo = stringResource(R.string.widgets__headline__preview_time),
+        publisher = stringResource(R.string.widgets__headline__preview_publisher),
         link = "",
     )
 
