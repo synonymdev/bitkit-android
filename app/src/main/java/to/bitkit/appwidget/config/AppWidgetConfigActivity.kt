@@ -43,7 +43,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
 
         val type = resolveWidgetType(appWidgetId)
 
-        viewModel.init(appWidgetId, type)
+        if (savedInstanceState == null) viewModel.init(appWidgetId, type)
 
         setContent {
             AppThemeSurface {

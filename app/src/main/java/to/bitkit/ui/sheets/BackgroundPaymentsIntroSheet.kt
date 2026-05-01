@@ -18,7 +18,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun BackgroundPaymentsIntroSheet(
-    onContinue: () -> Unit,
+    onLater: () -> Unit,
+    onEnable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -30,7 +31,10 @@ fun BackgroundPaymentsIntroSheet(
             .testTag("background_payments_intro_sheet")
     ) {
         SheetTopBar(titleText = stringResource(R.string.settings__bg__title))
-        BackgroundPaymentsIntroContent(onContinue = onContinue)
+        BackgroundPaymentsIntroContent(
+            onLater = onLater,
+            onEnable = onEnable,
+        )
     }
 }
 
@@ -41,7 +45,8 @@ private fun Preview() {
         Column {
             BottomSheetPreview {
                 BackgroundPaymentsIntroSheet(
-                    onContinue = {},
+                    onLater = {},
+                    onEnable = {},
                 )
             }
         }

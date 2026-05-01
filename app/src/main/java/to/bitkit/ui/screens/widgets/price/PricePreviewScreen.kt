@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.widgets.price
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +25,7 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -156,10 +156,11 @@ fun PricePreviewContent(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f)
                         .testTag("price_preview_carousel")
                 )
             } else {
-                Box(modifier = Modifier.weight(1f))
+                FillHeight()
             }
         }
 

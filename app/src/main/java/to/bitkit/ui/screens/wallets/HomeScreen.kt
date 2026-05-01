@@ -150,9 +150,9 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
-private const val SMALL_SCREEN_HEIGHT_DP = 700
-private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
-private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
+private const val SMALL_SCREEN_HEIGHT_DP = 800
+private const val SMALL_SCREEN_SLOT_CAPACITY = 3
+private const val LARGE_SCREEN_SLOT_CAPACITY = 4
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
 @Suppress("CyclomaticComplexMethod")
@@ -370,11 +370,10 @@ private fun Content(
 
     val density = LocalDensity.current
     val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp().value.toInt() }
-    val activityCount = if (screenHeightDp < SMALL_SCREEN_HEIGHT_DP) {
-        SMALL_SCREEN_ACTIVITY_COUNT
-    } else {
-        LARGE_SCREEN_ACTIVITY_COUNT
-    }
+    val isSmallScreen = screenHeightDp < SMALL_SCREEN_HEIGHT_DP
+    val slotCapacity = if (isSmallScreen) SMALL_SCREEN_SLOT_CAPACITY else LARGE_SCREEN_SLOT_CAPACITY
+    val nonItemSlots = countNonItemSlots(homeUiState)
+    val activityCount = (slotCapacity - nonItemSlots).coerceAtLeast(0)
 
     val paginatedActivities = remember(latestActivities, activityCount) {
         latestActivities?.take(activityCount)?.toImmutableList()
@@ -417,6 +416,7 @@ private fun Content(
                     homeUiState = homeUiState,
                     latestActivities = paginatedActivities,
                     balances = balances,
+                    isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
                     onNavigateToSettingUp = onNavigateToSettingUp,
                     onNavigateToAllActivity = onNavigateToAllActivity,
@@ -439,6 +439,12 @@ private fun Content(
     }
 }
 
+private fun countNonItemSlots(homeUiState: HomeUiState): Int {
+    val bannerSlot = if (homeUiState.banners.isNotEmpty()) 1 else 0
+    val widgetsHintSlot = if (homeUiState.showWidgetsOnboardingHint) 1 else 0
+    return bannerSlot + widgetsHintSlot
+}
+
 @Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -447,6 +453,7 @@ private fun WalletPage(
     homeUiState: HomeUiState,
     latestActivities: ImmutableList<Activity>?,
     balances: BalanceState,
+    isSmallScreen: Boolean,
     onRefresh: () -> Unit,
     onNavigateToSettingUp: () -> Unit,
     onNavigateToAllActivity: () -> Unit,
@@ -542,6 +549,7 @@ private fun WalletPage(
         if (homeUiState.showEmptyState) {
             EmptyStateView(
                 text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
+                isSmallScreen = isSmallScreen,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
             )

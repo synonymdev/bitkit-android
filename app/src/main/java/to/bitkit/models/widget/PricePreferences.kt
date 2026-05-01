@@ -12,5 +12,4 @@ data class PricePreferences(
         TradingPair.BTC_USD
     ),
     val period: GraphPeriod? = GraphPeriod.ONE_DAY,
-    val showSource: Boolean = false
 )
