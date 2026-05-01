@@ -34,6 +34,7 @@ import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -150,9 +151,10 @@ fun PricePreviewContent(
                     priceDTO = priceDTO,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f)
                 )
             } else {
-                Box(modifier = Modifier.weight(1f))
+                FillHeight()
             }
         }
 
