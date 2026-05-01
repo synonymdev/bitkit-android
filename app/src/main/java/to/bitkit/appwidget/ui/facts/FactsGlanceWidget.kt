@@ -10,7 +10,9 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.flow.first
 import to.bitkit.appwidget.AppWidgetEntryPoint
+import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
@@ -23,10 +25,21 @@ class FactsGlanceWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val store = EntryPointAccessors
+        val accessor = EntryPointAccessors
             .fromApplication(context, AppWidgetEntryPoint::class.java)
-            .appWidgetPreferencesStore()
+        val store = accessor.appWidgetPreferencesStore()
+        val repo = accessor.appWidgetDataRepository()
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
+
+        val current = store.data.first()
+        val isRegistered = current.entries.any { it.appWidgetId == appWidgetId }
+        if (!isRegistered) {
+            store.registerWidget(appWidgetId, AppWidgetType.FACTS)
+            if (current.cachedFacts.isEmpty()) {
+                repo.fetchFacts().onSuccess { store.cacheFacts(it) }
+            }
+            AppWidgetRefreshWorker.enqueue(context)
+        }
 
         provideContent {
             val data by store.data.collectAsState(initial = AppWidgetData())
