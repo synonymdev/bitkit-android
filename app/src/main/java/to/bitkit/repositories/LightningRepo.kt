@@ -1019,12 +1019,20 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
-        if (_lightningState.value.channels.any { it.isUsable }) return@withContext
+        val state = _lightningState.value
+        if (!state.nodeLifecycleState.canRun()) return@withContext
+
+        if (state.channels.isEmpty()) return@withContext // no channel exists, don't wait
+        if (state.channels.any { it.isUsable }) return@withContext
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
         withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
-            _lightningState.first { state -> state.channels.any { it.isUsable } }
+            _lightningState.first {
+                !it.nodeLifecycleState.canRun() ||
+                    it.channels.isEmpty() ||
+                    it.channels.any { channel -> channel.isUsable }
+            }
         } ?: Logger.warn("Timed out waiting for usable channels", context = TAG)
     }
 
