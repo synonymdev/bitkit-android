@@ -12,6 +12,7 @@ enum class AppWidgetType {
     PRICE,
     HEADLINES,
     BLOCKS,
+    FACTS,
 }
 
 @Stable
@@ -58,4 +59,6 @@ data class AppWidgetData(
     val cachedArticles: List<ArticleDTO> = emptyList(),
     val articleRotationTick: Int = 0,
     val cachedBlock: BlockDTO? = null,
+    val cachedFacts: List<String> = emptyList(),
+    val factsRotationTick: Int = 0,
 )

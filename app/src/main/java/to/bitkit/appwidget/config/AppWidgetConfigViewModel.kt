@@ -134,6 +134,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                 AppWidgetType.PRICE -> it.copy(pricePreferences = PricePreferences())
                 AppWidgetType.HEADLINES -> it.copy(headlinePreferences = HeadlinePreferences())
                 AppWidgetType.BLOCKS -> it.copy(blocksPreferences = BlocksPreferences())
+                AppWidgetType.FACTS -> it
             }
         }
     }
@@ -147,6 +148,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                 AppWidgetType.PRICE -> savePrice(state)
                 AppWidgetType.HEADLINES -> saveHeadlines(state)
                 AppWidgetType.BLOCKS -> saveBlocks(state)
+                AppWidgetType.FACTS -> Unit
             }
 
             onComplete()
