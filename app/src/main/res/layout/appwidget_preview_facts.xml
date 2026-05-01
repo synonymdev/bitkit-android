@@ -15,7 +15,7 @@
         android:layout_weight="1"
         android:ellipsize="end"
         android:fontFamily="sans-serif"
-        android:maxLines="3"
+        android:maxLines="2"
         android:text="Bitcoin doesn’t need your personal information"
         android:textColor="#FFFFFFFF"
         android:textSize="22sp"

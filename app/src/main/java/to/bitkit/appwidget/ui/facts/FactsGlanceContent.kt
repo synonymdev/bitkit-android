@@ -10,13 +10,11 @@ import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.layout.Alignment
-import androidx.glance.layout.HeightModifier
-import androidx.glance.layout.Row
-import androidx.glance.layout.WidthModifier
-import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.Box
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.text.Text
-import androidx.glance.unit.Dimension
 import to.bitkit.R
 import to.bitkit.appwidget.config.AppWidgetConfigActivity
 import to.bitkit.appwidget.model.AppWidgetEntry
@@ -25,6 +23,9 @@ import to.bitkit.appwidget.ui.components.CaptionB
 import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
+
+private val BADGE_SIZE = 32.dp
+private val BADGE_RESERVED_END = 40.dp
 
 @Suppress("RestrictedApi")
 @Composable
@@ -45,47 +46,24 @@ fun FactsGlanceContent(
             return@GlanceWidgetScaffold
         }
 
-        if (LocalSize.current.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH) {
-            WideContent(fact = fact)
-        } else {
-            CompactContent(fact = fact)
+        val isWide = LocalSize.current.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH
+
+        Box(
+            contentAlignment = if (isWide) Alignment.TopEnd else Alignment.BottomEnd,
+            modifier = GlanceModifier.fillMaxSize()
+        ) {
+            Text(
+                text = fact,
+                style = if (isWide) GlanceTextStyles.title22 else GlanceTextStyles.bodyMSB,
+                maxLines = if (isWide) 3 else 5,
+                modifier = if (isWide) {
+                    GlanceModifier.fillMaxSize().padding(end = BADGE_RESERVED_END)
+                } else {
+                    GlanceModifier.fillMaxSize()
+                }
+            )
+            BitcoinBadge()
         }
-    }
-}
-
-@Suppress("RestrictedApi")
-@Composable
-private fun WideContent(fact: String) {
-    Row(
-        verticalAlignment = Alignment.Top,
-        modifier = GlanceModifier.fillMaxWidth()
-    ) {
-        Text(
-            text = fact,
-            style = GlanceTextStyles.title22,
-            maxLines = 3,
-            modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
-        )
-        BitcoinBadge()
-    }
-}
-
-@Suppress("RestrictedApi")
-@Composable
-private fun CompactContent(fact: String) {
-    Text(
-        text = fact,
-        style = GlanceTextStyles.bodyMSB,
-        maxLines = 5,
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .then(HeightModifier(Dimension.Expand))
-    )
-    Row(
-        horizontalAlignment = Alignment.End,
-        modifier = GlanceModifier.fillMaxWidth()
-    ) {
-        BitcoinBadge()
     }
 }
 
@@ -94,6 +72,6 @@ private fun BitcoinBadge() {
     Image(
         provider = ImageProvider(R.drawable.ic_bitcoin_badge),
         contentDescription = null,
-        modifier = GlanceModifier.size(32.dp)
+        modifier = GlanceModifier.size(BADGE_SIZE)
     )
 }
