@@ -3,7 +3,6 @@ package to.bitkit.appwidget.ui.facts
 import android.content.Context
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -45,8 +44,11 @@ class FactsGlanceWidget : GlanceAppWidget() {
             val data by store.data.collectAsState(initial = AppWidgetData())
             val entry = data.entries.find { it.appWidgetId == appWidgetId }
                 ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.FACTS)
-            val fact = remember(data.cachedFacts, data.factsRotationTick) {
-                data.cachedFacts.randomOrNull()
+            val facts = data.cachedFacts
+            val fact = if (facts.isEmpty()) {
+                null
+            } else {
+                facts[data.factsRotationTick.mod(facts.size)]
             }
 
             FactsGlanceContent(
