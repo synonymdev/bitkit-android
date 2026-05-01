@@ -61,6 +61,25 @@ fun Display(
 }
 
 @Composable
+fun Display34(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+) {
+    Text(
+        text = text,
+        style = AppTextStyles.Display34.merge(
+            color = color,
+        ),
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
+    )
+}
+
+@Composable
 fun Headline(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
