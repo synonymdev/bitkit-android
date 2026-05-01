@@ -46,7 +46,9 @@ fun FactsGlanceContent(
             return@GlanceWidgetScaffold
         }
 
-        val isWide = LocalSize.current.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH
+        val size = LocalSize.current
+        val isWide = size.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH
+        val isTall = size.height >= GlanceLayoutDimens.TALL_LAYOUT_MIN_HEIGHT
 
         Box(
             contentAlignment = if (isWide) Alignment.TopEnd else Alignment.BottomEnd,
@@ -55,7 +57,11 @@ fun FactsGlanceContent(
             Text(
                 text = fact,
                 style = if (isWide) GlanceTextStyles.title22 else GlanceTextStyles.bodyMSB,
-                maxLines = if (isWide) 3 else 5,
+                maxLines = when {
+                    isWide && !isTall -> 2
+                    isWide -> 5
+                    else -> 5
+                },
                 modifier = if (isWide) {
                     GlanceModifier.fillMaxSize().padding(end = BADGE_RESERVED_END)
                 } else {

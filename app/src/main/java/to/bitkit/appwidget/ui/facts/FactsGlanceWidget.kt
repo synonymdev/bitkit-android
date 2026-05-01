@@ -15,13 +15,10 @@ import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
-import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 
 class FactsGlanceWidget : GlanceAppWidget() {
 
-    override val sizeMode = SizeMode.Responsive(
-        setOf(GlanceLayoutDimens.COMPACT_WIDGET_SIZE, GlanceLayoutDimens.WIDE_WIDGET_SIZE),
-    )
+    override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val accessor = EntryPointAccessors
