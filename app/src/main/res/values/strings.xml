@@ -737,6 +737,7 @@
     <string name="settings__bg__disabled">Background payments are disabled, because you have denied notifications.</string>
     <string name="settings__bg__enabled">Background payments are enabled. You can receive funds even when the app is closed (if your device is connected to the internet).</string>
     <string name="settings__bg__include_amount">Include amount in notifications</string>
+    <string name="settings__bg__intro_button">Enable</string>
     <string name="settings__bg__intro_desc">Turn on notifications to get paid, even when your Bitkit app is closed.</string>
     <string name="settings__bg__intro_title">GET PAID\n&lt;accent&gt;PASSIVELY&lt;/accent&gt;</string>
     <string name="settings__bg__notifications_header">Notifications</string>

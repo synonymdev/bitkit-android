@@ -44,7 +44,7 @@ fun AppWidgetConfigScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     when (state.type) {
-        AppWidgetType.PRICE -> PriceConfigContent(
+        AppWidgetType.PRICE -> Content(
             state = state,
             onSelectPair = { viewModel.selectPricePair(it) },
             onSelectPeriod = { viewModel.selectPricePeriod(it) },
@@ -56,7 +56,7 @@ fun AppWidgetConfigScreen(
 }
 
 @Composable
-private fun PriceConfigContent(
+private fun Content(
     state: AppWidgetConfigUiState,
     onSelectPair: (TradingPair) -> Unit,
     onSelectPeriod: (GraphPeriod) -> Unit,

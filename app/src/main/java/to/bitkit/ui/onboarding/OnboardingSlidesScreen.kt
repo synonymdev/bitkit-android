@@ -10,13 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,6 +39,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -53,18 +54,18 @@ private const val PAGE_COUNT = LAST_PAGE_INDEX + 1
 
 @Composable
 fun OnboardingSlidesScreen(
-    currentTab: Int = 0,
     isGeoBlocked: Boolean,
     onAdvancedSetupClick: () -> Unit,
     onCreateClick: () -> Unit,
     onRestoreClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    currentTab: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = currentTab, pageCount = { PAGE_COUNT })
 
     Box(
-        modifier = Modifier
-            .screen()
+        modifier = modifier.screen()
     ) {
         HorizontalPager(
             state = pagerState,
@@ -123,8 +124,6 @@ fun OnboardingSlidesScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp)
-                .height(16.dp)
                 .offset { IntOffset(0, yOffset.roundToPx()) }
                 .alpha(alpha)
         ) {
@@ -132,7 +131,7 @@ fun OnboardingSlidesScreen(
                 val size by animateDpAsState(
                     targetValue = if (index == pagerState.currentPage) 10.dp else 7.dp,
                     animationSpec = tween(durationMillis = 300),
-                    label = "dotSize"
+                    label = "dotSize",
                 )
                 Box(
                     modifier = Modifier
@@ -186,34 +185,37 @@ fun OnboardingTab(
     modifier: Modifier = Modifier,
     disclaimerText: String? = null,
 ) {
-    Box(
-        contentAlignment = Alignment.TopCenter,
+    Column(
         modifier = modifier.fillMaxSize()
     ) {
+        FillHeight()
+
         Image(
             painter = painterResource(id = imageResId),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .padding(top = 125.dp)
-                .fillMaxWidth()
+                .align(Alignment.CenterHorizontally)
+                .sizeIn(maxWidth = 311.dp, maxHeight = 311.dp)
         )
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.BottomCenter),
+                .padding(top = 48.dp)
+                .defaultMinSize(minHeight = 255.dp)
         ) {
             Display(text = title.withAccent(accentColor = titleAccentColor))
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(14.dp)
             BodyM(
                 text = text,
                 color = Colors.White64,
-                minLines = 3
+                minLines = 3,
             )
             disclaimerText?.let {
-                Footnote(text = it)
+                VerticalSpacer(4.dp)
+                Footnote(text = it, color = Colors.White32)
             }
-            VerticalSpacer(70.dp)
         }
     }
 }

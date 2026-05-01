@@ -42,7 +42,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
         val type = typeName?.let { runCatching { AppWidgetType.valueOf(it) }.getOrNull() }
             ?: AppWidgetType.PRICE
 
-        viewModel.init(appWidgetId, type)
+        if (savedInstanceState == null) viewModel.init(appWidgetId, type)
 
         setContent {
             AppThemeSurface {
