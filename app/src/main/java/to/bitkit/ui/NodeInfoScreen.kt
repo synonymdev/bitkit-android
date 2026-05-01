@@ -50,11 +50,11 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatToString
 import to.bitkit.ext.uri
-import to.bitkit.models.msatFloorOf
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodePeer
 import to.bitkit.models.alias
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.msatFloorOf
 import to.bitkit.repositories.LightningState
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB

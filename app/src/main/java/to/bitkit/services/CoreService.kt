@@ -72,11 +72,11 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
-import to.bitkit.models.msatFloorOf
 import to.bitkit.ext.channelId
 import to.bitkit.ext.create
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.models.addressTypeFromAddress
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -1334,8 +1334,6 @@ class ActivityService(
 
             // Check if any input spends a closed channel's funding UTXO (commitment tx)
             findChannelByFundingUtxo(details, closedChannelsList)
-                // Check if any input's parent transaction is a channel-related activity
-                // (e.g., sweep tx spending from commitment tx)
                 ?: findChannelByParentActivity(details)
         }.onFailure { e ->
             Logger.warn("Failed to check if transaction $txid spends closed channel funding UTXO", e, context = TAG)
