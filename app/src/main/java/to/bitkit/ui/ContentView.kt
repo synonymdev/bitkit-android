@@ -451,7 +451,11 @@ fun ContentView(
 
                                 TimedSheetType.NOTIFICATIONS -> {
                                     BackgroundPaymentsIntroSheet(
-                                        onContinue = {
+                                        onLater = {
+                                            appViewModel.dismissTimedSheet()
+                                            settingsViewModel.setBgPaymentsIntroSeen(true)
+                                        },
+                                        onEnable = {
                                             appViewModel.dismissTimedSheet()
                                             navController.navigateTo(Routes.BackgroundPaymentsSettings)
                                             settingsViewModel.setBgPaymentsIntroSeen(true)
@@ -1145,9 +1149,10 @@ private fun NavGraphBuilder.generalSettingsSubScreens(navController: NavHostCont
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
-            onContinue = {
+            onLater = { navController.popBackStack() },
+            onEnable = {
                 navController.navigateTo(Routes.BackgroundPaymentsSettings)
-            }
+            },
         )
     }
 }
