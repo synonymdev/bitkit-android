@@ -460,6 +460,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleChannelReady(event: Event.ChannelReady) {
         transferRepo.syncTransferStates()
         walletRepo.syncBalances()
+        refreshPublicPaykitEndpointsIfEnabled()
         notifyChannelReady(event)
     }
 
@@ -476,6 +477,7 @@ class AppViewModel @Inject constructor(
         }
         transferRepo.syncTransferStates()
         walletRepo.syncBalances()
+        refreshPublicPaykitEndpointsIfEnabled()
     }
 
     private suspend fun createTransferForCounterpartyClose(channelId: String, isForceClose: Boolean) {

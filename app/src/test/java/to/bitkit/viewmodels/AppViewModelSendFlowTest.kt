@@ -12,6 +12,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -83,6 +84,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val formatMoneyValue = mock<FormatMoneyValue>()
 
     private val balanceState = MutableStateFlow(BalanceState())
+    private val settingsData = MutableStateFlow(SettingsData())
+    private val walletState = MutableStateFlow(WalletState())
     private val nodeEvents = MutableSharedFlow<Event>()
 
     private val timedSheetManager = mock<TimedSheetManager>()
@@ -100,9 +103,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
-        whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState()))
+        whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(walletRepo.walletExists()).thenReturn(true)
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever(settingsStore.data).thenReturn(settingsData)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(timedSheetManager.currentSheet).thenReturn(MutableStateFlow(null))
@@ -311,6 +314,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `channel ready refreshes public Paykit endpoints when sharing enabled`() = test {
+        enablePublicPaykitSharing()
+        advanceUntilIdle()
+        clearInvocations(publicPaykitRepo)
+
+        nodeEvents.emit(
+            Event.ChannelReady(
+                channelId = "testChannelId",
+                userChannelId = "testUserChannelId",
+                counterpartyNodeId = null,
+                fundingTxo = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints()
+    }
+
+    @Test
+    fun `channel closed refreshes public Paykit endpoints when sharing enabled`() = test {
+        enablePublicPaykitSharing()
+        advanceUntilIdle()
+        clearInvocations(publicPaykitRepo)
+
+        nodeEvents.emit(
+            Event.ChannelClosed(
+                channelId = "testChannelId",
+                userChannelId = "testUserChannelId",
+                counterpartyNodeId = null,
+                reason = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints()
+    }
+
+    @Test
     fun `amount change clears confirmedWarnings`() = test {
         setUnifiedState(amount = 1000u)
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
@@ -361,6 +402,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lastLightningFee is zero initially`() = test {
         assertEquals(0L, sut.sendUiState.value.lastLightningFee)
+    }
+
+    private suspend fun enablePublicPaykitSharing() {
+        settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)
+        walletState.value = WalletState(onchainAddress = "bc1qtest")
+        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints() }.thenReturn(Result.success(Unit))
     }
 
     @Suppress("UNCHECKED_CAST")
