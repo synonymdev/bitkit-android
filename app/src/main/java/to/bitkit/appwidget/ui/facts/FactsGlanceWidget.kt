@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.first
 import to.bitkit.appwidget.AppWidgetEntryPoint
 import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetData
-import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 
 class FactsGlanceWidget : GlanceAppWidget() {
@@ -39,8 +38,6 @@ class FactsGlanceWidget : GlanceAppWidget() {
 
         provideContent {
             val data by store.data.collectAsState(initial = AppWidgetData())
-            val entry = data.entries.find { it.appWidgetId == appWidgetId }
-                ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.FACTS)
             val facts = data.cachedFacts
             val fact = if (facts.isEmpty()) {
                 null
@@ -48,10 +45,7 @@ class FactsGlanceWidget : GlanceAppWidget() {
                 facts[data.factsRotationTick.mod(facts.size)]
             }
 
-            FactsGlanceContent(
-                entry = entry,
-                fact = fact,
-            )
+            FactsGlanceContent(fact = fact)
         }
     }
 }
