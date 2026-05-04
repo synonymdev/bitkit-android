@@ -114,7 +114,7 @@ private fun Content(
         )
 
         when {
-            uiState.isLoading && currentProfile == null -> LoadingState()
+            uiState.isLoading -> LoadingState()
             currentProfile != null -> ContactBody(
                 profile = currentProfile,
                 tags = uiState.tags,
