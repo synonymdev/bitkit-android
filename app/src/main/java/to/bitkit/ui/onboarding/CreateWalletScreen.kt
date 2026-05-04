@@ -2,13 +2,12 @@ package to.bitkit.ui.onboarding
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,57 +38,59 @@ fun CreateWalletScreen(
     onRestoreClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        contentAlignment = Alignment.TopCenter,
+    Column(
         modifier = modifier
             .screen(insets = null)
+            .fillMaxSize()
     ) {
+        FillHeight()
+
         Image(
             painter = painterResource(id = R.drawable.wallet),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .padding(top = 125.dp)
-                .fillMaxWidth()
+                .align(Alignment.CenterHorizontally)
+                .sizeIn(maxWidth = 311.dp, maxHeight = 311.dp)
         )
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.BottomCenter)
+                .padding(top = 48.dp)
         ) {
-            FillHeight()
             Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
-            VerticalSpacer(8.dp)
+            VerticalSpacer(14.dp)
             BodyM(
                 text = stringResource(R.string.onboarding__slide4_text).withAccent(
                     defaultColor = Colors.White64,
                     accentStyle = SpanStyle(fontWeight = FontWeight.Bold, color = Colors.White),
                 ),
             )
-
-            VerticalSpacer(32.dp)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                PrimaryButton(
-                    text = stringResource(R.string.onboarding__new_wallet),
-                    onClick = onCreateClick,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("NewWallet")
-                )
-                SecondaryButton(
-                    text = stringResource(R.string.onboarding__restore),
-                    onClick = onRestoreClick,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("RestoreWallet")
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
         }
+
+        VerticalSpacer(32.dp)
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.onboarding__new_wallet),
+                onClick = onCreateClick,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("NewWallet")
+            )
+            SecondaryButton(
+                text = stringResource(R.string.onboarding__restore),
+                onClick = onRestoreClick,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("RestoreWallet")
+            )
+        }
+        VerticalSpacer(16.dp)
     }
 }
 

@@ -16,6 +16,7 @@ import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.models.widget.toArticleModel
+import kotlin.random.Random
 
 class HeadlinesGlanceWidget : GlanceAppWidget() {
 
@@ -34,7 +35,13 @@ class HeadlinesGlanceWidget : GlanceAppWidget() {
             val entry = data.entries.find { it.appWidgetId == appWidgetId }
                 ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.HEADLINES)
             val article = remember(data.cachedArticles, data.articleRotationTick) {
-                data.cachedArticles.randomOrNull()?.toArticleModel()
+                if (data.cachedArticles.isEmpty()) {
+                    null
+                } else {
+                    data.cachedArticles
+                        .random(Random(data.articleRotationTick.toLong()))
+                        .toArticleModel()
+                }
             }
 
             HeadlinesGlanceContent(

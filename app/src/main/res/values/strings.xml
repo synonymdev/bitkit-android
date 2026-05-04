@@ -737,6 +737,7 @@
     <string name="settings__bg__disabled">Background payments are disabled, because you have denied notifications.</string>
     <string name="settings__bg__enabled">Background payments are enabled. You can receive funds even when the app is closed (if your device is connected to the internet).</string>
     <string name="settings__bg__include_amount">Include amount in notifications</string>
+    <string name="settings__bg__intro_button">Enable</string>
     <string name="settings__bg__intro_desc">Turn on notifications to get paid, even when your Bitkit app is closed.</string>
     <string name="settings__bg__intro_title">GET PAID\n&lt;accent&gt;PASSIVELY&lt;/accent&gt;</string>
     <string name="settings__bg__notifications_header">Notifications</string>
@@ -1151,6 +1152,9 @@
     <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__facts__description">Discover fun facts about Bitcoin, every time you open your wallet.</string>
     <string name="widgets__facts__name">Bitcoin Facts</string>
+    <string name="widgets__headline__preview_publisher">bitcoinmagazine.com</string>
+    <string name="widgets__headline__preview_time">21 minutes ago</string>
+    <string name="widgets__headline__preview_title">How Bitcoin changed El Salvador in more ways</string>
     <string name="widgets__news__description">Read the latest &amp; greatest Bitcoin headlines from various news sites.</string>
     <string name="widgets__news__name">Bitcoin Headlines</string>
     <string name="widgets__onboarding__description">Enjoy decentralized feeds from your favorite web services, by adding fun and useful widgets to your Bitkit wallet.</string>

@@ -29,7 +29,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.widgets.price.label
+import to.bitkit.ext.label
 import to.bitkit.ui.theme.Colors
 
 @Composable

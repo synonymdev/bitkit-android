@@ -18,12 +18,14 @@ import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
 import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
 import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.utils.Logger
 
 @AndroidEntryPoint
 class AppWidgetConfigActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_WIDGET_TYPE = "extra_widget_type"
+        private const val TAG = "AppWidgetConfigActivity"
     }
 
     private val viewModel: AppWidgetConfigViewModel by viewModels()
@@ -45,7 +47,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
 
         val type = resolveWidgetType(appWidgetId)
 
-        viewModel.init(appWidgetId, type)
+        if (savedInstanceState == null) viewModel.init(appWidgetId, type)
 
         setContent {
             AppThemeSurface {
@@ -82,7 +84,14 @@ class AppWidgetConfigActivity : ComponentActivity() {
             HeadlinesGlanceReceiver::class.java.name -> AppWidgetType.HEADLINES
             PriceGlanceReceiver::class.java.name -> AppWidgetType.PRICE
             BlocksGlanceReceiver::class.java.name -> AppWidgetType.BLOCKS
-            else -> AppWidgetType.PRICE
+            else -> {
+                Logger.warn(
+                    "Encountered unknown provider class '$providerClass' " +
+                        "for appWidgetId='$appWidgetId', defaulting to PRICE",
+                    context = TAG,
+                )
+                AppWidgetType.PRICE
+            }
         }
     }
 }

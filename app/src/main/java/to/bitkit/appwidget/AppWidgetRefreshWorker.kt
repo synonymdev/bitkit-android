@@ -93,11 +93,10 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
 
                 AppWidgetType.HEADLINES -> {
                     dataRepository.fetchArticles()
-                        .onSuccess { preferencesStore.cacheArticles(it) }
+                        .onSuccess { preferencesStore.cacheArticlesAndRotate(it) }
                         .onFailure {
                             Logger.warn("Failed to refresh headlines", it, context = TAG)
                         }
-                    preferencesStore.bumpArticleRotationTick()
                     HeadlinesGlanceWidget().updateAll(appContext)
                 }
 

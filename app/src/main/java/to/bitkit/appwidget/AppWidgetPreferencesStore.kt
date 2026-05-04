@@ -83,12 +83,14 @@ class AppWidgetPreferencesStore @Inject constructor(
         store.updateData { it.copy(cachedPrices = it.cachedPrices + (period to price)) }
     }
 
-    suspend fun cacheArticles(articles: List<ArticleDTO>) {
-        store.updateData { it.copy(cachedArticles = articles) }
-    }
-
-    suspend fun bumpArticleRotationTick() {
-        store.updateData { it.copy(articleRotationTick = it.articleRotationTick + 1) }
+    suspend fun cacheArticlesAndRotate(articles: List<ArticleDTO>) {
+        if (articles.isEmpty()) return
+        store.updateData {
+            it.copy(
+                cachedArticles = articles,
+                articleRotationTick = it.articleRotationTick + 1,
+            )
+        }
     }
 
     suspend fun cacheBlock(block: BlockDTO) {
