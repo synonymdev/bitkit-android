@@ -335,7 +335,7 @@ private fun ContentRunning(
         }
 
         if (!isLnurlPay) {
-            VerticalSpacer(16.dp)
+            FillHeight(min = 16.dp)
 
             PrimaryButton(
                 text = stringResource(
@@ -361,15 +361,17 @@ private fun ContentRunning(
                     )
                 },
                 fullWidth = false,
-                color = Colors.White06,
+                color = Colors.Gray65,
                 enableGradient = false,
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .testTag("SendConfirmToggleDetails")
             )
-        }
 
-        FillHeight(min = 16.dp)
+            VerticalSpacer(62.dp)
+        } else {
+            FillHeight(min = 16.dp)
+        }
 
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
