@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -25,10 +24,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import ir.ehsannarmani.compose_charts.LineChart
 import ir.ehsannarmani.compose_charts.models.DividerProperties
 import ir.ehsannarmani.compose_charts.models.DrawStyle
@@ -44,20 +41,22 @@ import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.Display34
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PriceCard(
-    modifier: Modifier = Modifier,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
+    modifier: Modifier = Modifier,
 ) {
     val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
-        priceDTO.widgets.firstOrNull { it.pair in pricePreferences.enabledPairs }
-            ?: priceDTO.widgets.firstOrNull()
+        priceDTO.resolveWidget(pricePreferences)
     } ?: return
 
     Box(
@@ -85,22 +84,16 @@ fun PriceCard(
                         .testTag("PriceWidgetRow-${widgetData.pair.displayName}")
                 )
                 HorizontalSpacer(16.dp)
-                Text(
+                Title(
                     text = widgetData.change.formatted,
                     color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                    fontSize = 22.sp,
-                    lineHeight = 26.sp,
-                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
                 )
             }
 
-            Text(
+            Display34(
                 text = "${widgetData.pair.symbol} ${widgetData.price}",
                 color = Colors.White,
-                fontSize = 34.sp,
-                lineHeight = 34.sp,
-                fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("price_card_pair_price_${widgetData.pair}")
@@ -119,13 +112,12 @@ fun PriceCard(
 
 @Composable
 fun PriceCardSmall(
-    modifier: Modifier = Modifier,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
+    modifier: Modifier = Modifier,
 ) {
     val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
-        priceDTO.widgets.firstOrNull { it.pair in pricePreferences.enabledPairs }
-            ?: priceDTO.widgets.firstOrNull()
+        priceDTO.resolveWidget(pricePreferences)
     } ?: return
 
     Box(
@@ -157,22 +149,16 @@ fun PriceCardSmall(
                         color = Colors.White64,
                     )
                 }
-                Text(
+                Title(
                     text = "${widgetData.pair.symbol} ${widgetData.price}",
                     color = Colors.White,
-                    fontSize = 22.sp,
-                    lineHeight = 26.sp,
-                    fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("price_card_small_pair_price_${widgetData.pair}")
                 )
-                Text(
+                BodySSB(
                     text = widgetData.change.formatted,
                     color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("price_card_small_pair_change_${widgetData.pair}")
                 )
             }
@@ -187,6 +173,9 @@ fun PriceCardSmall(
         }
     }
 }
+
+private fun PriceDTO.resolveWidget(prefs: PricePreferences): PriceWidgetData? =
+    widgets.firstOrNull { it.pair in prefs.enabledPairs } ?: widgets.firstOrNull()
 
 @Composable
 fun ChartComponent(
@@ -264,9 +253,7 @@ private fun FullBlockCardPreview() {
                 .padding(16.dp)
         ) {
             PriceCard(
-                pricePreferences = PricePreferences(
-                    showSource = true,
-                ),
+                pricePreferences = PricePreferences(),
                 priceDTO = PriceDTO(
                     widgets = listOf(
                         PriceWidgetData(

@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
@@ -29,6 +28,7 @@ import to.bitkit.appwidget.ui.components.VerticalSpacer
 import to.bitkit.appwidget.ui.theme.GlanceColors
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.models.widget.ArticleModel
+import to.bitkit.models.widget.safeBrowserUri
 import to.bitkit.ui.theme.Colors
 
 @Suppress("RestrictedApi")
@@ -38,8 +38,9 @@ fun HeadlinesGlanceContent(
     article: ArticleModel?,
 ) {
     val context = LocalContext.current
-    val tapIntent = if (article != null && article.link.isNotEmpty()) {
-        Intent(Intent.ACTION_VIEW, article.link.toUri()).apply {
+    val articleUri = article?.safeBrowserUri()
+    val tapIntent = if (articleUri != null) {
+        Intent(Intent.ACTION_VIEW, articleUri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     } else {

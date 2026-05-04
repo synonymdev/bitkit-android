@@ -177,7 +177,7 @@ class AppWidgetConfigViewModel @Inject constructor(
             entry.copy(headlinePreferences = headlinePreferences.toHome())
         }
         dataRepository.fetchArticles()
-            .onSuccess { preferencesStore.cacheArticles(it) }
+            .onSuccess { preferencesStore.cacheArticlesAndRotate(it) }
             .onFailure { Logger.warn("Failed to fetch initial articles", it, context = TAG) }
     }
 

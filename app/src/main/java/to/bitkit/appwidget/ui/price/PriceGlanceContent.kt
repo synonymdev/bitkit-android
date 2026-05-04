@@ -3,7 +3,6 @@ package to.bitkit.appwidget.ui.price
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.graphics.Bitmap
-import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
@@ -34,15 +33,14 @@ import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
 import to.bitkit.appwidget.ui.components.VerticalSpacer
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
-import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.ui.theme.Colors
+import java.util.Locale
 
 @Suppress("RestrictedApi")
 @Composable
 fun PriceGlanceContent(
     widget: PriceWidgetData?,
-    priceAvailable: Boolean,
     entry: AppWidgetEntry,
     chartBitmap: Bitmap? = null,
 ) {
@@ -54,7 +52,7 @@ fun PriceGlanceContent(
     }
 
     GlanceWidgetScaffold(onClick = configIntent) {
-        if (!priceAvailable || widget == null) {
+        if (widget == null) {
             CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold
         }
@@ -71,15 +69,14 @@ fun PriceGlanceContent(
 @Composable
 private fun WideContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
     val changeColor = if (widget.change.isPositive) Colors.Green else Colors.Red
-    val periodLabel = LocalContext.current.getString(widget.period.labelRes())
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = GlanceModifier.fillMaxWidth()
     ) {
         Text(
-            text = "${widget.pair.displayName}  $periodLabel".uppercase(),
-            style = GlanceTextStyles.captionUp,
+            text = "${widget.pair.displayName}  ${widget.period.value}".uppercase(Locale.ENGLISH),
+            style = GlanceTextStyles.captionB,
             modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
         )
         HorizontalSpacer(16.dp)
@@ -104,17 +101,16 @@ private fun WideContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
 @Composable
 private fun CompactContent(widget: PriceWidgetData, chartBitmap: Bitmap?) {
     val changeColor = if (widget.change.isPositive) Colors.Green else Colors.Red
-    val periodLabel = LocalContext.current.getString(widget.period.labelRes())
 
     Row(modifier = GlanceModifier.fillMaxWidth()) {
         Text(
-            text = widget.pair.displayName.uppercase(),
-            style = GlanceTextStyles.captionUp,
+            text = widget.pair.displayName.uppercase(Locale.ENGLISH),
+            style = GlanceTextStyles.captionB,
             modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
         )
         Text(
-            text = periodLabel.uppercase(),
-            style = GlanceTextStyles.captionUp,
+            text = widget.period.value.uppercase(Locale.ENGLISH),
+            style = GlanceTextStyles.captionB,
         )
     }
     VerticalSpacer(8.dp)
@@ -153,12 +149,4 @@ private fun ChartBox(chartBitmap: Bitmap?) {
                 .cornerRadius(8.dp)
         )
     }
-}
-
-@StringRes
-private fun GraphPeriod.labelRes(): Int = when (this) {
-    GraphPeriod.ONE_DAY -> R.string.appwidget__price__day
-    GraphPeriod.ONE_WEEK -> R.string.appwidget__price__week
-    GraphPeriod.ONE_MONTH -> R.string.appwidget__price__month
-    GraphPeriod.ONE_YEAR -> R.string.appwidget__price__year
 }

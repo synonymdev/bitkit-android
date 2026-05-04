@@ -21,11 +21,11 @@ class PriceGlanceReceiver : GlanceAppWidgetReceiver() {
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
         val pendingResult = goAsync()
-        val store = EntryPointAccessors
-            .fromApplication(context, AppWidgetEntryPoint::class.java)
-            .appWidgetPreferencesStore()
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val store = EntryPointAccessors
+                    .fromApplication(context, AppWidgetEntryPoint::class.java)
+                    .appWidgetPreferencesStore()
                 appWidgetIds.forEach { store.unregisterWidget(it) }
             } finally {
                 pendingResult.finish()

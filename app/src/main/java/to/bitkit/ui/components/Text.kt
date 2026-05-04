@@ -46,13 +46,35 @@ fun Display(
 fun Display(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
+    fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
         text = text.toUpperCase(),
         style = AppTextStyles.Display.merge(
+            fontSize = fontSize,
+            lineHeight = fontSize,
             color = color,
         ),
+        modifier = modifier
+    )
+}
+
+@Composable
+fun Display34(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+) {
+    Text(
+        text = text,
+        style = AppTextStyles.Display34.merge(
+            color = color,
+        ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier
     )
 }

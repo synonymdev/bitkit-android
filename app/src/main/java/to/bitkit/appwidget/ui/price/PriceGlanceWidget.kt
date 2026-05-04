@@ -52,7 +52,6 @@ class PriceGlanceWidget : GlanceAppWidget() {
 
             PriceGlanceContent(
                 widget = widget,
-                priceAvailable = price != null,
                 entry = entry,
                 chartBitmap = chartBitmap,
             )
