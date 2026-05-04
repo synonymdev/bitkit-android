@@ -1176,6 +1176,7 @@
     <string name="widgets__weather__next_block">Next block inclusion</string>
     <string name="widgets__widget__content">CONTENT</string>
     <string name="widgets__widget__data">DATA</string>
+    <string name="widgets__widget__display">DISPLAY</string>
     <string name="widgets__widget__edit">Widget Feed</string>
     <string name="widgets__widget__edit_custom">Custom</string>
     <string name="widgets__widget__edit_default">Default</string>

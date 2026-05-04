@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.spaceToNewline
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Headline
@@ -217,8 +218,9 @@ private fun Preview() {
             weatherModel = WeatherModel(
                 title = R.string.widgets__weather__condition__good__title,
                 description = R.string.widgets__weather__condition__good__description,
-                currentFee = "15 sat/vB",
-                nextBlockFee = "12 sat/vB",
+                currentFee = "$ 0.52",
+                currentFeeSats = 520L,
+                nextBlockFee = "6 ₿/vByte",
                 icon = "☀️"
             ),
             isWeatherWidgetEnabled = false
@@ -236,17 +238,13 @@ private fun Preview2() {
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
-            weatherPreferences = WeatherPreferences(
-                showTitle = true,
-                showDescription = true,
-                showCurrentFee = true,
-                showNextBlockFee = true
-            ),
+            weatherPreferences = WeatherPreferences(selectedOption = WeatherDataOption.NEXT_BLOCK_INCLUSION),
             weatherModel = WeatherModel(
                 title = R.string.widgets__weather__condition__poor__title,
                 description = R.string.widgets__weather__condition__poor__description,
-                currentFee = "45 sat/vB",
-                nextBlockFee = "50 sat/vB",
+                currentFee = "$ 4.50",
+                currentFeeSats = 4500L,
+                nextBlockFee = "45 ₿/vByte",
                 icon = "⛈️"
             ),
             isWeatherWidgetEnabled = true

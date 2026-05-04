@@ -8,6 +8,7 @@ import org.junit.Rule
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -20,9 +21,10 @@ class WeatherPreviewContentTest {
     private val testWeatherModel = WeatherModel(
         title = R.string.widgets__weather__condition__good__title,
         description = R.string.widgets__weather__condition__good__description,
-        currentFee = "15 sat/vB",
-        nextBlockFee = "12 sat/vB",
-        icon = FeeCondition.GOOD.icon
+        currentFee = "$ 0.52",
+        currentFeeSats = 520L,
+        nextBlockFee = "6 ₿/vByte",
+        icon = FeeCondition.GOOD.icon,
     )
 
     private val defaultPreferences = WeatherPreferences()
@@ -122,12 +124,7 @@ class WeatherPreviewContentTest {
     @Test
     fun testCustomWeatherPreferences() {
         // Arrange
-        val customPreferences = WeatherPreferences(
-            showTitle = true,
-            showDescription = false,
-            showCurrentFee = true,
-            showNextBlockFee = false
-        )
+        val customPreferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_SATS)
 
         // Act
         composeTestRule.setContent {
@@ -211,12 +208,7 @@ class WeatherPreviewContentTest {
     @Test
     fun testWithMinimalWeatherPreferences() {
         // Arrange
-        val minimalPreferences = WeatherPreferences(
-            showTitle = true,
-            showDescription = false,
-            showCurrentFee = false,
-            showNextBlockFee = false
-        )
+        val minimalPreferences = WeatherPreferences(selectedOption = null)
 
         // Act
         composeTestRule.setContent {
@@ -266,12 +258,7 @@ class WeatherPreviewContentTest {
     @Test
     fun testEditButtonShowsCustomState() {
         // Arrange with custom preferences
-        val customPreferences = WeatherPreferences(
-            showTitle = true,
-            showDescription = false,
-            showCurrentFee = true,
-            showNextBlockFee = false
-        )
+        val customPreferences = WeatherPreferences(selectedOption = WeatherDataOption.NEXT_BLOCK_INCLUSION)
 
         // Act
         composeTestRule.setContent {

@@ -1002,8 +1002,9 @@ private val previewPrice = PriceDTO(
 private val previewWeather = WeatherModel(
     title = R.string.widgets__weather__condition__good__title,
     description = R.string.widgets__weather__condition__good__description,
-    currentFee = "15 sat/vB",
-    nextBlockFee = "12 sat/vB",
+    currentFee = "$ 0.52",
+    currentFeeSats = 520L,
+    nextBlockFee = "6 \u20BF/vByte",
     icon = "\u2600\uFE0F",
 )
 

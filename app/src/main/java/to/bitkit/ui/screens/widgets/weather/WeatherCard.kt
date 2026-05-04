@@ -23,16 +23,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.BodySB
-import to.bitkit.ui.components.Subtitle
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -51,10 +52,10 @@ fun WeatherCard(
             .background(Colors.White10)
     ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
         ) {
             if (showWidgetTitle) {
                 Row(
@@ -66,10 +67,10 @@ fun WeatherCard(
                     Icon(
                         painter = painterResource(R.drawable.widget_cloud),
                         contentDescription = null,
+                        tint = Color.Unspecified,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("weather_card_condition_icon"),
-                        tint = Color.Unspecified
+                            .testTag("weather_card_condition_icon")
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     BodyMSB(
@@ -79,90 +80,46 @@ fun WeatherCard(
                 }
             }
 
-            if (preferences.showTitle) {
-                Row(
+            preferences.selectedOption?.let { option ->
+                val (labelRes, value, testTagPrefix) = when (option) {
+                    WeatherDataOption.CURRENT_FEE_FIAT ->
+                        Triple(R.string.widgets__weather__current_fee, weatherModel.currentFee, "current_fee_fiat")
+                    WeatherDataOption.CURRENT_FEE_SATS ->
+                        Triple(
+                            R.string.widgets__weather__current_fee,
+                            rememberMoneyText(
+                                sats = weatherModel.currentFeeSats,
+                                unit = PrimaryDisplay.BITCOIN,
+                                showSymbol = true,
+                            ).orEmpty().stripAccentTags(),
+                            "current_fee_sats",
+                        )
+                    WeatherDataOption.NEXT_BLOCK_INCLUSION ->
+                        Triple(R.string.widgets__weather__next_block, weatherModel.nextBlockFee, "next_block")
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("weather_card_title_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .testTag("weather_card_${testTagPrefix}_column")
                 ) {
+                    Caption13Up(
+                        text = stringResource(labelRes),
+                        color = Colors.White64,
+                        modifier = Modifier.testTag("weather_card_${testTagPrefix}_label")
+                    )
                     Text(
-                        text = stringResource(weatherModel.title).uppercase(),
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 2,
+                        text = value,
                         style = TextStyle(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 34.sp,
-                            lineHeight = 34.sp,
-                            letterSpacing = 0.sp,
+                            fontSize = 30.sp,
+                            lineHeight = 30.sp,
+                            letterSpacing = (-1).sp,
                             fontFamily = InterFontFamily,
-                            color = Colors.White,
+                            color = Colors.Green,
                         ),
-                        modifier = Modifier.weight(1f),
-                    )
-
-                    Text(
-                        text = weatherModel.icon,
-                        style = TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 100.sp,
-                            lineHeight = 80.sp,
-                            letterSpacing = 0.sp,
-                            fontFamily = InterFontFamily,
-                            color = Colors.White,
-                        ),
-                    )
-                }
-            }
-
-            if (preferences.showDescription) {
-                Subtitle(
-                    text = stringResource(weatherModel.description),
-                    color = Colors.White,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .testTag("weather_card_description_text")
-                )
-            }
-
-            if (preferences.showCurrentFee) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .testTag("weather_card_current_fee_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    BodySB(
-                        text = stringResource(R.string.widgets__weather__current_fee),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("weather_card_current_fee_label")
-                    )
-                    BodySB(
-                        text = weatherModel.currentFee,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("weather_card_current_fee_value"),
-                    )
-                }
-            }
-
-            if (preferences.showNextBlockFee) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("weather_card_next_block_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    BodySB(
-                        text = stringResource(R.string.widgets__weather__next_block),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("weather_card_next_block_fee_label")
-                    )
-                    BodySB(
-                        text = weatherModel.nextBlockFee,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("weather_card_next_block_fee_value"),
+                        modifier = Modifier.testTag("weather_card_${testTagPrefix}_value")
                     )
                 }
             }
@@ -170,30 +127,28 @@ fun WeatherCard(
     }
 }
 
+private fun String.stripAccentTags(): String =
+    replace("<accent>", "").replace("</accent>", "")
+
 @Preview(showBackground = true)
 @Composable
 private fun WeatherCardPreview() {
     AppThemeSurface {
         Column(
-            modifier = Modifier
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(16.dp)
         ) {
             WeatherCard(
                 showWidgetTitle = true,
                 weatherModel = WeatherModel(
                     title = R.string.widgets__weather__condition__good__title,
                     description = R.string.widgets__weather__condition__good__description,
-                    currentFee = "15 sat/vB",
-                    nextBlockFee = "12 sat/vB",
-                    icon = FeeCondition.GOOD.icon
+                    currentFee = "$ 0.52",
+                    currentFeeSats = 520L,
+                    nextBlockFee = "6 ₿/vByte",
+                    icon = FeeCondition.GOOD.icon,
                 ),
-                preferences = WeatherPreferences(
-                    showTitle = true,
-                    showDescription = true,
-                    showCurrentFee = true,
-                    showNextBlockFee = true
-                )
+                preferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_FIAT),
             )
 
             WeatherCard(
@@ -201,33 +156,25 @@ private fun WeatherCardPreview() {
                 weatherModel = WeatherModel(
                     title = R.string.widgets__weather__condition__average__title,
                     description = R.string.widgets__weather__condition__average__description,
-                    currentFee = "45 sat/vB",
-                    nextBlockFee = "50 sat/vB",
-                    icon = FeeCondition.AVERAGE.icon
+                    currentFee = "$ 1.20",
+                    currentFeeSats = 1200L,
+                    nextBlockFee = "12 ₿/vByte",
+                    icon = FeeCondition.AVERAGE.icon,
                 ),
-                preferences = WeatherPreferences(
-                    showTitle = true,
-                    showDescription = true,
-                    showCurrentFee = true,
-                    showNextBlockFee = false
-                )
+                preferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_SATS),
             )
 
             WeatherCard(
-                showWidgetTitle = false,
+                showWidgetTitle = true,
                 weatherModel = WeatherModel(
                     title = R.string.widgets__weather__condition__poor__title,
                     description = R.string.widgets__weather__condition__poor__description,
-                    currentFee = "45 sat/vB",
-                    nextBlockFee = "50 sat/vB",
-                    icon = FeeCondition.POOR.icon
+                    currentFee = "$ 4.50",
+                    currentFeeSats = 4500L,
+                    nextBlockFee = "45 ₿/vByte",
+                    icon = FeeCondition.POOR.icon,
                 ),
-                preferences = WeatherPreferences(
-                    showTitle = true,
-                    showDescription = true,
-                    showCurrentFee = true,
-                    showNextBlockFee = false
-                )
+                preferences = WeatherPreferences(selectedOption = WeatherDataOption.NEXT_BLOCK_INCLUSION),
             )
         }
     }

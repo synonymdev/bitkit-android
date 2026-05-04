@@ -11,6 +11,7 @@ data class WeatherModel(
     @StringRes val title: Int,
     @StringRes val description: Int,
     val currentFee: String,
+    val currentFeeSats: Long,
     val nextBlockFee: String,
     val icon: String,
 )
@@ -31,6 +32,7 @@ fun WeatherDTO.toWeatherModel(): WeatherModel {
         title = title,
         description = description,
         currentFee = currentFee,
+        currentFeeSats = avgFeeSats,
         nextBlockFee = "$nextBlockFee ₿/vByte",
         icon = condition.icon,
     )

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.models.WidgetType
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
@@ -77,27 +78,10 @@ class WeatherViewModel @Inject constructor(
 
     // MARK: - Public Methods
 
-    fun toggleShowTitle() {
+    fun selectOption(option: WeatherDataOption) {
         _customPreferences.update { preferences ->
-            preferences.copy(showTitle = !preferences.showTitle)
-        }
-    }
-
-    fun toggleShowDescription() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showDescription = !preferences.showDescription)
-        }
-    }
-
-    fun toggleShowCurrentFee() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showCurrentFee = !preferences.showCurrentFee)
-        }
-    }
-
-    fun toggleShowNextBlockFee() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showNextBlockFee = !preferences.showNextBlockFee)
+            val next = if (preferences.selectedOption == option) null else option
+            preferences.copy(selectedOption = next)
         }
     }
 

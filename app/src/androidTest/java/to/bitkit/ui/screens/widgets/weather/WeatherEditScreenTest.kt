@@ -9,6 +9,7 @@ import org.junit.Rule
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -21,127 +22,91 @@ class WeatherEditScreenTest {
     private val testWeatherModel = WeatherModel(
         title = R.string.widgets__weather__condition__good__title,
         description = R.string.widgets__weather__condition__good__description,
-        currentFee = "15 sat/vB",
-        nextBlockFee = "12 sat/vB",
-        icon = FeeCondition.GOOD.icon
+        currentFee = "$ 0.52",
+        currentFeeSats = 520L,
+        nextBlockFee = "6 ₿/vByte",
+        icon = FeeCondition.GOOD.icon,
     )
 
-    private val defaultPreferences = WeatherPreferences()
+    private val rowPrefixes = listOf("current_fee_fiat", "current_fee_sats", "next_block")
 
     @Test
     fun testWeatherEditScreenWithDefaultPreferences() {
-        // Arrange
-        var backClicked = false
-        var titleClicked = false
-        var descriptionClicked = false
-        var currentFeeClicked = false
-        var nextBlockFeeClicked = false
-        var resetClicked = false
         var previewClicked = false
+        var selectedOption: WeatherDataOption? = null
 
-        // Act
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onBack = { backClicked = true },
-                    onClickShowTitle = { titleClicked = true },
-                    onClickShowDescription = { descriptionClicked = true },
-                    onClickShowCurrentFee = { currentFeeClicked = true },
-                    onClickShowNextBlockFee = { nextBlockFeeClicked = true },
-                    onClickReset = { resetClicked = true },
+                    onBack = {},
+                    onSelectOption = { selectedOption = it },
+                    onClickReset = {},
                     onClickPreview = { previewClicked = true },
-                    weatherPreferences = defaultPreferences,
-                    weather = testWeatherModel
+                    weatherPreferences = WeatherPreferences(),
+                    weather = testWeatherModel,
                 )
             }
         }
 
-        // Assert main elements exist
         composeTestRule.onNodeWithTag("weather_edit_screen").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditScrollView").assertExists()
+        composeTestRule.onNodeWithTag("display_section_header").assertExists()
 
-        // Verify description
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
-
-        // Verify all setting rows exist
-        listOf("title", "description", "current_fee", "next_block_fee").forEach { prefix ->
+        rowPrefixes.forEach { prefix ->
             composeTestRule.onNodeWithTag("${prefix}_setting_row").assertExists()
-            composeTestRule.onNodeWithTag("${prefix}_text").assertExists()
+            composeTestRule.onNodeWithTag("${prefix}_label").assertExists()
+            composeTestRule.onNodeWithTag("${prefix}_value").assertExists()
             composeTestRule.onNodeWithTag("${prefix}_toggle_button").assertExists()
             composeTestRule.onNodeWithTag("${prefix}_toggle_icon", useUnmergedTree = true).assertExists()
             composeTestRule.onNodeWithTag("${prefix}_divider").assertExists()
         }
 
-        // Verify buttons
         composeTestRule.onNodeWithTag("buttons_row").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditReset").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditPreview").assertExists()
 
-        // Test button clicks
-        composeTestRule.onNodeWithTag("title_toggle_button").performClick()
-        assert(titleClicked)
+        composeTestRule.onNodeWithTag("current_fee_sats_toggle_button").performClick()
+        assert(selectedOption == WeatherDataOption.CURRENT_FEE_SATS)
 
         composeTestRule.onNodeWithTag("WidgetEditPreview").performClick()
         assert(previewClicked)
 
-        // Reset button should be disabled with default preferences
         composeTestRule.onNodeWithTag("WidgetEditReset").assertIsNotEnabled()
     }
 
     @Test
-    fun testWeatherEditScreenWithCustomPreferences() {
-        // Arrange - Some options enabled
-        val customPreferences = WeatherPreferences(
-            showTitle = true,
-            showDescription = true,
-            showCurrentFee = false,
-            showNextBlockFee = true
-        )
-
+    fun testResetButtonEnabledWhenPreferencesDifferFromDefault() {
         var resetClicked = false
 
-        // Act
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
                     onBack = {},
-                    onClickShowTitle = {},
-                    onClickShowDescription = {},
-                    onClickShowCurrentFee = {},
-                    onClickShowNextBlockFee = {},
+                    onSelectOption = {},
                     onClickReset = { resetClicked = true },
                     onClickPreview = {},
-                    weatherPreferences = customPreferences,
-                    weather = testWeatherModel
+                    weatherPreferences = WeatherPreferences(selectedOption = WeatherDataOption.NEXT_BLOCK_INCLUSION),
+                    weather = testWeatherModel,
                 )
             }
         }
 
-        // Assert reset button should be enabled when preferences are customized
         composeTestRule.onNodeWithTag("WidgetEditReset").assertIsEnabled()
-
-        // Test reset button click
         composeTestRule.onNodeWithTag("WidgetEditReset").performClick()
         assert(resetClicked)
     }
 
     @Test
-    fun testPreviewButtonEnabledState() {
-        // Test when preview should be enabled (at least one option enabled)
-        val preferencesSomeEnabled = WeatherPreferences(showTitle = true)
-
+    fun testPreviewButtonEnabledWhenAnyOptionSelected() {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
                     onBack = {},
-                    onClickShowTitle = {},
-                    onClickShowDescription = {},
-                    onClickShowCurrentFee = {},
-                    onClickShowNextBlockFee = {},
+                    onSelectOption = {},
                     onClickReset = {},
                     onClickPreview = {},
-                    weatherPreferences = preferencesSomeEnabled,
-                    weather = testWeatherModel
+                    weatherPreferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_FIAT),
+                    weather = testWeatherModel,
                 )
             }
         }
@@ -150,27 +115,16 @@ class WeatherEditScreenTest {
     }
 
     @Test
-    fun testPreviewButtonDisabledState() {
-        // Test when preview should be disabled (all options disabled)
-        val preferencesAllDisabled = WeatherPreferences(
-            showTitle = false,
-            showDescription = false,
-            showCurrentFee = false,
-            showNextBlockFee = false
-        )
-
+    fun testPreviewButtonDisabledWhenNothingSelected() {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
                     onBack = {},
-                    onClickShowTitle = {},
-                    onClickShowDescription = {},
-                    onClickShowCurrentFee = {},
-                    onClickShowNextBlockFee = {},
+                    onSelectOption = {},
                     onClickReset = {},
                     onClickPreview = {},
-                    weatherPreferences = preferencesAllDisabled,
-                    weather = testWeatherModel
+                    weatherPreferences = WeatherPreferences(selectedOption = null),
+                    weather = testWeatherModel,
                 )
             }
         }
@@ -179,162 +133,30 @@ class WeatherEditScreenTest {
     }
 
     @Test
-    fun testAllCallbacksTriggered() {
-        // Arrange
-        var titleClicked = false
-        var descriptionClicked = false
-        var currentFeeClicked = false
-        var nextBlockFeeClicked = false
-        var resetClicked = false
-        var previewClicked = false
-
-        val customPreferences = WeatherPreferences(
-            showTitle = false,
-            showDescription = true,
-            showCurrentFee = false,
-            showNextBlockFee = true
-        )
+    fun testEachRowTriggersSelectionCallback() {
+        val captured = mutableListOf<WeatherDataOption>()
 
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
                     onBack = {},
-                    onClickShowTitle = { titleClicked = true },
-                    onClickShowDescription = { descriptionClicked = true },
-                    onClickShowCurrentFee = { currentFeeClicked = true },
-                    onClickShowNextBlockFee = { nextBlockFeeClicked = true },
-                    onClickReset = { resetClicked = true },
-                    onClickPreview = { previewClicked = true },
-                    weatherPreferences = customPreferences,
-                    weather = testWeatherModel
-                )
-            }
-        }
-
-        // Test all clickable elements
-        composeTestRule.onNodeWithTag("title_toggle_button").performClick()
-        assert(titleClicked)
-
-        composeTestRule.onNodeWithTag("description_toggle_button").performClick()
-        assert(descriptionClicked)
-
-        composeTestRule.onNodeWithTag("current_fee_toggle_button").performClick()
-        assert(currentFeeClicked)
-
-        composeTestRule.onNodeWithTag("next_block_fee_toggle_button").performClick()
-        assert(nextBlockFeeClicked)
-
-        composeTestRule.onNodeWithTag("WidgetEditPreview").performClick()
-        assert(previewClicked)
-
-        composeTestRule.onNodeWithTag("WidgetEditReset").performClick()
-        assert(resetClicked)
-    }
-
-    @Test
-    fun testEmptyValuesDisplay() {
-        // Arrange - Weather with empty values
-        val emptyWeather = WeatherModel(
-            title = R.string.widgets__weather__condition__good__title,
-            description = R.string.widgets__weather__condition__good__description,
-            currentFee = "",
-            nextBlockFee = "",
-            icon = FeeCondition.GOOD.icon
-        )
-
-        composeTestRule.setContent {
-            AppThemeSurface {
-                WeatherEditContent(
-                    onBack = {},
-                    onClickShowTitle = {},
-                    onClickShowDescription = {},
-                    onClickShowCurrentFee = {},
-                    onClickShowNextBlockFee = {},
+                    onSelectOption = { captured.add(it) },
                     onClickReset = {},
                     onClickPreview = {},
-                    weatherPreferences = defaultPreferences,
-                    weather = emptyWeather
+                    weatherPreferences = WeatherPreferences(selectedOption = null),
+                    weather = testWeatherModel,
                 )
             }
         }
 
-        // Assert that fee text elements don't exist when values are empty
-        listOf("current_fee", "next_block_fee").forEach { prefix ->
-            composeTestRule.onNodeWithTag("${prefix}_text").assertDoesNotExist()
-        }
-    }
+        composeTestRule.onNodeWithTag("current_fee_fiat_toggle_button").performClick()
+        composeTestRule.onNodeWithTag("current_fee_sats_toggle_button").performClick()
+        composeTestRule.onNodeWithTag("next_block_toggle_button").performClick()
 
-    @Test
-    fun testAllElementsExist() {
-        // Arrange
-        composeTestRule.setContent {
-            AppThemeSurface {
-                WeatherEditContent(
-                    onBack = {},
-                    onClickShowTitle = {},
-                    onClickShowDescription = {},
-                    onClickShowCurrentFee = {},
-                    onClickShowNextBlockFee = {},
-                    onClickReset = {},
-                    onClickPreview = {},
-                    weatherPreferences = WeatherPreferences(
-                        showTitle = false,
-                        showDescription = true,
-                        showCurrentFee = false,
-                        showNextBlockFee = true
-                    ),
-                    weather = testWeatherModel
-                )
-            }
-        }
-
-        // Assert all tagged elements exist
-        composeTestRule.onNodeWithTag("weather_edit_screen").assertExists()
-        composeTestRule.onNodeWithTag("WidgetEditScrollView").assertExists()
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
-
-        listOf("title", "description", "current_fee", "next_block_fee").forEach { prefix ->
-            composeTestRule.onNodeWithTag("${prefix}_setting_row").assertExists()
-            composeTestRule.onNodeWithTag("${prefix}_toggle_button").assertExists()
-            composeTestRule.onNodeWithTag("${prefix}_toggle_icon", useUnmergedTree = true).assertExists()
-            composeTestRule.onNodeWithTag("${prefix}_divider").assertExists()
-        }
-
-        composeTestRule.onNodeWithTag("buttons_row").assertExists()
-        composeTestRule.onNodeWithTag("WidgetEditReset").assertExists()
-        composeTestRule.onNodeWithTag("WidgetEditPreview").assertExists()
-    }
-
-    @Test
-    fun testToggleIconsColorChange() {
-        // Arrange
-        val customPreferences = WeatherPreferences(
-            showTitle = true,
-            showDescription = false,
-            showCurrentFee = true,
-            showNextBlockFee = false
-        )
-
-        composeTestRule.setContent {
-            AppThemeSurface {
-                WeatherEditContent(
-                    onBack = {},
-                    onClickShowTitle = {},
-                    onClickShowDescription = {},
-                    onClickShowCurrentFee = {},
-                    onClickShowNextBlockFee = {},
-                    onClickReset = {},
-                    onClickPreview = {},
-                    weatherPreferences = customPreferences,
-                    weather = testWeatherModel
-                )
-            }
-        }
-
-        // Assert toggle icons have correct color based on preferences
-        composeTestRule.onNodeWithTag("title_toggle_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("description_toggle_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("current_fee_toggle_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("next_block_fee_toggle_icon", useUnmergedTree = true).assertExists()
+        assert(captured == listOf(
+            WeatherDataOption.CURRENT_FEE_FIAT,
+            WeatherDataOption.CURRENT_FEE_SATS,
+            WeatherDataOption.NEXT_BLOCK_INCLUSION,
+        ))
     }
 }

@@ -60,6 +60,7 @@ import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.services.core.Bip39Service
@@ -1138,19 +1139,18 @@ class MigrationService @Inject constructor(
                 val weatherJson = json.decodeFromString<JsonObject>(
                     weatherData.decodeToString()
                 )
-                val showTitle = weatherJson["showStatus"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
-                val showDescription = weatherJson["showText"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
                 val showCurrentFee = weatherJson["showMedian"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
                 val showNextBlockFee = weatherJson["showNextBlockFee"]?.jsonPrimitive?.content
                     ?.toBooleanStrictOrNull() ?: false
 
+                val selectedOption = when {
+                    showCurrentFee -> WeatherDataOption.CURRENT_FEE_FIAT
+                    showNextBlockFee -> WeatherDataOption.NEXT_BLOCK_INCLUSION
+                    else -> WeatherDataOption.CURRENT_FEE_FIAT
+                }
+
                 widgetsStore.updateWeatherPreferences(
-                    WeatherPreferences(
-                        showTitle = showTitle,
-                        showDescription = showDescription,
-                        showCurrentFee = showCurrentFee,
-                        showNextBlockFee = showNextBlockFee
-                    )
+                    WeatherPreferences(selectedOption = selectedOption)
                 )
             }.onFailure {
                 Logger.error("Failed to migrate weather preferences: $it", it, context = TAG)
