@@ -7,6 +7,9 @@ import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.action.actionParametersOf
+import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.HeightModifier
@@ -28,7 +31,6 @@ import to.bitkit.appwidget.ui.components.VerticalSpacer
 import to.bitkit.appwidget.ui.theme.GlanceColors
 import to.bitkit.appwidget.ui.theme.GlanceTextStyles
 import to.bitkit.models.widget.ArticleModel
-import to.bitkit.models.widget.safeBrowserUri
 import to.bitkit.ui.theme.Colors
 
 @Suppress("RestrictedApi")
@@ -38,20 +40,20 @@ fun HeadlinesGlanceContent(
     article: ArticleModel?,
 ) {
     val context = LocalContext.current
-    val articleUri = article?.safeBrowserUri()
-    val tapIntent = if (articleUri != null) {
-        Intent(Intent.ACTION_VIEW, articleUri).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+    val tapAction = if (article != null && article.link.isNotEmpty()) {
+        actionRunCallback<OpenUrlAction>(
+            actionParametersOf(OpenUrlAction.linkKey to article.link)
+        )
     } else {
-        Intent(context, AppWidgetConfigActivity::class.java).apply {
+        val configIntent = Intent(context, AppWidgetConfigActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, entry.appWidgetId)
             putExtra(AppWidgetConfigActivity.EXTRA_WIDGET_TYPE, AppWidgetType.HEADLINES.name)
         }
+        actionStartActivity(configIntent)
     }
 
-    GlanceWidgetScaffold(onClick = tapIntent) {
+    GlanceWidgetScaffold(onClick = tapAction) {
         if (article == null) {
             CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold

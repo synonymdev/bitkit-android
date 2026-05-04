@@ -11,6 +11,7 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
@@ -60,7 +61,7 @@ fun BlocksGlanceContent(
         putExtra(AppWidgetConfigActivity.EXTRA_WIDGET_TYPE, AppWidgetType.BLOCKS.name)
     }
 
-    GlanceWidgetScaffold(onClick = configIntent) {
+    GlanceWidgetScaffold(onClick = actionStartActivity(configIntent)) {
         if (block == null) {
             CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold
