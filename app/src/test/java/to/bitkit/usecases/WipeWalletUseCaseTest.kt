@@ -6,6 +6,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
@@ -47,6 +48,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
         onWipeCalled = false
         onSetWalletExistsStateCalled = false
 
@@ -90,8 +92,9 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
-        inOrder.verify(keychain).wipe()
+        inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(pubkyRepo).wipeLocalState()
+        inOrder.verify(keychain).wipe()
         inOrder.verify(coreService).wipeData()
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
@@ -131,6 +134,23 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(backupRepo).setWiping(true)
+        verify(backupRepo).setWiping(false)
+    }
+
+    @Test
+    fun `invoke should return failure when endpoint cleanup fails`() = runTest {
+        whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(
+            Result.failure(RuntimeException("Cleanup failed")),
+        )
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isFailure)
+        verify(keychain, never()).wipe()
+        verify(pubkyRepo, never()).wipeLocalState()
         verify(backupRepo).setWiping(false)
     }
 

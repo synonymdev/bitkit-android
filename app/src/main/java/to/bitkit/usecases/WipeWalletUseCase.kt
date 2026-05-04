@@ -44,8 +44,9 @@ class WipeWalletUseCase @Inject constructor(
             backupRepo.setWiping(true)
             backupRepo.reset()
 
-            keychain.wipe()
+            pubkyRepo.removeBitkitPaymentEndpoints().getOrThrow()
             pubkyRepo.wipeLocalState()
+            keychain.wipe()
             firebaseMessaging.deleteToken()
 
             coreService.wipeData()

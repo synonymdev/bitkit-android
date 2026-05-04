@@ -47,8 +47,8 @@ import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
-import to.bitkit.models.msatFloorOf
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.msatFloorOf
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB

@@ -299,6 +299,22 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun removeBitkitPaymentEndpoints(): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val currentPublicKey = _publicKey.value ?: pubkyService.currentPublicKey()?.ensurePubkyPrefix()
+                ?: return@runCatching
+            val managedMethodIds = MethodId.entries
+                .filter { it.isBitkitManaged }
+                .map { it.rawValue }
+                .toSet()
+
+            pubkyService.getPaymentList(currentPublicKey)
+                .map { it.methodId }
+                .filter { it in managedMethodIds }
+                .forEach { pubkyService.removePaymentEndpoint(it) }
+        }
+    }
+
     suspend fun currentPublicKey(): Result<String?> = withContext(ioDispatcher) {
         runCatching {
             pubkyService.currentPublicKey()?.ensurePubkyPrefix()
@@ -856,6 +872,10 @@ class PubkyRepo @Inject constructor(
     // region Sign out
 
     suspend fun signOut(): Result<Unit> {
+        val cleanupResult = removeBitkitPaymentEndpoints()
+            .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
+        if (cleanupResult.isFailure) return cleanupResult
+
         val result = runCatching {
             withContext(ioDispatcher) { pubkyService.signOut() }
         }.recoverCatching {

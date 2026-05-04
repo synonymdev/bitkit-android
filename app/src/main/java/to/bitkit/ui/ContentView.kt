@@ -254,6 +254,7 @@ fun ContentView(
 
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
+                    appViewModel.refreshPublicPaykitEndpoints()
                 }
 
                 Lifecycle.Event.ON_STOP -> {

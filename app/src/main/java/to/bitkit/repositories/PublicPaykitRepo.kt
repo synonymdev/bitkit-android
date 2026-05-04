@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.validateBitcoinAddress
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -10,8 +11,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
@@ -20,6 +24,10 @@ import to.bitkit.utils.NetworkValidationHelper
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.ExperimentalTime
 
 sealed class PublicPaykitError(message: String) : AppError(message) {
     data object InvalidPayload : PublicPaykitError("Invalid Paykit payment endpoint payload")
@@ -34,6 +42,8 @@ sealed interface PublicPaykitPaymentResult {
     data object NotOpened : PublicPaykitPaymentResult
 }
 
+@OptIn(ExperimentalTime::class)
+@Suppress("LongParameterList")
 @Singleton
 class PublicPaykitRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -41,6 +51,8 @@ class PublicPaykitRepo @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val coreService: CoreService,
+    private val settingsStore: SettingsStore,
+    private val clock: Clock,
 ) {
     companion object {
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
@@ -55,7 +67,9 @@ class PublicPaykitRepo @Inject constructor(
             MethodId.P2pkh,
         )
 
-        private val removableMethodIds = MethodId.entries
+        private val managedMethodIds = MethodId.entries.filter { it.isBitkitManaged }
+        private val publicBolt11Expiry = 24.hours
+        private val publicBolt11RefreshWindow = 30.minutes
 
         fun parseEndpoint(methodId: String, endpointData: String): Endpoint? {
             if (!methodIdPattern.matches(methodId)) return null
@@ -150,6 +164,18 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
+    suspend fun refreshPublishedBolt11ForPayment(paymentHash: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val settings = settingsStore.data.first()
+            if (!settings.sharesPublicPaykitEndpoints) return@runCatching
+            if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runCatching
+
+            clearPublicBolt11Metadata()
+            val desired = buildWalletEndpoints(refresh = true)
+            applyPublishedEndpoints(desired)
+        }
+    }
+
     private suspend fun fetchPublicEndpoints(publicKey: String): Result<List<Endpoint>> = withContext(ioDispatcher) {
         runCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
@@ -164,9 +190,10 @@ class PublicPaykitRepo @Inject constructor(
     private suspend fun removePublishedEndpoints() {
         publishMutex.withLock {
             val currentMethodIds = currentPublishedMethodIds()
-            removableMethodIds
+            managedMethodIds
                 .filter { it.rawValue in currentMethodIds }
                 .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
+            clearPublicBolt11Metadata()
         }
     }
 
@@ -180,7 +207,7 @@ class PublicPaykitRepo @Inject constructor(
             }
 
             val publishedMethodIds = currentPublishedMethodIds()
-            removableMethodIds
+            managedMethodIds
                 .filter { it.rawValue in publishedMethodIds && it.rawValue !in desiredMethodIds }
                 .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
         }
@@ -211,15 +238,7 @@ class PublicPaykitRepo @Inject constructor(
 
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
-        val publicBolt11 = buildPublicBolt11()
-
-        if (publicBolt11.isNotBlank()) {
-            endpoints += Endpoint(
-                methodId = MethodId.Bolt11,
-                value = publicBolt11,
-                rawPayload = serializePayload(publicBolt11),
-            )
-        }
+        buildPublicBolt11Endpoint()?.let { endpoints += it }
 
         val onchainAddress = state.onchainAddress
         if (onchainAddress.isNotBlank()) {
@@ -236,10 +255,61 @@ class PublicPaykitRepo @Inject constructor(
         return endpoints
     }
 
-    private suspend fun buildPublicBolt11(): String {
-        if (!lightningRepo.canReceive()) return ""
+    private suspend fun buildPublicBolt11Endpoint(): Endpoint? {
+        if (!lightningRepo.canReceive()) {
+            clearPublicBolt11Metadata()
+            return null
+        }
 
-        return lightningRepo.createInvoice(amountSats = null, description = "").getOrThrow()
+        val settings = settingsStore.data.first()
+        val cachedBolt11 = settings.publicPaykitBolt11
+        if (cachedBolt11.isNotBlank() && !settings.shouldRefreshPublicBolt11(clock.now().toEpochMilliseconds())) {
+            return Endpoint(
+                methodId = MethodId.Bolt11,
+                value = cachedBolt11,
+                rawPayload = serializePayload(cachedBolt11),
+            )
+        }
+
+        val bolt11 = lightningRepo.createInvoice(
+            amountSats = null,
+            description = "",
+            expirySeconds = publicBolt11Expiry.inWholeSeconds.toUInt(),
+        ).getOrThrow()
+        val invoice = (coreService.decode(bolt11) as Scanner.Lightning).invoice
+        val expiresAtMillis = clock.now().plus(publicBolt11Expiry).toEpochMilliseconds()
+
+        settingsStore.update {
+            it.copy(
+                publicPaykitBolt11 = bolt11,
+                publicPaykitBolt11PaymentHash = invoice.paymentHash.toHex(),
+                publicPaykitBolt11ExpiresAtMillis = expiresAtMillis,
+            )
+        }
+
+        return Endpoint(
+            methodId = MethodId.Bolt11,
+            value = bolt11,
+            rawPayload = serializePayload(bolt11),
+        )
+    }
+
+    private suspend fun clearPublicBolt11Metadata() {
+        settingsStore.update {
+            it.copy(
+                publicPaykitBolt11 = "",
+                publicPaykitBolt11PaymentHash = "",
+                publicPaykitBolt11ExpiresAtMillis = 0,
+            )
+        }
+    }
+
+    private fun SettingsData.shouldRefreshPublicBolt11(nowMillis: Long): Boolean {
+        if (publicPaykitBolt11PaymentHash.isBlank()) return true
+        if (publicPaykitBolt11ExpiresAtMillis <= 0) return true
+
+        val refreshAtMillis = publicPaykitBolt11ExpiresAtMillis - publicBolt11RefreshWindow.inWholeMilliseconds
+        return nowMillis >= refreshAtMillis
     }
 
     private suspend fun isPayable(endpoint: Endpoint): Boolean = runCatching {
@@ -274,13 +344,17 @@ data class Endpoint(
         get() = value
 }
 
-enum class MethodId(val rawValue: String, val isOnchain: Boolean = false) {
-    Bolt11("btc-lightning-bolt11"),
+enum class MethodId(
+    val rawValue: String,
+    val isOnchain: Boolean = false,
+    val isBitkitManaged: Boolean = false,
+) {
+    Bolt11("btc-lightning-bolt11", isBitkitManaged = true),
     Lnurl("btc-lightning-lnurl"),
-    P2tr("btc-bitcoin-p2tr", isOnchain = true),
-    P2wpkh("btc-bitcoin-p2wpkh", isOnchain = true),
-    P2sh("btc-bitcoin-p2sh", isOnchain = true),
-    P2pkh("btc-bitcoin-p2pkh", isOnchain = true),
+    P2tr("btc-bitcoin-p2tr", isOnchain = true, isBitkitManaged = true),
+    P2wpkh("btc-bitcoin-p2wpkh", isOnchain = true, isBitkitManaged = true),
+    P2sh("btc-bitcoin-p2sh", isOnchain = true, isBitkitManaged = true),
+    P2pkh("btc-bitcoin-p2pkh", isOnchain = true, isBitkitManaged = true),
     ;
 
     companion object {

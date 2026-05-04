@@ -375,20 +375,26 @@ class AppViewModel @Inject constructor(
     private fun observePublicPaykitEndpoints() {
         viewModelScope.launch {
             walletRepo.walletState
-                .map { it.bolt11 to it.onchainAddress }
+                .map { it.onchainAddress }
                 .distinctUntilChanged()
                 .debounce(PUBLIC_PAYKIT_SYNC_DEBOUNCE)
-                .collect { (bolt11, onchainAddress) ->
-                    val shouldPublish = settingsStore.data.first().sharesPublicPaykitEndpoints
-                    if (!shouldPublish) return@collect
-                    if (bolt11.isBlank() && onchainAddress.isBlank()) return@collect
-
-                    publicPaykitRepo.syncCurrentPublishedEndpoints()
-                        .onFailure {
-                            Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG)
-                        }
-                }
+                .collect { refreshPublicPaykitEndpointsIfEnabled() }
         }
+    }
+
+    fun refreshPublicPaykitEndpoints() {
+        viewModelScope.launch { refreshPublicPaykitEndpointsIfEnabled() }
+    }
+
+    private suspend fun refreshPublicPaykitEndpointsIfEnabled() {
+        val shouldPublish = settingsStore.data.first().sharesPublicPaykitEndpoints
+        if (!shouldPublish) return
+
+        val onchainAddress = walletRepo.walletState.value.onchainAddress
+        if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
+
+        publicPaykitRepo.syncCurrentPublishedEndpoints()
+            .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -677,6 +683,14 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentReceived(event: Event.PaymentReceived) {
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            publicPaykitRepo.refreshPublishedBolt11ForPayment(paymentHash)
+                .onFailure {
+                    Logger.warn(
+                        "Failed to refresh public Paykit invoice for '$paymentHash'",
+                        it,
+                        context = TAG,
+                    )
+                }
         }
         notifyPaymentReceived(event)
     }

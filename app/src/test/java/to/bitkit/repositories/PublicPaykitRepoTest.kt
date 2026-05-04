@@ -1,5 +1,8 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.FfiPaymentEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
@@ -9,23 +12,38 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
+@OptIn(ExperimentalTime::class)
 class PublicPaykitRepoTest : BaseUnitTest() {
+    companion object {
+        private const val NOW_MILLIS = 1_000L
+    }
+
     @Test
-    fun `syncCurrentPublishedEndpoints sets desired endpoints and removes obsolete endpoints`() = test {
+    fun `syncCurrentPublishedEndpoints sets desired endpoints and removes obsolete bitkit endpoints`() = test {
         val pubkyRepo = mock<PubkyRepo>()
         val walletRepo = mock<WalletRepo>()
         val lightningRepo = mock<LightningRepo>()
+        val coreService = mock<CoreService>()
+        val (settingsStore, settingsFlow) = createSettingsStore()
         val sut = createRepo(
             pubkyRepo = pubkyRepo,
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
+            coreService = coreService,
+            settingsStore = settingsStore,
         )
 
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
@@ -38,14 +56,14 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             ),
         )
         whenever(lightningRepo.canReceive()).thenReturn(true)
-        whenever(lightningRepo.createInvoice(null, "")).thenReturn(Result.success("lnbc1public"))
+        stubPublicInvoice(lightningRepo, coreService, "lnbc1public", byteArrayOf(1, 2, 3))
         whenever(pubkyRepo.setPaymentEndpoint(any(), any())).thenReturn(Result.success(Unit))
         whenever(pubkyRepo.removePaymentEndpoint(any())).thenReturn(Result.success(Unit))
         whenever(pubkyRepo.getPaymentList("pubkyself")).thenReturn(
             Result.success(
                 listOf(
                     paymentEntry(MethodId.Bolt11, "lnbc1old"),
-                    paymentEntry(MethodId.Lnurl, "lnurl1obsolete"),
+                    paymentEntry(MethodId.Lnurl, "lnurl1external"),
                     paymentEntry(MethodId.P2pkh, "1obsolete"),
                 ),
             ),
@@ -54,21 +72,30 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         val result = sut.syncCurrentPublishedEndpoints()
 
         assertTrue(result.isSuccess)
+        assertEquals("lnbc1public", settingsFlow.value.publicPaykitBolt11)
+        assertEquals("010203", settingsFlow.value.publicPaykitBolt11PaymentHash)
         inOrder(pubkyRepo) {
             verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1public"}""")
             verify(pubkyRepo).setPaymentEndpoint(MethodId.P2tr.rawValue, """{"value":"bc1ptest"}""")
             verify(pubkyRepo).getPaymentList("pubkyself")
-            verify(pubkyRepo).removePaymentEndpoint(MethodId.Lnurl.rawValue)
             verify(pubkyRepo).removePaymentEndpoint(MethodId.P2pkh.rawValue)
         }
+        verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Lnurl.rawValue)
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Bolt11.rawValue)
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.P2tr.rawValue)
     }
 
     @Test
-    fun `syncPublishedEndpoints removes supported endpoints including lnurl`() = test {
+    fun `syncPublishedEndpoints removes bitkit managed endpoints and preserves lnurl`() = test {
         val pubkyRepo = mock<PubkyRepo>()
-        val sut = createRepo(pubkyRepo = pubkyRepo)
+        val (settingsStore, settingsFlow) = createSettingsStore(
+            SettingsData(
+                publicPaykitBolt11 = "lnbc1old",
+                publicPaykitBolt11PaymentHash = "010203",
+                publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+            ),
+        )
+        val sut = createRepo(pubkyRepo = pubkyRepo, settingsStore = settingsStore)
 
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
         whenever(pubkyRepo.removePaymentEndpoint(any())).thenReturn(Result.success(Unit))
@@ -76,7 +103,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             Result.success(
                 listOf(
                     paymentEntry(MethodId.Bolt11, "lnbc1old"),
-                    paymentEntry(MethodId.Lnurl, "lnurl1old"),
+                    paymentEntry(MethodId.Lnurl, "lnurl1external"),
                     paymentEntry(MethodId.P2tr, "bc1pold"),
                 ),
             ),
@@ -85,9 +112,113 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         val result = sut.syncPublishedEndpoints(publish = false)
 
         assertTrue(result.isSuccess)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11)
         verify(pubkyRepo).removePaymentEndpoint(MethodId.Bolt11.rawValue)
-        verify(pubkyRepo).removePaymentEndpoint(MethodId.Lnurl.rawValue)
         verify(pubkyRepo).removePaymentEndpoint(MethodId.P2tr.rawValue)
+        verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Lnurl.rawValue)
+    }
+
+    @Test
+    fun `syncCurrentPublishedEndpoints reuses fresh public bolt11`() = test {
+        val pubkyRepo = mock<PubkyRepo>()
+        val walletRepo = mock<WalletRepo>()
+        val lightningRepo = mock<LightningRepo>()
+        val coreService = mock<CoreService>()
+        val clock = createClock()
+        val (settingsStore) = createSettingsStore(
+            SettingsData(
+                publicPaykitBolt11 = "lnbc1cached",
+                publicPaykitBolt11PaymentHash = "010203",
+                publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+            ),
+        )
+        val sut = createRepo(
+            pubkyRepo = pubkyRepo,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+            coreService = coreService,
+            settingsStore = settingsStore,
+            clock = clock,
+        )
+
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
+        whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState()))
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(pubkyRepo.setPaymentEndpoint(any(), any())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.getPaymentList("pubkyself")).thenReturn(Result.success(emptyList()))
+
+        val result = sut.syncCurrentPublishedEndpoints()
+
+        assertTrue(result.isSuccess)
+        verify(lightningRepo, never()).createInvoice(amountSats = null, description = "", expirySeconds = 86_400u)
+        verify(coreService, never()).decode(any())
+        verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1cached"}""")
+    }
+
+    @Test
+    fun `refreshPublishedBolt11ForPayment rotates paid public bolt11`() = test {
+        val pubkyRepo = mock<PubkyRepo>()
+        val walletRepo = mock<WalletRepo>()
+        val lightningRepo = mock<LightningRepo>()
+        val coreService = mock<CoreService>()
+        val (settingsStore, settingsFlow) = createSettingsStore(
+            SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitBolt11 = "lnbc1old",
+                publicPaykitBolt11PaymentHash = "010203",
+                publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+            ),
+        )
+        val sut = createRepo(
+            pubkyRepo = pubkyRepo,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+            coreService = coreService,
+            settingsStore = settingsStore,
+        )
+
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
+        whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState()))
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        stubPublicInvoice(lightningRepo, coreService, "lnbc1new", byteArrayOf(4, 5, 6))
+        whenever(pubkyRepo.setPaymentEndpoint(any(), any())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.getPaymentList("pubkyself")).thenReturn(
+            Result.success(listOf(paymentEntry(MethodId.Bolt11, "lnbc1old"))),
+        )
+
+        val result = sut.refreshPublishedBolt11ForPayment("010203")
+
+        assertTrue(result.isSuccess)
+        assertEquals("lnbc1new", settingsFlow.value.publicPaykitBolt11)
+        assertEquals("040506", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1new"}""")
+    }
+
+    @Test
+    fun `refreshPublishedBolt11ForPayment ignores unrelated payment hash`() = test {
+        val pubkyRepo = mock<PubkyRepo>()
+        val lightningRepo = mock<LightningRepo>()
+        val coreService = mock<CoreService>()
+        val (settingsStore) = createSettingsStore(
+            SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitBolt11 = "lnbc1old",
+                publicPaykitBolt11PaymentHash = "010203",
+                publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+            ),
+        )
+        val sut = createRepo(
+            pubkyRepo = pubkyRepo,
+            lightningRepo = lightningRepo,
+            coreService = coreService,
+            settingsStore = settingsStore,
+        )
+
+        val result = sut.refreshPublishedBolt11ForPayment("unrelated")
+
+        assertTrue(result.isSuccess)
+        verify(lightningRepo, never()).createInvoice(amountSats = null, description = "", expirySeconds = 86_400u)
+        verify(pubkyRepo, never()).setPaymentEndpoint(any(), any())
     }
 
     @Test
@@ -252,21 +383,72 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         rawPayload = """{"value":"$value"}""",
     )
 
+    @Suppress("LongParameterList")
     private fun createRepo(
         pubkyRepo: PubkyRepo = mock(),
         walletRepo: WalletRepo = mock(),
         lightningRepo: LightningRepo = mock(),
         coreService: CoreService = mock(),
+        settingsStore: SettingsStore = createSettingsStore().first,
+        clock: Clock = createClock(),
     ) = PublicPaykitRepo(
         ioDispatcher = testDispatcher,
         pubkyRepo = pubkyRepo,
         walletRepo = walletRepo,
         lightningRepo = lightningRepo,
         coreService = coreService,
+        settingsStore = settingsStore,
+        clock = clock,
     )
 
     private fun paymentEntry(methodId: MethodId, value: String) = FfiPaymentEntry(
         methodId = methodId.rawValue,
         endpointData = """{"value":"$value"}""",
+    )
+
+    private fun createSettingsStore(
+        initial: SettingsData = SettingsData(),
+    ): Pair<SettingsStore, MutableStateFlow<SettingsData>> {
+        val settingsStore = mock<SettingsStore>()
+        val flow = MutableStateFlow(initial)
+        whenever(settingsStore.data).thenReturn(flow)
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            flow.value = transform(flow.value)
+            Unit
+        }
+        return settingsStore to flow
+    }
+
+    private fun createClock(): Clock {
+        val clock = mock<Clock>()
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
+        return clock
+    }
+
+    private fun freshExpiryMillis() = NOW_MILLIS + 1.hours.inWholeMilliseconds
+
+    private suspend fun stubPublicInvoice(
+        lightningRepo: LightningRepo,
+        coreService: CoreService,
+        bolt11: String,
+        paymentHash: ByteArray,
+    ) {
+        whenever(
+            lightningRepo.createInvoice(amountSats = null, description = "", expirySeconds = 86_400u)
+        ).thenReturn(Result.success(bolt11))
+        whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(lightningInvoice(bolt11, paymentHash)))
+    }
+
+    private fun lightningInvoice(bolt11: String, paymentHash: ByteArray) = LightningInvoice(
+        bolt11 = bolt11,
+        paymentHash = paymentHash,
+        amountSatoshis = 0u,
+        timestampSeconds = 0u,
+        expirySeconds = 86_400u,
+        isExpired = false,
+        description = "",
+        networkType = NetworkType.REGTEST,
+        payeeNodeId = null,
     )
 }

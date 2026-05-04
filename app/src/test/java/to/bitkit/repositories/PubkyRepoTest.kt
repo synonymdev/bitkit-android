@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
+import com.synonym.paykit.FfiPaymentEntry
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -244,6 +245,40 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.isAuthenticated.value)
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(pubkyStore) { reset() }
+    }
+
+    @Test
+    fun `removeBitkitPaymentEndpoints removes only bitkit managed endpoints`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getPaymentList(VALID_SELF_KEY)).thenReturn(
+            listOf(
+                paymentEntry(MethodId.Bolt11),
+                paymentEntry(MethodId.Lnurl),
+                paymentEntry(MethodId.P2tr),
+            ),
+        )
+
+        val result = sut.removeBitkitPaymentEndpoints()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) { removePaymentEndpoint(MethodId.Bolt11.rawValue) }
+        verifyBlocking(pubkyService) { removePaymentEndpoint(MethodId.P2tr.rawValue) }
+        verifyBlocking(pubkyService, never()) { removePaymentEndpoint(MethodId.Lnurl.rawValue) }
+    }
+
+    @Test
+    fun `signOut should keep state when endpoint cleanup fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getPaymentList(VALID_SELF_KEY)).thenAnswer { throw TestAppError("Cleanup failed") }
+
+        val result = sut.signOut()
+
+        assertTrue(result.isFailure)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forceSignOut() }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test
@@ -922,9 +957,15 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever { pubkyService.getProfile(prefixedPublicKey) }.thenReturn(ffiProfile)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(secret)
         whenever { pubkyService.sessionList(secret, Env.contactsBasePath) }.thenReturn(emptyList())
+        whenever { pubkyService.getPaymentList(prefixedPublicKey) }.thenReturn(emptyList())
 
         sut.completeAuthentication()
     }
+
+    private fun paymentEntry(methodId: MethodId) = FfiPaymentEntry(
+        methodId = methodId.rawValue,
+        endpointData = """{"value":"value"}""",
+    )
 
     private fun createFfiProfile(name: String): CorePubkyProfile {
         val ffiProfile = mock<CorePubkyProfile>()
