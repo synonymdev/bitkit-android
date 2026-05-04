@@ -190,7 +190,7 @@ private fun BlockToggleRow(
             if (value.isNotEmpty()) {
                 BodySSB(
                     text = value,
-                    color = Colors.White
+                    color = Colors.White,
                 )
             }
             IconButton(onClick = onToggle) {
