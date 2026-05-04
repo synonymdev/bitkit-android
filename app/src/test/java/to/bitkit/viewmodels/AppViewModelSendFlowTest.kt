@@ -50,6 +50,7 @@ import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -289,6 +290,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending contact lightning failure clears context`() = test {
+        val paymentHash = "pending_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        advanceUntilIdle()
+
+        setPendingContactPaymentContext(paymentHash, "pubkycontact")
+        nodeEvents.emit(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Failure(paymentHash))
+        assertNull(pendingContactPaymentContext(paymentHash))
+    }
+
+    @Test
     fun `amount change clears confirmedWarnings`() = test {
         setUnifiedState(amount = 1000u)
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
@@ -347,6 +369,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         field.isAccessible = true
         val contexts = field.get(sut) as MutableMap<String, ContactPaymentContext>
         contexts[paymentHash] = ContactPaymentContext(publicKey)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun pendingContactPaymentContext(paymentHash: String): ContactPaymentContext? {
+        val field = AppViewModel::class.java.getDeclaredField("pendingContactPaymentContexts")
+        field.isAccessible = true
+        val contexts = field.get(sut) as MutableMap<String, ContactPaymentContext>
+        return contexts[paymentHash]
     }
 
     @Suppress("UNCHECKED_CAST")

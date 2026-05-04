@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -153,6 +154,7 @@ import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -335,6 +337,7 @@ class AppViewModel @Inject constructor(
         }
         observeLdkNodeEvents()
         observePublicPaykitEndpoints()
+        observePublicPaykitInvoiceExpiry()
         observeSendEvents()
         viewModelScope.launch {
             checkCriticalAppUpdate()
@@ -379,6 +382,22 @@ class AppViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .debounce(PUBLIC_PAYKIT_SYNC_DEBOUNCE)
                 .collect { refreshPublicPaykitEndpointsIfEnabled() }
+        }
+    }
+
+    private fun observePublicPaykitInvoiceExpiry() {
+        viewModelScope.launch {
+            settingsStore.data
+                .map { it.sharesPublicPaykitEndpoints to it.publicPaykitBolt11ExpiresAtMillis }
+                .distinctUntilChanged()
+                .collectLatest { (sharesPublicPaykitEndpoints, expiresAtMillis) ->
+                    if (!sharesPublicPaykitEndpoints || expiresAtMillis <= 0) return@collectLatest
+
+                    val refreshAtMillis = expiresAtMillis - PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW.inWholeMilliseconds
+                    val delayMillis = (refreshAtMillis - System.currentTimeMillis()).coerceAtLeast(0)
+                    delay(delayMillis.milliseconds)
+                    refreshPublicPaykitEndpointsIfEnabled()
+                }
         }
     }
 
@@ -670,6 +689,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
+                clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentFailed()
@@ -1437,9 +1457,15 @@ class AppViewModel @Inject constructor(
         action()
     }
 
-    private fun clearActiveContactPaymentContext() {
+    fun clearActiveContactPaymentContext() {
         synchronized(contactPaymentContextLock) {
             activeContactPaymentContext = null
+        }
+    }
+
+    private fun clearPendingContactPaymentContext(paymentHash: String) {
+        synchronized(contactPaymentContextLock) {
+            pendingContactPaymentContexts.remove(paymentHash)
         }
     }
 
@@ -2722,6 +2748,7 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
+        private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
     }
 }
