@@ -20,7 +20,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
@@ -42,12 +41,7 @@ internal fun HeadlinesConfigContent(
     onCancel: () -> Unit,
 ) {
     val prefs = state.headlinePreferences
-    val previewArticle = ArticleModel(
-        title = "How Bitcoin changed El Salvador in more ways",
-        timeAgo = "21 minutes ago",
-        publisher = "bitcoinmagazine.com",
-        link = "",
-    )
+    val previewArticle = state.previewArticle
 
     ScreenColumn(
         noBackground = true,
