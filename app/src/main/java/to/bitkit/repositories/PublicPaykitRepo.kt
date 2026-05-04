@@ -3,6 +3,8 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.validateBitcoinAddress
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -115,6 +117,8 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
+    private val publishMutex = Mutex()
+
     suspend fun beginPayment(publicKey: String): Result<PublicPaykitPaymentResult> = withContext(ioDispatcher) {
         runCatching {
             val endpoints = fetchPublicEndpoints(publicKey).getOrThrow()
@@ -164,33 +168,42 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private suspend fun removePublishedEndpoints() {
-        val currentMethodIds = currentPublishedMethodIds()
-        publishableMethodIds
-            .filter { it.rawValue in currentMethodIds }
-            .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
+        publishMutex.withLock {
+            val currentMethodIds = currentPublishedMethodIds()
+            publishableMethodIds
+                .filter { it.rawValue in currentMethodIds }
+                .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
+        }
     }
 
     private suspend fun applyPublishedEndpoints(desiredEndpoints: List<Endpoint>) {
-        val desiredMethodIds = desiredEndpoints.map { it.methodId.rawValue }.toSet()
+        publishMutex.withLock {
+            requireCurrentPublicKey()
+            val desiredMethodIds = desiredEndpoints.map { it.methodId.rawValue }.toSet()
 
-        desiredEndpoints.forEach {
-            pubkyRepo.setPaymentEndpoint(it.methodId.rawValue, it.rawPayload).getOrThrow()
+            desiredEndpoints.forEach {
+                pubkyRepo.setPaymentEndpoint(it.methodId.rawValue, it.rawPayload).getOrThrow()
+            }
+
+            val publishedMethodIds = currentPublishedMethodIds()
+            publishableMethodIds
+                .filter { it.rawValue in publishedMethodIds && it.rawValue !in desiredMethodIds }
+                .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
         }
-
-        val publishedMethodIds = currentPublishedMethodIds()
-        publishableMethodIds
-            .filter { it.rawValue in publishedMethodIds && it.rawValue !in desiredMethodIds }
-            .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
     }
 
     private suspend fun currentPublishedMethodIds(): Set<String> {
+        return pubkyRepo.getPaymentList(requireCurrentPublicKey()).getOrThrow()
+            .map { it.methodId }
+            .toSet()
+    }
+
+    private suspend fun requireCurrentPublicKey(): String {
         val currentPublicKey = pubkyRepo.publicKey.value
             ?: pubkyRepo.currentPublicKey().getOrThrow()
         if (currentPublicKey == null) throw PublicPaykitError.SessionNotActive
 
-        return pubkyRepo.getPaymentList(currentPublicKey).getOrThrow()
-            .map { it.methodId }
-            .toSet()
+        return currentPublicKey
     }
 
     private suspend fun buildWalletEndpoints(refresh: Boolean): List<Endpoint> {

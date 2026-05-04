@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PublicPaykitError
@@ -44,8 +45,7 @@ class PayContactsViewModel @Inject constructor(
             val settings = settingsStore.data.first()
             _uiState.update {
                 it.copy(
-                    isPaymentSharingEnabled = settings.sharesPublicPaykitEndpoints ||
-                        !settings.hasConfirmedPublicPaykitEndpoints,
+                    isPaymentSharingEnabled = resolvedSharingDefault(settings),
                 )
             }
         }
@@ -73,8 +73,7 @@ class PayContactsViewModel @Inject constructor(
                 }
                 .onFailure {
                     val settings = settingsStore.data.first()
-                    val persistedValue = settings.sharesPublicPaykitEndpoints ||
-                        !settings.hasConfirmedPublicPaykitEndpoints
+                    val persistedValue = resolvedSharingDefault(settings)
                     Logger.error("Failed to sync public Paykit endpoints", it, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
@@ -98,6 +97,9 @@ class PayContactsViewModel @Inject constructor(
         PublicPaykitError.WalletNotReady -> context.getString(R.string.profile__pay_contacts_error_wallet)
         else -> context.getString(R.string.common__error_body)
     }
+
+    private fun resolvedSharingDefault(settings: SettingsData): Boolean =
+        settings.sharesPublicPaykitEndpoints || !settings.hasConfirmedPublicPaykitEndpoints
 }
 
 @Immutable

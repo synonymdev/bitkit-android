@@ -74,5 +74,15 @@ class MSatTest {
     fun `msatFloorOf matches MSat floor`() {
         assertEquals(MSat(1500uL).floor(), msatFloorOf(1500uL))
     }
+
+    @Test
+    fun `satsToMsat converts sats to msats`() {
+        assertEquals(42_000uL, satsToMsat(42uL))
+    }
+
+    @Test
+    fun `satsToMsat saturates when conversion would overflow`() {
+        assertEquals(ULong.MAX_VALUE, satsToMsat(ULong.MAX_VALUE))
+    }
     // endregion
 }

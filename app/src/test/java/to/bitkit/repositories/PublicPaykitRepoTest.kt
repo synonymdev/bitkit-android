@@ -21,15 +21,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     fun `syncCurrentPublishedEndpoints sets desired endpoints and removes obsolete endpoints`() = test {
         val pubkyRepo = mock<PubkyRepo>()
         val walletRepo = mock<WalletRepo>()
-        val lightningRepo = mock<LightningRepo>()
-        val coreService = mock<CoreService>()
-        val sut = PublicPaykitRepo(
-            ioDispatcher = testDispatcher,
-            pubkyRepo = pubkyRepo,
-            walletRepo = walletRepo,
-            lightningRepo = lightningRepo,
-            coreService = coreService,
-        )
+        val sut = createRepo(pubkyRepo = pubkyRepo, walletRepo = walletRepo)
 
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
         whenever(walletRepo.walletState).thenReturn(
@@ -62,6 +54,22 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         }
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Bolt11.rawValue)
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.P2tr.rawValue)
+    }
+
+    @Test
+    fun `syncCurrentPublishedEndpoints returns SessionNotActive when no pubky session exists`() = test {
+        val pubkyRepo = mock<PubkyRepo>()
+        val walletRepo = mock<WalletRepo>()
+        val sut = createRepo(pubkyRepo = pubkyRepo, walletRepo = walletRepo)
+
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
+        whenever(pubkyRepo.currentPublicKey()).thenReturn(Result.success(null))
+        whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState(bolt11 = "lnbc1test")))
+
+        val error = sut.syncCurrentPublishedEndpoints().exceptionOrNull()
+
+        assertEquals(PublicPaykitError.SessionNotActive, error)
+        verify(pubkyRepo, never()).setPaymentEndpoint(any(), any())
     }
 
     @Test
@@ -171,6 +179,18 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `paymentRequest prefers lnurl over onchain when bolt11 is unavailable`() {
+        val request = PublicPaykitRepo.paymentRequest(
+            listOf(
+                endpoint(MethodId.P2tr, "bc1ptest"),
+                endpoint(MethodId.Lnurl, "lnurl1test"),
+            ),
+        )
+
+        assertEquals("lnurl1test", request)
+    }
+
+    @Test
     fun `paymentRequest returns empty string for empty endpoints`() {
         assertEquals("", PublicPaykitRepo.paymentRequest(emptyList()))
     }
@@ -196,6 +216,19 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         methodId = methodId,
         value = value,
         rawPayload = """{"value":"$value"}""",
+    )
+
+    private fun createRepo(
+        pubkyRepo: PubkyRepo = mock(),
+        walletRepo: WalletRepo = mock(),
+        lightningRepo: LightningRepo = mock(),
+        coreService: CoreService = mock(),
+    ) = PublicPaykitRepo(
+        ioDispatcher = testDispatcher,
+        pubkyRepo = pubkyRepo,
+        walletRepo = walletRepo,
+        lightningRepo = lightningRepo,
+        coreService = coreService,
     )
 
     private fun paymentEntry(methodId: MethodId, value: String) = FfiPaymentEntry(

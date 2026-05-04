@@ -33,6 +33,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -45,6 +46,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -151,6 +153,7 @@ import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
@@ -368,11 +371,13 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @OptIn(FlowPreview::class)
     private fun observePublicPaykitEndpoints() {
         viewModelScope.launch {
             walletRepo.walletState
                 .map { it.bolt11 to it.onchainAddress }
                 .distinctUntilChanged()
+                .debounce(PUBLIC_PAYKIT_SYNC_DEBOUNCE)
                 .collect { (bolt11, onchainAddress) ->
                     val shouldPublish = settingsStore.data.first().sharesPublicPaykitEndpoints
                     if (!shouldPublish) return@collect
@@ -2701,6 +2706,7 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
+        private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
     }
 }

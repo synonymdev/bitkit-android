@@ -24,3 +24,7 @@ fun msatCeilOf(msat: ULong): ULong = MSat(msat).ceil()
 
 /** Truncate sub-sat remainder from [msat]. Use for fees and upper bounds. */
 fun msatFloorOf(msat: ULong): ULong = MSat(msat).floor()
+
+/** Convert [sats] to millisats with saturating overflow protection. */
+fun satsToMsat(sats: ULong): ULong =
+    if (sats <= ULong.MAX_VALUE / MSat.PER_SAT) sats * MSat.PER_SAT else ULong.MAX_VALUE
