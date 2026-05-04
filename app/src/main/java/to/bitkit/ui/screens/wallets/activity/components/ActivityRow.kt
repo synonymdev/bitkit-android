@@ -5,10 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +50,7 @@ import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.settingsViewModel
@@ -129,7 +128,7 @@ fun ActivityRow(
             .testTag(testTag)
     ) {
         ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild)
-        Spacer(modifier = Modifier.width(16.dp))
+        HorizontalSpacer(16.dp)
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.weight(1f)
@@ -183,7 +182,7 @@ fun ActivityRow(
                 maxLines = 1,
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        HorizontalSpacer(16.dp)
         AmountView(
             item = item,
             prefix = amountPrefix,
@@ -332,7 +331,7 @@ private fun AmountViewContent(
             if (titleSymbol != null && !isSymbolSuffix) {
                 BodyMSB(text = titleSymbol, color = Colors.White64)
             }
-            Spacer(modifier = Modifier.width(2.dp))
+            HorizontalSpacer(2.dp)
             AnimatedContent(
                 targetState = hideBalance,
                 transitionSpec = { BalanceAnimations.activityAmountTransition },
