@@ -1006,6 +1006,7 @@ private val previewWeather = WeatherModel(
     description = R.string.widgets__weather__condition__good__description,
     currentFee = "$ 0.52",
     currentFeeSats = 520L,
+    currentFeeSatsFormatted = "520 \u20BF",
     nextBlockFee = "6 \u20BF/vByte",
     icon = "\u2600\uFE0F",
 )

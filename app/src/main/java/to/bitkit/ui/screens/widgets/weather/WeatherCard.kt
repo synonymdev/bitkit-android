@@ -28,13 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
-import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Subtitle
-import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.theme.AppThemeSurface
@@ -168,11 +166,7 @@ private fun WeatherFeeBlock(
         WeatherDataOption.CURRENT_FEE_SATS ->
             Triple(
                 R.string.widgets__weather__current_fee,
-                rememberMoneyText(
-                    sats = weatherModel.currentFeeSats,
-                    unit = PrimaryDisplay.BITCOIN,
-                    showSymbol = true,
-                ).orEmpty().stripAccentTags(),
+                weatherModel.currentFeeSatsFormatted,
                 "current_fee_sats",
             )
         WeatherDataOption.NEXT_BLOCK_INCLUSION ->
@@ -223,9 +217,6 @@ private fun FeeCondition.feeColor(): Color = when (this) {
     FeeCondition.POOR -> Colors.Red
 }
 
-private fun String.stripAccentTags(): String =
-    replace("<accent>", "").replace("</accent>", "")
-
 private val LARGE_EMOJI_SIZE = 82.sp
 private val SMALL_EMOJI_SIZE = 60.sp
 
@@ -245,6 +236,7 @@ private fun PreviewLarge() {
                     description = R.string.widgets__weather__condition__good__description,
                     currentFee = "$ 0.52",
                     currentFeeSats = 520L,
+                    currentFeeSatsFormatted = "520 ₿",
                     nextBlockFee = "6 ₿/vByte",
                     icon = FeeCondition.GOOD.icon,
                 ),
@@ -260,6 +252,7 @@ private fun PreviewLarge() {
                     description = R.string.widgets__weather__condition__average__description,
                     currentFee = "$ 1.27",
                     currentFeeSats = 1270L,
+                    currentFeeSatsFormatted = "1,270 ₿",
                     nextBlockFee = "12 ₿/vByte",
                     icon = FeeCondition.AVERAGE.icon,
                 ),
@@ -275,6 +268,7 @@ private fun PreviewLarge() {
                     description = R.string.widgets__weather__condition__poor__description,
                     currentFee = "$ 4.50",
                     currentFeeSats = 4500L,
+                    currentFeeSatsFormatted = "4,500 ₿",
                     nextBlockFee = "45 ₿/vByte",
                     icon = FeeCondition.POOR.icon,
                 ),
@@ -301,6 +295,7 @@ private fun PreviewSmall() {
                     description = R.string.widgets__weather__condition__good__description,
                     currentFee = "$ 0.52",
                     currentFeeSats = 520L,
+                    currentFeeSatsFormatted = "520 ₿",
                     nextBlockFee = "6 ₿/vByte",
                     icon = FeeCondition.GOOD.icon,
                 ),
@@ -314,6 +309,7 @@ private fun PreviewSmall() {
                     description = R.string.widgets__weather__condition__average__description,
                     currentFee = "$ 1.27",
                     currentFeeSats = 1270L,
+                    currentFeeSatsFormatted = "1,270 ₿",
                     nextBlockFee = "12 ₿/vByte",
                     icon = FeeCondition.AVERAGE.icon,
                 ),
@@ -335,6 +331,7 @@ private fun PreviewLargeNoSelection() {
                 description = R.string.widgets__weather__condition__good__description,
                 currentFee = "$ 0.52",
                 currentFeeSats = 520L,
+                currentFeeSatsFormatted = "520 ₿",
                 nextBlockFee = "6 ₿/vByte",
                 icon = FeeCondition.GOOD.icon,
             ),

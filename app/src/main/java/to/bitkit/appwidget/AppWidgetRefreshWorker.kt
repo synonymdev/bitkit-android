@@ -24,6 +24,8 @@ import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
 import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
 import to.bitkit.appwidget.ui.price.PriceGlanceWidget
+import to.bitkit.appwidget.ui.weather.WeatherGlanceReceiver
+import to.bitkit.appwidget.ui.weather.WeatherGlanceWidget
 import to.bitkit.utils.Logger
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
@@ -71,6 +73,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
             AppWidgetType.HEADLINES -> HeadlinesGlanceReceiver::class.java
             AppWidgetType.BLOCKS -> BlocksGlanceReceiver::class.java
             AppWidgetType.FACTS -> FactsGlanceReceiver::class.java
+            AppWidgetType.WEATHER -> WeatherGlanceReceiver::class.java
         }
     }
 
@@ -120,6 +123,15 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                         }
                     preferencesStore.bumpFactsRotationTick()
                     FactsGlanceWidget().updateAll(appContext)
+                }
+
+                AppWidgetType.WEATHER -> {
+                    dataRepository.fetchWeather()
+                        .onSuccess { preferencesStore.cacheWeather(it) }
+                        .onFailure {
+                            Logger.warn("Failed to refresh weather", it, context = TAG)
+                        }
+                    WeatherGlanceWidget().updateAll(appContext)
                 }
             }
         }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.WeatherDTO
+import java.text.NumberFormat
 
 @Immutable
 data class WeatherModel(
@@ -14,6 +15,7 @@ data class WeatherModel(
     @StringRes val description: Int,
     val currentFee: String,
     val currentFeeSats: Long,
+    val currentFeeSatsFormatted: String,
     val nextBlockFee: String,
     val icon: String,
 )
@@ -42,6 +44,7 @@ fun WeatherDTO.toWeatherModel(): WeatherModel {
         description = description,
         currentFee = currentFee,
         currentFeeSats = avgFeeSats,
+        currentFeeSatsFormatted = "${NumberFormat.getInstance().format(avgFeeSats)} ₿",
         nextBlockFee = "$nextBlockFee ₿/vByte",
         icon = condition.icon,
     )
