@@ -872,9 +872,8 @@ class PubkyRepo @Inject constructor(
     // region Sign out
 
     suspend fun signOut(): Result<Unit> {
-        val cleanupResult = removeBitkitPaymentEndpoints()
+        removeBitkitPaymentEndpoints()
             .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
-        if (cleanupResult.isFailure) return cleanupResult
 
         val result = runCatching {
             withContext(ioDispatcher) { pubkyService.signOut() }

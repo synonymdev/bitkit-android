@@ -6,7 +6,6 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
@@ -138,7 +137,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `invoke should return failure when endpoint cleanup fails`() = runTest {
+    fun `invoke should continue when endpoint cleanup fails`() = runTest {
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(
             Result.failure(RuntimeException("Cleanup failed")),
         )
@@ -148,9 +147,9 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             onSuccess = { onSetWalletExistsStateCalled = true },
         )
 
-        assertTrue(result.isFailure)
-        verify(keychain, never()).wipe()
-        verify(pubkyRepo, never()).wipeLocalState()
+        assertTrue(result.isSuccess)
+        verify(pubkyRepo).wipeLocalState()
+        verify(keychain).wipe()
         verify(backupRepo).setWiping(false)
     }
 
