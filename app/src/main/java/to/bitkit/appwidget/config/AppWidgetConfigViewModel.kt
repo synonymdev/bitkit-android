@@ -8,6 +8,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.appwidget.AppWidgetDataRepository
@@ -18,9 +19,11 @@ import to.bitkit.appwidget.model.HomeHeadlinePreferences
 import to.bitkit.appwidget.model.HomePricePreferences
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
+import to.bitkit.models.widget.toArticleModel
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -41,6 +44,8 @@ class AppWidgetConfigViewModel @Inject constructor(
     fun init(appWidgetId: Int, type: AppWidgetType) {
         viewModelScope.launch {
             val entry = preferencesStore.getEntry(appWidgetId)
+            val cachedArticles = preferencesStore.data.first().cachedArticles
+            val previewArticle = cachedArticles.randomOrNull()?.toArticleModel() ?: DEFAULT_PREVIEW_ARTICLE
 
             _uiState.update {
                 it.copy(
@@ -49,6 +54,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                     pricePreferences = entry?.pricePreferences?.toInApp() ?: PricePreferences(),
                     headlinePreferences = entry?.headlinePreferences?.toInApp() ?: HeadlinePreferences(),
                     blocksPreferences = entry?.blocksPreferences?.toInApp() ?: BlocksPreferences(),
+                    previewArticle = previewArticle,
                 )
             }
         }
@@ -194,6 +200,13 @@ class AppWidgetConfigViewModel @Inject constructor(
     }
 }
 
+private val DEFAULT_PREVIEW_ARTICLE = ArticleModel(
+    title = "How Bitcoin changed El Salvador in more ways",
+    timeAgo = "21 minutes ago",
+    publisher = "bitcoinmagazine.com",
+    link = "",
+)
+
 @Stable
 data class AppWidgetConfigUiState(
     val appWidgetId: Int = -1,
@@ -201,6 +214,7 @@ data class AppWidgetConfigUiState(
     val pricePreferences: PricePreferences = PricePreferences(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
+    val previewArticle: ArticleModel = DEFAULT_PREVIEW_ARTICLE,
     val isSaving: Boolean = false,
 )
 

@@ -164,13 +164,14 @@ internal fun BlocksConfigContent(
 
 @Composable
 private fun BlockToggleRow(
+    modifier: Modifier = Modifier,
     @DrawableRes icon: Int,
     label: String,
     value: String,
     isEnabled: Boolean,
     onToggle: () -> Unit,
 ) {
-    Column {
+    Column(modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,

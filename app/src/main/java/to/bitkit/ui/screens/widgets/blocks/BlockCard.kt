@@ -182,6 +182,7 @@ private data class SmallRowData(
 
 @Composable
 private fun WidgetDataRow(
+    modifier: Modifier = Modifier,
     @DrawableRes icon: Int,
     label: String,
     value: String,
@@ -190,7 +191,7 @@ private fun WidgetDataRow(
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag("${testTagPrefix}_row")
     ) {
@@ -219,6 +220,7 @@ private fun WidgetDataRow(
 
 @Composable
 private fun SmallDataRow(
+    modifier: Modifier = Modifier,
     @DrawableRes icon: Int,
     value: String,
     testTagPrefix: String,
@@ -226,7 +228,7 @@ private fun SmallDataRow(
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag("${testTagPrefix}_row")
     ) {
