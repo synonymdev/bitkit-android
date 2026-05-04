@@ -276,7 +276,6 @@ fun SendSheet(
                         )
                     },
                     onPaymentPending = { paymentHash, amount ->
-                        appViewModel.preserveContactPaymentContext(paymentHash)
                         navController.navigateTo(SendRoute.Pending(paymentHash, amount)) {
                             popUpTo(startDestination) { inclusive = true }
                         }

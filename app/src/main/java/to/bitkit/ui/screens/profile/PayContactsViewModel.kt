@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -78,7 +79,7 @@ class PayContactsViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
-                        description = it.message ?: context.getString(R.string.common__error_body),
+                        description = syncErrorMessage(it),
                     )
                     _uiState.update {
                         it.copy(
@@ -88,6 +89,14 @@ class PayContactsViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    private fun syncErrorMessage(error: Throwable): String = when (error) {
+        PublicPaykitError.InvalidPayload -> context.getString(R.string.profile__pay_contacts_error_invalid_payload)
+        PublicPaykitError.NoSupportedEndpoint -> context.getString(R.string.profile__pay_contacts_error_no_endpoint)
+        PublicPaykitError.SessionNotActive -> context.getString(R.string.profile__pay_contacts_error_session)
+        PublicPaykitError.WalletNotReady -> context.getString(R.string.profile__pay_contacts_error_wallet)
+        else -> context.getString(R.string.common__error_body)
     }
 }
 

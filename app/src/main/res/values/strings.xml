@@ -536,6 +536,10 @@
     <string name="profile__intro_title">Portable\n&lt;accent&gt;pubky\nprofile&lt;/accent&gt;</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
+    <string name="profile__pay_contacts_error_invalid_payload">Payment endpoint data could not be prepared.</string>
+    <string name="profile__pay_contacts_error_no_endpoint">No supported payment endpoint is available.</string>
+    <string name="profile__pay_contacts_error_session">Reconnect your Pubky profile to share payment data.</string>
+    <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pay Contacts</string>
     <string name="profile__pay_contacts_toggle">Share payment data and enable payments with contacts</string>

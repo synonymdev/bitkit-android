@@ -1,6 +1,15 @@
 package to.bitkit.repositories
 
+import com.synonym.paykit.FfiPaymentEntry
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -8,6 +17,53 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PublicPaykitRepoTest : BaseUnitTest() {
+    @Test
+    fun `syncCurrentPublishedEndpoints sets desired endpoints and removes obsolete endpoints`() = test {
+        val pubkyRepo = mock<PubkyRepo>()
+        val walletRepo = mock<WalletRepo>()
+        val lightningRepo = mock<LightningRepo>()
+        val coreService = mock<CoreService>()
+        val sut = PublicPaykitRepo(
+            ioDispatcher = testDispatcher,
+            pubkyRepo = pubkyRepo,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+            coreService = coreService,
+        )
+
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
+        whenever(walletRepo.walletState).thenReturn(
+            MutableStateFlow(
+                WalletState(
+                    onchainAddress = "bc1ptest",
+                    bolt11 = "lnbc1test",
+                ),
+            ),
+        )
+        whenever(pubkyRepo.setPaymentEndpoint(any(), any())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.removePaymentEndpoint(any())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.getPaymentList("pubkyself")).thenReturn(
+            Result.success(
+                listOf(
+                    paymentEntry(MethodId.Bolt11, "lnbc1old"),
+                    paymentEntry(MethodId.P2pkh, "1obsolete"),
+                ),
+            ),
+        )
+
+        val result = sut.syncCurrentPublishedEndpoints()
+
+        assertTrue(result.isSuccess)
+        inOrder(pubkyRepo) {
+            verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1test"}""")
+            verify(pubkyRepo).setPaymentEndpoint(MethodId.P2tr.rawValue, """{"value":"bc1ptest"}""")
+            verify(pubkyRepo).getPaymentList("pubkyself")
+            verify(pubkyRepo).removePaymentEndpoint(MethodId.P2pkh.rawValue)
+        }
+        verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Bolt11.rawValue)
+        verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.P2tr.rawValue)
+    }
+
     @Test
     fun `parseEndpoint accepts Paykit JSON payloads`() {
         val endpoint = PublicPaykitRepo.parseEndpoint(
@@ -140,5 +196,10 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         methodId = methodId,
         value = value,
         rawPayload = """{"value":"$value"}""",
+    )
+
+    private fun paymentEntry(methodId: MethodId, value: String) = FfiPaymentEntry(
+        methodId = methodId.rawValue,
+        endpointData = """{"value":"$value"}""",
     )
 }
