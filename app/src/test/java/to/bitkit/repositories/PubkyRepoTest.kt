@@ -465,7 +465,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initialize should delete stale saved session when re-sign-in is unavailable`() = test {
+    fun `initialize should keep saved session when re-sign-in is unavailable`() = test {
         val session = "stale_session"
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
@@ -475,7 +475,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(sut.sessionRestorationFailed.value)
         assertFalse(sut.isAuthenticated.value)
-        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test

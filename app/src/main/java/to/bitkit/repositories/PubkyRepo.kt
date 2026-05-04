@@ -206,9 +206,7 @@ class PubkyRepo @Inject constructor(
     ): InitResult = withContext(ioDispatcher) {
         if (storedSecretKeyHex.isNullOrEmpty()) {
             if (!savedSessionSecret.isNullOrEmpty()) {
-                Logger.warn("Skipped re-sign-in recovery, no secret key available", context = TAG)
-                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-                notifyBackupStateChanged()
+                Logger.warn("Skipped re-sign-in recovery, keeping saved session", context = TAG)
                 InitResult.RestorationFailed
             } else {
                 InitResult.NoSession
@@ -223,8 +221,6 @@ class PubkyRepo @Inject constructor(
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.error("Failed re-sign-in recovery", it, context = TAG)
-                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-                notifyBackupStateChanged()
                 InitResult.RestorationFailed
             }
         }
