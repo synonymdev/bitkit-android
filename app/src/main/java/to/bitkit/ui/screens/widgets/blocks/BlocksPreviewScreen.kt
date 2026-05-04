@@ -46,7 +46,7 @@ fun BlocksPreviewScreen(
         blocksViewModel.refreshOnDisplay()
     }
 
-    BlocksPreviewContent(
+    Content(
         onBack = onBack,
         isBlocksWidgetEnabled = isBlocksWidgetEnabled,
         blocksPreferences = customBlocksPreferences,
@@ -64,7 +64,7 @@ fun BlocksPreviewScreen(
 }
 
 @Composable
-fun BlocksPreviewContent(
+private fun Content(
     onBack: () -> Unit,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
@@ -204,7 +204,7 @@ fun BlocksPreviewContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        BlocksPreviewContent(
+        Content(
             onBack = {},
             onClickEdit = {},
             onClickDelete = {},
@@ -219,7 +219,7 @@ private fun Preview() {
                 source = "mempool.space",
                 fees = "25 059 357",
             ),
-            isBlocksWidgetEnabled = false
+            isBlocksWidgetEnabled = false,
         )
     }
 }
@@ -228,7 +228,7 @@ private fun Preview() {
 @Composable
 private fun Preview2() {
     AppThemeSurface {
-        BlocksPreviewContent(
+        Content(
             onBack = {},
             onClickEdit = {},
             onClickDelete = {},
@@ -250,7 +250,7 @@ private fun Preview2() {
                 source = "mempool.space",
                 fees = "25 059 357",
             ),
-            isBlocksWidgetEnabled = true
+            isBlocksWidgetEnabled = true,
         )
     }
 }

@@ -1,6 +1,7 @@
 package to.bitkit.appwidget.ui.blocks
 
 import android.appwidget.AppWidgetManager
+import android.content.Context
 import android.content.Intent
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
@@ -144,7 +145,7 @@ private fun CompactRow(row: BlockRow) {
 }
 
 private fun buildRows(
-    context: android.content.Context,
+    context: Context,
     preferences: HomeBlocksPreferences,
     block: BlockModel,
 ): ImmutableList<BlockRow> = listOfNotNull(
