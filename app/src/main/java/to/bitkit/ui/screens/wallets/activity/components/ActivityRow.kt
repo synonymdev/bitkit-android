@@ -27,10 +27,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
-import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
-import to.bitkit.ext.contact
 import to.bitkit.ext.formatted
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
@@ -40,8 +38,6 @@ import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
-import to.bitkit.models.PubkyProfile
-import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
@@ -91,22 +87,9 @@ fun ActivityRow(
         is Activity.Onchain -> item.v1.confirmed
     }
     val isTransfer = item.isTransfer()
-
     val activityListViewModel = activityListViewModel
-    val contacts by activityListViewModel?.contacts?.collectAsStateWithLifecycle() ?: remember {
-        mutableStateOf(persistentListOf())
-    }
-    val contactName = remember(item, contacts) { contactName(item, contacts) }
-    val contactTitle = contactName?.let {
-        val titleRes = if (item.isSent()) {
-            R.string.contacts__activity_sent_to
-        } else {
-            R.string.contacts__activity_received_from
-        }
-        stringResource(titleRes, it)
-    }
     var isCpfpChild by remember { mutableStateOf(false) }
-    val resolvedTitle = (title ?: contactTitle).takeIf {
+    val resolvedTitle = title.takeIf {
         shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
     }
 
@@ -188,11 +171,6 @@ fun ActivityRow(
             prefix = amountPrefix,
         )
     }
-}
-
-private fun contactName(activity: Activity, contacts: List<PubkyProfile>): String? {
-    val contact = activity.contact() ?: return null
-    return contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, contact) }?.name
 }
 
 private fun shouldUseContactActivityTitle(
