@@ -112,9 +112,9 @@ fun WeatherCardSmall(
                     fontSize = SMALL_EMOJI_SIZE,
                 )
                 Subtitle(
-                    text = stringResource(weatherModel.title),
+                    text = stringResource(weatherModel.shortTitle),
                     color = Colors.White,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag("weather_card_small_title")
                 )
@@ -188,6 +188,8 @@ private fun WeatherFeeBlock(
         Caption13Up(
             text = stringResource(labelRes),
             color = Colors.White64,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.testTag("weather_card_${testTagPrefix}_label")
         )
         WeatherFeeValueText(
@@ -224,7 +226,7 @@ private fun FeeCondition.feeColor(): Color = when (this) {
 private fun String.stripAccentTags(): String =
     replace("<accent>", "").replace("</accent>", "")
 
-private val LARGE_EMOJI_SIZE = 80.sp
+private val LARGE_EMOJI_SIZE = 82.sp
 private val SMALL_EMOJI_SIZE = 60.sp
 
 @Preview(showBackground = true)
@@ -239,6 +241,7 @@ private fun PreviewLarge() {
                 weatherModel = WeatherModel(
                     condition = FeeCondition.GOOD,
                     title = R.string.widgets__weather__condition__good__title,
+                    shortTitle = R.string.widgets__weather__condition__good__short_title,
                     description = R.string.widgets__weather__condition__good__description,
                     currentFee = "$ 0.52",
                     currentFeeSats = 520L,
@@ -253,6 +256,7 @@ private fun PreviewLarge() {
                 weatherModel = WeatherModel(
                     condition = FeeCondition.AVERAGE,
                     title = R.string.widgets__weather__condition__average__title,
+                    shortTitle = R.string.widgets__weather__condition__average__short_title,
                     description = R.string.widgets__weather__condition__average__description,
                     currentFee = "$ 1.27",
                     currentFeeSats = 1270L,
@@ -267,6 +271,7 @@ private fun PreviewLarge() {
                 weatherModel = WeatherModel(
                     condition = FeeCondition.POOR,
                     title = R.string.widgets__weather__condition__poor__title,
+                    shortTitle = R.string.widgets__weather__condition__poor__short_title,
                     description = R.string.widgets__weather__condition__poor__description,
                     currentFee = "$ 4.50",
                     currentFeeSats = 4500L,
@@ -292,6 +297,7 @@ private fun PreviewSmall() {
                 weatherModel = WeatherModel(
                     condition = FeeCondition.GOOD,
                     title = R.string.widgets__weather__condition__good__title,
+                    shortTitle = R.string.widgets__weather__condition__good__short_title,
                     description = R.string.widgets__weather__condition__good__description,
                     currentFee = "$ 0.52",
                     currentFeeSats = 520L,
@@ -304,6 +310,7 @@ private fun PreviewSmall() {
                 weatherModel = WeatherModel(
                     condition = FeeCondition.AVERAGE,
                     title = R.string.widgets__weather__condition__average__title,
+                    shortTitle = R.string.widgets__weather__condition__average__short_title,
                     description = R.string.widgets__weather__condition__average__description,
                     currentFee = "$ 1.27",
                     currentFeeSats = 1270L,
@@ -324,6 +331,7 @@ private fun PreviewLargeNoSelection() {
             weatherModel = WeatherModel(
                 condition = FeeCondition.GOOD,
                 title = R.string.widgets__weather__condition__good__title,
+                shortTitle = R.string.widgets__weather__condition__good__short_title,
                 description = R.string.widgets__weather__condition__good__description,
                 currentFee = "$ 0.52",
                 currentFeeSats = 520L,

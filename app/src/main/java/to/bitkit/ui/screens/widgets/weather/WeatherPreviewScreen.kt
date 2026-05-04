@@ -191,6 +191,7 @@ private fun Preview() {
             weatherModel = WeatherModel(
                 condition = FeeCondition.GOOD,
                 title = R.string.widgets__weather__condition__good__title,
+                shortTitle = R.string.widgets__weather__condition__good__short_title,
                 description = R.string.widgets__weather__condition__good__description,
                 currentFee = "$ 0.52",
                 currentFeeSats = 520L,
@@ -215,6 +216,7 @@ private fun Preview2() {
             weatherModel = WeatherModel(
                 condition = FeeCondition.POOR,
                 title = R.string.widgets__weather__condition__poor__title,
+                shortTitle = R.string.widgets__weather__condition__poor__short_title,
                 description = R.string.widgets__weather__condition__poor__description,
                 currentFee = "$ 4.50",
                 currentFeeSats = 4500L,

@@ -10,6 +10,7 @@ import to.bitkit.data.dto.WeatherDTO
 data class WeatherModel(
     val condition: FeeCondition,
     @StringRes val title: Int,
+    @StringRes val shortTitle: Int,
     @StringRes val description: Int,
     val currentFee: String,
     val currentFeeSats: Long,
@@ -23,6 +24,11 @@ fun WeatherDTO.toWeatherModel(): WeatherModel {
         FeeCondition.AVERAGE -> R.string.widgets__weather__condition__average__title
         FeeCondition.POOR -> R.string.widgets__weather__condition__poor__title
     }
+    val shortTitle = when (condition) {
+        FeeCondition.GOOD -> R.string.widgets__weather__condition__good__short_title
+        FeeCondition.AVERAGE -> R.string.widgets__weather__condition__average__short_title
+        FeeCondition.POOR -> R.string.widgets__weather__condition__poor__short_title
+    }
     val description = when (condition) {
         FeeCondition.GOOD -> R.string.widgets__weather__condition__good__description
         FeeCondition.AVERAGE -> R.string.widgets__weather__condition__average__description
@@ -32,6 +38,7 @@ fun WeatherDTO.toWeatherModel(): WeatherModel {
     return WeatherModel(
         condition = condition,
         title = title,
+        shortTitle = shortTitle,
         description = description,
         currentFee = currentFee,
         currentFeeSats = avgFeeSats,

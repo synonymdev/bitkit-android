@@ -235,6 +235,7 @@ private fun Preview() {
             weather = WeatherModel(
                 condition = FeeCondition.GOOD,
                 title = R.string.widgets__weather__condition__good__title,
+                shortTitle = R.string.widgets__weather__condition__good__short_title,
                 description = R.string.widgets__weather__condition__good__description,
                 currentFee = "$ 0.52",
                 currentFeeSats = 520L,
@@ -258,6 +259,7 @@ private fun PreviewSelectedSats() {
             weather = WeatherModel(
                 condition = FeeCondition.AVERAGE,
                 title = R.string.widgets__weather__condition__average__title,
+                shortTitle = R.string.widgets__weather__condition__average__short_title,
                 description = R.string.widgets__weather__condition__average__description,
                 currentFee = "$ 1.20",
                 currentFeeSats = 1200L,
@@ -281,6 +283,7 @@ private fun PreviewNoneSelected() {
             weather = WeatherModel(
                 condition = FeeCondition.POOR,
                 title = R.string.widgets__weather__condition__poor__title,
+                shortTitle = R.string.widgets__weather__condition__poor__short_title,
                 description = R.string.widgets__weather__condition__poor__description,
                 currentFee = "$ 4.50",
                 currentFeeSats = 4500L,

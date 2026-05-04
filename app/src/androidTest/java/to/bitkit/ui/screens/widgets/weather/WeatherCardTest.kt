@@ -20,6 +20,7 @@ class WeatherCardTest {
     private val testGoodWeatherModel = WeatherModel(
         condition = FeeCondition.GOOD,
         title = R.string.widgets__weather__condition__good__title,
+        shortTitle = R.string.widgets__weather__condition__good__short_title,
         description = R.string.widgets__weather__condition__good__description,
         currentFee = "$ 0.52",
         currentFeeSats = 520L,
@@ -30,6 +31,7 @@ class WeatherCardTest {
     private val testAverageWeatherModel = WeatherModel(
         condition = FeeCondition.AVERAGE,
         title = R.string.widgets__weather__condition__average__title,
+        shortTitle = R.string.widgets__weather__condition__average__short_title,
         description = R.string.widgets__weather__condition__average__description,
         currentFee = "$ 1.27",
         currentFeeSats = 1270L,
