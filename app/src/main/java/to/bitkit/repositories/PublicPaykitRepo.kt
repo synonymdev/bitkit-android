@@ -21,6 +21,7 @@ import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.NetworkValidationHelper
+import to.bitkit.utils.encodeToUrl
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -102,7 +103,7 @@ class PublicPaykitRepo @Inject constructor(
             val onchain = sortedEndpoints.firstOrNull { it.methodId.isOnchain }
 
             if (lightning != null && onchain != null) {
-                return "bitcoin:${onchain.value}?lightning=${lightning.value}"
+                return "bitcoin:${onchain.value}?lightning=${lightning.value.encodeToUrl()}"
             }
 
             return sortedEndpoints.firstOrNull()?.paymentRequest.orEmpty()

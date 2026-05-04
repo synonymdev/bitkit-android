@@ -316,6 +316,18 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `paymentRequest encodes bolt11 query parameter`() {
+        val request = PublicPaykitRepo.paymentRequest(
+            listOf(
+                endpoint(MethodId.Bolt11, "lnbc1test&label"),
+                endpoint(MethodId.P2tr, "bc1ptest"),
+            ),
+        )
+
+        assertEquals("bitcoin:bc1ptest?lightning=lnbc1test%26label", request)
+    }
+
+    @Test
     fun `paymentRequest prefers taproot among multiple onchain endpoints`() {
         val request = PublicPaykitRepo.paymentRequest(
             listOf(
