@@ -457,15 +457,6 @@ private fun LoadedContent(
             imageUrl = profile.imageUrl,
         )
 
-        if (hasPublicPaymentEndpoint) {
-            VerticalSpacer(24.dp)
-            SecondaryButton(
-                text = stringResource(R.string.wallet__send),
-                onClick = onPay,
-                modifier = Modifier.testTag("AddContactPay")
-            )
-        }
-
         FillHeight()
 
         BodyS(
@@ -473,6 +464,15 @@ private fun LoadedContent(
             color = Colors.White64,
         )
         VerticalSpacer(16.dp)
+
+        if (hasPublicPaymentEndpoint) {
+            SecondaryButton(
+                text = stringResource(R.string.wallet__send),
+                onClick = onPay,
+                modifier = Modifier.testTag("AddContactPay")
+            )
+            VerticalSpacer(16.dp)
+        }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
