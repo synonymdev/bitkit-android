@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -18,11 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
@@ -40,7 +36,6 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.InterFontFamily
 
 @Composable
 fun WeatherEditScreen(
@@ -199,16 +194,9 @@ private fun WeatherEditOptionRow(
                     modifier = Modifier.testTag("${testTagPrefix}_label")
                 )
 
-                Text(
+                WeatherFeeValueText(
                     text = value,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 30.sp,
-                        lineHeight = 30.sp,
-                        letterSpacing = (-1).sp,
-                        fontFamily = InterFontFamily,
-                        color = Colors.Green,
-                    ),
+                    color = Colors.Green,
                     modifier = Modifier.testTag("${testTagPrefix}_value")
                 )
             }
@@ -245,6 +233,7 @@ private fun Preview() {
             onClickPreview = {},
             weatherPreferences = WeatherPreferences(),
             weather = WeatherModel(
+                condition = FeeCondition.GOOD,
                 title = R.string.widgets__weather__condition__good__title,
                 description = R.string.widgets__weather__condition__good__description,
                 currentFee = "$ 0.52",
@@ -267,6 +256,7 @@ private fun PreviewSelectedSats() {
             onClickPreview = {},
             weatherPreferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_SATS),
             weather = WeatherModel(
+                condition = FeeCondition.AVERAGE,
                 title = R.string.widgets__weather__condition__average__title,
                 description = R.string.widgets__weather__condition__average__description,
                 currentFee = "$ 1.20",
@@ -289,6 +279,7 @@ private fun PreviewNoneSelected() {
             onClickPreview = {},
             weatherPreferences = WeatherPreferences(selectedOption = null),
             weather = WeatherModel(
+                condition = FeeCondition.POOR,
                 title = R.string.widgets__weather__condition__poor__title,
                 description = R.string.widgets__weather__condition__poor__description,
                 currentFee = "$ 4.50",

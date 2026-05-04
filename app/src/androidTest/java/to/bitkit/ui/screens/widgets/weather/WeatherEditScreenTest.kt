@@ -20,6 +20,7 @@ class WeatherEditScreenTest {
     val composeTestRule = createComposeRule()
 
     private val testWeatherModel = WeatherModel(
+        condition = FeeCondition.GOOD,
         title = R.string.widgets__weather__condition__good__title,
         description = R.string.widgets__weather__condition__good__description,
         currentFee = "$ 0.52",

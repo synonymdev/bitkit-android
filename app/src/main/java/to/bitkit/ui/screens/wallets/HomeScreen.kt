@@ -83,6 +83,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
@@ -802,7 +803,6 @@ private fun Widgets(
                 WidgetType.WEATHER -> {
                     homeUiState.currentWeather?.run {
                         WeatherCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             weatherModel = this,
                             preferences = homeUiState.weatherPreferences,
                             modifier = Modifier.fillMaxWidth()
@@ -1000,6 +1000,7 @@ private val previewPrice = PriceDTO(
 )
 
 private val previewWeather = WeatherModel(
+    condition = FeeCondition.GOOD,
     title = R.string.widgets__weather__condition__good__title,
     description = R.string.widgets__weather__condition__good__description,
     currentFee = "$ 0.52",

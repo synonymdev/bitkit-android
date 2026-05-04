@@ -19,6 +19,7 @@ class WeatherPreviewContentTest {
     val composeTestRule = createComposeRule()
 
     private val testWeatherModel = WeatherModel(
+        condition = FeeCondition.GOOD,
         title = R.string.widgets__weather__condition__good__title,
         description = R.string.widgets__weather__condition__good__description,
         currentFee = "$ 0.52",
@@ -45,7 +46,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = defaultPreferences,
                     weatherModel = testWeatherModel
@@ -100,7 +100,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = false,
                     isWeatherWidgetEnabled = false,
                     weatherPreferences = defaultPreferences,
                     weatherModel = testWeatherModel
@@ -134,7 +133,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = customPreferences,
                     weatherModel = testWeatherModel
@@ -158,7 +156,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = defaultPreferences,
                     weatherModel = testWeatherModel
@@ -194,7 +191,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = defaultPreferences,
                     weatherModel = testWeatherModel
@@ -218,7 +214,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = false,
                     isWeatherWidgetEnabled = false,
                     weatherPreferences = minimalPreferences,
                     weatherModel = testWeatherModel
@@ -243,7 +238,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = defaultPreferences,
                     weatherModel = testWeatherModel
@@ -268,7 +262,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = customPreferences,
                     weatherModel = testWeatherModel
@@ -290,7 +283,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = defaultPreferences,
                     weatherModel = null
@@ -312,7 +304,6 @@ class WeatherPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isWeatherWidgetEnabled = true,
                     weatherPreferences = defaultPreferences,
                     weatherModel = testWeatherModel

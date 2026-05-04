@@ -8,6 +8,7 @@ import to.bitkit.data.dto.WeatherDTO
 
 @Immutable
 data class WeatherModel(
+    val condition: FeeCondition,
     @StringRes val title: Int,
     @StringRes val description: Int,
     val currentFee: String,
@@ -29,6 +30,7 @@ fun WeatherDTO.toWeatherModel(): WeatherModel {
     }
 
     return WeatherModel(
+        condition = condition,
         title = title,
         description = description,
         currentFee = currentFee,

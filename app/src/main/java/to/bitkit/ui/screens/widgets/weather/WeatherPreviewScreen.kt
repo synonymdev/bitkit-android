@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.data.dto.FeeCondition
 import to.bitkit.ext.spaceToNewline
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
@@ -50,7 +51,6 @@ fun WeatherPreviewScreen(
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
 ) {
-    val showWidgetTitles by weatherViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customWeatherPreferences by weatherViewModel.customPreferences.collectAsStateWithLifecycle()
     val weather by weatherViewModel.currentWeather.collectAsStateWithLifecycle()
     val isWeatherWidgetEnabled by weatherViewModel.isWeatherWidgetEnabled.collectAsStateWithLifecycle()
@@ -63,7 +63,6 @@ fun WeatherPreviewScreen(
         onBack = onBack,
         isWeatherWidgetEnabled = isWeatherWidgetEnabled,
         weatherPreferences = customWeatherPreferences,
-        showWidgetTitles = showWidgetTitles,
         weatherModel = weather,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
@@ -83,7 +82,6 @@ fun WeatherPreviewContent(
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
     isWeatherWidgetEnabled: Boolean,
     weatherPreferences: WeatherPreferences,
     weatherModel: WeatherModel?,
@@ -164,12 +162,11 @@ fun WeatherPreviewContent(
 
             weatherModel?.let { model ->
                 WeatherCard(
+                    weatherModel = model,
+                    preferences = weatherPreferences,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("weather_card"),
-                    showWidgetTitle = showWidgetTitles,
-                    weatherModel = model,
-                    preferences = weatherPreferences
+                        .testTag("weather_card")
                 )
             }
         }
@@ -210,12 +207,12 @@ private fun Preview() {
     AppThemeSurface {
         WeatherPreviewContent(
             onBack = {},
-            showWidgetTitles = true,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
             weatherPreferences = WeatherPreferences(),
             weatherModel = WeatherModel(
+                condition = FeeCondition.GOOD,
                 title = R.string.widgets__weather__condition__good__title,
                 description = R.string.widgets__weather__condition__good__description,
                 currentFee = "$ 0.52",
@@ -234,12 +231,12 @@ private fun Preview2() {
     AppThemeSurface {
         WeatherPreviewContent(
             onBack = {},
-            showWidgetTitles = false,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
             weatherPreferences = WeatherPreferences(selectedOption = WeatherDataOption.NEXT_BLOCK_INCLUSION),
             weatherModel = WeatherModel(
+                condition = FeeCondition.POOR,
                 title = R.string.widgets__weather__condition__poor__title,
                 description = R.string.widgets__weather__condition__poor__description,
                 currentFee = "$ 4.50",
