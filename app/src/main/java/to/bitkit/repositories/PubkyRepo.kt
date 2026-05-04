@@ -26,6 +26,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.data.PubkyStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -52,7 +53,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
 }
 
-@Suppress("TooManyFunctions", "LargeClass")
+@Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @Singleton
 class PubkyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -60,6 +61,7 @@ class PubkyRepo @Inject constructor(
     private val keychain: Keychain,
     private val imageLoader: ImageLoader,
     private val pubkyStore: PubkyStore,
+    private val settingsStore: SettingsStore,
     private val httpClient: HttpClient,
 ) {
     companion object {
@@ -961,8 +963,22 @@ class PubkyRepo @Inject constructor(
     private suspend fun clearLocalState() = withContext(ioDispatcher) {
         runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        runCatching { clearPublicPaykitSharingState() }
+            .onFailure { Logger.warn("Failed to clear public Paykit sharing state", it, context = TAG) }
         notifyBackupStateChanged()
         clearAuthenticatedState()
+    }
+
+    private suspend fun clearPublicPaykitSharingState() {
+        settingsStore.update {
+            it.copy(
+                hasConfirmedPublicPaykitEndpoints = false,
+                sharesPublicPaykitEndpoints = false,
+                publicPaykitBolt11 = "",
+                publicPaykitBolt11PaymentHash = "",
+                publicPaykitBolt11ExpiresAtMillis = 0,
+            )
+        }
     }
 
     private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {

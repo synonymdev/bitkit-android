@@ -5,6 +5,7 @@ import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import com.synonym.paykit.FfiPaymentEntry
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -20,6 +21,8 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.models.PubkyProfile
@@ -51,10 +54,19 @@ class PubkyRepoTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val imageLoader = mock<ImageLoader>()
     private val pubkyStore = mock<PubkyStore>()
+    private val settingsStore = mock<SettingsStore>()
+    private val settingsFlow = MutableStateFlow(SettingsData())
 
     @Before
     fun setUp() = runBlocking {
+        settingsFlow.value = SettingsData()
         whenever(pubkyStore.data).thenReturn(flowOf(PubkyStoreData()))
+        whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsFlow.value = transform(settingsFlow.value)
+            Unit
+        }
         sut = createSut()
     }
 
@@ -64,6 +76,7 @@ class PubkyRepoTest : BaseUnitTest() {
         keychain = keychain,
         imageLoader = imageLoader,
         pubkyStore = pubkyStore,
+        settingsStore = settingsStore,
         httpClient = mock(),
     )
 
@@ -245,6 +258,27 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.isAuthenticated.value)
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(pubkyStore) { reset() }
+    }
+
+    @Test
+    fun `signOut should clear public Paykit sharing settings`() = test {
+        authenticateForTesting()
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitBolt11 = "lnbc1old",
+            publicPaykitBolt11PaymentHash = "010203",
+            publicPaykitBolt11ExpiresAtMillis = 123L,
+        )
+
+        val result = sut.signOut()
+
+        assertTrue(result.isSuccess)
+        assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
     }
 
     @Test
