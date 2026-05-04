@@ -122,31 +122,59 @@ This PR adds support for...
 When the user provides custom instructions after `--`:
 - Parse any referenced commit SHAs and read their full messages
 - Focus the description content on areas the user emphasizes
-- Structure QA Notes according to user's specific testing instructions
+- Structure QA Notes according to user's specific manual testing instructions
 - Custom instructions take priority over default generation rules for sections they address
-- Preserve exact testing steps provided by the user (don't summarize or omit details)
+- Preserve exact manual testing steps provided by the user (don't summarize or omit details)
+- If custom instructions include automated checks, keep them out of the PR body and mention them only in the assistant's chat summary
 
-**QA Notes / Testing Scenarios:**
-- Structure with numbered headings and steps
-- Make steps easily referenceable
-- Be specific about what to test and expected outcomes
+**QA Notes / Manual Tests:**
+- QA Notes are only for actionable human QA instructions.
+- Always use this structure:
+  ```md
+  ### QA Notes
+  #### Manual Tests
+  ```
+- Do not include automated verification entries in PR bodies.
+- Do not mention CI checks, local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, or similar automated checks in PR-body QA notes.
+- If automated checks were run, mention them only in the assistant's chat summary, not in the PR description.
+- If no actionable manual validation exists, write `N/A` under `#### Manual Tests`.
+- Write manual tests using this template:
+  ```md
+  - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation
+  ```
+- Use a list of unchecked checkboxes for each individual test.
+- Use a numbered prefix for each test, in bold, for example `**1.**`, `**2.**`.
+- Use `regression:` for regression checks, positioned after the numbering.
+- Use sub-lists for variations of the same test.
+- Use letter suffixes in numbering for each variation when a test has a sub-list, for example `**3a.**`, `**3b.**`.
+- Always use `→` to denote navigation, for example `Send → Amount`.
+- Use screen names from code, formatted as separate words without the `Screen` suffix, for example `SendAmountScreen` becomes `Send Amount`.
+- Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
-Structure QA Notes around testing and integration:
+Structure QA Notes around manual integration validation only. Automated checks still belong in the assistant's chat summary.
 
 Example:
 ```
 ### QA Notes
+#### Manual Tests
+- [ ] **1.** Consumer app → exercise updated binding flow: behavior matches previous release.
+- [ ] **2.** `regression:` Android integration screen → trigger changed API path: no crash or stale data.
+```
 
-#### Testing
-- [ ] `cargo test` passes
-- [ ] `cargo clippy` clean
-- [ ] Android bindings: `./build_android.sh`
-- [ ] iOS bindings: `./build_ios.sh`
-
-#### Integration
-- Tested in: [bitkit-android#XXX](link)
-- Or N/A if internal refactor with no API changes
+Concrete style target:
+```md
+### QA Notes
+#### Manual Tests
+- [ ] **1.** No usable channels/spending balance → scan LN invoice: error shows immediately, not after 15s.
+- [ ] **2.** Scanner → scan fixed amount LN invoice: Send Confirm or QuickPay opens directly.
+- [ ] **3a.** `regression:` Send → scanner/paste fixed amount LN invoice: in-sheet nav to Confirm or QuickPay.
+  - [ ] **3b.** `regression:` Variable amount LN invoice/LNURL-pay: lands on Amount view.
+- [ ] **4a.** Activity Detail of LN transfer → tap Connection: lands on Channel Detail.
+  - [ ] **4b.** back: returns to Activity Detail.
+- [ ] **5a.** Settings → Lightning Connections → tap channel: still opens Channel Detail.
+  - [ ] **5b.** back: returns to Connections List.
+- [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
 ```
 
 **Preview Section (conditional):**
