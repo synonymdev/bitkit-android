@@ -1,6 +1,9 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,6 +30,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
@@ -46,7 +50,9 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import kotlin.test.assertEquals
@@ -108,6 +114,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
+        whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
         whenever(timedSheetManager.currentSheet).thenReturn(MutableStateFlow(null))
         whenever(migrationService.isShowingMigrationLoading).thenReturn(MutableStateFlow(false))
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
@@ -314,6 +322,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lightning scan uses QuickPay when enabled`() = test {
+        val bolt11 = "lnbcrt1quickpay"
+        enableQuickPay(thresholdSats = 1000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `contact lightning payment skips QuickPay and opens confirm`() = test {
+        val bolt11 = "lnbcrt1contact"
+        enableQuickPay(thresholdSats = 1000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.openContactPayment(paymentRequest = bolt11, publicKey = "pubkycontact")
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
     fun `channel ready refreshes public Paykit endpoints when sharing enabled`() = test {
         enablePublicPaykitSharing()
         advanceUntilIdle()
@@ -403,6 +437,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `lastLightningFee is zero initially`() = test {
         assertEquals(0L, sut.sendUiState.value.lastLightningFee)
     }
+
+    private fun enableQuickPay(thresholdSats: ULong) {
+        settingsData.value = SettingsData(isQuickPayEnabled = true, quickPayAmount = 5)
+        whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(thresholdSats))
+    }
+
+    private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {
+        whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(lightningInvoice(bolt11, amountSats)))
+        whenever(lightningRepo.canSend(amountSats)).thenReturn(true)
+    }
+
+    private fun lightningInvoice(bolt11: String, amountSats: ULong) = LightningInvoice(
+        bolt11 = bolt11,
+        paymentHash = byteArrayOf(1, 2, 3),
+        amountSatoshis = amountSats,
+        timestampSeconds = 0u,
+        expirySeconds = 86_400u,
+        isExpired = false,
+        description = "",
+        networkType = NetworkType.REGTEST,
+        payeeNodeId = null,
+    )
 
     private suspend fun enablePublicPaykitSharing() {
         settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)

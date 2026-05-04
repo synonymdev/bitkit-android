@@ -1471,6 +1471,10 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun hasActiveContactPaymentContext() = synchronized(contactPaymentContextLock) {
+        activeContactPaymentContext != null
+    }
+
     @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
         val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
@@ -1805,6 +1809,8 @@ class AppViewModel @Inject constructor(
         lnurlPay: LnurlPayData? = null,
         invoice: LightningInvoice? = null,
     ): Boolean {
+        if (hasActiveContactPaymentContext()) return false
+
         val settings = settingsStore.data.first()
         if (!settings.isQuickPayEnabled || amountSats == 0uL) {
             return false
