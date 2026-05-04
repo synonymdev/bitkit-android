@@ -67,8 +67,14 @@ class AddContactViewModel @Inject constructor(
             }
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile ->
-                    _uiState.update { it.copy(fetchedProfile = profile, isLoading = false) }
-                    loadPaymentEndpoint(profile.publicKey)
+                    val hasEndpoint = loadPaymentEndpoint(profile.publicKey)
+                    _uiState.update {
+                        it.copy(
+                            fetchedProfile = profile,
+                            hasPublicPaymentEndpoint = hasEndpoint,
+                            isLoading = false,
+                        )
+                    }
                 }
                 .onFailure { error ->
                     _uiState.update { state ->
@@ -90,16 +96,12 @@ class AddContactViewModel @Inject constructor(
         }
     }
 
-    private fun loadPaymentEndpoint(publicKey: String) {
-        viewModelScope.launch {
-            publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
-                .onSuccess { hasEndpoint ->
-                    _uiState.update { it.copy(hasPublicPaymentEndpoint = hasEndpoint) }
-                }
-                .onFailure {
-                    Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
-                }
-        }
+    private suspend fun loadPaymentEndpoint(publicKey: String): Boolean {
+        return publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
+            .onFailure {
+                Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
+            }
+            .getOrDefault(false)
     }
 
     fun payContact() {

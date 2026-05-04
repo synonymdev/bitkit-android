@@ -53,30 +53,33 @@ class ContactDetailViewModel @Inject constructor(
 
     init {
         loadContact()
-        loadPaymentEndpoint()
         observeContactUpdates()
     }
 
     fun loadContact() {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             val cached = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
             if (cached != null) {
+                val hasEndpoint = loadPaymentEndpoint()
                 _uiState.update {
                     it.copy(
                         profile = cached,
                         tags = cached.tags.toImmutableList(),
+                        hasPublicPaymentEndpoint = hasEndpoint,
                         isLoading = false,
                     )
                 }
                 return@launch
             }
-            _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile ->
+                    val hasEndpoint = loadPaymentEndpoint()
                     _uiState.update {
                         it.copy(
                             profile = profile,
                             tags = profile.tags.toImmutableList(),
+                            hasPublicPaymentEndpoint = hasEndpoint,
                             isLoading = false,
                         )
                     }
@@ -92,16 +95,12 @@ class ContactDetailViewModel @Inject constructor(
         }
     }
 
-    private fun loadPaymentEndpoint() {
-        viewModelScope.launch {
-            publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
-                .onSuccess { hasEndpoint ->
-                    _uiState.update { it.copy(hasPublicPaymentEndpoint = hasEndpoint) }
-                }
-                .onFailure {
-                    Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
-                }
-        }
+    private suspend fun loadPaymentEndpoint(): Boolean {
+        return publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
+            .onFailure {
+                Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
+            }
+            .getOrDefault(false)
     }
 
     fun payContact() {
