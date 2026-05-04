@@ -178,32 +178,6 @@ class ContactDetailViewModel @Inject constructor(
         persistTags(newTags)
     }
 
-    fun showDeleteConfirmation() {
-        _uiState.update { it.copy(showDeleteDialog = true) }
-    }
-
-    fun dismissDeleteDialog() {
-        _uiState.update { it.copy(showDeleteDialog = false) }
-    }
-
-    fun deleteContact() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(showDeleteDialog = false) }
-            pubkyRepo.removeContact(publicKey)
-                .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.contacts__delete_success),
-                        testTag = "ContactDeletedToast",
-                    )
-                    _effects.emit(ContactDetailEffect.DeleteSuccess)
-                }
-                .onFailure {
-                    Logger.error("Failed to delete contact '$redactedPublicKey'", it, context = TAG)
-                }
-        }
-    }
-
     private fun persistTags(tags: List<String>) {
         val profile = _uiState.value.profile ?: return
         viewModelScope.launch {
@@ -228,10 +202,8 @@ data class ContactDetailUiState(
     val isLoading: Boolean = false,
     val hasPublicPaymentEndpoint: Boolean = false,
     val showAddTagSheet: Boolean = false,
-    val showDeleteDialog: Boolean = false,
 )
 
 sealed interface ContactDetailEffect {
-    data object DeleteSuccess : ContactDetailEffect
     data class OpenPayment(val paymentRequest: String, val publicKey: String) : ContactDetailEffect
 }

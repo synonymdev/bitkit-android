@@ -39,7 +39,6 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -61,7 +60,6 @@ fun ContactDetailScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                ContactDetailEffect.DeleteSuccess -> onBackClick()
                 is ContactDetailEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
             }
         }
@@ -75,14 +73,11 @@ fun ContactDetailScreen(
         onClickPay = { viewModel.payContact() },
         onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
-        onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickRetry = { viewModel.loadContact() },
         onAddTag = { viewModel.showAddTagSheet() },
         onRemoveTag = { viewModel.removeTag(it) },
         onDismissAddTagSheet = { viewModel.dismissAddTagSheet() },
         onSaveTag = { viewModel.addTag(it) },
-        onDismissDeleteDialog = { viewModel.dismissDeleteDialog() },
-        onConfirmDelete = { viewModel.deleteContact() },
     )
 }
 
@@ -95,14 +90,11 @@ private fun Content(
     onClickPay: () -> Unit,
     onClickActivity: () -> Unit,
     onClickShare: () -> Unit,
-    onClickDelete: () -> Unit,
     onClickRetry: () -> Unit,
     onAddTag: () -> Unit,
     onRemoveTag: (Int) -> Unit,
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
-    onDismissDeleteDialog: () -> Unit,
-    onConfirmDelete: () -> Unit,
 ) {
     val currentProfile = uiState.profile
 
@@ -124,22 +116,11 @@ private fun Content(
                 onClickPay = onClickPay,
                 onClickActivity = onClickActivity,
                 onClickShare = onClickShare,
-                onClickDelete = onClickDelete,
                 onAddTag = onAddTag,
                 onRemoveTag = onRemoveTag,
             )
             else -> EmptyState(onClickRetry = onClickRetry)
         }
-    }
-
-    if (uiState.showDeleteDialog && currentProfile != null) {
-        AppAlertDialog(
-            title = stringResource(R.string.contacts__delete_confirm_title, currentProfile.name),
-            text = stringResource(R.string.contacts__delete_confirm_text, currentProfile.name),
-            confirmText = stringResource(R.string.common__delete_yes),
-            onConfirm = onConfirmDelete,
-            onDismiss = onDismissDeleteDialog,
-        )
     }
 
     if (uiState.showAddTagSheet) {
@@ -161,7 +142,6 @@ private fun ContactBody(
     onClickPay: () -> Unit,
     onClickActivity: () -> Unit,
     onClickShare: () -> Unit,
-    onClickDelete: () -> Unit,
     onAddTag: () -> Unit,
     onRemoveTag: (Int) -> Unit,
 ) {
@@ -190,11 +170,6 @@ private fun ContactBody(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            ActionButton(
-                onClick = onClickCopy,
-                iconRes = R.drawable.ic_copy,
-                modifier = Modifier.testTag("ContactCopy")
-            )
             if (hasPublicPaymentEndpoint) {
                 ActionButton(
                     onClick = onClickPay,
@@ -204,8 +179,13 @@ private fun ContactBody(
             }
             ActionButton(
                 onClick = onClickActivity,
-                iconRes = R.drawable.ic_list_dashes,
+                iconRes = R.drawable.ic_activity,
                 modifier = Modifier.testTag("ContactActivity")
+            )
+            ActionButton(
+                onClick = onClickCopy,
+                iconRes = R.drawable.ic_copy,
+                modifier = Modifier.testTag("ContactCopy")
             )
             ActionButton(
                 onClick = onClickShare,
@@ -216,11 +196,6 @@ private fun ContactBody(
                 onClick = onClickEdit,
                 iconRes = R.drawable.ic_edit,
                 modifier = Modifier.testTag("ContactEdit")
-            )
-            ActionButton(
-                onClick = onClickDelete,
-                iconRes = R.drawable.ic_trash,
-                modifier = Modifier.testTag("ContactDelete")
             )
         }
 
@@ -320,14 +295,11 @@ private fun Preview() {
             onClickPay = {},
             onClickActivity = {},
             onClickShare = {},
-            onClickDelete = {},
             onClickRetry = {},
             onAddTag = {},
             onRemoveTag = {},
             onDismissAddTagSheet = {},
             onSaveTag = {},
-            onDismissDeleteDialog = {},
-            onConfirmDelete = {},
         )
     }
 }
