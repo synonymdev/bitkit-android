@@ -55,13 +55,7 @@ class PublicPaykitRepo @Inject constructor(
             MethodId.P2pkh,
         )
 
-        private val publishableMethodIds = listOf(
-            MethodId.Bolt11,
-            MethodId.P2tr,
-            MethodId.P2wpkh,
-            MethodId.P2sh,
-            MethodId.P2pkh,
-        )
+        private val removableMethodIds = MethodId.entries
 
         fun parseEndpoint(methodId: String, endpointData: String): Endpoint? {
             if (!methodIdPattern.matches(methodId)) return null
@@ -170,7 +164,7 @@ class PublicPaykitRepo @Inject constructor(
     private suspend fun removePublishedEndpoints() {
         publishMutex.withLock {
             val currentMethodIds = currentPublishedMethodIds()
-            publishableMethodIds
+            removableMethodIds
                 .filter { it.rawValue in currentMethodIds }
                 .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
         }
@@ -186,7 +180,7 @@ class PublicPaykitRepo @Inject constructor(
             }
 
             val publishedMethodIds = currentPublishedMethodIds()
-            publishableMethodIds
+            removableMethodIds
                 .filter { it.rawValue in publishedMethodIds && it.rawValue !in desiredMethodIds }
                 .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
         }

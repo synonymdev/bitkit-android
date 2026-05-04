@@ -21,6 +21,7 @@ import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -44,6 +45,8 @@ class ContactDetailViewModel @Inject constructor(
     private val publicKey: String = checkNotNull(
         savedStateHandle["publicKey"],
     ) { "publicKey not found in SavedStateHandle" }
+
+    private val redactedPublicKey = PubkyPublicKeyFormat.redacted(publicKey)
 
     private val _uiState = MutableStateFlow(ContactDetailUiState())
     val uiState: StateFlow<ContactDetailUiState> = _uiState.asStateFlow()
@@ -98,7 +101,7 @@ class ContactDetailViewModel @Inject constructor(
     private suspend fun loadPaymentEndpoint(): Boolean {
         return publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
             .onFailure {
-                Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
+                Logger.warn("Failed to load public Paykit endpoint for '$redactedPublicKey'", it, context = TAG)
             }
             .getOrDefault(false)
     }
@@ -117,7 +120,7 @@ class ContactDetailViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
-                    Logger.warn("Failed to begin public Paykit payment for '$publicKey'", it, context = TAG)
+                    Logger.warn("Failed to begin public Paykit payment for '$redactedPublicKey'", it, context = TAG)
                     showPayError(R.string.slashtags__error_pay_not_opened_msg)
                 }
         }
@@ -196,7 +199,7 @@ class ContactDetailViewModel @Inject constructor(
                     _effects.emit(ContactDetailEffect.DeleteSuccess)
                 }
                 .onFailure {
-                    Logger.error("Failed to delete contact '$publicKey'", it, context = TAG)
+                    Logger.error("Failed to delete contact '$redactedPublicKey'", it, context = TAG)
                 }
         }
     }
@@ -212,7 +215,7 @@ class ContactDetailViewModel @Inject constructor(
                 links = profile.links.map { PubkyProfileLink(it.label, it.url) },
                 tags = tags,
             ).onFailure {
-                Logger.error("Failed to update tags for contact '$publicKey'", it, context = TAG)
+                Logger.error("Failed to update tags for contact '$redactedPublicKey'", it, context = TAG)
             }
         }
     }

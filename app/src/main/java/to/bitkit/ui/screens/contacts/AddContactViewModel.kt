@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
@@ -99,7 +100,11 @@ class AddContactViewModel @Inject constructor(
     private suspend fun loadPaymentEndpoint(publicKey: String): Boolean {
         return publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
             .onFailure {
-                Logger.warn("Failed to load public Paykit endpoint for '$publicKey'", it, context = TAG)
+                Logger.warn(
+                    "Failed to load public Paykit endpoint for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
+                    it,
+                    context = TAG,
+                )
             }
             .getOrDefault(false)
     }
@@ -119,7 +124,12 @@ class AddContactViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
-                    Logger.warn("Failed to begin public Paykit payment for '${profile.publicKey}'", it, context = TAG)
+                    val redactedPublicKey = PubkyPublicKeyFormat.redacted(profile.publicKey)
+                    Logger.warn(
+                        "Failed to begin public Paykit payment for '$redactedPublicKey'",
+                        it,
+                        context = TAG,
+                    )
                     showPayError(R.string.slashtags__error_pay_not_opened_msg)
                 }
         }

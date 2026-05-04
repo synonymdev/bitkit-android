@@ -45,6 +45,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             Result.success(
                 listOf(
                     paymentEntry(MethodId.Bolt11, "lnbc1old"),
+                    paymentEntry(MethodId.Lnurl, "lnurl1obsolete"),
                     paymentEntry(MethodId.P2pkh, "1obsolete"),
                 ),
             ),
@@ -57,10 +58,36 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1public"}""")
             verify(pubkyRepo).setPaymentEndpoint(MethodId.P2tr.rawValue, """{"value":"bc1ptest"}""")
             verify(pubkyRepo).getPaymentList("pubkyself")
+            verify(pubkyRepo).removePaymentEndpoint(MethodId.Lnurl.rawValue)
             verify(pubkyRepo).removePaymentEndpoint(MethodId.P2pkh.rawValue)
         }
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Bolt11.rawValue)
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.P2tr.rawValue)
+    }
+
+    @Test
+    fun `syncPublishedEndpoints removes supported endpoints including lnurl`() = test {
+        val pubkyRepo = mock<PubkyRepo>()
+        val sut = createRepo(pubkyRepo = pubkyRepo)
+
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
+        whenever(pubkyRepo.removePaymentEndpoint(any())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.getPaymentList("pubkyself")).thenReturn(
+            Result.success(
+                listOf(
+                    paymentEntry(MethodId.Bolt11, "lnbc1old"),
+                    paymentEntry(MethodId.Lnurl, "lnurl1old"),
+                    paymentEntry(MethodId.P2tr, "bc1pold"),
+                ),
+            ),
+        )
+
+        val result = sut.syncPublishedEndpoints(publish = false)
+
+        assertTrue(result.isSuccess)
+        verify(pubkyRepo).removePaymentEndpoint(MethodId.Bolt11.rawValue)
+        verify(pubkyRepo).removePaymentEndpoint(MethodId.Lnurl.rawValue)
+        verify(pubkyRepo).removePaymentEndpoint(MethodId.P2tr.rawValue)
     }
 
     @Test

@@ -82,7 +82,11 @@ class ContactActivityViewModel @Inject constructor(
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile -> _uiState.update { it.copy(profile = profile) } }
                 .onFailure {
-                    Logger.warn("Failed to load contact profile for '$publicKey'", it, context = TAG)
+                    Logger.warn(
+                        "Failed to load contact profile for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
+                        it,
+                        context = TAG,
+                    )
                     _uiState.update { it.copy(profile = PubkyProfile.placeholder(publicKey)) }
                 }
         }

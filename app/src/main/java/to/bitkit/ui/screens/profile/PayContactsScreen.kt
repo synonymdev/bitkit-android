@@ -104,7 +104,7 @@ private fun Content(
                 HorizontalSpacer(16.dp)
                 Switch(
                     checked = uiState.isPaymentSharingEnabled,
-                    onCheckedChange = onPaymentSharingChange,
+                    onCheckedChange = if (uiState.isLoading) null else onPaymentSharingChange,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Colors.White,
                         checkedTrackColor = Colors.PubkyGreen,

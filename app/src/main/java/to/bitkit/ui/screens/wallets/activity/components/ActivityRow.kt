@@ -106,8 +106,10 @@ fun ActivityRow(
         }
         stringResource(titleRes, it)
     }
-    val resolvedTitle = title ?: contactTitle
     var isCpfpChild by remember { mutableStateOf(false) }
+    val resolvedTitle = (title ?: contactTitle).takeIf {
+        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+    }
 
     LaunchedEffect(item) {
         isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
@@ -192,6 +194,20 @@ fun ActivityRow(
 private fun contactName(activity: Activity, contacts: List<PubkyProfile>): String? {
     val contact = activity.contact() ?: return null
     return contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, contact) }?.name
+}
+
+private fun shouldUseContactActivityTitle(
+    activity: Activity,
+    status: PaymentState?,
+    isTransfer: Boolean,
+    isCpfpChild: Boolean,
+): Boolean {
+    if (isTransfer || isCpfpChild) return false
+
+    return when (activity) {
+        is Activity.Lightning -> status == PaymentState.SUCCEEDED
+        is Activity.Onchain -> activity.v1.doesExist
+    }
 }
 
 @Suppress("CyclomaticComplexMethod")
