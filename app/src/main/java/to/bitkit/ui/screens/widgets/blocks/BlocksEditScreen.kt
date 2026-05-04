@@ -54,7 +54,7 @@ fun BlocksEditScreen(
         fees = "",
     )
 
-    BlocksEditContent(
+    Content(
         onBack = onBack,
         blocksPreferences = customPreference,
         block = currentBlock ?: blockPlaceholder,
@@ -71,7 +71,7 @@ fun BlocksEditScreen(
 }
 
 @Composable
-fun BlocksEditContent(
+private fun Content(
     onBack: () -> Unit,
     onClickShowBlock: () -> Unit,
     onClickShowTime: () -> Unit,
@@ -276,7 +276,7 @@ private fun BlockEditOptionRow(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        BlocksEditContent(
+        Content(
             onBack = {},
             onClickShowBlock = {},
             onClickShowTime = {},
@@ -305,7 +305,7 @@ private fun Preview() {
 @Composable
 private fun PreviewWithSomeOptionsEnabled() {
     AppThemeSurface {
-        BlocksEditContent(
+        Content(
             onBack = {},
             onClickShowBlock = {},
             onClickShowTime = {},
@@ -342,7 +342,7 @@ private fun PreviewWithSomeOptionsEnabled() {
 @Composable
 private fun PreviewWithAllDisabled() {
     AppThemeSurface {
-        BlocksEditContent(
+        Content(
             onBack = {},
             onClickShowBlock = {},
             onClickShowTime = {},
