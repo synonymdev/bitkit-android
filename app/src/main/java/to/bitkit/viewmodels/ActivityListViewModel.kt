@@ -196,7 +196,7 @@ class ActivityListViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "ActivityListViewModel"
-        private const val SIZE_LATEST = 3
+        private const val SIZE_LATEST = 4
         private const val MS_TIMEOUT_SUB = 5000L
     }
 }
