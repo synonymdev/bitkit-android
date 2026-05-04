@@ -9,6 +9,7 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.fillMaxSize
@@ -40,7 +41,7 @@ fun FactsGlanceContent(
         putExtra(AppWidgetConfigActivity.EXTRA_WIDGET_TYPE, AppWidgetType.FACTS.name)
     }
 
-    GlanceWidgetScaffold(onClick = configIntent) {
+    GlanceWidgetScaffold(onClick = actionStartActivity(configIntent)) {
         if (fact == null) {
             CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold
