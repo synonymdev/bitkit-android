@@ -9,9 +9,11 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
@@ -31,6 +33,7 @@ import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PendingPaymentRepo
+import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
@@ -79,18 +82,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val formatMoneyValue = mock<FormatMoneyValue>()
 
     private val balanceState = MutableStateFlow(BalanceState())
+    private val nodeEvents = MutableSharedFlow<Event>()
 
     private val timedSheetManager = mock<TimedSheetManager>()
 
     @Before
     fun setUp() {
+        stubRepositories()
+        sut = createViewModel()
+    }
+
+    private fun stubRepositories() {
         whenever(context.getString(any())).thenReturn("")
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        whenever(lightningRepo.nodeEvents).thenReturn(MutableSharedFlow())
+        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState()))
+        whenever(walletRepo.walletExists()).thenReturn(true)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -108,41 +118,41 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
         whenever { lightningRepo.canSend(any(), any()) }.thenReturn(true)
-
-        sut = AppViewModel(
-            connectivityRepo = connectivityRepo,
-            healthRepo = healthRepo,
-            toastManagerProvider = { mock<ToastQueueManager>() },
-            timedSheetManagerProvider = { timedSheetManager },
-            context = context,
-            bgDispatcher = testDispatcher,
-            keychain = keychain,
-            lightningRepo = lightningRepo,
-            pendingPaymentRepo = pendingPaymentRepo,
-            walletRepo = walletRepo,
-            backupRepo = backupRepo,
-            settingsStore = settingsStore,
-            currencyRepo = currencyRepo,
-            activityRepo = activityRepo,
-            preActivityMetadataRepo = preActivityMetadataRepo,
-            blocktankRepo = blocktankRepo,
-            appUpdaterService = appUpdaterService,
-            notifyPaymentReceivedHandler = notifyPaymentReceivedHandler,
-            cacheStore = cacheStore,
-            transferRepo = transferRepo,
-            migrationService = migrationService,
-            coreService = coreService,
-            publicPaykitRepo = publicPaykitRepo,
-            appUpdateSheet = mock(),
-            backupSheet = mock(),
-            notificationsSheet = mock(),
-            quickPaySheet = mock(),
-            highBalanceSheet = mock(),
-            formatMoneyValue = formatMoneyValue,
-            widgetsRepo = widgetsRepo,
-            pubkyRepo = pubkyRepo,
-        )
     }
+
+    private fun createViewModel() = AppViewModel(
+        connectivityRepo = connectivityRepo,
+        healthRepo = healthRepo,
+        toastManagerProvider = { mock<ToastQueueManager>() },
+        timedSheetManagerProvider = { timedSheetManager },
+        context = context,
+        bgDispatcher = testDispatcher,
+        keychain = keychain,
+        lightningRepo = lightningRepo,
+        pendingPaymentRepo = pendingPaymentRepo,
+        walletRepo = walletRepo,
+        backupRepo = backupRepo,
+        settingsStore = settingsStore,
+        currencyRepo = currencyRepo,
+        activityRepo = activityRepo,
+        preActivityMetadataRepo = preActivityMetadataRepo,
+        blocktankRepo = blocktankRepo,
+        appUpdaterService = appUpdaterService,
+        notifyPaymentReceivedHandler = notifyPaymentReceivedHandler,
+        cacheStore = cacheStore,
+        transferRepo = transferRepo,
+        migrationService = migrationService,
+        coreService = coreService,
+        publicPaykitRepo = publicPaykitRepo,
+        appUpdateSheet = mock(),
+        backupSheet = mock(),
+        notificationsSheet = mock(),
+        quickPaySheet = mock(),
+        highBalanceSheet = mock(),
+        formatMoneyValue = formatMoneyValue,
+        widgetsRepo = widgetsRepo,
+        pubkyRepo = pubkyRepo,
+    )
 
     @Test
     fun `canSwitchWallet is false when not unified`() = test {
@@ -255,6 +265,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending contact lightning success tags activity`() = test {
+        val contactKey = "pubkycontact"
+        val paymentHash = "pending_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever(activityRepo.setContact(contactKey, paymentHash)).thenReturn(Result.success(Unit))
+        advanceUntilIdle()
+
+        setPendingContactPaymentContext(paymentHash, contactKey)
+        nodeEvents.emit(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+        verify(activityRepo).setContact(contactPublicKey = contactKey, forPaymentId = paymentHash)
+    }
+
+    @Test
     fun `amount change clears confirmedWarnings`() = test {
         setUnifiedState(amount = 1000u)
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
@@ -305,6 +339,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lastLightningFee is zero initially`() = test {
         assertEquals(0L, sut.sendUiState.value.lastLightningFee)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun setPendingContactPaymentContext(paymentHash: String, publicKey: String) {
+        val field = AppViewModel::class.java.getDeclaredField("pendingContactPaymentContexts")
+        field.isAccessible = true
+        val contexts = field.get(sut) as MutableMap<String, ContactPaymentContext>
+        contexts[paymentHash] = ContactPaymentContext(publicKey)
     }
 
     @Suppress("UNCHECKED_CAST")

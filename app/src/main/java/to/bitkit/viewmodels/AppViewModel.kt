@@ -699,6 +699,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
+                syncContactForActivity(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentSucceeded()
