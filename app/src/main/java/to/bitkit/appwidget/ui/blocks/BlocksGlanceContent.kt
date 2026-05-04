@@ -21,6 +21,8 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.unit.Dimension
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.appwidget.config.AppWidgetConfigActivity
 import to.bitkit.appwidget.model.AppWidgetEntry
@@ -73,14 +75,14 @@ fun BlocksGlanceContent(
         if (LocalSize.current.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH) {
             WideContent(rows = rows)
         } else {
-            CompactContent(rows = rows.take(MAX_SMALL_ROWS))
+            CompactContent(rows = rows.take(MAX_SMALL_ROWS).toImmutableList())
         }
     }
 }
 
 @Suppress("RestrictedApi")
 @Composable
-private fun WideContent(rows: List<BlockRow>) {
+private fun WideContent(rows: ImmutableList<BlockRow>) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
         rows.forEach { row ->
             WideRow(row = row, modifier = GlanceModifier.padding(vertical = 6.dp))
@@ -113,7 +115,7 @@ private fun WideRow(row: BlockRow, modifier: GlanceModifier = GlanceModifier) {
 
 @Suppress("RestrictedApi")
 @Composable
-private fun CompactContent(rows: List<BlockRow>) {
+private fun CompactContent(rows: ImmutableList<BlockRow>) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         rows.forEachIndexed { index, row ->
             if (index > 0) VerticalSpacer(16.dp)
@@ -144,7 +146,7 @@ private fun buildRows(
     context: android.content.Context,
     preferences: HomeBlocksPreferences,
     block: BlockModel,
-): List<BlockRow> = listOfNotNull(
+): ImmutableList<BlockRow> = listOfNotNull(
     BlockRow(
         icon = R.drawable.ic_cube,
         label = context.getString(R.string.widgets__blocks__field__block),
@@ -180,4 +182,4 @@ private fun buildRows(
         label = context.getString(R.string.widgets__widget__source),
         value = block.source,
     ).takeIf { preferences.showSource && block.source.isNotEmpty() },
-)
+).toImmutableList()
