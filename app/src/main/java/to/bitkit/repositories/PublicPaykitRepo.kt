@@ -243,8 +243,7 @@ class PublicPaykitRepo @Inject constructor(
             -> {
                 val scan = coreService.decode(endpoint.paymentRequest) as? Scanner.OnChain ?: return@runCatching false
                 val address = validateBitcoinAddress(scan.invoice.address)
-                onchainMethodId(scan.invoice.address) == endpoint.methodId &&
-                    !NetworkValidationHelper.isNetworkMismatch(address.network.toLdkNetwork(), Env.network)
+                !NetworkValidationHelper.isNetworkMismatch(address.network.toLdkNetwork(), Env.network)
             }
         }
     }.getOrDefault(false)
