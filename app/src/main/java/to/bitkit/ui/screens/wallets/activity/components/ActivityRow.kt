@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.contact
@@ -94,7 +95,7 @@ fun ActivityRow(
 
     val activityListViewModel = activityListViewModel
     val contacts by activityListViewModel?.contacts?.collectAsStateWithLifecycle() ?: remember {
-        mutableStateOf(emptyList())
+        mutableStateOf(persistentListOf())
     }
     val contactName = remember(item, contacts) { contactName(item, contacts) }
     val contactTitle = contactName?.let {
