@@ -262,6 +262,7 @@ class PubkyRepo @Inject constructor(
             _authState.update { PubkyAuthState.Authenticated }
             Logger.info("Completed pubky auth for '$pk'", context = TAG)
             loadProfile()
+            loadContacts()
         }.map { }
     }
 

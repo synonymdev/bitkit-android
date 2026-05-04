@@ -105,6 +105,8 @@ class PubkyRepoTest : BaseUnitTest() {
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("User")
         whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
 
         val result = sut.completeAuthentication()
 
@@ -122,6 +124,8 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
         val ffiProfile = createFfiProfile(name = "User")
         whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
 
         val result = sut.completeAuthentication()
 
@@ -130,18 +134,20 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `completeAuthentication should not load contacts automatically`() = test {
+    fun `completeAuthentication should load contacts automatically`() = test {
         val testSecret = "session_secret"
         val testPk = VALID_SELF_KEY.removePrefix("pubky")
         whenever(pubkyService.completeAuth()).thenReturn(testSecret)
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
         val ffiProfile = createFfiProfile(name = "User")
         whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
 
         val result = sut.completeAuthentication()
 
         assertTrue(result.isSuccess)
-        verify(pubkyService, never()).sessionList(any(), any())
+        verify(pubkyService).sessionList(testSecret, Env.contactsBasePath)
     }
 
     @Test
