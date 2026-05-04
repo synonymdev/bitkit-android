@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.isTransfer
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -37,6 +38,7 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
+    pubkyRepo: PubkyRepo,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
@@ -49,6 +51,8 @@ class ActivityListViewModel @Inject constructor(
 
     private val _latestActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val latestActivities = _latestActivities.asStateFlow()
+
+    val contacts = pubkyRepo.contacts
 
     val availableTags: StateFlow<ImmutableList<String>> =
         activityRepo.state.map { it.tags }.stateInScope(persistentListOf())

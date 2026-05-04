@@ -35,6 +35,7 @@ import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.contact
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
@@ -403,11 +404,6 @@ class ActivityRepo @Inject constructor(
     private suspend fun getActivityByPaymentId(forPaymentId: String): Activity? =
         coreService.activity.getActivity(forPaymentId)
             ?: getOnchainActivityByTxId(forPaymentId)?.let { Activity.Onchain(it) }
-
-    private fun Activity.contact(): String? = when (this) {
-        is Activity.Lightning -> v1.contact
-        is Activity.Onchain -> v1.contact
-    }
 
     private fun Activity.withContact(normalizedKey: String, updatedAt: ULong): Activity = when (this) {
         is Activity.Lightning -> Activity.Lightning(v1.copy(contact = normalizedKey, updatedAt = updatedAt))

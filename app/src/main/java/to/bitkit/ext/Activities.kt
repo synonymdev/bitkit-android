@@ -52,6 +52,11 @@ fun Activity.isSent() = when (this) {
     is Activity.Onchain -> v1.txType == PaymentType.SENT
 }
 
+fun Activity.contact(): String? = when (this) {
+    is Activity.Lightning -> v1.contact
+    is Activity.Onchain -> v1.contact
+}
+
 fun Activity.matchesPaymentId(paymentHashOrTxId: String): Boolean = when (this) {
     is Activity.Lightning -> paymentHashOrTxId == v1.id
     is Activity.Onchain -> paymentHashOrTxId == v1.txId
