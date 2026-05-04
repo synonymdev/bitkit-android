@@ -11,6 +11,10 @@ import to.bitkit.utils.Logger
 private const val TAG = "OpenUrlAction"
 
 class OpenUrlAction : ActionCallback {
+    companion object {
+        val linkKey = ActionParameters.Key<String>("article_link")
+    }
+
     override suspend fun onAction(
         context: Context,
         glanceId: GlanceId,
@@ -23,9 +27,5 @@ class OpenUrlAction : ActionCallback {
         }
         runCatching { context.startActivity(intent) }
             .onFailure { Logger.error("Failed to open url '$link'", it, context = TAG) }
-    }
-
-    companion object {
-        val linkKey = ActionParameters.Key<String>("article_link")
     }
 }
