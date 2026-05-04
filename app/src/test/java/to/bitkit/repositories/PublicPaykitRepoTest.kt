@@ -21,17 +21,24 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     fun `syncCurrentPublishedEndpoints sets desired endpoints and removes obsolete endpoints`() = test {
         val pubkyRepo = mock<PubkyRepo>()
         val walletRepo = mock<WalletRepo>()
-        val sut = createRepo(pubkyRepo = pubkyRepo, walletRepo = walletRepo)
+        val lightningRepo = mock<LightningRepo>()
+        val sut = createRepo(
+            pubkyRepo = pubkyRepo,
+            walletRepo = walletRepo,
+            lightningRepo = lightningRepo,
+        )
 
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
         whenever(walletRepo.walletState).thenReturn(
             MutableStateFlow(
                 WalletState(
                     onchainAddress = "bc1ptest",
-                    bolt11 = "lnbc1test",
+                    bolt11 = "lnbc1user",
                 ),
             ),
         )
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.createInvoice(null, "")).thenReturn(Result.success("lnbc1public"))
         whenever(pubkyRepo.setPaymentEndpoint(any(), any())).thenReturn(Result.success(Unit))
         whenever(pubkyRepo.removePaymentEndpoint(any())).thenReturn(Result.success(Unit))
         whenever(pubkyRepo.getPaymentList("pubkyself")).thenReturn(
@@ -47,7 +54,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         inOrder(pubkyRepo) {
-            verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1test"}""")
+            verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1public"}""")
             verify(pubkyRepo).setPaymentEndpoint(MethodId.P2tr.rawValue, """{"value":"bc1ptest"}""")
             verify(pubkyRepo).getPaymentList("pubkyself")
             verify(pubkyRepo).removePaymentEndpoint(MethodId.P2pkh.rawValue)
@@ -64,7 +71,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
         whenever(pubkyRepo.currentPublicKey()).thenReturn(Result.success(null))
-        whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState(bolt11 = "lnbc1test")))
+        whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState(onchainAddress = "bc1ptest")))
 
         val error = sut.syncCurrentPublishedEndpoints().exceptionOrNull()
 

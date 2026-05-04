@@ -211,18 +211,19 @@ class PublicPaykitRepo @Inject constructor(
             lightningRepo.executeWhenNodeRunning(
                 operationName = "sync public Paykit endpoints",
             ) {
-                walletRepo.refreshBip21()
+                Result.success(Unit)
             }.getOrThrow()
         }
 
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
+        val publicBolt11 = buildPublicBolt11()
 
-        if (state.bolt11.isNotBlank()) {
+        if (publicBolt11.isNotBlank()) {
             endpoints += Endpoint(
                 methodId = MethodId.Bolt11,
-                value = state.bolt11,
-                rawPayload = serializePayload(state.bolt11),
+                value = publicBolt11,
+                rawPayload = serializePayload(publicBolt11),
             )
         }
 
@@ -239,6 +240,12 @@ class PublicPaykitRepo @Inject constructor(
         if (endpoints.isEmpty()) throw PublicPaykitError.NoSupportedEndpoint
 
         return endpoints
+    }
+
+    private suspend fun buildPublicBolt11(): String {
+        if (!lightningRepo.canReceive()) return ""
+
+        return lightningRepo.createInvoice(amountSats = null, description = "").getOrThrow()
     }
 
     private suspend fun isPayable(endpoint: Endpoint): Boolean = runCatching {
