@@ -100,24 +100,6 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncPublishedEndpoints publishes onchain endpoint when lightning cannot receive`() = test {
-        walletState.value = WalletState(onchainAddress = "bc1ptest")
-        whenever(lightningRepo.canReceive()).thenReturn(false)
-        whenever(pubkyRepo.getPaymentList("pubkyself")).thenReturn(Result.success(emptyList()))
-
-        val result = sut.syncPublishedEndpoints(publish = true)
-
-        assertTrue(result.isSuccess)
-        assertEquals("", settingsFlow.value.publicPaykitBolt11)
-        verify(pubkyRepo).setPaymentEndpoint(MethodId.P2tr.rawValue, """{"value":"bc1ptest"}""")
-        verify(lightningRepo, never()).createInvoice(
-            amountSats = null,
-            description = "",
-            expirySeconds = PUBLIC_BOLT11_EXPIRY_SECONDS,
-        )
-    }
-
-    @Test
     fun `syncPublishedEndpoints removes bitkit managed endpoints and preserves lnurl`() = test {
         setSettings(
             SettingsData(

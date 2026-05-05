@@ -228,9 +228,17 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private suspend fun buildWalletEndpoints(refresh: Boolean): List<Endpoint> {
+        if (refresh) {
+            lightningRepo.executeWhenNodeRunning(
+                operationName = "sync public Paykit endpoints",
+            ) {
+                Result.success(Unit)
+            }.getOrThrow()
+        }
+
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
-        buildPublicBolt11Endpoint(refresh)?.let { endpoints += it }
+        buildPublicBolt11Endpoint()?.let { endpoints += it }
 
         val onchainAddress = state.onchainAddress
         if (onchainAddress.isNotBlank()) {
@@ -247,7 +255,7 @@ class PublicPaykitRepo @Inject constructor(
         return endpoints
     }
 
-    private suspend fun buildPublicBolt11Endpoint(refresh: Boolean): Endpoint? {
+    private suspend fun buildPublicBolt11Endpoint(): Endpoint? {
         if (!lightningRepo.canReceive()) {
             clearPublicBolt11Metadata()
             return null
@@ -261,14 +269,6 @@ class PublicPaykitRepo @Inject constructor(
                 value = cachedBolt11,
                 rawPayload = serializePayload(cachedBolt11),
             )
-        }
-
-        if (refresh) {
-            lightningRepo.executeWhenNodeRunning(
-                operationName = "sync public Paykit Bolt11 endpoint",
-            ) {
-                Result.success(Unit)
-            }.getOrThrow()
         }
 
         val bolt11 = lightningRepo.createInvoice(
