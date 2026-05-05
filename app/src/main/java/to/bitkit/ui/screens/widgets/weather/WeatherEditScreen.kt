@@ -39,6 +39,7 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun WeatherEditScreen(
+    modifier: Modifier = Modifier,
     weatherViewModel: WeatherViewModel,
     onBack: () -> Unit,
     navigatePreview: () -> Unit,
@@ -53,11 +54,13 @@ fun WeatherEditScreen(
         onSelectOption = { weatherViewModel.selectOption(it) },
         onClickReset = { weatherViewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
+        modifier = modifier,
     )
 }
 
 @Composable
 fun WeatherEditContent(
+    modifier: Modifier = Modifier,
     onBack: () -> Unit,
     weather: WeatherModel?,
     onSelectOption: (WeatherDataOption) -> Unit,
@@ -67,7 +70,7 @@ fun WeatherEditContent(
 ) {
     ScreenColumn(
         noBackground = true,
-        modifier = Modifier
+        modifier = modifier
             .background(Colors.Gray7)
             .testTag("weather_edit_screen")
     ) {
@@ -167,13 +170,14 @@ private fun String.stripAccentTags(): String =
 
 @Composable
 private fun WeatherEditOptionRow(
+    modifier: Modifier = Modifier,
     label: String,
     value: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     testTagPrefix: String,
 ) {
-    Column {
+    Column(modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,

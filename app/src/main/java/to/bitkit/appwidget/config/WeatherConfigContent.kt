@@ -32,6 +32,7 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 internal fun WeatherConfigContent(
+    modifier: Modifier = Modifier,
     state: AppWidgetConfigUiState,
     onSelectOption: (WeatherDataOption) -> Unit,
     onReset: () -> Unit,
@@ -43,7 +44,7 @@ internal fun WeatherConfigContent(
 
     ScreenColumn(
         noBackground = true,
-        modifier = Modifier.background(Colors.Gray7)
+        modifier = modifier.background(Colors.Gray7)
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__weather__name),
@@ -116,6 +117,7 @@ internal fun WeatherConfigContent(
 
 @Composable
 private fun WeatherOptionRow(
+    modifier: Modifier = Modifier,
     label: String,
     value: String,
     isSelected: Boolean,
@@ -124,7 +126,7 @@ private fun WeatherOptionRow(
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .padding(vertical = 8.dp)
             .fillMaxWidth()
     ) {

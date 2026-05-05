@@ -128,13 +128,14 @@ fun WeatherCardSmall(
 
 @Composable
 private fun WeatherTitleBlock(
+    modifier: Modifier = Modifier,
     @StringRes titleRes: Int,
     @StringRes descriptionRes: Int,
     showDescription: Boolean,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag("weather_card_title_block")
     ) {
@@ -155,6 +156,7 @@ private fun WeatherTitleBlock(
 
 @Composable
 private fun WeatherFeeBlock(
+    modifier: Modifier = Modifier,
     weatherModel: WeatherModel,
     selectedOption: WeatherDataOption?,
 ) {
@@ -175,7 +177,7 @@ private fun WeatherFeeBlock(
 
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag("weather_card_${testTagPrefix}_block")
     ) {
@@ -196,6 +198,7 @@ private fun WeatherFeeBlock(
 
 @Composable
 private fun WeatherEmoji(
+    modifier: Modifier = Modifier,
     icon: String,
     fontSize: TextUnit,
 ) {
@@ -207,7 +210,7 @@ private fun WeatherEmoji(
             lineHeight = fontSize,
             color = Colors.White,
         ),
-        modifier = Modifier.testTag("weather_card_icon")
+        modifier = modifier.testTag("weather_card_icon")
     )
 }
 

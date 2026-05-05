@@ -35,6 +35,7 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun WeatherPreviewScreen(
+    modifier: Modifier = Modifier,
     weatherViewModel: WeatherViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
@@ -62,11 +63,13 @@ fun WeatherPreviewScreen(
             weatherViewModel.savePreferences()
             onClose()
         },
+        modifier = modifier,
     )
 }
 
 @Composable
 fun WeatherPreviewContent(
+    modifier: Modifier = Modifier,
     onBack: () -> Unit,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
@@ -77,7 +80,7 @@ fun WeatherPreviewContent(
 ) {
     ScreenColumn(
         noBackground = true,
-        modifier = Modifier
+        modifier = modifier
             .background(Colors.Gray7)
             .testTag("weather_preview_screen")
     ) {
