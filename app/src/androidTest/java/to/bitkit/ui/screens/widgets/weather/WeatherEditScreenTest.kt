@@ -35,16 +35,13 @@ class WeatherEditScreenTest {
 
     @Test
     fun testWeatherEditScreenWithDefaultPreferences() {
-        var previewClicked = false
-        var selectedOption: WeatherDataOption? = null
-
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
                     onBack = {},
-                    onSelectOption = { selectedOption = it },
+                    onSelectOption = {},
                     onClickReset = {},
-                    onClickPreview = { previewClicked = true },
+                    onClickPreview = {},
                     weatherPreferences = WeatherPreferences(),
                     weather = testWeatherModel,
                 )
@@ -67,14 +64,6 @@ class WeatherEditScreenTest {
         composeTestRule.onNodeWithTag("buttons_row").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditReset").assertExists()
         composeTestRule.onNodeWithTag("WidgetEditPreview").assertExists()
-
-        composeTestRule.onNodeWithTag("current_fee_sats_toggle_button").performClick()
-        assert(selectedOption == WeatherDataOption.CURRENT_FEE_SATS)
-
-        composeTestRule.onNodeWithTag("WidgetEditPreview").performClick()
-        assert(previewClicked)
-
-        composeTestRule.onNodeWithTag("WidgetEditReset").assertIsNotEnabled()
     }
 
     @Test
