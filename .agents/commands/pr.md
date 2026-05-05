@@ -122,22 +122,24 @@ This PR adds support for...
 When the user provides custom instructions after `--`:
 - Parse any referenced commit SHAs and read their full messages
 - Focus the description content on areas the user emphasizes
-- Structure QA Notes according to user's specific manual testing instructions
+- Structure QA Notes according to user's specific manual testing instructions and automated coverage notes
 - Custom instructions take priority over default generation rules for sections they address
 - Preserve exact manual testing steps provided by the user (don't summarize or omit details)
-- If custom instructions include automated checks, keep them out of the PR body and mention them only in the assistant's chat summary
+- If custom instructions include automated checks, place them under `#### Automated Tests`
 
-**QA Notes / Manual Tests:**
-- QA Notes are only for actionable human QA instructions.
+**QA Notes / Tests:**
+- QA Notes separate actionable human QA instructions from automated verification coverage.
 - Always use this structure:
   ```md
   ### QA Notes
   #### Manual Tests
+  #### Automated Tests
   ```
-- Do not include automated verification entries in PR bodies.
-- Do not mention CI checks, local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, or similar automated checks in PR-body QA notes.
-- If automated checks were run, mention them only in the assistant's chat summary, not in the PR description.
+- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; list them under `#### Automated Tests`.
+- Use `#### Automated Tests` to list automated checks that were run locally and any automated coverage added or updated with the change, such as unit tests, integration tests, or CI checks.
+- For workflow behavior validation, include `(after merge)` in the automated test item because workflow changes only take effect for PRs opened after the workflow update merges.
 - If no actionable manual validation exists, write `N/A` under `#### Manual Tests`.
+- If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Tests`.
 - Write manual tests using this template:
   ```md
   - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation
@@ -152,7 +154,7 @@ When the user provides custom instructions after `--`:
 - Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
-Structure QA Notes around manual integration validation only. Automated checks still belong in the assistant's chat summary.
+Structure manual QA around integration validation only. Automated checks belong under `#### Automated Tests`.
 
 Example:
 ```
@@ -160,6 +162,9 @@ Example:
 #### Manual Tests
 - [ ] **1.** Consumer app → exercise updated binding flow: behavior matches previous release.
 - [ ] **2.** `regression:` Android integration screen → trigger changed API path: no crash or stale data.
+#### Automated Tests
+- [x] cargo test
+- [x] Android binding integration tests
 ```
 
 Concrete style target:
@@ -175,6 +180,10 @@ Concrete style target:
 - [ ] **5a.** Settings → Lightning Connections → tap channel: still opens Channel Detail.
   - [ ] **5b.** back: returns to Connections List.
 - [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
+#### Automated Tests
+- [x] ./gradlew compileDevDebugKotlin
+- [x] ./gradlew testDevDebugUnitTest
+- [x] ./gradlew detekt
 ```
 
 **Preview Section (conditional):**
