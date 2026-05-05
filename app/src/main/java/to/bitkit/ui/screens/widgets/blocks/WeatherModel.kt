@@ -6,6 +6,7 @@ import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.WeatherDTO
 import java.text.NumberFormat
+import java.util.Locale
 
 @Immutable
 data class WeatherModel(
@@ -20,7 +21,7 @@ data class WeatherModel(
     val icon: String,
 )
 
-fun WeatherDTO.toWeatherModel(): WeatherModel {
+fun WeatherDTO.toWeatherModel(locale: Locale = Locale.getDefault()): WeatherModel {
     val title = when (condition) {
         FeeCondition.GOOD -> R.string.widgets__weather__condition__good__title
         FeeCondition.AVERAGE -> R.string.widgets__weather__condition__average__title
@@ -44,7 +45,7 @@ fun WeatherDTO.toWeatherModel(): WeatherModel {
         description = description,
         currentFee = currentFee,
         currentFeeSats = avgFeeSats,
-        currentFeeSatsFormatted = "${NumberFormat.getInstance().format(avgFeeSats)} ₿",
+        currentFeeSatsFormatted = "${NumberFormat.getInstance(locale).format(avgFeeSats)} ₿",
         nextBlockFee = "$nextBlockFee ₿/vByte",
         icon = condition.icon,
     )
