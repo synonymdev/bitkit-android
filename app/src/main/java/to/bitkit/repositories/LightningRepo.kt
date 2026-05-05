@@ -58,7 +58,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
@@ -918,7 +917,7 @@ class LightningRepo @Inject constructor(
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
-        expirySeconds: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySeconds: UInt = 86_400u,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
         updateGeoBlockState()
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
@@ -927,7 +926,7 @@ class LightningRepo @Inject constructor(
     suspend fun createInvoiceMsats(
         amountMsats: ULong,
         description: String,
-        expirySeconds: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySeconds: UInt = 86_400u,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
         updateGeoBlockState()
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }

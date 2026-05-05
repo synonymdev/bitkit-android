@@ -7,6 +7,7 @@ import com.synonym.paykit.FfiPaymentEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -212,6 +213,25 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncCurrentPublishedEndpoints returns InvalidPayload when public bolt11 decode is not lightning`() = test {
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(
+            lightningRepo.createInvoice(
+                amountSats = null,
+                description = "",
+                expirySeconds = PUBLIC_BOLT11_EXPIRY_SECONDS,
+            )
+        ).thenReturn(Result.success("not-lightning"))
+        whenever(coreService.decode("not-lightning")).thenReturn(mock<Scanner.OnChain>())
+
+        val error = sut.syncCurrentPublishedEndpoints().exceptionOrNull()
+
+        assertEquals(PublicPaykitError.InvalidPayload, error)
+        verify(pubkyRepo, never()).setPaymentEndpoint(any(), any())
+    }
+
+    @Test
     fun `parseEndpoint accepts Paykit JSON payloads`() {
         val endpoint = PublicPaykitRepo.parseEndpoint(
             methodId = "btc-lightning-bolt11",
@@ -237,8 +257,18 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `parseEndpoint rejects raw string payloads`() {
         val endpoint = PublicPaykitRepo.parseEndpoint(
-            methodId = "btc-bitcoin-p2wpkh",
+            methodId = MethodId.P2wpkh.rawValue,
             endpointData = "bc1qexampleaddress",
+        )
+
+        assertNull(endpoint)
+    }
+
+    @Test
+    fun `parseEndpoint rejects lenient JSON payloads`() {
+        val endpoint = PublicPaykitRepo.parseEndpoint(
+            methodId = MethodId.P2wpkh.rawValue,
+            endpointData = """{value:"bc1qexampleaddress"}""",
         )
 
         assertNull(endpoint)
@@ -353,6 +383,14 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         MethodId.entries.forEach {
             assertTrue(pattern.matches(it.rawValue), "Invalid method id '${it.rawValue}'")
         }
+    }
+
+    @Test
+    fun `onchain method ids use network rail`() {
+        assertEquals("btc-bitcoin-p2tr", MethodId.P2tr.rawValueForNetwork(Network.BITCOIN))
+        assertEquals("btc-testnet-p2wpkh", MethodId.P2wpkh.rawValueForNetwork(Network.TESTNET))
+        assertEquals("btc-regtest-p2sh", MethodId.P2sh.rawValueForNetwork(Network.REGTEST))
+        assertEquals("btc-signet-p2pkh", MethodId.P2pkh.rawValueForNetwork(Network.SIGNET))
     }
 
     @Test

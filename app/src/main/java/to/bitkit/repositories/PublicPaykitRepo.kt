@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -59,6 +60,12 @@ class PublicPaykitRepo @Inject constructor(
     companion object {
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
 
+        private val payloadJson = Json(appJson) {
+            prettyPrint = false
+            isLenient = false
+            encodeDefaults = false
+        }
+
         private val payablePreferenceOrder = listOf(
             MethodId.Bolt11,
             MethodId.Lnurl,
@@ -77,7 +84,7 @@ class PublicPaykitRepo @Inject constructor(
 
             val knownMethodId = MethodId.fromRawValue(methodId) ?: return null
             val payload = runCatching {
-                appJson.decodeFromString<PaymentEndpointPayload>(endpointData)
+                payloadJson.decodeFromString<PaymentEndpointPayload>(endpointData)
             }.getOrNull() ?: return null
             val value = payload.value.trim()
             if (value.isEmpty()) return null
@@ -94,7 +101,7 @@ class PublicPaykitRepo @Inject constructor(
         fun serializePayload(value: String): String {
             val trimmedValue = value.trim()
             if (trimmedValue.isEmpty()) throw PublicPaykitError.InvalidPayload
-            return Json.encodeToString(PaymentEndpointPayload(value = trimmedValue))
+            return payloadJson.encodeToString(PaymentEndpointPayload(value = trimmedValue))
         }
 
         fun paymentRequest(endpoints: List<Endpoint>): String {
@@ -277,7 +284,8 @@ class PublicPaykitRepo @Inject constructor(
             description = "",
             expirySeconds = publicBolt11Expiry.inWholeSeconds.toUInt(),
         ).getOrThrow()
-        val invoice = (coreService.decode(bolt11) as Scanner.Lightning).invoice
+        val invoice = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
+            ?: throw PublicPaykitError.InvalidPayload
         val expiresAtMillis = clock.now().plus(publicBolt11Expiry).toEpochMilliseconds()
 
         settingsStore.update {
@@ -346,17 +354,33 @@ data class Endpoint(
 }
 
 enum class MethodId(
-    val rawValue: String,
+    private val fixedRawValue: String? = null,
+    private val onchainEndpoint: String? = null,
     val isOnchain: Boolean = false,
     val isBitkitManaged: Boolean = false,
 ) {
-    Bolt11("btc-lightning-bolt11", isBitkitManaged = true),
-    Lnurl("btc-lightning-lnurl"),
-    P2tr("btc-bitcoin-p2tr", isOnchain = true, isBitkitManaged = true),
-    P2wpkh("btc-bitcoin-p2wpkh", isOnchain = true, isBitkitManaged = true),
-    P2sh("btc-bitcoin-p2sh", isOnchain = true, isBitkitManaged = true),
-    P2pkh("btc-bitcoin-p2pkh", isOnchain = true, isBitkitManaged = true),
+    Bolt11(fixedRawValue = "btc-lightning-bolt11", isBitkitManaged = true),
+    Lnurl(fixedRawValue = "btc-lightning-lnurl"),
+    P2tr(onchainEndpoint = "p2tr", isOnchain = true, isBitkitManaged = true),
+    P2wpkh(onchainEndpoint = "p2wpkh", isOnchain = true, isBitkitManaged = true),
+    P2sh(onchainEndpoint = "p2sh", isOnchain = true, isBitkitManaged = true),
+    P2pkh(onchainEndpoint = "p2pkh", isOnchain = true, isBitkitManaged = true),
     ;
+
+    val rawValue: String
+        get() = rawValueForNetwork(Env.network)
+
+    fun rawValueForNetwork(network: Network): String {
+        fixedRawValue?.let { return it }
+        val endpoint = checkNotNull(onchainEndpoint)
+        val rail = when (network) {
+            Network.BITCOIN -> "bitcoin"
+            Network.REGTEST -> "regtest"
+            Network.TESTNET -> "testnet"
+            Network.SIGNET -> "signet"
+        }
+        return "btc-$rail-$endpoint"
+    }
 
     companion object {
         fun fromRawValue(value: String): MethodId? = entries.firstOrNull { it.rawValue == value }
