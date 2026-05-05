@@ -125,21 +125,21 @@ When the user provides custom instructions after `--`:
 - Structure QA Notes according to user's specific manual testing instructions and automated coverage notes
 - Custom instructions take priority over default generation rules for sections they address
 - Preserve exact manual testing steps provided by the user (don't summarize or omit details)
-- If custom instructions include automated checks, place them under `#### Automated Tests`
+- If custom instructions include automated checks, place them under `#### Automated Checks`
 
-**QA Notes / Tests:**
+**QA Notes / Validation:**
 - QA Notes separate actionable human QA instructions from automated verification coverage.
 - Always use this structure:
   ```md
   ### QA Notes
   #### Manual Tests
-  #### Automated Tests
+  #### Automated Checks
   ```
-- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; list them under `#### Automated Tests`.
-- Use `#### Automated Tests` to list automated checks that were run locally and any automated coverage added or updated with the change, such as unit tests, integration tests, or CI checks.
-- For workflow behavior validation, include `(after merge)` in the automated test item because workflow changes only take effect for PRs opened after the workflow update merges.
+- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; list them under `#### Automated Checks`.
+- Use `#### Automated Checks` to list automated checks that were run locally and any automated coverage added or updated with the change, such as unit tests, integration tests, or CI checks.
+- For workflow behavior validation, include `(after merge)` in the automated check item because workflow changes only take effect for PRs opened after the workflow update merges.
 - If no actionable manual validation exists, write `N/A` under `#### Manual Tests`.
-- If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Tests`.
+- If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
 - Write manual tests using this template:
   ```md
   - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation
@@ -154,7 +154,7 @@ When the user provides custom instructions after `--`:
 - Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
-Structure manual QA around integration validation only. Automated checks belong under `#### Automated Tests`.
+Structure manual QA around integration validation only. Automated checks belong under `#### Automated Checks`.
 
 Example:
 ```
@@ -162,7 +162,7 @@ Example:
 #### Manual Tests
 - [ ] **1.** Consumer app → exercise updated binding flow: behavior matches previous release.
 - [ ] **2.** `regression:` Android integration screen → trigger changed API path: no crash or stale data.
-#### Automated Tests
+#### Automated Checks
 - [x] cargo test
 - [x] Android binding integration tests
 ```
@@ -180,7 +180,7 @@ Concrete style target:
 - [ ] **5a.** Settings → Lightning Connections → tap channel: still opens Channel Detail.
   - [ ] **5b.** back: returns to Connections List.
 - [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
-#### Automated Tests
+#### Automated Checks
 - [x] ./gradlew compileDevDebugKotlin
 - [x] ./gradlew testDevDebugUnitTest
 - [x] ./gradlew detekt
