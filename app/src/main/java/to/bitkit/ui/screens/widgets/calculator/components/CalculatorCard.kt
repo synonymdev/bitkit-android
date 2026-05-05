@@ -46,6 +46,8 @@ import to.bitkit.ui.utils.visualTransformation.MonetaryVisualTransformation
 import to.bitkit.viewmodels.CurrencyViewModel
 import java.math.BigDecimal
 
+private const val FIAT_DECIMAL_PLACES = 2
+
 @Composable
 fun CalculatorCard(
     modifier: Modifier = Modifier,
@@ -137,7 +139,7 @@ fun CalculatorCard(
         fiatName = currencyUiState.selectedCurrency,
         fiatValue = displayedFiatValue,
         onFiatChange = { rawValue ->
-            val sanitized = sanitizeDecimalInput(rawValue)
+            val sanitized = sanitizeDecimalInput(rawValue, maxDecimalPlaces = FIAT_DECIMAL_PLACES)
             fiatValue = sanitized
             btcValue = if (sanitized.isEmpty()) {
                 ""
@@ -205,7 +207,7 @@ fun CalculatorCardContent(
                 currencySymbol = fiatSymbol,
                 currencyName = fiatName,
                 keyboardType = KeyboardType.Decimal,
-                visualTransformation = MonetaryVisualTransformation(decimalPlaces = 2),
+                visualTransformation = MonetaryVisualTransformation(decimalPlaces = FIAT_DECIMAL_PLACES),
                 modifier = Modifier.fillMaxWidth()
             )
         }

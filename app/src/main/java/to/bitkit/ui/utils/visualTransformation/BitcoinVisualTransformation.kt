@@ -101,12 +101,19 @@ class BitcoinVisualTransformation(
             rawToSanitizedCount[i + 1] = sanitizedSoFar
         }
         val totalSanitized = sanitizedSoFar
+        val transformedNonSpaceCount = transformed.count { it != ' ' }
+        // MODERN mode strips leading zeros via formatModernDisplay; account for that gap so
+        // cursor positions over stripped raw digits collapse to the start of the displayed text.
+        val leadingStripped = when (displayUnit) {
+            BitcoinDisplayUnit.MODERN -> (totalSanitized - transformedNonSpaceCount).coerceAtLeast(0)
+            BitcoinDisplayUnit.CLASSIC -> 0
+        }
 
         return object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
                 val clamped = offset.coerceIn(0, rawOriginal.length)
-                val validCount = rawToSanitizedCount[clamped]
-                if (validCount >= totalSanitized) return transformed.length
+                val validCount = (rawToSanitizedCount[clamped] - leadingStripped).coerceAtLeast(0)
+                if (validCount >= transformedNonSpaceCount) return transformed.length
                 var transformedOffset = 0
                 var counted = 0
                 while (transformedOffset < transformed.length && counted < validCount) {
@@ -122,7 +129,7 @@ class BitcoinVisualTransformation(
             override fun transformedToOriginal(offset: Int): Int {
                 val clamped = offset.coerceIn(0, transformed.length)
                 if (clamped >= transformed.length) return rawOriginal.length
-                val validCount = transformed.take(clamped).count { it != ' ' }
+                val validCount = transformed.take(clamped).count { it != ' ' } + leadingStripped
                 for (i in 0..rawOriginal.length) {
                     if (rawToSanitizedCount[i] >= validCount) return i
                 }

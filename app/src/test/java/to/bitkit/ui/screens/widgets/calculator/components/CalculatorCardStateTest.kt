@@ -96,12 +96,17 @@ class CalculatorCardStateTest {
     }
 
     @Test
-    fun `sanitizeIntegerInput strips non-digit characters`() {
-        assertEquals("088800000000", sanitizeIntegerInput("0888,,,,,,,.00000000"))
+    fun `sanitizeIntegerInput strips non-digit characters and leading zeros`() {
+        assertEquals("88800000000", sanitizeIntegerInput("0888,,,,,,,.00000000"))
         assertEquals("12345", sanitizeIntegerInput("12,345"))
         assertEquals("100", sanitizeIntegerInput("1.0.0"))
         assertEquals("", sanitizeIntegerInput(".,,,"))
         assertEquals("42", sanitizeIntegerInput("42"))
+        assertEquals("", sanitizeIntegerInput(""))
+        assertEquals("0", sanitizeIntegerInput("0"))
+        assertEquals("0", sanitizeIntegerInput("00"))
+        assertEquals("1000", sanitizeIntegerInput("01000"))
+        assertEquals("100", sanitizeIntegerInput("00100"))
     }
 
     @Test
@@ -113,5 +118,15 @@ class CalculatorCardStateTest {
         assertEquals("1234", sanitizeDecimalInput("1,234"))
         assertEquals("", sanitizeDecimalInput(",,,"))
         assertEquals("100.00", sanitizeDecimalInput("1,00.00"))
+    }
+
+    @Test
+    fun `sanitizeDecimalInput caps fraction digits when maxDecimalPlaces given`() {
+        assertEquals("12.34", sanitizeDecimalInput("12.345678", maxDecimalPlaces = 2))
+        assertEquals("12.34", sanitizeDecimalInput("12.34", maxDecimalPlaces = 2))
+        assertEquals("12", sanitizeDecimalInput("12", maxDecimalPlaces = 2))
+        assertEquals("0.", sanitizeDecimalInput("0.", maxDecimalPlaces = 2))
+        assertEquals(".5", sanitizeDecimalInput(".5", maxDecimalPlaces = 2))
+        assertEquals("12.", sanitizeDecimalInput("12.", maxDecimalPlaces = 2))
     }
 }
