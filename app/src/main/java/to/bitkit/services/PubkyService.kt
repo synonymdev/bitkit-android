@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import android.content.Context
 import com.synonym.bitkitcore.PubkyProfile
 import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.bitkitcore.cancelPubkyAuth
@@ -19,6 +20,7 @@ import com.synonym.bitkitcore.pubkySignIn
 import com.synonym.bitkitcore.pubkySignUp
 import com.synonym.bitkitcore.startPubkyAuth
 import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.PaykitAndroid
 import com.synonym.paykit.paykitExportSession
 import com.synonym.paykit.paykitForceSignOut
 import com.synonym.paykit.paykitGetCurrentPublicKey
@@ -29,19 +31,26 @@ import com.synonym.paykit.paykitIsAuthenticated
 import com.synonym.paykit.paykitRemovePaymentEndpoint
 import com.synonym.paykit.paykitSetPaymentEndpoint
 import com.synonym.paykit.paykitSignOut
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import to.bitkit.async.ServiceQueue
 import to.bitkit.env.Env
+import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Suppress("TooManyFunctions")
 @Singleton
-class PubkyService @Inject constructor() {
+class PubkyService @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
 
     private val isSetup = CompletableDeferred<Unit>()
 
     suspend fun initialize() = ServiceQueue.CORE.background {
+        if (!PaykitAndroid.initialize(context)) {
+            throw AppError("Failed to initialize Android platform verifier")
+        }
         paykitInitialize()
         isSetup.complete(Unit)
     }
