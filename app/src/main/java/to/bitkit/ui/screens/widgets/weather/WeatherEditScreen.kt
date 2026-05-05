@@ -39,10 +39,10 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun WeatherEditScreen(
-    modifier: Modifier = Modifier,
     weatherViewModel: WeatherViewModel,
     onBack: () -> Unit,
     navigatePreview: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customPreferences by weatherViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentWeather by weatherViewModel.currentWeather.collectAsStateWithLifecycle()
@@ -60,13 +60,13 @@ fun WeatherEditScreen(
 
 @Composable
 fun WeatherEditContent(
-    modifier: Modifier = Modifier,
     onBack: () -> Unit,
     weather: WeatherModel?,
     onSelectOption: (WeatherDataOption) -> Unit,
     onClickReset: () -> Unit,
     onClickPreview: () -> Unit,
     weatherPreferences: WeatherPreferences,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
         noBackground = true,
@@ -170,12 +170,12 @@ private fun String.stripAccentTags(): String =
 
 @Composable
 private fun WeatherEditOptionRow(
-    modifier: Modifier = Modifier,
     label: String,
     value: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     testTagPrefix: String,
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Row(

@@ -35,11 +35,11 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun WeatherPreviewScreen(
-    modifier: Modifier = Modifier,
     weatherViewModel: WeatherViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customWeatherPreferences by weatherViewModel.customPreferences.collectAsStateWithLifecycle()
     val weather by weatherViewModel.currentWeather.collectAsStateWithLifecycle()
@@ -69,7 +69,6 @@ fun WeatherPreviewScreen(
 
 @Composable
 fun WeatherPreviewContent(
-    modifier: Modifier = Modifier,
     onBack: () -> Unit,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
@@ -77,6 +76,7 @@ fun WeatherPreviewContent(
     isWeatherWidgetEnabled: Boolean,
     weatherPreferences: WeatherPreferences,
     weatherModel: WeatherModel?,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
         noBackground = true,

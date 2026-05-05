@@ -32,12 +32,12 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 internal fun WeatherConfigContent(
-    modifier: Modifier = Modifier,
     state: AppWidgetConfigUiState,
     onSelectOption: (WeatherDataOption) -> Unit,
     onReset: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val prefs = state.weatherPreferences
     val weather = state.previewWeather
@@ -117,11 +117,11 @@ internal fun WeatherConfigContent(
 
 @Composable
 private fun WeatherOptionRow(
-    modifier: Modifier = Modifier,
     label: String,
     value: String,
     isSelected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
