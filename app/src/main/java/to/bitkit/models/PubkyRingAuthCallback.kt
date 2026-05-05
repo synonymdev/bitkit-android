@@ -2,6 +2,8 @@ package to.bitkit.models
 
 import android.net.Uri
 
+private const val NONCE_PARAM = "nonce"
+
 sealed interface PubkyRingAuthCallback {
     companion object {
         private const val BITKIT_SCHEME = "bitkit"
@@ -9,7 +11,6 @@ sealed interface PubkyRingAuthCallback {
         private const val SUCCESS_PATH = "/success"
         private const val CANCEL_PATH = "/cancel"
         private const val ERROR_PATH = "/error"
-        private const val NONCE_PARAM = "nonce"
         private const val ERROR_MESSAGE_PARAM = "errorMessage"
 
         fun parse(uri: Uri): PubkyRingAuthCallback? {
@@ -62,7 +63,7 @@ object PubkyRingAuthUrlBuilder {
 
         return Uri.parse(baseUrl)
             .buildUpon()
-            .appendQueryParameter("nonce", nonce)
+            .appendQueryParameter(NONCE_PARAM, nonce)
             .build()
             .toString()
     }
