@@ -265,7 +265,7 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun completeAuthentication(): Result<Unit> {
-        val attemptId = _activeAuthAttemptId.value
+        val attemptId = _activeAuthAttemptId.value ?: return Result.failure(PubkyAuthAttemptInactive())
         return runCatching {
             withContext(ioDispatcher) {
                 val sessionSecret = pubkyService.completeAuth()
