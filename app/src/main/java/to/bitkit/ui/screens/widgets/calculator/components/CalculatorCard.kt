@@ -142,11 +142,16 @@ fun CalculatorCard(
             btcValue = if (sanitized.isEmpty()) {
                 ""
             } else {
-                CalculatorFormatter.convertFiatToBtc(
+                val converted = CalculatorFormatter.convertFiatToBtc(
                     fiatValue = fiatValue,
                     displayUnit = currencyUiState.displayUnit,
                     currencyViewModel = currencyViewModel,
                 )
+                if (currencyUiState.displayUnit.isModern()) {
+                    converted.filter { it.isDigit() }
+                } else {
+                    converted
+                }
             }
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         },

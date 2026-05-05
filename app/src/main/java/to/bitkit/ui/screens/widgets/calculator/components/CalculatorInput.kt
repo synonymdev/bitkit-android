@@ -23,6 +23,7 @@ import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import java.text.DecimalFormatSymbols
 
 @Composable
 fun CalculatorInput(
@@ -67,7 +68,9 @@ internal fun sanitizeIntegerInput(raw: String): String =
     raw.filter { it.isDigit() }
 
 internal fun sanitizeDecimalInput(raw: String): String {
-    val filtered = raw.filter { it.isDigit() || it == '.' }
+    val localDecimal = DecimalFormatSymbols.getInstance().decimalSeparator
+    val normalized = if (localDecimal == ',') raw.replace(',', '.') else raw
+    val filtered = normalized.filter { it.isDigit() || it == '.' }
     val dotIndex = filtered.indexOf('.')
     if (dotIndex == -1) return filtered
     return filtered.substring(0, dotIndex + 1) +
