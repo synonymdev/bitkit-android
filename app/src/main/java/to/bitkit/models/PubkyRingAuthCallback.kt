@@ -15,7 +15,7 @@ sealed interface PubkyRingAuthCallback {
         fun parse(uri: Uri): PubkyRingAuthCallback? {
             if (uri.scheme != BITKIT_SCHEME || uri.host != PUBKY_AUTH_HOST) return null
 
-            val nonce = uri.getQueryParameter(NONCE_PARAM)
+            val nonce = uri.getQueryParameter(NONCE_PARAM)?.takeIf { it.isNotBlank() }
             return when (uri.path) {
                 SUCCESS_PATH -> Success(nonce)
                 CANCEL_PATH -> Cancel(nonce)
@@ -36,7 +36,6 @@ sealed interface PubkyRingAuthCallbackHandlingResult {
     data object Ignored : PubkyRingAuthCallbackHandlingResult
     data object Handled : PubkyRingAuthCallbackHandlingResult
     data class TrustedError(val message: String?) : PubkyRingAuthCallbackHandlingResult
-    data object UntrustedError : PubkyRingAuthCallbackHandlingResult
 }
 
 object PubkyRingAuthUrlBuilder {

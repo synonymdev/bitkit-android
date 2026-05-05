@@ -2564,12 +2564,6 @@ class AppViewModel @Inject constructor(
                     description = result.message ?: context.getString(R.string.other__qr_error_text),
                 )
             }
-            PubkyRingAuthCallbackHandlingResult.UntrustedError -> {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                )
-            }
             PubkyRingAuthCallbackHandlingResult.Handled,
             PubkyRingAuthCallbackHandlingResult.Ignored,
             -> Unit

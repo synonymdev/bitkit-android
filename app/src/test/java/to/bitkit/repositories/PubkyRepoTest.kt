@@ -192,19 +192,19 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `handleAuthCallback should clear invalid cancel nonce`() = test {
+    fun `handleAuthCallback should ignore invalid cancel nonce`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         sut.startAuthentication()
 
         val result = sut.handleAuthCallback(PubkyRingAuthCallback.Cancel(nonce = "invalid"))
 
-        assertEquals(PubkyRingAuthCallbackHandlingResult.Handled, result)
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Ignored, result)
         assertFalse(sut.isAuthenticated.value)
         verifyBlocking(pubkyService, never()) { cancelAuth() }
     }
 
     @Test
-    fun `handleAuthCallback should not trust invalid error message`() = test {
+    fun `handleAuthCallback should ignore invalid error nonce`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         sut.startAuthentication()
 
@@ -212,7 +212,87 @@ class PubkyRepoTest : BaseUnitTest() {
             PubkyRingAuthCallback.Error(message = "Forged error", nonce = "invalid"),
         )
 
-        assertEquals(PubkyRingAuthCallbackHandlingResult.UntrustedError, result)
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Ignored, result)
+        verifyBlocking(pubkyService, never()) { cancelAuth() }
+    }
+
+    @Test
+    fun `handleAuthCallback should keep active auth after missing cancel nonce`() = test {
+        val testSecret = "session_secret"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(mock())
+        sut.startAuthentication()
+
+        val callbackResult = sut.handleAuthCallback(PubkyRingAuthCallback.Cancel(nonce = null))
+        val result = sut.completeAuthentication()
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Ignored, callbackResult)
+        assertTrue(result.isSuccess)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService, never()) { cancelAuth() }
+    }
+
+    @Test
+    fun `handleAuthCallback should keep active auth after missing error nonce`() = test {
+        val testSecret = "session_secret"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(mock())
+        sut.startAuthentication()
+
+        val callbackResult = sut.handleAuthCallback(
+            PubkyRingAuthCallback.Error(message = "Forged error", nonce = null),
+        )
+        val result = sut.completeAuthentication()
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Ignored, callbackResult)
+        assertTrue(result.isSuccess)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService, never()) { cancelAuth() }
+    }
+
+    @Test
+    fun `handleAuthCallback should keep active auth after invalid cancel nonce`() = test {
+        val testSecret = "session_secret"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(mock())
+        sut.startAuthentication()
+
+        val callbackResult = sut.handleAuthCallback(PubkyRingAuthCallback.Cancel(nonce = "invalid"))
+        val result = sut.completeAuthentication()
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Ignored, callbackResult)
+        assertTrue(result.isSuccess)
+        assertTrue(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService, never()) { cancelAuth() }
+    }
+
+    @Test
+    fun `handleAuthCallback should keep active auth after invalid error nonce`() = test {
+        val testSecret = "session_secret"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(mock())
+        sut.startAuthentication()
+
+        val callbackResult = sut.handleAuthCallback(
+            PubkyRingAuthCallback.Error(message = "Forged error", nonce = "invalid"),
+        )
+        val result = sut.completeAuthentication()
+
+        assertEquals(PubkyRingAuthCallbackHandlingResult.Ignored, callbackResult)
+        assertTrue(result.isSuccess)
+        assertTrue(sut.isAuthenticated.value)
         verifyBlocking(pubkyService, never()) { cancelAuth() }
     }
 

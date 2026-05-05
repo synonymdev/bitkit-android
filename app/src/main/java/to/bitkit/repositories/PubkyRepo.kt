@@ -343,14 +343,12 @@ class PubkyRepo @Inject constructor(
                 PubkyRingAuthCallbackHandlingResult.Ignored
             }
             is PubkyRingAuthCallback.Cancel -> {
-                Logger.warn("Received Pubky Ring auth cancel callback with missing or invalid nonce", context = TAG)
-                endAuthAttempt()
-                PubkyRingAuthCallbackHandlingResult.Handled
+                Logger.warn("Ignoring Pubky Ring auth cancel callback with missing or invalid nonce", context = TAG)
+                PubkyRingAuthCallbackHandlingResult.Ignored
             }
             is PubkyRingAuthCallback.Error -> {
-                Logger.warn("Received Pubky Ring auth error callback with missing or invalid nonce", context = TAG)
-                endAuthAttempt()
-                PubkyRingAuthCallbackHandlingResult.UntrustedError
+                Logger.warn("Ignoring Pubky Ring auth error callback with missing or invalid nonce", context = TAG)
+                PubkyRingAuthCallbackHandlingResult.Ignored
             }
         }
     }
