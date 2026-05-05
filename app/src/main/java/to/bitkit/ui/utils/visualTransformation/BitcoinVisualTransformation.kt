@@ -38,8 +38,8 @@ class BitcoinVisualTransformation(
         BitcoinDisplayUnit.CLASSIC -> sanitizeClassicInput(text)
     }
 
-    private fun sanitizeClassicInput(text: String): String {
-        val localDecimal = DecimalFormatSymbols.getInstance().decimalSeparator
+    private fun sanitizeClassicInput(text: String, locale: Locale = Locale.getDefault()): String {
+        val localDecimal = DecimalFormatSymbols.getInstance(locale).decimalSeparator
         val normalized = if (localDecimal == ',') text.replace(',', '.') else text
         val filtered = normalized.filter { it.isDigit() || it == '.' }
         val dotIndex = filtered.indexOf('.')

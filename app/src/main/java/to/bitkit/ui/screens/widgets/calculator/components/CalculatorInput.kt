@@ -24,6 +24,7 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import java.text.DecimalFormatSymbols
+import java.util.Locale
 
 @Composable
 fun CalculatorInput(
@@ -67,8 +68,8 @@ fun CalculatorInput(
 internal fun sanitizeIntegerInput(raw: String): String =
     raw.filter { it.isDigit() }
 
-internal fun sanitizeDecimalInput(raw: String): String {
-    val localDecimal = DecimalFormatSymbols.getInstance().decimalSeparator
+internal fun sanitizeDecimalInput(raw: String, locale: Locale = Locale.getDefault()): String {
+    val localDecimal = DecimalFormatSymbols.getInstance(locale).decimalSeparator
     val normalized = if (localDecimal == ',') raw.replace(',', '.') else raw
     val filtered = normalized.filter { it.isDigit() || it == '.' }
     val dotIndex = filtered.indexOf('.')
