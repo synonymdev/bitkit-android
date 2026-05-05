@@ -14,7 +14,6 @@ import kotlinx.serialization.json.Json
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
-import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -27,8 +26,8 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import to.bitkit.di.json as appJson
 
@@ -70,7 +69,7 @@ class PublicPaykitRepo @Inject constructor(
         )
 
         private val managedMethodIds = MethodId.entries.filter { it.isBitkitManaged }
-        private val publicBolt11Expiry = Defaults.bolt11InvoiceExpirySeconds.toInt().seconds
+        private val publicBolt11Expiry = 24.hours
         private val publicBolt11RefreshWindow = 30.minutes
 
         fun parseEndpoint(methodId: String, endpointData: String): Endpoint? {
@@ -276,7 +275,7 @@ class PublicPaykitRepo @Inject constructor(
         val bolt11 = lightningRepo.createInvoice(
             amountSats = null,
             description = "",
-            expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
+            expirySeconds = publicBolt11Expiry.inWholeSeconds.toUInt(),
         ).getOrThrow()
         val invoice = (coreService.decode(bolt11) as Scanner.Lightning).invoice
         val expiresAtMillis = clock.now().plus(publicBolt11Expiry).toEpochMilliseconds()

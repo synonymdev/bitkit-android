@@ -15,7 +15,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.env.Defaults
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -31,7 +30,7 @@ import kotlin.time.Instant
 class PublicPaykitRepoTest : BaseUnitTest() {
     companion object {
         private const val NOW_MILLIS = 1_000L
-        private const val PUBLIC_BOLT11_EXPIRY_SECONDS = Defaults.bolt11InvoiceExpirySeconds
+        private const val PUBLIC_BOLT11_EXPIRY_SECONDS = 86_400u
     }
 
     private val pubkyRepo = mock<PubkyRepo>()
