@@ -9,12 +9,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
-import to.bitkit.di.json
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -29,6 +28,7 @@ import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.ExperimentalTime
+import to.bitkit.di.json as appJson
 
 sealed class PublicPaykitError(message: String) : AppError(message) {
     data object InvalidPayload : PublicPaykitError("Invalid Paykit payment endpoint payload")
@@ -76,7 +76,7 @@ class PublicPaykitRepo @Inject constructor(
 
             val knownMethodId = MethodId.fromRawValue(methodId) ?: return null
             val payload = runCatching {
-                json.decodeFromString<PaymentEndpointPayload>(endpointData)
+                appJson.decodeFromString<PaymentEndpointPayload>(endpointData)
             }.getOrNull() ?: return null
             val value = payload.value.trim()
             if (value.isEmpty()) return null
@@ -93,7 +93,7 @@ class PublicPaykitRepo @Inject constructor(
         fun serializePayload(value: String): String {
             val trimmedValue = value.trim()
             if (trimmedValue.isEmpty()) throw PublicPaykitError.InvalidPayload
-            return buildJsonObject { put("value", trimmedValue) }.toString()
+            return Json.encodeToString(PublishedPaymentEndpointPayload(value = trimmedValue))
         }
 
         fun paymentRequest(endpoints: List<Endpoint>): String {
@@ -367,4 +367,9 @@ private data class PaymentEndpointPayload(
     val value: String,
     val min: String? = null,
     val max: String? = null,
+)
+
+@Serializable
+private data class PublishedPaymentEndpointPayload(
+    val value: String,
 )
