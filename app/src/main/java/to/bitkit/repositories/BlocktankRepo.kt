@@ -492,6 +492,15 @@ class BlocktankRepo @Inject constructor(
             context = TAG,
         )
 
+        if (Env.isDebug && GIFT_QA_PRE_RECEIVE_DELAY > Duration.ZERO) {
+            Logger.debug(
+                "QA window open: sleeping '$GIFT_QA_PRE_RECEIVE_DELAY' before awaiting LDK PaymentReceived " +
+                    "(disable wifi now to simulate routing failure)",
+                context = TAG,
+            )
+            delay(GIFT_QA_PRE_RECEIVE_DELAY)
+        }
+
         val paymentReceived = withTimeoutOrNull(GIFT_PAYMENT_RECEIVE_TIMEOUT) {
             paymentReceivedDeferred.await()
         }
@@ -552,6 +561,11 @@ class BlocktankRepo @Inject constructor(
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
         private val TIMEOUT_GIFT_CODE = 30.seconds
         private val GIFT_PAYMENT_RECEIVE_TIMEOUT = 45.seconds
+
+        // QA aid: in debug builds only, pause after `giftPay` returns and before awaiting
+        // the LDK PaymentReceived event, so a tester can disable wifi/peer to simulate a
+        // routing failure. Set to Duration.ZERO to disable.
+        private val GIFT_QA_PRE_RECEIVE_DELAY: Duration = 15.seconds
     }
 }
 
