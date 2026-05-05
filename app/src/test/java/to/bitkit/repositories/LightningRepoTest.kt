@@ -40,6 +40,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.env.Defaults
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
 import to.bitkit.models.CoinSelectionPreference
@@ -200,11 +201,15 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService.receive(
                 sat = 100uL,
                 description = "test",
-                expirySecs = 3600u
+                expirySecs = Defaults.bolt11InvoiceExpirySeconds,
             )
         ).thenReturn(testInvoice)
 
-        val result = sut.createInvoice(amountSats = 100uL, description = "test", expirySeconds = 3600u)
+        val result = sut.createInvoice(
+            amountSats = 100uL,
+            description = "test",
+            expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
+        )
         assertTrue(result.isSuccess)
         assertEquals(testInvoice, result.getOrNull())
     }

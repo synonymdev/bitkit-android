@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -27,6 +28,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import to.bitkit.di.json as appJson
 
@@ -68,7 +70,7 @@ class PublicPaykitRepo @Inject constructor(
         )
 
         private val managedMethodIds = MethodId.entries.filter { it.isBitkitManaged }
-        private val publicBolt11Expiry = 60.minutes
+        private val publicBolt11Expiry = Defaults.bolt11InvoiceExpirySeconds.toInt().seconds
         private val publicBolt11RefreshWindow = 30.minutes
 
         fun parseEndpoint(methodId: String, endpointData: String): Endpoint? {
@@ -93,7 +95,7 @@ class PublicPaykitRepo @Inject constructor(
         fun serializePayload(value: String): String {
             val trimmedValue = value.trim()
             if (trimmedValue.isEmpty()) throw PublicPaykitError.InvalidPayload
-            return Json.encodeToString(PublishedPaymentEndpointPayload(value = trimmedValue))
+            return Json.encodeToString(PaymentEndpointPayload(value = trimmedValue))
         }
 
         fun paymentRequest(endpoints: List<Endpoint>): String {
@@ -274,7 +276,7 @@ class PublicPaykitRepo @Inject constructor(
         val bolt11 = lightningRepo.createInvoice(
             amountSats = null,
             description = "",
-            expirySeconds = publicBolt11Expiry.inWholeSeconds.toUInt(),
+            expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
         ).getOrThrow()
         val invoice = (coreService.decode(bolt11) as Scanner.Lightning).invoice
         val expiresAtMillis = clock.now().plus(publicBolt11Expiry).toEpochMilliseconds()
@@ -367,9 +369,4 @@ private data class PaymentEndpointPayload(
     val value: String,
     val min: String? = null,
     val max: String? = null,
-)
-
-@Serializable
-private data class PublishedPaymentEndpointPayload(
-    val value: String,
 )
