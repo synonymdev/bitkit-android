@@ -63,7 +63,7 @@ fun WeatherPreviewScreen(
             weatherViewModel.savePreferences()
             onClose()
         },
-        modifier = modifier,
+        modifier = modifier
     )
 }
 

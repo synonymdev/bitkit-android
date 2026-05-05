@@ -54,7 +54,7 @@ fun WeatherEditScreen(
         onSelectOption = { weatherViewModel.selectOption(it) },
         onClickReset = { weatherViewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 

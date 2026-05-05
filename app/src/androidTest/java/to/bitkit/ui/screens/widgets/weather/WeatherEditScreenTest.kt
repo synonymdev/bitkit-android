@@ -26,6 +26,7 @@ class WeatherEditScreenTest {
         description = R.string.widgets__weather__condition__good__description,
         currentFee = "$ 0.52",
         currentFeeSats = 520L,
+        currentFeeSatsFormatted = "520 ₿",
         nextBlockFee = "6 ₿/vByte",
         icon = FeeCondition.GOOD.icon,
     )
