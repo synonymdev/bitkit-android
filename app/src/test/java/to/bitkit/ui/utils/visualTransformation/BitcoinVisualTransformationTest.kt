@@ -1,11 +1,18 @@
 package to.bitkit.ui.utils.visualTransformation
 
 import androidx.compose.ui.text.AnnotatedString
+import org.junit.Before
 import org.junit.Test
 import to.bitkit.models.BitcoinDisplayUnit
+import java.util.Locale
 import kotlin.test.assertEquals
 
 class BitcoinVisualTransformationTest {
+
+    @Before
+    fun setLocale() {
+        Locale.setDefault(Locale.US)
+    }
 
     @Test
     fun `modern filter strips non-digits from pasted input`() {

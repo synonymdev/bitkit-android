@@ -1,12 +1,19 @@
 package to.bitkit.ui.screens.widgets.calculator.components
 
+import org.junit.Before
 import org.junit.Test
 import to.bitkit.models.BitcoinDisplayUnit
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CalculatorCardStateTest {
+
+    @Before
+    fun setLocale() {
+        Locale.setDefault(Locale.US)
+    }
 
     @Test
     fun `shouldHydrateFiatFromStoredBtc returns true when btc exists and fiat values are empty`() {
