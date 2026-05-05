@@ -83,7 +83,11 @@ class MainActivity : FragmentActivity() {
             desc = getString(R.string.notification__channel_node__body),
             importance = NotificationManager.IMPORTANCE_LOW
         )
-        appViewModel.handleDeeplinkIntent(intent)
+        // Skip on Activity recreation (e.g. locale change) — Android re-delivers the
+        // launching intent and would otherwise re-trigger deeplink flows like the gift sheet.
+        if (savedInstanceState == null) {
+            appViewModel.handleDeeplinkIntent(intent)
+        }
 
         installSplashScreen()
         enableAppEdgeToEdge()
