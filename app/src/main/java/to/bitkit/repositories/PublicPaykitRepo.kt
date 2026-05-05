@@ -29,6 +29,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.ExperimentalTime
+import to.bitkit.di.json as appJson
 
 sealed class PublicPaykitError(message: String) : AppError(message) {
     data object InvalidPayload : PublicPaykitError("Invalid Paykit payment endpoint payload")
@@ -57,7 +58,6 @@ class PublicPaykitRepo @Inject constructor(
 ) {
     companion object {
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
-        private val json = Json { ignoreUnknownKeys = true }
 
         private val payablePreferenceOrder = listOf(
             MethodId.Bolt11,
@@ -77,7 +77,7 @@ class PublicPaykitRepo @Inject constructor(
 
             val knownMethodId = MethodId.fromRawValue(methodId) ?: return null
             val payload = runCatching {
-                json.decodeFromString<PaymentEndpointPayload>(endpointData)
+                appJson.decodeFromString<PaymentEndpointPayload>(endpointData)
             }.getOrNull() ?: return null
             val value = payload.value.trim()
             if (value.isEmpty()) return null
@@ -94,7 +94,7 @@ class PublicPaykitRepo @Inject constructor(
         fun serializePayload(value: String): String {
             val trimmedValue = value.trim()
             if (trimmedValue.isEmpty()) throw PublicPaykitError.InvalidPayload
-            return json.encodeToString(PaymentEndpointPayload(value = trimmedValue))
+            return Json.encodeToString(PaymentEndpointPayload(value = trimmedValue))
         }
 
         fun paymentRequest(endpoints: List<Endpoint>): String {

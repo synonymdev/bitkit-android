@@ -245,6 +245,9 @@ internal object Env {
 
 @Suppress("ConstPropertyName")
 object Defaults {
+    /** Default Bolt11 invoice expiry in seconds. */
+    const val bolt11InvoiceExpirySeconds = 3_600u
+
     /** Recommended transaction base fee in sats */
     const val recommendedBaseFee = 256u
 

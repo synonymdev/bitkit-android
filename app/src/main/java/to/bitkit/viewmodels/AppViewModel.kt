@@ -1373,8 +1373,10 @@ class AppViewModel @Inject constructor(
 
     fun preserveContactPaymentContext(paymentHash: String) {
         synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext?.let {
-                pendingContactPaymentContexts[paymentHash] = it
+            val context = activeContactPaymentContext
+            if (context != null) {
+                pendingContactPaymentContexts[paymentHash] = context
+                activeContactPaymentContext = null
             }
         }
     }
@@ -2069,7 +2071,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoiceMsats(
                     amountMsats = lnurl.data.maxWithdrawable,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = 3600u,
+                    expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
                 )
             } else {
                 val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
@@ -2079,7 +2081,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoice(
                     amountSats = withdrawAmountSats,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = 3600u,
+                    expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
                 )
             }.getOrNull()
 
