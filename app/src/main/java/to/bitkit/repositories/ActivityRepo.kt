@@ -348,12 +348,7 @@ class ActivityRepo @Inject constructor(
             getActivities(
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,
-            ).getOrThrow().filter { activity ->
-                when (activity) {
-                    is Activity.Lightning -> PubkyPublicKeyFormat.matches(activity.v1.contact, normalizedKey)
-                    is Activity.Onchain -> PubkyPublicKeyFormat.matches(activity.v1.contact, normalizedKey)
-                }
-            }
+            ).getOrThrow().filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
         }.onFailure {
             Logger.error("Failed to load contact activities for '$publicKey'", it, context = TAG)
         }

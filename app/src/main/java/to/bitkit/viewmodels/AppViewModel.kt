@@ -1373,8 +1373,10 @@ class AppViewModel @Inject constructor(
 
     fun preserveContactPaymentContext(paymentHash: String) {
         synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext?.let {
-                pendingContactPaymentContexts[paymentHash] = it
+            val context = activeContactPaymentContext
+            if (context != null) {
+                pendingContactPaymentContexts[paymentHash] = context
+                activeContactPaymentContext = null
             }
         }
     }

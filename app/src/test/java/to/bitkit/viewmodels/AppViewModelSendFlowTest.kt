@@ -322,6 +322,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `preserveContactPaymentContext moves active context to pending`() = test {
+        val paymentHash = "pending_hash"
+        val contactKey = "pubkycontact"
+        setActiveContactPaymentContext(contactKey)
+
+        sut.preserveContactPaymentContext(paymentHash)
+
+        assertNull(activeContactPaymentContext())
+        assertEquals(contactKey, pendingContactPaymentContext(paymentHash)?.publicKey)
+    }
+
+    @Test
     fun `lightning scan uses QuickPay when enabled`() = test {
         val bolt11 = "lnbcrt1quickpay"
         enableQuickPay(thresholdSats = 1000u)
@@ -472,6 +484,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         field.isAccessible = true
         val contexts = field.get(sut) as MutableMap<String, ContactPaymentContext>
         contexts[paymentHash] = ContactPaymentContext(publicKey)
+    }
+
+    private fun setActiveContactPaymentContext(publicKey: String) {
+        val field = AppViewModel::class.java.getDeclaredField("activeContactPaymentContext")
+        field.isAccessible = true
+        field.set(sut, ContactPaymentContext(publicKey))
+    }
+
+    private fun activeContactPaymentContext(): ContactPaymentContext? {
+        val field = AppViewModel::class.java.getDeclaredField("activeContactPaymentContext")
+        field.isAccessible = true
+        return field.get(sut) as ContactPaymentContext?
     }
 
     @Suppress("UNCHECKED_CAST")

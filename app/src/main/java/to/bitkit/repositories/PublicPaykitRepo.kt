@@ -9,11 +9,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.di.json
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -26,7 +27,6 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.ExperimentalTime
 
@@ -57,7 +57,6 @@ class PublicPaykitRepo @Inject constructor(
 ) {
     companion object {
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
-        private val json = Json { ignoreUnknownKeys = true }
 
         private val payablePreferenceOrder = listOf(
             MethodId.Bolt11,
@@ -69,7 +68,7 @@ class PublicPaykitRepo @Inject constructor(
         )
 
         private val managedMethodIds = MethodId.entries.filter { it.isBitkitManaged }
-        private val publicBolt11Expiry = 24.hours
+        private val publicBolt11Expiry = 60.minutes
         private val publicBolt11RefreshWindow = 30.minutes
 
         fun parseEndpoint(methodId: String, endpointData: String): Endpoint? {
@@ -94,7 +93,7 @@ class PublicPaykitRepo @Inject constructor(
         fun serializePayload(value: String): String {
             val trimmedValue = value.trim()
             if (trimmedValue.isEmpty()) throw PublicPaykitError.InvalidPayload
-            return json.encodeToString(PaymentEndpointPayload(value = trimmedValue))
+            return buildJsonObject { put("value", trimmedValue) }.toString()
         }
 
         fun paymentRequest(endpoints: List<Endpoint>): String {
@@ -229,17 +228,9 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private suspend fun buildWalletEndpoints(refresh: Boolean): List<Endpoint> {
-        if (refresh) {
-            lightningRepo.executeWhenNodeRunning(
-                operationName = "sync public Paykit endpoints",
-            ) {
-                Result.success(Unit)
-            }.getOrThrow()
-        }
-
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
-        buildPublicBolt11Endpoint()?.let { endpoints += it }
+        buildPublicBolt11Endpoint(refresh)?.let { endpoints += it }
 
         val onchainAddress = state.onchainAddress
         if (onchainAddress.isNotBlank()) {
@@ -256,7 +247,7 @@ class PublicPaykitRepo @Inject constructor(
         return endpoints
     }
 
-    private suspend fun buildPublicBolt11Endpoint(): Endpoint? {
+    private suspend fun buildPublicBolt11Endpoint(refresh: Boolean): Endpoint? {
         if (!lightningRepo.canReceive()) {
             clearPublicBolt11Metadata()
             return null
@@ -270,6 +261,14 @@ class PublicPaykitRepo @Inject constructor(
                 value = cachedBolt11,
                 rawPayload = serializePayload(cachedBolt11),
             )
+        }
+
+        if (refresh) {
+            lightningRepo.executeWhenNodeRunning(
+                operationName = "sync public Paykit Bolt11 endpoint",
+            ) {
+                Result.success(Unit)
+            }.getOrThrow()
         }
 
         val bolt11 = lightningRepo.createInvoice(
