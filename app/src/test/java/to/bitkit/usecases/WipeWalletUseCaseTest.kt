@@ -47,6 +47,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
         onWipeCalled = false
         onSetWalletExistsStateCalled = false
 
@@ -90,8 +91,9 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
-        inOrder.verify(keychain).wipe()
+        inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(pubkyRepo).wipeLocalState()
+        inOrder.verify(keychain).wipe()
         inOrder.verify(coreService).wipeData()
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
@@ -131,6 +133,23 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(backupRepo).setWiping(true)
+        verify(backupRepo).setWiping(false)
+    }
+
+    @Test
+    fun `invoke should continue when endpoint cleanup fails`() = runTest {
+        whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(
+            Result.failure(RuntimeException("Cleanup failed")),
+        )
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(pubkyRepo).wipeLocalState()
+        verify(keychain).wipe()
         verify(backupRepo).setWiping(false)
     }
 

@@ -12,6 +12,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -20,6 +21,7 @@ import kotlin.test.assertNull
 class AddContactViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
+    private val publicPaykitRepo: PublicPaykitRepo = mock()
 
     @Test
     fun `self add failure should show dedicated error`() = test {
@@ -48,9 +50,23 @@ class AddContactViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `existing contact failure should show dedicated error`() = test {
+        whenever(context.getString(R.string.contacts__add_error_existing)).thenReturn("existing contact")
+        whenever(pubkyRepo.fetchContactProfile(any()))
+            .thenReturn(Result.failure(PubkyContactError.AlreadyExists))
+
+        val sut = createSut()
+        advanceUntilIdle()
+
+        assertEquals("existing contact", sut.uiState.value.error)
+        assertNull(sut.uiState.value.fetchedProfile)
+    }
+
+    @Test
     fun `successful fetch should populate profile`() = test {
         val profile = PubkyProfile.placeholder(TEST_PUBLIC_KEY)
         whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(profile))
+        whenever(publicPaykitRepo.hasPayablePublicEndpoint(TEST_PUBLIC_KEY)).thenReturn(Result.success(false))
 
         val sut = createSut()
         advanceUntilIdle()
@@ -63,6 +79,7 @@ class AddContactViewModelTest : BaseUnitTest() {
         return AddContactViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
+            publicPaykitRepo = publicPaykitRepo,
             savedStateHandle = SavedStateHandle(mapOf("publicKey" to publicKey)),
         )
     }

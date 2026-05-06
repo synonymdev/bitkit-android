@@ -19,6 +19,7 @@ import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.Toast
+import to.bitkit.models.satsToMsat
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.ProbeError
 import to.bitkit.repositories.ProbeOutcome
@@ -230,7 +231,7 @@ class ProbingToolViewModel @Inject constructor(
 
             is Scanner.LnurlPay -> {
                 val amount = amountSats ?: return@runCatching null
-                lightningRepo.fetchLnurlInvoice(decoded.data.callback, amount * 1000u).getOrThrow().bolt11
+                lightningRepo.fetchLnurlInvoice(decoded.data.callback, satsToMsat(amount)).getOrThrow().bolt11
             }
 
             else -> null

@@ -50,6 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.getClipboardText
@@ -81,6 +82,7 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun AddContactSheet(
     currentPublicKey: String?,
+    contacts: ImmutableList<PubkyProfile>,
     onDismiss: () -> Unit,
     onSubmit: (publicKey: String) -> Unit,
     onScanQr: () -> Unit,
@@ -90,9 +92,11 @@ fun AddContactSheet(
     val validationResult = resolveAddContactValidation(
         input = publicKeyInput,
         ownPublicKey = currentPublicKey,
+        contacts = contacts,
     )
     val validationMessage = when (validationResult) {
         AddContactValidationResult.Empty -> null
+        AddContactValidationResult.ExistingContact -> context.getString(R.string.contacts__add_error_existing)
         AddContactValidationResult.InvalidKey -> context.getString(R.string.contacts__add_error_invalid_key)
         AddContactValidationResult.OwnKey -> context.getString(R.string.contacts__add_error_self)
         is AddContactValidationResult.Valid -> null
@@ -211,6 +215,7 @@ fun AddContactScreen(
     viewModel: AddContactViewModel,
     onBackClick: () -> Unit,
     onContactSaved: () -> Unit,
+    onPayContact: (String, String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -218,6 +223,7 @@ fun AddContactScreen(
         viewModel.effects.collect {
             when (it) {
                 AddContactEffect.ContactSaved -> onContactSaved()
+                is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
             }
         }
     }
@@ -225,6 +231,7 @@ fun AddContactScreen(
     Content(
         uiState = uiState,
         onBackClick = onBackClick,
+        onPay = { viewModel.payContact() },
         onSave = { viewModel.saveContact() },
         onRetry = { viewModel.fetchProfile(uiState.publicKeyInput) },
     )
@@ -234,6 +241,7 @@ fun AddContactScreen(
 private fun Content(
     uiState: AddContactUiState,
     onBackClick: () -> Unit,
+    onPay: () -> Unit,
     onSave: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -255,6 +263,8 @@ private fun Content(
             uiState.fetchedProfile != null -> LoadedContent(
                 profile = uiState.fetchedProfile,
                 isLoading = uiState.isLoading,
+                hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
+                onPay = onPay,
                 onDiscard = onBackClick,
                 onSave = onSave,
             )
@@ -427,6 +437,8 @@ private fun ErrorContent(
 private fun LoadedContent(
     profile: PubkyProfile,
     isLoading: Boolean,
+    hasPublicPaymentEndpoint: Boolean,
+    onPay: () -> Unit,
     onDiscard: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -452,6 +464,15 @@ private fun LoadedContent(
             color = Colors.White64,
         )
         VerticalSpacer(16.dp)
+
+        if (hasPublicPaymentEndpoint) {
+            SecondaryButton(
+                text = stringResource(R.string.wallet__send),
+                onClick = onPay,
+                modifier = Modifier.testTag("AddContactPay")
+            )
+            VerticalSpacer(16.dp)
+        }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -507,6 +528,7 @@ private fun LoadingPreview() {
                 isLoading = true,
             ),
             onBackClick = {},
+            onPay = {},
             onSave = {},
             onRetry = {},
         )
@@ -530,6 +552,7 @@ private fun LoadedPreview() {
                 ),
             ),
             onBackClick = {},
+            onPay = {},
             onSave = {},
             onRetry = {},
         )
@@ -546,6 +569,7 @@ private fun ErrorPreview() {
                 error = "Could not retrieve contact info. Please check the public key and try again.",
             ),
             onBackClick = {},
+            onPay = {},
             onSave = {},
             onRetry = {},
         )

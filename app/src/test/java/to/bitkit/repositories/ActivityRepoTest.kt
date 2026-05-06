@@ -123,6 +123,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
         sut = ActivityRepo(
             bgDispatcher = testDispatcher,
+            ioDispatcher = testDispatcher,
             coreService = coreService,
             lightningRepo = lightningRepo,
             blocktankRepo = blocktankRepo,
