@@ -1,6 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to AI agents like Cursor/Claude Code/Codex/WARP when working with code in this repository.
+This file provides guidance to Codex, Claude Code, and Cursor when working with code in this repository.
+
+## Agent Commands
+
+Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
 ## Build Commands
 

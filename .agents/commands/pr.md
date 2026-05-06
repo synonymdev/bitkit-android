@@ -122,31 +122,72 @@ This PR adds support for...
 When the user provides custom instructions after `--`:
 - Parse any referenced commit SHAs and read their full messages
 - Focus the description content on areas the user emphasizes
-- Structure QA Notes according to user's specific testing instructions
+- Structure QA Notes according to user's specific manual testing instructions and automated coverage notes
 - Custom instructions take priority over default generation rules for sections they address
-- Preserve exact testing steps provided by the user (don't summarize or omit details)
+- Preserve exact manual testing steps provided by the user (don't summarize or omit details)
+- If custom instructions include automated checks or coverage notes, place them under `#### Automated Checks`
 
-**QA Notes / Testing Scenarios:**
-- Structure with numbered headings and steps
-- Make steps easily referenceable
-- Be specific about what to test and expected outcomes
+**QA Notes / Validation:**
+- QA Notes separate actionable human QA instructions from automated verification coverage.
+- Always use this structure:
+  ```md
+  ### QA Notes
+  #### Manual Tests
+  #### Automated Checks
+  ```
+- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
+- Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed with file paths and a short explanation.
+- For removed automated coverage, state why it was removed.
+- Do not list standard CI or PR bot commands as checkbox items just because they run for every PR. If standard CI coverage is worth mentioning, summarize it in one sentence.
+- List raw commands only when they were run locally, are non-standard, use special flags or environment values, validate workflow behavior, or explain a meaningful verification gap.
+- For workflow behavior validation, include `(after merge)` in the automated check item because workflow changes only take effect for PRs opened after the workflow update merges.
+- If no actionable manual validation exists, write `N/A` under `#### Manual Tests`.
+- If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
+- Write manual tests using this template:
+  ```md
+  - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation
+  ```
+- Use a list of unchecked checkboxes for each individual test.
+- Use a numbered prefix for each test, in bold, for example `**1.**`, `**2.**`.
+- Use `regression:` for regression checks, positioned after the numbering.
+- Use sub-lists for variations of the same test.
+- Use letter suffixes in numbering for each variation when a test has a sub-list, for example `**3a.**`, `**3b.**`.
+- Always use `→` to denote navigation, for example `Send → Amount`.
+- Use screen names from code, formatted as separate words without the `Screen` suffix, for example `SendAmountScreen` becomes `Send Amount`.
+- Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
-Structure QA Notes around testing and integration:
+Structure manual QA around integration validation only. Automated checks belong under `#### Automated Checks`.
 
 Example:
 ```
 ### QA Notes
+#### Manual Tests
+- [ ] **1.** Consumer app → exercise updated binding flow: behavior matches previous release.
+- [ ] **2.** `regression:` Android integration screen → trigger changed API path: no crash or stale data.
+#### Automated Checks
+- Binding tests added: cover updated Android API path in `bindings/android/...`.
+- CI: standard cargo and binding checks run by the PR bot.
+```
 
-#### Testing
-- [ ] `cargo test` passes
-- [ ] `cargo clippy` clean
-- [ ] Android bindings: `./build_android.sh`
-- [ ] iOS bindings: `./build_ios.sh`
-
-#### Integration
-- Tested in: [bitkit-android#XXX](link)
-- Or N/A if internal refactor with no API changes
+Concrete style target:
+```md
+### QA Notes
+#### Manual Tests
+- [ ] **1.** No usable channels/spending balance → scan LN invoice: error shows immediately, not after 15s.
+- [ ] **2.** Scanner → scan fixed amount LN invoice: Send Confirm or QuickPay opens directly.
+- [ ] **3a.** `regression:` Send → scanner/paste fixed amount LN invoice: in-sheet nav to Confirm or QuickPay.
+  - [ ] **3b.** `regression:` Variable amount LN invoice/LNURL-pay: lands on Amount view.
+- [ ] **4a.** Activity Detail of LN transfer → tap Connection: lands on Channel Detail.
+  - [ ] **4b.** back: returns to Activity Detail.
+- [ ] **5a.** Settings → Lightning Connections → tap channel: still opens Channel Detail.
+  - [ ] **5b.** back: returns to Connections List.
+- [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
+#### Automated Checks
+- Unit tests added: cover invoice timeout handling in `app/src/test/.../SendInvoiceTest.kt`.
+- Unit tests modified: update channel navigation assertions in `app/src/test/.../ChannelDetailTest.kt`.
+- Test coverage removed: delete stale mock-only assertions from `app/src/test/.../OldFlowTest.kt` because the flow no longer exists.
+- CI: standard compile, unit test, and detekt checks run by the PR bot.
 ```
 
 **Preview Section (conditional):**
