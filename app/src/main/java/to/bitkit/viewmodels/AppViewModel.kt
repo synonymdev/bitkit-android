@@ -1137,7 +1137,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onAddressContinue(data: String) {
-        launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data)
+        launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data, routePubkyKeys = true)
     }
 
     private suspend fun onAmountChange(amount: ULong) {

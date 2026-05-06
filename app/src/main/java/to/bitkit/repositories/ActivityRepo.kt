@@ -36,6 +36,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.contact
+import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
@@ -345,10 +346,13 @@ class ActivityRepo @Inject constructor(
     suspend fun contactActivities(publicKey: String): Result<List<Activity>> = withContext(ioDispatcher) {
         runCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
+            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
             getActivities(
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,
-            ).getOrThrow().filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
+            ).getOrThrow()
+                .filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
+                .filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
         }.onFailure {
             Logger.error("Failed to load contact activities for '$publicKey'", it, context = TAG)
         }
