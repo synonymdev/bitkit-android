@@ -200,11 +200,14 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService.receive(
                 sat = 100uL,
                 description = "test",
-                expirySecs = 3600u
+                expirySecs = 86_400u,
             )
         ).thenReturn(testInvoice)
 
-        val result = sut.createInvoice(amountSats = 100uL, description = "test", expirySeconds = 3600u)
+        val result = sut.createInvoice(
+            amountSats = 100uL,
+            description = "test",
+        )
         assertTrue(result.isSuccess)
         assertEquals(testInvoice, result.getOrNull())
     }

@@ -4,6 +4,8 @@ import app.cash.turbine.test
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
+import com.synonym.paykit.FfiPaymentEntry
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -19,6 +21,8 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.models.PubkyProfile
@@ -50,10 +54,19 @@ class PubkyRepoTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val imageLoader = mock<ImageLoader>()
     private val pubkyStore = mock<PubkyStore>()
+    private val settingsStore = mock<SettingsStore>()
+    private val settingsFlow = MutableStateFlow(SettingsData())
 
     @Before
     fun setUp() = runBlocking {
+        settingsFlow.value = SettingsData()
         whenever(pubkyStore.data).thenReturn(flowOf(PubkyStoreData()))
+        whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsFlow.value = transform(settingsFlow.value)
+            Unit
+        }
         sut = createSut()
     }
 
@@ -63,6 +76,7 @@ class PubkyRepoTest : BaseUnitTest() {
         keychain = keychain,
         imageLoader = imageLoader,
         pubkyStore = pubkyStore,
+        settingsStore = settingsStore,
         httpClient = mock(),
     )
 
@@ -105,6 +119,8 @@ class PubkyRepoTest : BaseUnitTest() {
         val ffiProfile = mock<CorePubkyProfile>()
         whenever(ffiProfile.name).thenReturn("User")
         whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
 
         val result = sut.completeAuthentication()
 
@@ -122,6 +138,8 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
         val ffiProfile = createFfiProfile(name = "User")
         whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
 
         val result = sut.completeAuthentication()
 
@@ -130,18 +148,20 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `completeAuthentication should not load contacts automatically`() = test {
+    fun `completeAuthentication should load contacts automatically`() = test {
         val testSecret = "session_secret"
         val testPk = VALID_SELF_KEY.removePrefix("pubky")
         whenever(pubkyService.completeAuth()).thenReturn(testSecret)
         whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
         val ffiProfile = createFfiProfile(name = "User")
         whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
 
         val result = sut.completeAuthentication()
 
         assertTrue(result.isSuccess)
-        verify(pubkyService, never()).sessionList(any(), any())
+        verify(pubkyService).sessionList(testSecret, Env.contactsBasePath)
     }
 
     @Test
@@ -238,6 +258,60 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.isAuthenticated.value)
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(pubkyStore) { reset() }
+    }
+
+    @Test
+    fun `signOut should clear public Paykit sharing settings`() = test {
+        authenticateForTesting()
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitBolt11 = "lnbc1old",
+            publicPaykitBolt11PaymentHash = "010203",
+            publicPaykitBolt11ExpiresAtMillis = 123L,
+        )
+
+        val result = sut.signOut()
+
+        assertTrue(result.isSuccess)
+        assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
+    }
+
+    @Test
+    fun `removeBitkitPaymentEndpoints removes only bitkit managed endpoints`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getPaymentList(VALID_SELF_KEY)).thenReturn(
+            listOf(
+                paymentEntry(MethodId.Bolt11),
+                paymentEntry(MethodId.Lnurl),
+                paymentEntry(MethodId.P2tr),
+            ),
+        )
+
+        val result = sut.removeBitkitPaymentEndpoints()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) { removePaymentEndpoint(MethodId.Bolt11.rawValue) }
+        verifyBlocking(pubkyService) { removePaymentEndpoint(MethodId.P2tr.rawValue) }
+        verifyBlocking(pubkyService, never()) { removePaymentEndpoint(MethodId.Lnurl.rawValue) }
+    }
+
+    @Test
+    fun `signOut should continue when endpoint cleanup fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.getPaymentList(VALID_SELF_KEY)).thenAnswer { throw TestAppError("Cleanup failed") }
+
+        val result = sut.signOut()
+
+        assertTrue(result.isSuccess)
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+        verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test
@@ -465,7 +539,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initialize should delete stale saved session when re-sign-in is unavailable`() = test {
+    fun `initialize should keep saved session when re-sign-in is unavailable`() = test {
         val session = "stale_session"
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(session)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
@@ -475,7 +549,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(sut.sessionRestorationFailed.value)
         assertFalse(sut.isAuthenticated.value)
-        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test
@@ -916,9 +990,15 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever { pubkyService.getProfile(prefixedPublicKey) }.thenReturn(ffiProfile)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(secret)
         whenever { pubkyService.sessionList(secret, Env.contactsBasePath) }.thenReturn(emptyList())
+        whenever { pubkyService.getPaymentList(prefixedPublicKey) }.thenReturn(emptyList())
 
         sut.completeAuthentication()
     }
+
+    private fun paymentEntry(methodId: MethodId) = FfiPaymentEntry(
+        methodId = methodId.rawValue,
+        endpointData = """{"value":"value"}""",
+    )
 
     private fun createFfiProfile(name: String): CorePubkyProfile {
         val ffiProfile = mock<CorePubkyProfile>()
