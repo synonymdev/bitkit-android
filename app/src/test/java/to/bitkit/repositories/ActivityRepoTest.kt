@@ -305,6 +305,56 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `setContact propagates contact to replacement transaction`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val replacedTxId = "replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            id = "replaced_activity_id",
+            txId = replacedTxId,
+            doesExist = false,
+        )
+        val replacementActivity = createOnchainActivity(
+            id = "replacement_activity_id",
+            txId = "replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+        )
+        whenever(coreService.activity.getActivity(replacedTxId)).thenReturn(null)
+        whenever(coreService.activity.getOnchainActivityByTxId(replacedTxId)).thenReturn(replacedActivity.v1)
+        whenever(
+            coreService.activity.get(
+                filter = ActivityFilter.ONCHAIN,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null,
+            )
+        ).thenReturn(listOf(replacedActivity, replacementActivity))
+
+        val result = sut.setContact(
+            contactPublicKey = contactPublicKey,
+            forPaymentId = replacedTxId,
+            syncLdkPayments = false,
+        )
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).update(
+            eq(replacedActivity.v1.id),
+            argThat {
+                this is Activity.Onchain && v1.contact == contactPublicKey
+            },
+        )
+        verify(coreService.activity).update(
+            eq(replacementActivity.v1.id),
+            argThat {
+                this is Activity.Onchain && v1.contact == contactPublicKey
+            },
+        )
+    }
+
+    @Test
     fun `updateActivity updates successfully when not deleted`() = test {
         val activityId = "activity123"
         val cacheData = AppCacheData(deletedActivities = emptyList())

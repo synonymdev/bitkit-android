@@ -386,9 +386,27 @@ class ActivityRepo @Inject constructor(
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(normalizedKey, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt)
         }.onFailure {
             Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)
         }
+    }
+
+    private suspend fun updateReplacementContactIfNeeded(
+        activity: Activity,
+        normalizedKey: String,
+        updatedAt: ULong,
+    ) {
+        if (activity !is Activity.Onchain || activity.v1.doesExist || activity.v1.txType != PaymentType.SENT) return
+
+        getActivities(filter = ActivityFilter.ONCHAIN).getOrThrow()
+            .filterIsInstance<Activity.Onchain>()
+            .filter { activity.v1.txId in it.v1.boostTxIds }
+            .filterNot { PubkyPublicKeyFormat.matches(it.v1.contact, normalizedKey) }
+            .forEach {
+                val updatedReplacement = Activity.Onchain(it.v1.copy(contact = normalizedKey, updatedAt = updatedAt))
+                updateActivity(updatedReplacement.rawId(), updatedReplacement).getOrThrow()
+            }
     }
 
     private suspend fun findActivityForPaymentId(forPaymentId: String, syncLdkPayments: Boolean): Activity? {
