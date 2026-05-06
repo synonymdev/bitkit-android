@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import app.cash.turbine.test
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
@@ -17,6 +18,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
@@ -50,6 +52,7 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
@@ -93,6 +96,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val settingsData = MutableStateFlow(SettingsData())
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEvents = MutableSharedFlow<Event>()
+    private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
     private val timedSheetManager = mock<TimedSheetManager>()
 
@@ -123,6 +127,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
         whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
@@ -216,6 +222,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.sendUiState.value.canSwitchWallet)
+    }
+
+    @Test
+    fun `manual address continue routes pubky to add contact`() = test {
+        sut.mainScreenEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(testPublicKey))
+
+            assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+        }
+    }
+
+    @Test
+    fun `manual address input accepts pubky without decode error`() = test {
+        sut.setSendEvent(SendEvent.AddressChange(testPublicKey))
+        advanceUntilIdle()
+
+        assertEquals(testPublicKey, sut.sendUiState.value.addressInput)
+        assertTrue(sut.sendUiState.value.isAddressInputValid)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `pubky routing dismisses send sheet before navigation`() = test {
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        sut.mainScreenEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(testPublicKey))
+
+            assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+            assertNull(sut.currentSheet.value)
+        }
     }
 
     @Test

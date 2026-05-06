@@ -66,6 +66,12 @@ fun Activity.isTransfer() = this is Activity.Onchain && this.v1.isTransfer
 
 fun Activity.doesExist() = this is Activity.Onchain && this.v1.doesExist
 
+fun Activity.isReplacedSentTransaction(txIdsInBoostTxIds: Set<String>): Boolean =
+    this is Activity.Onchain &&
+        !v1.doesExist &&
+        v1.txType == PaymentType.SENT &&
+        v1.txId in txIdsInBoostTxIds
+
 fun Activity.paymentState(): PaymentState? = when (this) {
     is Activity.Lightning -> this.v1.status
     is Activity.Onchain -> null

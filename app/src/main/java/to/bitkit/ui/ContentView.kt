@@ -1005,6 +1005,7 @@ private fun NavGraphBuilder.contacts(
             onBackClick = { navController.popBackStack() },
             onContactSaved = { navController.popBackStack() },
             onPayContact = { paymentRequest, publicKey ->
+                navController.popBackStack()
                 appViewModel.openContactPayment(paymentRequest, publicKey)
             },
         )
