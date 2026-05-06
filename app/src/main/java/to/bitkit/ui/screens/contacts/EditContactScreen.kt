@@ -127,7 +127,8 @@ private fun Content(
                     )
                 },
                 publicKeyLabel = stringResource(R.string.contacts__pubky),
-                showFooterNote = false,
+                bioPlaceholder = stringResource(R.string.contacts__edit_bio_placeholder),
+                footerNote = stringResource(R.string.contacts__edit_public_note),
                 onDelete = onDelete,
                 deleteLabel = stringResource(R.string.contacts__delete_contact),
             )
@@ -137,7 +138,7 @@ private fun Content(
     if (uiState.showDeleteDialog) {
         AppAlertDialog(
             title = stringResource(R.string.contacts__delete_confirm_title, uiState.name),
-            text = stringResource(R.string.contacts__delete_confirm_text),
+            text = stringResource(R.string.contacts__delete_confirm_text, uiState.name),
             confirmText = stringResource(R.string.common__delete_yes),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,

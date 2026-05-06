@@ -39,7 +39,6 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -51,6 +50,8 @@ import to.bitkit.ui.theme.Colors
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     onBackClick: () -> Unit,
+    onPayContact: (String, String) -> Unit,
+    onActivityClick: (String) -> Unit,
     onEditContact: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -59,7 +60,7 @@ fun ContactDetailScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                ContactDetailEffect.DeleteSuccess -> onBackClick()
+                is ContactDetailEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
             }
         }
     }
@@ -69,15 +70,14 @@ fun ContactDetailScreen(
         onBackClick = onBackClick,
         onClickEdit = { uiState.profile?.publicKey?.let { onEditContact(it) } },
         onClickCopy = { viewModel.copyPublicKey() },
+        onClickPay = { viewModel.payContact() },
+        onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
-        onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickRetry = { viewModel.loadContact() },
         onAddTag = { viewModel.showAddTagSheet() },
         onRemoveTag = { viewModel.removeTag(it) },
         onDismissAddTagSheet = { viewModel.dismissAddTagSheet() },
         onSaveTag = { viewModel.addTag(it) },
-        onDismissDeleteDialog = { viewModel.dismissDeleteDialog() },
-        onConfirmDelete = { viewModel.deleteContact() },
     )
 }
 
@@ -87,15 +87,14 @@ private fun Content(
     onBackClick: () -> Unit,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
+    onClickPay: () -> Unit,
+    onClickActivity: () -> Unit,
     onClickShare: () -> Unit,
-    onClickDelete: () -> Unit,
     onClickRetry: () -> Unit,
     onAddTag: () -> Unit,
     onRemoveTag: (Int) -> Unit,
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
-    onDismissDeleteDialog: () -> Unit,
-    onConfirmDelete: () -> Unit,
 ) {
     val currentProfile = uiState.profile
 
@@ -107,29 +106,21 @@ private fun Content(
         )
 
         when {
-            uiState.isLoading && currentProfile == null -> LoadingState()
+            uiState.isLoading -> LoadingState()
             currentProfile != null -> ContactBody(
                 profile = currentProfile,
                 tags = uiState.tags,
+                hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
+                onClickPay = onClickPay,
+                onClickActivity = onClickActivity,
                 onClickShare = onClickShare,
-                onClickDelete = onClickDelete,
                 onAddTag = onAddTag,
                 onRemoveTag = onRemoveTag,
             )
             else -> EmptyState(onClickRetry = onClickRetry)
         }
-    }
-
-    if (uiState.showDeleteDialog && currentProfile != null) {
-        AppAlertDialog(
-            title = stringResource(R.string.contacts__delete_confirm_title, currentProfile.name),
-            text = stringResource(R.string.contacts__delete_confirm_text),
-            confirmText = stringResource(R.string.contacts__delete_contact),
-            onConfirm = onConfirmDelete,
-            onDismiss = onDismissDeleteDialog,
-        )
     }
 
     if (uiState.showAddTagSheet) {
@@ -145,10 +136,12 @@ private fun Content(
 private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
+    hasPublicPaymentEndpoint: Boolean,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
+    onClickPay: () -> Unit,
+    onClickActivity: () -> Unit,
     onClickShare: () -> Unit,
-    onClickDelete: () -> Unit,
     onAddTag: () -> Unit,
     onRemoveTag: (Int) -> Unit,
 ) {
@@ -172,29 +165,37 @@ private fun ContactBody(
 
         VerticalSpacer(24.dp)
 
-        Row(
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
+            if (hasPublicPaymentEndpoint) {
+                ActionButton(
+                    onClick = onClickPay,
+                    iconRes = R.drawable.ic_coins,
+                    modifier = Modifier.testTag("ContactPay")
+                )
+            }
+            ActionButton(
+                onClick = onClickActivity,
+                iconRes = R.drawable.ic_activity,
+                modifier = Modifier.testTag("ContactActivity")
+            )
             ActionButton(
                 onClick = onClickCopy,
                 iconRes = R.drawable.ic_copy,
-                modifier = Modifier.testTag("ContactCopy"),
+                modifier = Modifier.testTag("ContactCopy")
             )
             ActionButton(
                 onClick = onClickShare,
                 iconRes = R.drawable.ic_share,
-                modifier = Modifier.testTag("ContactShare"),
+                modifier = Modifier.testTag("ContactShare")
             )
             ActionButton(
                 onClick = onClickEdit,
                 iconRes = R.drawable.ic_edit,
-                modifier = Modifier.testTag("ContactEdit"),
-            )
-            ActionButton(
-                onClick = onClickDelete,
-                iconRes = R.drawable.ic_trash,
-                modifier = Modifier.testTag("ContactDelete"),
+                modifier = Modifier.testTag("ContactEdit")
             )
         }
 
@@ -210,13 +211,13 @@ private fun ContactBody(
             color = Colors.White64,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("ContactViewTagsHeader"),
+                .testTag("ContactViewTagsHeader")
         )
         VerticalSpacer(8.dp)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             tags.forEachIndexed { index, tag ->
                 TagButton(
@@ -233,7 +234,7 @@ private fun ContactBody(
                 onClick = onAddTag,
                 icon = painterResource(R.drawable.ic_tag),
                 displayIconClose = true,
-                modifier = Modifier.testTag("ContactAddTag"),
+                modifier = Modifier.testTag("ContactAddTag")
             )
         }
     }
@@ -263,7 +264,7 @@ private fun EmptyState(onClickRetry: () -> Unit) {
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
             onClick = onClickRetry,
-            modifier = Modifier.testTag("ContactRetry"),
+            modifier = Modifier.testTag("ContactRetry")
         )
     }
 }
@@ -291,15 +292,14 @@ private fun Preview() {
             onBackClick = {},
             onClickEdit = {},
             onClickCopy = {},
+            onClickPay = {},
+            onClickActivity = {},
             onClickShare = {},
-            onClickDelete = {},
             onClickRetry = {},
             onAddTag = {},
             onRemoveTag = {},
             onDismissAddTagSheet = {},
             onSaveTag = {},
-            onDismissDeleteDialog = {},
-            onConfirmDelete = {},
         )
     }
 }

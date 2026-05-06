@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -49,6 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.getClipboardText
@@ -80,21 +82,24 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun AddContactSheet(
     currentPublicKey: String?,
+    contacts: ImmutableList<PubkyProfile>,
     onDismiss: () -> Unit,
     onSubmit: (publicKey: String) -> Unit,
     onScanQr: () -> Unit,
 ) {
     val context = LocalContext.current
     var publicKeyInput by remember { mutableStateOf("") }
-    val trimmedInput = publicKeyInput.trim()
-    val normalizedInput = PubkyPublicKeyFormat.normalized(trimmedInput)
-    val validationMessage = when {
-        trimmedInput.isEmpty() -> null
-        PubkyPublicKeyFormat.matches(trimmedInput, currentPublicKey) ->
-            context.getString(R.string.contacts__add_error_self)
-        normalizedInput == null ->
-            context.getString(R.string.contacts__add_error_invalid_key)
-        else -> null
+    val validationResult = resolveAddContactValidation(
+        input = publicKeyInput,
+        ownPublicKey = currentPublicKey,
+        contacts = contacts,
+    )
+    val validationMessage = when (validationResult) {
+        AddContactValidationResult.Empty -> null
+        AddContactValidationResult.ExistingContact -> context.getString(R.string.contacts__add_error_existing)
+        AddContactValidationResult.InvalidKey -> context.getString(R.string.contacts__add_error_invalid_key)
+        AddContactValidationResult.OwnKey -> context.getString(R.string.contacts__add_error_self)
+        is AddContactValidationResult.Valid -> null
     }
 
     BottomSheet(
@@ -104,7 +109,7 @@ fun AddContactSheet(
         AddContactSheetContent(
             publicKeyInput = publicKeyInput,
             validationMessage = validationMessage,
-            isSubmitEnabled = normalizedInput != null && validationMessage == null,
+            isSubmitEnabled = validationResult is AddContactValidationResult.Valid,
             onPublicKeyChange = { publicKeyInput = PubkyPublicKeyFormat.bounded(it) },
             onPaste = {
                 context.getClipboardText()?.trim()?.let {
@@ -112,7 +117,11 @@ fun AddContactSheet(
                 }
             },
             onScanQr = onScanQr,
-            onSubmit = { normalizedInput?.let(onSubmit) },
+            onSubmit = {
+                val normalizedKey = (validationResult as? AddContactValidationResult.Valid)?.normalizedKey
+                    ?: return@AddContactSheetContent
+                onSubmit(normalizedKey)
+            },
         )
     }
 }
@@ -156,7 +165,10 @@ private fun AddContactSheetContent(
                 }
             },
             trailingIcon = {
-                IconButton(onClick = onPaste) {
+                IconButton(
+                    onClick = onPaste,
+                    modifier = Modifier.testTag("AddContactPaste")
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_clipboard_text),
                         contentDescription = null,
@@ -164,7 +176,9 @@ private fun AddContactSheetContent(
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("AddContactPubkyField")
         )
         VerticalSpacer(16.dp)
 
@@ -175,13 +189,17 @@ private fun AddContactSheetContent(
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_scan_qr),
                 onClick = onScanQr,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactScanQR")
             )
             PrimaryButton(
                 text = stringResource(R.string.contacts__add_button),
                 onClick = onSubmit,
                 enabled = isSubmitEnabled,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactAdd")
             )
         }
         VerticalSpacer(16.dp)
@@ -197,6 +215,7 @@ fun AddContactScreen(
     viewModel: AddContactViewModel,
     onBackClick: () -> Unit,
     onContactSaved: () -> Unit,
+    onPayContact: (String, String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -204,6 +223,7 @@ fun AddContactScreen(
         viewModel.effects.collect {
             when (it) {
                 AddContactEffect.ContactSaved -> onContactSaved()
+                is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
             }
         }
     }
@@ -211,6 +231,7 @@ fun AddContactScreen(
     Content(
         uiState = uiState,
         onBackClick = onBackClick,
+        onPay = { viewModel.payContact() },
         onSave = { viewModel.saveContact() },
         onRetry = { viewModel.fetchProfile(uiState.publicKeyInput) },
     )
@@ -220,6 +241,7 @@ fun AddContactScreen(
 private fun Content(
     uiState: AddContactUiState,
     onBackClick: () -> Unit,
+    onPay: () -> Unit,
     onSave: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -241,6 +263,8 @@ private fun Content(
             uiState.fetchedProfile != null -> LoadedContent(
                 profile = uiState.fetchedProfile,
                 isLoading = uiState.isLoading,
+                hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
+                onPay = onPay,
                 onDiscard = onBackClick,
                 onSave = onSave,
             )
@@ -257,7 +281,7 @@ private fun LoadingContent(publicKey: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -273,7 +297,7 @@ private fun LoadingContent(publicKey: String) {
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(Colors.Gray5),
+                .background(Colors.Gray5)
         ) {
             Display(
                 text = publicKey.take(1).uppercase(),
@@ -292,7 +316,7 @@ private fun LoadingContent(publicKey: String) {
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
         ) {
             RotatingEllipses(modifier = Modifier.size(256.dp))
         }
@@ -377,7 +401,7 @@ private fun RotatingEllipses(modifier: Modifier = Modifier) {
                         style = dashedStroke,
                     )
                 }
-            },
+            }
     ) {
         Image(
             painter = painterResource(R.drawable.card),
@@ -397,13 +421,14 @@ private fun ErrorContent(
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         BodyM(text = error, color = Colors.White64, textAlign = TextAlign.Center)
         VerticalSpacer(16.dp)
         SecondaryButton(
             text = stringResource(R.string.common__retry),
             onClick = onRetry,
+            modifier = Modifier.testTag("AddContactRetry")
         )
     }
 }
@@ -412,6 +437,8 @@ private fun ErrorContent(
 private fun LoadedContent(
     profile: PubkyProfile,
     isLoading: Boolean,
+    hasPublicPaymentEndpoint: Boolean,
+    onPay: () -> Unit,
     onDiscard: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -419,7 +446,7 @@ private fun LoadedContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            .padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -438,6 +465,15 @@ private fun LoadedContent(
         )
         VerticalSpacer(16.dp)
 
+        if (hasPublicPaymentEndpoint) {
+            SecondaryButton(
+                text = stringResource(R.string.wallet__send),
+                onClick = onPay,
+                modifier = Modifier.testTag("AddContactPay")
+            )
+            VerticalSpacer(16.dp)
+        }
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
@@ -445,13 +481,17 @@ private fun LoadedContent(
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_discard),
                 onClick = onDiscard,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactDiscard")
             )
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = !isLoading,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("AddContactSave")
             )
         }
         VerticalSpacer(16.dp)
@@ -488,6 +528,7 @@ private fun LoadingPreview() {
                 isLoading = true,
             ),
             onBackClick = {},
+            onPay = {},
             onSave = {},
             onRetry = {},
         )
@@ -511,6 +552,7 @@ private fun LoadedPreview() {
                 ),
             ),
             onBackClick = {},
+            onPay = {},
             onSave = {},
             onRetry = {},
         )
@@ -527,6 +569,7 @@ private fun ErrorPreview() {
                 error = "Could not retrieve contact info. Please check the public key and try again.",
             ),
             onBackClick = {},
+            onPay = {},
             onSave = {},
             onRetry = {},
         )

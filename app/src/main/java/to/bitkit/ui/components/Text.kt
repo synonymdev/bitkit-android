@@ -24,6 +24,8 @@ fun Display(
     fontWeight: FontWeight = FontWeight.Black,
     fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
     textAlign: TextAlign? = null,
 ) {
     Text(
@@ -33,8 +35,10 @@ fun Display(
             fontSize = fontSize,
             color = color,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         textAlign = textAlign,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -42,14 +46,17 @@ fun Display(
 fun Display(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
+    fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
         text = text.toUpperCase(),
         style = AppTextStyles.Display.merge(
+            fontSize = fontSize,
+            lineHeight = fontSize,
             color = color,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -64,7 +71,7 @@ fun Headline(
         style = AppTextStyles.Headline.merge(
             color = color,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -82,7 +89,7 @@ fun Headline20(
             letterSpacing = (-.5).sp,
             color = color,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -99,7 +106,7 @@ fun Headline24(
             lineHeight = 24.sp,
             color = color,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -120,7 +127,7 @@ fun Title(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -141,7 +148,7 @@ fun Subtitle(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -185,7 +192,7 @@ fun BodyM(
         maxLines = maxLines,
         minLines = minLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -225,7 +232,7 @@ fun BodyMSB(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -246,7 +253,7 @@ fun BodyMB(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -339,7 +346,7 @@ fun BodySB(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -356,7 +363,7 @@ fun Text13Up(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -377,7 +384,7 @@ fun Caption(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -434,7 +441,7 @@ fun Caption13Up(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -455,6 +462,6 @@ fun Footnote(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }

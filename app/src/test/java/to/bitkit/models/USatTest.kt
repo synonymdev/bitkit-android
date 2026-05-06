@@ -74,6 +74,26 @@ class USatTest {
     }
     // endregion
 
+    // region Multiplication
+    @Test
+    fun `times returns product`() {
+        val result = USat(42uL) * USat(1_000uL)
+        assertEquals(42_000uL, result)
+    }
+
+    @Test
+    fun `times returns zero when either value is zero`() {
+        assertEquals(0uL, USat(0uL) * USat(1_000uL))
+        assertEquals(0uL, USat(1_000uL) * USat(0uL))
+    }
+
+    @Test
+    fun `times saturates at max when would overflow`() {
+        val result = USat(ULong.MAX_VALUE) * USat(1_000uL)
+        assertEquals(ULong.MAX_VALUE, result)
+    }
+    // endregion
+
     // region Comparisons
     @Test
     fun `compareTo returns negative when less than`() {

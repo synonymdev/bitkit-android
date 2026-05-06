@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Improve Pubky profile restore, contact editing, and contact routing flows #905
+
 ### Fixed
-- Block numberpad input above max amount on Send, Transfer to Spending, and Receiving Capacity screens, with short toast explaining the limit #908
+- Fix probe results and add keysend probes #920
+- Align top bar back arrow and passphrase input cursor/placeholder with iOS #906
+- Polish Terms of Use screen padding to match iOS #903
 
 ## [2.2.0] - 2026-04-07
 

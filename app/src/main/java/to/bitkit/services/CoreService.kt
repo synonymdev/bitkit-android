@@ -72,11 +72,11 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
-import to.bitkit.models.msatFloorOf
 import to.bitkit.ext.channelId
 import to.bitkit.ext.create
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.models.addressTypeFromAddress
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -1021,7 +1021,8 @@ class ActivityService(
         val updatedActivity = replacementActivity.copy(
             boostTxIds = replacementActivity.boostTxIds + txid,
             isBoosted = true,
-            updatedAt = System.currentTimeMillis().toULong() / 1000u
+            contact = replacementActivity.contact ?: replacedActivity?.contact,
+            updatedAt = System.currentTimeMillis().toULong() / 1000u,
         )
         updateActivity(replacementActivity.id, Activity.Onchain(updatedActivity))
 

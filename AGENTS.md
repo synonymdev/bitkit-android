@@ -1,6 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to AI agents like Cursor/Claude Code/Codex/WARP when working with code in this repository.
+This file provides guidance to Codex, Claude Code, and Cursor when working with code in this repository.
+
+## Agent Commands
+
+Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
 ## Build Commands
 
@@ -240,13 +244,14 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 
 ### Changelog
 
-- ALWAYS add exactly ONE entry per PR under `## [Unreleased]` in `CHANGELOG.md` for `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
-- NEVER add multiple changelog lines for the same PR — summarize all changes in a single concise entry
-- USE standard Keep a Changelog categories: `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`
-- ALWAYS append `#PR_NUMBER` at the end of each changelog entry when the PR number is known
-- ALWAYS place new entries at the top of their category section (newest first)
-- NEVER modify released version sections — only edit `## [Unreleased]`
-- ALWAYS create category headings on demand (don't add empty stubs)
+- NEVER edit `CHANGELOG.md` in normal feature/fix PRs; release automation collects changelog fragments into it
+- ALWAYS add exactly ONE changelog fragment for user-facing `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
+- PUT normal release fragments in `changelog.d/next/` and hotfix fragments in `changelog.d/hotfix/`
+- NAME fragments `<issue-or-pr>.<category>.md`, where category is one of `added`, `changed`, `deprecated`, `removed`, `fixed`, or `security`
+- WRITE the fragment as one polished user-facing sentence without a leading bullet and without a PR number
+- NEVER add multiple changelog fragments for the same PR — summarize all changes in one concise fragment
+- Release commits consume fragments with `scripts/collect-changelog.sh --target next|hotfix`, update `CHANGELOG.md`, and delete consumed fragment files
+- NEVER modify released version sections manually
 
 ### Device Debugging (adb)
 
