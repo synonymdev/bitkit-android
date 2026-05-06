@@ -125,7 +125,7 @@ When the user provides custom instructions after `--`:
 - Structure QA Notes according to user's specific manual testing instructions and automated coverage notes
 - Custom instructions take priority over default generation rules for sections they address
 - Preserve exact manual testing steps provided by the user (don't summarize or omit details)
-- If custom instructions include automated checks, place them under `#### Automated Checks`
+- If custom instructions include automated checks or coverage notes, place them under `#### Automated Checks`
 
 **QA Notes / Validation:**
 - QA Notes separate actionable human QA instructions from automated verification coverage.
@@ -135,8 +135,11 @@ When the user provides custom instructions after `--`:
   #### Manual Tests
   #### Automated Checks
   ```
-- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; list them under `#### Automated Checks`.
-- Use `#### Automated Checks` to list automated checks that were run locally and any automated coverage added or updated with the change, such as unit tests, integration tests, or CI checks.
+- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
+- Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed with file paths and a short explanation.
+- For removed automated coverage, state why it was removed.
+- Do not list standard CI or PR bot commands as checkbox items just because they run for every PR. If standard CI coverage is worth mentioning, summarize it in one sentence.
+- List raw commands only when they were run locally, are non-standard, use special flags or environment values, validate workflow behavior, or explain a meaningful verification gap.
 - For workflow behavior validation, include `(after merge)` in the automated check item because workflow changes only take effect for PRs opened after the workflow update merges.
 - If no actionable manual validation exists, write `N/A` under `#### Manual Tests`.
 - If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
@@ -163,8 +166,8 @@ Example:
 - [ ] **1.** Consumer app → exercise updated binding flow: behavior matches previous release.
 - [ ] **2.** `regression:` Android integration screen → trigger changed API path: no crash or stale data.
 #### Automated Checks
-- [x] cargo test
-- [x] Android binding integration tests
+- Binding tests added: cover updated Android API path in `bindings/android/...`.
+- CI: standard cargo and binding checks run by the PR bot.
 ```
 
 Concrete style target:
@@ -181,9 +184,10 @@ Concrete style target:
   - [ ] **5b.** back: returns to Connections List.
 - [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
 #### Automated Checks
-- [x] ./gradlew compileDevDebugKotlin
-- [x] ./gradlew testDevDebugUnitTest
-- [x] ./gradlew detekt
+- Unit tests added: cover invoice timeout handling in `app/src/test/.../SendInvoiceTest.kt`.
+- Unit tests modified: update channel navigation assertions in `app/src/test/.../ChannelDetailTest.kt`.
+- Test coverage removed: delete stale mock-only assertions from `app/src/test/.../OldFlowTest.kt` because the flow no longer exists.
+- CI: standard compile, unit test, and detekt checks run by the PR bot.
 ```
 
 **Preview Section (conditional):**
