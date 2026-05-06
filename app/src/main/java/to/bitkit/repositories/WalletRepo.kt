@@ -32,8 +32,8 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
-import to.bitkit.models.msatFloorOf
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase

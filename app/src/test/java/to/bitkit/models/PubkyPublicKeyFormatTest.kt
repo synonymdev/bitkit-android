@@ -39,6 +39,13 @@ class PubkyPublicKeyFormatTest {
     }
 
     @Test
+    fun `redacted shortens normalized pubky keys`() {
+        val rawKey = "ybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
+
+        assertEquals("pubkyyb…pqxot1u", PubkyPublicKeyFormat.redacted(rawKey))
+    }
+
+    @Test
     fun `matches compares equivalent pubky representations`() {
         val rawKey = "ybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
         val prefixedKey = "pubky$rawKey"

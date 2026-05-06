@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
+import com.synonym.paykit.FfiPaymentEntry
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -25,6 +26,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.data.PubkyStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -46,11 +48,12 @@ import kotlin.math.min
 enum class PubkyAuthState { Idle, Authenticating, Authenticated }
 
 sealed class PubkyContactError(message: String) : AppError(message) {
+    data object AlreadyExists : PubkyContactError("Contact already exists")
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
 }
 
-@Suppress("TooManyFunctions", "LargeClass")
+@Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @Singleton
 class PubkyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -58,6 +61,7 @@ class PubkyRepo @Inject constructor(
     private val keychain: Keychain,
     private val imageLoader: ImageLoader,
     private val pubkyStore: PubkyStore,
+    private val settingsStore: SettingsStore,
     private val httpClient: HttpClient,
 ) {
     companion object {
@@ -204,9 +208,7 @@ class PubkyRepo @Inject constructor(
     ): InitResult = withContext(ioDispatcher) {
         if (storedSecretKeyHex.isNullOrEmpty()) {
             if (!savedSessionSecret.isNullOrEmpty()) {
-                Logger.warn("Skipped re-sign-in recovery, no secret key available", context = TAG)
-                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-                notifyBackupStateChanged()
+                Logger.warn("Skipped re-sign-in recovery, keeping saved session", context = TAG)
                 InitResult.RestorationFailed
             } else {
                 InitResult.NoSession
@@ -221,8 +223,6 @@ class PubkyRepo @Inject constructor(
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.error("Failed re-sign-in recovery", it, context = TAG)
-                runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-                notifyBackupStateChanged()
                 InitResult.RestorationFailed
             }
         }
@@ -264,6 +264,7 @@ class PubkyRepo @Inject constructor(
             _authState.update { PubkyAuthState.Authenticated }
             Logger.info("Completed pubky auth for '$pk'", context = TAG)
             loadProfile()
+            loadContacts()
         }.map { }
     }
 
@@ -276,6 +277,50 @@ class PubkyRepo @Inject constructor(
 
     fun cancelAuthenticationSync() {
         scope.launch { cancelAuthentication() }
+    }
+
+    // endregion
+
+    // region Payment endpoints
+
+    suspend fun getPaymentList(publicKey: String): Result<List<FfiPaymentEntry>> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.getPaymentList(publicKey.ensurePubkyPrefix())
+        }
+    }
+
+    suspend fun setPaymentEndpoint(methodId: String, endpointData: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.setPaymentEndpoint(methodId, endpointData)
+        }
+    }
+
+    suspend fun removePaymentEndpoint(methodId: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.removePaymentEndpoint(methodId)
+        }
+    }
+
+    suspend fun removeBitkitPaymentEndpoints(): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val currentPublicKey = _publicKey.value ?: pubkyService.currentPublicKey()?.ensurePubkyPrefix()
+                ?: return@runCatching
+            val managedMethodIds = MethodId.entries
+                .filter { it.isBitkitManaged }
+                .map { it.rawValue }
+                .toSet()
+
+            pubkyService.getPaymentList(currentPublicKey)
+                .map { it.methodId }
+                .filter { it in managedMethodIds }
+                .forEach { pubkyService.removePaymentEndpoint(it) }
+        }
+    }
+
+    suspend fun currentPublicKey(): Result<String?> = withContext(ioDispatcher) {
+        runCatching {
+            pubkyService.currentPublicKey()?.ensurePubkyPrefix()
+        }
     }
 
     // endregion
@@ -604,7 +649,10 @@ class PubkyRepo @Inject constructor(
             val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            val prefixedKey = requireAddableContactPublicKey(publicKey)
+            val prefixedKey = requireAddableContactPublicKey(
+                publicKey = publicKey,
+                allowExisting = existingProfile != null,
+            )
             val profile = existingProfile?.copy(publicKey = prefixedKey) ?: run {
                 val ffiProfile = pubkyService.getProfile(prefixedKey)
                 PubkyProfile.fromFfi(prefixedKey, ffiProfile)
@@ -826,6 +874,9 @@ class PubkyRepo @Inject constructor(
     // region Sign out
 
     suspend fun signOut(): Result<Unit> {
+        removeBitkitPaymentEndpoints()
+            .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
+
         val result = runCatching {
             withContext(ioDispatcher) { pubkyService.signOut() }
         }.recoverCatching {
@@ -912,17 +963,37 @@ class PubkyRepo @Inject constructor(
     private suspend fun clearLocalState() = withContext(ioDispatcher) {
         runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        runCatching { clearPublicPaykitSharingState() }
+            .onFailure { Logger.warn("Failed to clear public Paykit sharing state", it, context = TAG) }
         notifyBackupStateChanged()
         clearAuthenticatedState()
     }
 
-    private fun requireAddableContactPublicKey(publicKey: String): String {
-        val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
-            ?: throw PubkyContactError.InvalidFormat
-        if (_publicKey.value == prefixedKey) {
-            throw PubkyContactError.CannotAddSelf
+    private suspend fun clearPublicPaykitSharingState() {
+        settingsStore.update {
+            it.copy(
+                hasConfirmedPublicPaykitEndpoints = false,
+                sharesPublicPaykitEndpoints = false,
+                publicPaykitBolt11 = "",
+                publicPaykitBolt11PaymentHash = "",
+                publicPaykitBolt11ExpiresAtMillis = 0,
+            )
         }
-        return prefixedKey
+    }
+
+    private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {
+        val prefixedKey = PubkyPublicKeyFormat.normalized(publicKey)
+        contactValidationError(prefixedKey, allowExisting)?.let { throw it }
+        return checkNotNull(prefixedKey) { "Normalized pubky key is required" }
+    }
+
+    private fun contactValidationError(prefixedKey: String?, allowExisting: Boolean = false): PubkyContactError? {
+        if (prefixedKey == null) return PubkyContactError.InvalidFormat
+        if (_publicKey.value == prefixedKey) return PubkyContactError.CannotAddSelf
+        if (!allowExisting && _contacts.value.any { PubkyPublicKeyFormat.matches(it.publicKey, prefixedKey) }) {
+            return PubkyContactError.AlreadyExists
+        }
+        return null
     }
 
     private fun String.ensurePubkyPrefix(): String =
