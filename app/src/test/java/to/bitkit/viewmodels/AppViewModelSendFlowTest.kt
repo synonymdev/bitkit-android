@@ -18,6 +18,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
@@ -229,6 +230,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.AddressContinue(testPublicKey))
 
             assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+        }
+    }
+
+    @Test
+    fun `manual address input accepts pubky without decode error`() = test {
+        sut.setSendEvent(SendEvent.AddressChange(testPublicKey))
+        advanceUntilIdle()
+
+        assertEquals(testPublicKey, sut.sendUiState.value.addressInput)
+        assertTrue(sut.sendUiState.value.isAddressInputValid)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `pubky routing dismisses send sheet before navigation`() = test {
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        sut.mainScreenEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(testPublicKey))
+
+            assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
+            assertNull(sut.currentSheet.value)
         }
     }
 

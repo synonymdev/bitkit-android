@@ -939,6 +939,11 @@ class AppViewModel @Inject constructor(
         // Skip validation for empty input
         if (valueWithoutSpaces.isEmpty()) return
 
+        if (PubkyPublicKeyFormat.normalized(valueWithoutSpaces) != null) {
+            _sendUiState.update { it.copy(isAddressInputValid = true) }
+            return
+        }
+
         // Start debounced validation
         addressValidationJob = viewModelScope.launch {
             delay(ADDRESS_VALIDATION_DEBOUNCE_MS)
@@ -1420,6 +1425,7 @@ class AppViewModel @Inject constructor(
 
             if (route != null) {
                 clearActiveContactPaymentContext()
+                if (currentSheet.value is Sheet.Send) hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(route))
                 return@withContext
             }
