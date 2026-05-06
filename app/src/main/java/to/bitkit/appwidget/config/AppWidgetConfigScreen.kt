@@ -1,5 +1,7 @@
 package to.bitkit.appwidget.config
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -23,9 +24,10 @@ import to.bitkit.R
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.ext.label
 import to.bitkit.models.widget.PricePreferences
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -44,7 +46,7 @@ fun AppWidgetConfigScreen(
     when (state.type) {
         AppWidgetType.PRICE -> Content(
             state = state,
-            onTogglePair = { viewModel.togglePricePair(it) },
+            onSelectPair = { viewModel.selectPricePair(it) },
             onSelectPeriod = { viewModel.selectPricePeriod(it) },
             onReset = { viewModel.resetPreferences() },
             onSave = { viewModel.saveAndFinish(onConfirm) },
@@ -56,16 +58,21 @@ fun AppWidgetConfigScreen(
 @Composable
 private fun Content(
     state: AppWidgetConfigUiState,
-    onTogglePair: (TradingPair) -> Unit,
+    onSelectPair: (TradingPair) -> Unit,
     onSelectPeriod: (GraphPeriod) -> Unit,
     onReset: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val prefs = state.pricePreferences
-    ScreenColumn {
+    val selectedPair = prefs.enabledPairs.firstOrNull() ?: TradingPair.BTC_USD
+
+    ScreenColumn(
+        noBackground = true,
+        modifier = Modifier.background(Colors.Gray7)
+    ) {
         AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__edit),
+            titleText = stringResource(R.string.widgets__price__name),
             onBackClick = onCancel,
         )
 
@@ -75,43 +82,33 @@ private fun Content(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
-            VerticalSpacer(26.dp)
+            VerticalSpacer(16.dp)
 
-            BodyM(
-                text = stringResource(R.string.widgets__widget__edit_description).replace(
-                    "{name}",
-                    stringResource(R.string.widgets__price__name),
-                ),
+            Caption13Up(
+                text = stringResource(R.string.appwidget__price__currency),
                 color = Colors.White64,
+                modifier = Modifier.padding(bottom = 16.dp)
             )
-
-            VerticalSpacer(32.dp)
-
-            BodySSB(
-                text = stringResource(R.string.appwidget__price__trading_pairs),
-                color = Colors.White64,
-            )
-            VerticalSpacer(8.dp)
 
             for (pair in TradingPair.entries) {
-                ConfigToggleRow(
+                SelectableRow(
                     label = pair.displayName,
-                    isEnabled = pair in prefs.enabledPairs,
-                    onClick = { onTogglePair(pair) },
+                    isSelected = pair == selectedPair,
+                    onClick = { onSelectPair(pair) },
                 )
             }
 
             VerticalSpacer(16.dp)
-            BodySSB(
-                text = stringResource(R.string.appwidget__price__period),
+            Caption13Up(
+                text = stringResource(R.string.appwidget__price__timeframe),
                 color = Colors.White64,
+                modifier = Modifier.padding(vertical = 16.dp)
             )
-            VerticalSpacer(8.dp)
 
             for (period in GraphPeriod.entries) {
-                ConfigToggleRow(
-                    label = period.value,
-                    isEnabled = period == prefs.period,
+                SelectableRow(
+                    label = period.label(),
+                    isSelected = period == prefs.period,
                     onClick = { onSelectPeriod(period) },
                 )
             }
@@ -120,7 +117,7 @@ private fun Content(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(vertical = 21.dp, horizontal = 16.dp)
+                .padding(16.dp)
                 .fillMaxWidth()
         ) {
             SecondaryButton(
@@ -143,9 +140,9 @@ private fun Content(
 }
 
 @Composable
-private fun ConfigToggleRow(
+private fun SelectableRow(
     label: String,
-    isEnabled: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
 ) {
     Column {
@@ -153,19 +150,20 @@ private fun ConfigToggleRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(vertical = 12.dp)
                 .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 14.dp)
         ) {
             BodySSB(
                 text = label,
-                color = Colors.White64,
+                color = if (isSelected) Colors.White else Colors.White64,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = onClick) {
+            if (isSelected) {
                 Icon(
                     painter = painterResource(R.drawable.ic_checkmark),
                     contentDescription = null,
-                    tint = if (isEnabled) Colors.Brand else Colors.White50,
+                    tint = Colors.Brand,
                     modifier = Modifier.size(32.dp)
                 )
             }

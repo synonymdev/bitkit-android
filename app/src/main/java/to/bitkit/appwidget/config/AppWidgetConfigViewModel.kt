@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,15 +47,9 @@ class AppWidgetConfigViewModel @Inject constructor(
         }
     }
 
-    fun togglePricePair(pair: TradingPair) {
+    fun selectPricePair(pair: TradingPair) {
         _uiState.update {
-            val current = it.pricePreferences.enabledPairs.toMutableList()
-            if (pair in current) {
-                if (current.size > 1) current.remove(pair)
-            } else {
-                current.add(pair)
-            }
-            it.copy(pricePreferences = it.pricePreferences.copy(enabledPairs = current.sortedBy { p -> p.position }))
+            it.copy(pricePreferences = it.pricePreferences.copy(enabledPairs = persistentListOf(pair)))
         }
     }
 

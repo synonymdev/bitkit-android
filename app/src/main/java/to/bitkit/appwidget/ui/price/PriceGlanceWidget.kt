@@ -6,8 +6,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -18,7 +16,9 @@ import to.bitkit.appwidget.AppWidgetEntryPoint
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.data.dto.price.PriceDTO
+import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.ui.theme.Colors
 
 class PriceGlanceWidget : GlanceAppWidget() {
@@ -26,12 +26,10 @@ class PriceGlanceWidget : GlanceAppWidget() {
     companion object {
         private const val CHART_WIDTH = 600
         private const val CHART_HEIGHT = 200
-        val COMPACT = DpSize(180.dp, 80.dp)
-        val EXPANDED = DpSize(180.dp, 180.dp)
     }
 
     override val sizeMode = SizeMode.Responsive(
-        setOf(COMPACT, EXPANDED),
+        setOf(GlanceLayoutDimens.COMPACT_WIDGET_SIZE, GlanceLayoutDimens.WIDE_WIDGET_SIZE),
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -45,33 +43,38 @@ class PriceGlanceWidget : GlanceAppWidget() {
             val entry = data.entries.find { it.appWidgetId == appWidgetId }
                 ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.PRICE)
             val price = data.cachedPrices[entry.pricePreferences.period]
-            val chartBitmap = remember(price, entry.pricePreferences) {
-                buildChartBitmap(price, entry)
+            val widget = remember(price, entry.pricePreferences) {
+                resolveWidget(price, entry)
+            }
+            val chartBitmap = remember(widget) {
+                widget?.let { buildChartBitmap(it) }
             }
 
             PriceGlanceContent(
-                price = price,
+                widget = widget,
                 entry = entry,
                 chartBitmap = chartBitmap,
             )
         }
     }
 
-    private fun buildChartBitmap(price: PriceDTO?, entry: AppWidgetEntry): Bitmap? {
-        val prefs = entry.pricePreferences
-        val enabledWidgets = price?.widgets?.filter { it.pair in prefs.enabledPairs }
-        val chartData = enabledWidgets?.firstOrNull() ?: price?.widgets?.firstOrNull()
-            ?: return null
-        if (chartData.pastValues.size < 2) return null
+    private fun resolveWidget(price: PriceDTO?, entry: AppWidgetEntry): PriceWidgetData? {
+        val widgets = price?.widgets ?: return null
+        val enabledPairs = entry.pricePreferences.enabledPairs
+        return widgets.firstOrNull { it.pair in enabledPairs } ?: widgets.firstOrNull()
+    }
 
-        val lineColor = if (chartData.change.isPositive) {
+    private fun buildChartBitmap(widget: PriceWidgetData): Bitmap? {
+        if (widget.pastValues.size < 2) return null
+
+        val lineColor = if (widget.change.isPositive) {
             Colors.Green.toArgb()
         } else {
             Colors.Red.toArgb()
         }
 
         return renderLineChartBitmap(
-            values = chartData.pastValues,
+            values = widget.pastValues,
             width = CHART_WIDTH,
             height = CHART_HEIGHT,
             lineColor = lineColor,
