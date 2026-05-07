@@ -33,6 +33,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
@@ -56,13 +57,13 @@ class WalletViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val pubkyRepo: PubkyRepo,
     private val migrationService: MigrationService,
     private val connectivityRepo: ConnectivityRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
-        private const val CHANNEL_RECOVERY_RESTART_DELAY_MS = 500L
     }
 
     val lightningState = lightningRepo.lightningState
@@ -213,6 +214,8 @@ class WalletViewModel @Inject constructor(
         } else {
             backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
         }
+
+        pubkyRepo.initialize()
     }
 
     private suspend fun restoreFromRNRemoteBackup() = runCatching {

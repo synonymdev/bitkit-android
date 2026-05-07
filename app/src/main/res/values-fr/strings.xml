@@ -736,10 +736,6 @@
     <string name="settings__rgs__button_connect">Connecter</string>
     <string name="settings__rgs__update_success_title">Mise à jour du serveur Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">Il se peut que vous deviez redémarrer l\'application une ou deux fois pour que cette modification prenne effet.</string>
-    <string name="slashtags__onboarding_profile1_header">Détenez votre \n&lt;accent&gt;profil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Configurez votre profil public et vos liens, afin que vos contacts Bitkit puissent vous joindre ou vous payer à tout moment et en tout lieu.</string>
-    <string name="slashtags__profile">Profil</string>
-    <string name="slashtags__profile_create">Créer un profil</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Veuillez patienter pendant que Bitkit recherche des fonds dans les adresses non prises en charge (Legacy, Nested SegWit et Taproot).</string>
     <string name="sweep__checking_loading">RECHERCHE DE FONDS...</string>

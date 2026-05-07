@@ -31,6 +31,7 @@ import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -38,7 +39,7 @@ import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -46,6 +47,7 @@ class HomeViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: TransferRepo,
+    private val pubkyRepo: PubkyRepo,
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
 
@@ -55,6 +57,9 @@ class HomeViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    val profileDisplayName = pubkyRepo.displayName
+    val profileDisplayImageUri = pubkyRepo.displayImageUri
 
     private val _currentArticle = MutableStateFlow<ArticleModel?>(null)
     private val _currentFact = MutableStateFlow<String?>(null)
@@ -299,21 +304,27 @@ class HomeViewModel @Inject constructor(
         walletRepo.balanceState,
         settingsStore.data,
         transferRepo.activeTransfers,
-    ) { balanceState, settings, transfers ->
+        pubkyRepo.isAuthenticated,
+    ) { balanceState, settings, transfers, profileAuthenticated ->
         val baseSuggestions = when {
-            balanceState.totalLightningSats > 0uL -> spendingSuggestions(settings)
-            balanceState.totalOnchainSats > 0uL -> savingsOnlySuggestions(settings, transfers)
-            else -> emptyWalletSuggestions(settings, transfers)
+            balanceState.totalLightningSats > 0uL ->
+                spendingSuggestions(settings, profileAuthenticated)
+            balanceState.totalOnchainSats > 0uL ->
+                savingsOnlySuggestions(settings, transfers, profileAuthenticated)
+            else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions.filterNot { it in dismissedList }.take(MAX_SUGGESTIONS)
     }
 
-    private fun spendingSuggestions(settings: SettingsData) = listOfNotNull(
+    private fun spendingSuggestions(
+        settings: SettingsData,
+        profileAuthenticated: Boolean,
+    ) = listOfNotNull(
         Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
         Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
         Suggestion.SHOP,
-        Suggestion.PROFILE,
+        Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.SUPPORT,
         Suggestion.INVITE,
         Suggestion.BUY,
@@ -322,6 +333,7 @@ class HomeViewModel @Inject constructor(
     private fun savingsOnlySuggestions(
         settings: SettingsData,
         transfers: List<TransferEntity>,
+        profileAuthenticated: Boolean,
     ) = listOfNotNull(
         Suggestion.BACK_UP.takeIf { !settings.backupVerified },
         Suggestion.SECURE.takeIf { !settings.isPinEnabled },
@@ -329,7 +341,7 @@ class HomeViewModel @Inject constructor(
             transfers.all { it.type != TransferType.TO_SPENDING }
         },
         Suggestion.SUPPORT,
-        Suggestion.PROFILE,
+        Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.INVITE,
         Suggestion.BUY,
     )
@@ -337,6 +349,7 @@ class HomeViewModel @Inject constructor(
     private fun emptyWalletSuggestions(
         settings: SettingsData,
         transfers: List<TransferEntity>,
+        profileAuthenticated: Boolean,
     ) = listOfNotNull(
         Suggestion.BUY,
         Suggestion.LIGHTNING.takeIf {
@@ -345,7 +358,7 @@ class HomeViewModel @Inject constructor(
         Suggestion.SUPPORT,
         Suggestion.BACK_UP.takeIf { !settings.backupVerified },
         Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-        Suggestion.PROFILE,
+        Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.INVITE,
     )
 }

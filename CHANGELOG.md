@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Improve Pubky profile restore, contact editing, and contact routing flows #905
+
+### Fixed
+- Fix probe results and add keysend probes #920
+- Align top bar back arrow and passphrase input cursor/placeholder with iOS #906
+- Polish Terms of Use screen padding to match iOS #903
+
 ## [2.2.0] - 2026-04-07
 
 ### Fixed
@@ -17,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Show loading state on Spending tab when node is not running #875
 
 ### Added
+- Pubky profile onboarding with contact sync, import, and editing #824
 - Lightning Connections empty state with onboarding screen #857
 - Unified PIN management screen (enable/disable/change in one place) #857
 - Support entry in drawer menu #857

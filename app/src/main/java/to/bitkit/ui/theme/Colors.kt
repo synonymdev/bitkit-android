@@ -10,6 +10,7 @@ object Colors {
     val Purple = Color(0xFFB95CE8)
     val Red = Color(0xFFE95164)
     val Yellow = Color(0xFFFFD200)
+    val PubkyGreen = Color(0xFFBEFF00)
 
     // Base
     val Black = Color(0xFF000000)
@@ -17,6 +18,7 @@ object Colors {
 
     // Gray Base
     val Gray7 = Color(0xFF101010)
+    val Gray65 = Color(0xFF151515)
     val Gray6 = Color(0xFF1C1C1C)
     val Gray5 = Color(0xFF2A2A2A)
     val Gray4 = Color(0xFF3A3A3A)
@@ -55,4 +57,5 @@ object Colors {
     val Red24 = Red.copy(alpha = 0.24f)
     val Yellow16 = Yellow.copy(alpha = 0.16f)
     val Yellow24 = Yellow.copy(alpha = 0.24f)
+    val PubkyGreen24 = PubkyGreen.copy(alpha = 0.24f)
 }

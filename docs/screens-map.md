@@ -145,10 +145,10 @@ Legend: RN = React Native screen, Android = Compose screen
 | - | - |
 | Contacts.tsx | `todo` |
 | Contact.tsx | `todo` |
-| Profile.tsx | CreateProfileScreen.kt / ProfileIntroScreen.kt |
-| ProfileEdit.tsx | CreateProfileScreen.kt |
-| ProfileOnboarding.tsx | ProfileIntroScreen.kt |
-| ProfileLink.tsx | CreateProfileScreen.kt |
+| Profile.tsx | ProfileScreen.kt |
+| ProfileEdit.tsx | `n/a` |
+| ProfileOnboarding.tsx | ProfileIntroScreen.kt / PubkyRingAuthScreen.kt |
+| ProfileLink.tsx | `n/a` |
 
 ## Widgets
 | RN | Android |

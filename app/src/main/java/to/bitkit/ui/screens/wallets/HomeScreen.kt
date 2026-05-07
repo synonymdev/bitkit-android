@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -29,6 +30,7 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -50,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -103,6 +106,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.SuggestionCard
@@ -110,6 +114,7 @@ import to.bitkit.ui.components.TAB_BAR_HEIGHT
 import to.bitkit.ui.components.TAB_BAR_PADDING_BOTTOM
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
@@ -117,6 +122,7 @@ import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
+import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -144,9 +150,9 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
-private const val SMALL_SCREEN_HEIGHT_DP = 700
-private const val SMALL_SCREEN_ACTIVITY_COUNT = 2
-private const val LARGE_SCREEN_ACTIVITY_COUNT = 3
+private const val SMALL_SCREEN_HEIGHT_DP = 800
+private const val SMALL_SCREEN_SLOT_CAPACITY = 3
+private const val LARGE_SCREEN_SLOT_CAPACITY = 4
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
 @Suppress("CyclomaticComplexMethod")
@@ -165,6 +171,10 @@ fun HomeScreen(
     val context = LocalContext.current
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
+    val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+    val isPubkyAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+    val profileDisplayName by homeViewModel.profileDisplayName.collectAsStateWithLifecycle()
+    val profileDisplayImageUri by homeViewModel.profileDisplayImageUri.collectAsStateWithLifecycle()
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
     val bgPaymentsIntroSeen: Boolean by settingsViewModel.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
@@ -192,10 +202,20 @@ fun HomeScreen(
         DeleteWidgetAlert(type, homeViewModel)
     }
 
+    val navigateToProfile = {
+        rootNavController.navigateToProfile(
+            isAuthenticated = isPubkyAuthenticated,
+            hasSeenIntro = hasSeenProfileIntro,
+        )
+    }
+
     Content(
         isRefreshing = isRefreshing,
         homeUiState = homeUiState,
         drawerState = drawerState,
+        profileDisplayName = profileDisplayName,
+        profileDisplayImageUri = profileDisplayImageUri,
+        onClickProfile = navigateToProfile,
         latestActivities = latestActivities,
         onRefresh = {
             activityListViewModel.resync()
@@ -240,9 +260,7 @@ fun HomeScreen(
                     )
                 }
 
-                Suggestion.PROFILE -> {
-                    rootNavController.navigateTo(Routes.Profile)
-                }
+                Suggestion.PROFILE -> navigateToProfile()
 
                 Suggestion.SHOP -> {
                     if (!hasSeenShopIntro) {
@@ -313,6 +331,9 @@ private fun Content(
     isRefreshing: Boolean,
     homeUiState: HomeUiState,
     drawerState: DrawerState,
+    profileDisplayName: String? = null,
+    profileDisplayImageUri: String? = null,
+    onClickProfile: () -> Unit = {},
     latestActivities: ImmutableList<Activity>?,
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
@@ -349,11 +370,10 @@ private fun Content(
 
     val density = LocalDensity.current
     val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp().value.toInt() }
-    val activityCount = if (screenHeightDp < SMALL_SCREEN_HEIGHT_DP) {
-        SMALL_SCREEN_ACTIVITY_COUNT
-    } else {
-        LARGE_SCREEN_ACTIVITY_COUNT
-    }
+    val isSmallScreen = screenHeightDp < SMALL_SCREEN_HEIGHT_DP
+    val slotCapacity = if (isSmallScreen) SMALL_SCREEN_SLOT_CAPACITY else LARGE_SCREEN_SLOT_CAPACITY
+    val nonItemSlots = countNonItemSlots(homeUiState)
+    val activityCount = (slotCapacity - nonItemSlots).coerceAtLeast(0)
 
     val paginatedActivities = remember(latestActivities, activityCount) {
         latestActivities?.take(activityCount)?.toImmutableList()
@@ -362,6 +382,9 @@ private fun Content(
     Box {
         TopBar(
             hazeState = hazeState,
+            profileDisplayName = profileDisplayName,
+            profileDisplayImageUri = profileDisplayImageUri,
+            onClickProfile = onClickProfile,
             showEditWidgets = homeUiState.currentPage == 1 && homeUiState.showWidgets,
             isEditingWidgets = homeUiState.isEditingWidgets,
             onClickEditWidgetList = onClickEditWidgetList,
@@ -393,6 +416,7 @@ private fun Content(
                     homeUiState = homeUiState,
                     latestActivities = paginatedActivities,
                     balances = balances,
+                    isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
                     onNavigateToSettingUp = onNavigateToSettingUp,
                     onNavigateToAllActivity = onNavigateToAllActivity,
@@ -415,6 +439,12 @@ private fun Content(
     }
 }
 
+private fun countNonItemSlots(homeUiState: HomeUiState): Int {
+    val bannerSlot = if (homeUiState.banners.isNotEmpty()) 1 else 0
+    val widgetsHintSlot = if (homeUiState.showWidgetsOnboardingHint) 1 else 0
+    return bannerSlot + widgetsHintSlot
+}
+
 @Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -423,6 +453,7 @@ private fun WalletPage(
     homeUiState: HomeUiState,
     latestActivities: ImmutableList<Activity>?,
     balances: BalanceState,
+    isSmallScreen: Boolean,
     onRefresh: () -> Unit,
     onNavigateToSettingUp: () -> Unit,
     onNavigateToAllActivity: () -> Unit,
@@ -518,6 +549,7 @@ private fun WalletPage(
         if (homeUiState.showEmptyState) {
             EmptyStateView(
                 text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
+                isSmallScreen = isSmallScreen,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
             )
@@ -760,7 +792,6 @@ private fun Widgets(
                 WidgetType.PRICE -> {
                     homeUiState.currentPrice?.run {
                         PriceCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             pricePreferences = homeUiState.pricePreferences,
                             priceDTO = homeUiState.currentPrice,
                             modifier = Modifier
@@ -799,6 +830,9 @@ private fun Widgets(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun TopBar(
     hazeState: HazeState,
+    profileDisplayName: String? = null,
+    profileDisplayImageUri: String? = null,
+    onClickProfile: () -> Unit = {},
     showEditWidgets: Boolean = false,
     isEditingWidgets: Boolean = false,
     onClickEditWidgetList: () -> Unit = {},
@@ -822,7 +856,13 @@ private fun TopBar(
             .zIndex(1f)
     ) {
         TopAppBar(
-            title = {},
+            title = {
+                ProfileButton(
+                    displayName = profileDisplayName,
+                    displayImageUri = profileDisplayImageUri,
+                    onClick = onClickProfile,
+                )
+            },
             actions = {
                 AnimatedVisibility(showEditWidgets) {
                     IconButton(
@@ -856,6 +896,48 @@ private fun TopBar(
             },
             colors = TopAppBarDefaults.topAppBarColors(Color.Transparent),
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun ProfileButton(
+    displayName: String?,
+    displayImageUri: String?,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .clickableAlpha(onClick = onClick)
+            .testTag("ProfileButton")
+    ) {
+        if (displayImageUri != null) {
+            PubkyImage(
+                uri = displayImageUri,
+                size = 32.dp,
+            )
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Colors.Gray4)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_user_square),
+                    contentDescription = null,
+                    tint = Colors.White32,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        Title(
+            text = displayName ?: stringResource(R.string.profile__your_name),
+            maxLines = 1,
         )
     }
 }
@@ -907,7 +989,6 @@ private val previewArticle = ArticleModel(
 )
 
 private val previewPrice = PriceDTO(
-    source = "Bitfinex.com",
     widgets = listOf(
         PriceWidgetData(
             pair = TradingPair.BTC_USD,

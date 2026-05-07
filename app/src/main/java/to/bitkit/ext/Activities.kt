@@ -52,6 +52,11 @@ fun Activity.isSent() = when (this) {
     is Activity.Onchain -> v1.txType == PaymentType.SENT
 }
 
+fun Activity.contact(): String? = when (this) {
+    is Activity.Lightning -> v1.contact
+    is Activity.Onchain -> v1.contact
+}
+
 fun Activity.matchesPaymentId(paymentHashOrTxId: String): Boolean = when (this) {
     is Activity.Lightning -> paymentHashOrTxId == v1.id
     is Activity.Onchain -> paymentHashOrTxId == v1.txId
@@ -60,6 +65,12 @@ fun Activity.matchesPaymentId(paymentHashOrTxId: String): Boolean = when (this) 
 fun Activity.isTransfer() = this is Activity.Onchain && this.v1.isTransfer
 
 fun Activity.doesExist() = this is Activity.Onchain && this.v1.doesExist
+
+fun Activity.isReplacedSentTransaction(txIdsInBoostTxIds: Set<String>): Boolean =
+    this is Activity.Onchain &&
+        !v1.doesExist &&
+        v1.txType == PaymentType.SENT &&
+        v1.txId in txIdsInBoostTxIds
 
 fun Activity.paymentState(): PaymentState? = when (this) {
     is Activity.Lightning -> this.v1.status
@@ -92,6 +103,7 @@ fun LightningActivity.Companion.create(
     fee: ULong = 0u,
     message: String = "",
     preimage: String? = null,
+    contact: String? = null,
     createdAt: ULong? = timestamp,
     updatedAt: ULong? = createdAt,
     seenAt: ULong? = null,
@@ -105,6 +117,7 @@ fun LightningActivity.Companion.create(
     message = message,
     timestamp = timestamp,
     preimage = preimage,
+    contact = contact,
     createdAt = createdAt,
     updatedAt = updatedAt,
     seenAt = seenAt,
@@ -128,6 +141,7 @@ fun OnchainActivity.Companion.create(
     confirmTimestamp: ULong? = null,
     channelId: String? = null,
     transferTxId: String? = null,
+    contact: String? = null,
     createdAt: ULong? = timestamp,
     updatedAt: ULong? = createdAt,
     seenAt: ULong? = null,
@@ -148,6 +162,7 @@ fun OnchainActivity.Companion.create(
     confirmTimestamp = confirmTimestamp,
     channelId = channelId,
     transferTxId = transferTxId,
+    contact = contact,
     createdAt = createdAt,
     updatedAt = updatedAt,
     seenAt = seenAt,
