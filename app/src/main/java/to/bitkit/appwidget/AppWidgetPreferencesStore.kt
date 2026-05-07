@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.AppWidgetDataSerializer
@@ -78,5 +79,15 @@ class AppWidgetPreferencesStore @Inject constructor(
 
     suspend fun cachePriceData(period: GraphPeriod, price: PriceDTO) {
         store.updateData { it.copy(cachedPrices = it.cachedPrices + (period to price)) }
+    }
+
+    suspend fun cacheArticlesAndRotate(articles: List<ArticleDTO>) {
+        if (articles.isEmpty()) return
+        store.updateData {
+            it.copy(
+                cachedArticles = articles,
+                articleRotationTick = it.articleRotationTick + 1,
+            )
+        }
     }
 }

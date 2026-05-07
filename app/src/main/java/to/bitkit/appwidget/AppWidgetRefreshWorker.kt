@@ -16,6 +16,8 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
+import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
 import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
 import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.utils.Logger
@@ -62,6 +64,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
 
         private fun receiverClassFor(type: AppWidgetType): Class<out GlanceAppWidgetReceiver> = when (type) {
             AppWidgetType.PRICE -> PriceGlanceReceiver::class.java
+            AppWidgetType.HEADLINES -> HeadlinesGlanceReceiver::class.java
         }
     }
 
@@ -83,6 +86,15 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                             }
                     }
                     PriceGlanceWidget().updateAll(appContext)
+                }
+
+                AppWidgetType.HEADLINES -> {
+                    dataRepository.fetchArticles()
+                        .onSuccess { preferencesStore.cacheArticlesAndRotate(it) }
+                        .onFailure {
+                            Logger.warn("Failed to refresh headlines", it, context = TAG)
+                        }
+                    HeadlinesGlanceWidget().updateAll(appContext)
                 }
             }
         }

@@ -1161,6 +1161,9 @@
     <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__facts__description">Discover fun facts about Bitcoin, every time you open your wallet.</string>
     <string name="widgets__facts__name">Bitcoin Facts</string>
+    <string name="widgets__headline__preview_publisher">bitcoinmagazine.com</string>
+    <string name="widgets__headline__preview_time">21 minutes ago</string>
+    <string name="widgets__headline__preview_title">How Bitcoin changed El Salvador in more ways</string>
     <string name="widgets__news__description">Read the latest &amp; greatest Bitcoin headlines from various news sites.</string>
     <string name="widgets__news__name">Bitcoin Headlines</string>
     <string name="widgets__onboarding__description">Enjoy decentralized feeds from your favorite web services, by adding fun and useful widgets to your Bitkit wallet.</string>
@@ -1180,11 +1183,14 @@
     <string name="widgets__weather__description">Find out when it’s a good time to transact on the Bitcoin blockchain.</string>
     <string name="widgets__weather__name">Bitcoin Weather</string>
     <string name="widgets__weather__next_block">Next block inclusion</string>
+    <string name="widgets__widget__content">CONTENT</string>
     <string name="widgets__widget__edit">Widget Feed</string>
     <string name="widgets__widget__edit_custom">Custom</string>
     <string name="widgets__widget__edit_default">Default</string>
     <string name="widgets__widget__edit_description">Please select which fields you want to display in the {name} widget.</string>
     <string name="widgets__widget__nav_title">Widget</string>
+    <string name="widgets__widget__save">Save Widget</string>
+    <string name="widgets__widget__settings">Widget Settings</string>
     <string name="widgets__widget__size_small">Small</string>
     <string name="widgets__widget__size_wide">Wide</string>
     <string name="widgets__widget__source">Source</string>

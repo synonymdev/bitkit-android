@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:minWidth="@dimen/appwidget_min_width"
+    android:minHeight="@dimen/appwidget_min_height"
+    android:minResizeWidth="@dimen/appwidget_min_resize_width"
+    android:minResizeHeight="@dimen/appwidget_min_resize_height"
+    android:targetCellWidth="@integer/appwidget_target_cell_width"
+    android:targetCellHeight="@integer/appwidget_target_cell_height"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:previewLayout="@layout/appwidget_preview_headlines"
+    android:description="@string/widgets__news__description"
+    android:configure="to.bitkit.appwidget.config.AppWidgetConfigActivity"
+    android:updatePeriodMillis="0"
+    tools:targetApi="31" />

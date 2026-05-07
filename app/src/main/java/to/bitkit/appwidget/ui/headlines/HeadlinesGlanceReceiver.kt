@@ -1,4 +1,4 @@
-package to.bitkit.appwidget.ui.price
+package to.bitkit.appwidget.ui.headlines
 
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
@@ -10,8 +10,8 @@ import kotlinx.coroutines.launch
 import to.bitkit.appwidget.AppWidgetEntryPoint
 import to.bitkit.appwidget.AppWidgetRefreshWorker
 
-class PriceGlanceReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = PriceGlanceWidget()
+class HeadlinesGlanceReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = HeadlinesGlanceWidget()
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)

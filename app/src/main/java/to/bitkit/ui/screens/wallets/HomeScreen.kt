@@ -775,7 +775,6 @@ private fun Widgets(
                 WidgetType.NEWS -> {
                     homeUiState.currentArticle?.run {
                         HeadlineCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             showTime = homeUiState.headlinePreferences.showTime,
                             showSource = homeUiState.headlinePreferences.showSource,
                             headline = title,
