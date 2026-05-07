@@ -945,6 +945,22 @@ class AmountInputViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `max amount blocks fiat input when exceeded`() = test {
+        val currency = mockCurrency(PrimaryDisplay.FIAT)
+
+        viewModel.setMaxAmount(1_000)
+
+        viewModel.handleNumberPadInput("1", currency)
+        assertEquals("1", viewModel.uiState.value.text)
+        assertEquals(868L, viewModel.uiState.value.sats)
+
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals("1", viewModel.uiState.value.text)
+        assertEquals(868L, viewModel.uiState.value.sats)
+        assertNotNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
     fun `max exceeded effect is emitted when dynamic limit is hit`() = test {
         val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
 
