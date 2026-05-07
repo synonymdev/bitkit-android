@@ -136,14 +136,12 @@ private fun SelectableRow(
                 color = if (isSelected) Colors.White else Colors.White64,
                 modifier = Modifier.weight(1f)
             )
-            if (isSelected) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_checkmark),
-                    contentDescription = null,
-                    tint = Colors.Brand,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
+            Icon(
+                painter = painterResource(R.drawable.ic_checkmark),
+                contentDescription = null,
+                tint = if (isSelected) Colors.Brand else Colors.Gray3,
+                modifier = Modifier.size(32.dp)
+            )
         }
         HorizontalDivider()
     }
