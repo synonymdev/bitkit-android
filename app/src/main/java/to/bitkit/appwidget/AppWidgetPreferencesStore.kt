@@ -30,6 +30,7 @@ private val Context.appWidgetDataStore: DataStore<AppWidgetData> by dataStore(
 @InstallIn(SingletonComponent::class)
 interface AppWidgetEntryPoint {
     fun appWidgetPreferencesStore(): AppWidgetPreferencesStore
+    fun appWidgetDataRepository(): AppWidgetDataRepository
 }
 
 @Singleton
@@ -95,5 +96,13 @@ class AppWidgetPreferencesStore @Inject constructor(
 
     suspend fun cacheBlock(block: BlockDTO) {
         store.updateData { it.copy(cachedBlock = block) }
+    }
+
+    suspend fun cacheFacts(facts: List<String>) {
+        store.updateData { it.copy(cachedFacts = facts) }
+    }
+
+    suspend fun bumpFactsRotationTick() {
+        store.updateData { it.copy(factsRotationTick = it.factsRotationTick + 1) }
     }
 }

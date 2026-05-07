@@ -7,6 +7,7 @@ import to.bitkit.data.dto.BlockDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.widgets.BlocksService
+import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
 import to.bitkit.data.widgets.PriceService
 import to.bitkit.di.IoDispatcher
@@ -19,6 +20,7 @@ class AppWidgetDataRepository @Inject constructor(
     private val priceService: PriceService,
     private val newsService: NewsService,
     private val blocksService: BlocksService,
+    private val factsService: FactsService,
 ) {
     suspend fun fetchPriceData(period: GraphPeriod = GraphPeriod.ONE_DAY): Result<PriceDTO> =
         withContext(ioDispatcher) {
@@ -33,5 +35,10 @@ class AppWidgetDataRepository @Inject constructor(
     suspend fun fetchBlock(): Result<BlockDTO> =
         withContext(ioDispatcher) {
             blocksService.fetchData()
+        }
+
+    suspend fun fetchFacts(): Result<List<String>> =
+        withContext(ioDispatcher) {
+            factsService.fetchData()
         }
 }

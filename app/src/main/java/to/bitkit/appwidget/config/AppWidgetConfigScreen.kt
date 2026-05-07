@@ -45,5 +45,7 @@ fun AppWidgetConfigScreen(
             onSave = { viewModel.saveAndFinish(onConfirm) },
             onCancel = onCancel,
         )
+
+        AppWidgetType.FACTS -> Unit
     }
 }

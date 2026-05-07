@@ -36,7 +36,6 @@ import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.CalculatorValues
-import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
@@ -186,10 +185,6 @@ class WidgetsRepo @Inject constructor(
 
     suspend fun updateHeadlinePreferences(preferences: HeadlinePreferences) = withContext(bgDispatcher) {
         widgetsStore.updateHeadlinePreferences(preferences)
-    }
-
-    suspend fun updateFactsPreferences(preferences: FactsPreferences) = withContext(bgDispatcher) {
-        widgetsStore.updateFactsPreferences(preferences)
     }
 
     suspend fun updateBlocksPreferences(preferences: BlocksPreferences) = withContext(bgDispatcher) {

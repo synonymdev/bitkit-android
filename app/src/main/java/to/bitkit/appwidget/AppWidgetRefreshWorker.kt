@@ -18,6 +18,8 @@ import dagger.assisted.AssistedInject
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceReceiver
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceWidget
+import to.bitkit.appwidget.ui.facts.FactsGlanceReceiver
+import to.bitkit.appwidget.ui.facts.FactsGlanceWidget
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
 import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
@@ -68,6 +70,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
             AppWidgetType.PRICE -> PriceGlanceReceiver::class.java
             AppWidgetType.HEADLINES -> HeadlinesGlanceReceiver::class.java
             AppWidgetType.BLOCKS -> BlocksGlanceReceiver::class.java
+            AppWidgetType.FACTS -> FactsGlanceReceiver::class.java
         }
     }
 
@@ -107,6 +110,16 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                             Logger.warn("Failed to refresh block", it, context = TAG)
                         }
                     BlocksGlanceWidget().updateAll(appContext)
+                }
+
+                AppWidgetType.FACTS -> {
+                    dataRepository.fetchFacts()
+                        .onSuccess { preferencesStore.cacheFacts(it) }
+                        .onFailure {
+                            Logger.warn("Failed to refresh facts", it, context = TAG)
+                        }
+                    preferencesStore.bumpFactsRotationTick()
+                    FactsGlanceWidget().updateAll(appContext)
                 }
             }
         }
