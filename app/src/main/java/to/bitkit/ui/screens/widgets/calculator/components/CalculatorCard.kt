@@ -15,11 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,126 +33,31 @@ import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.screens.widgets.calculator.CALCULATOR_FIAT_DECIMAL_PLACES
 import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.visualTransformation.BitcoinVisualTransformation
-import to.bitkit.ui.utils.visualTransformation.CalculatorFormatter
 import to.bitkit.ui.utils.visualTransformation.MonetaryVisualTransformation
-import to.bitkit.viewmodels.CurrencyViewModel
-import java.math.BigDecimal
-
-private const val FIAT_DECIMAL_PLACES = 2
 
 @Composable
 fun CalculatorCard(
     modifier: Modifier = Modifier,
-    currencyViewModel: CurrencyViewModel,
     calculatorViewModel: CalculatorViewModel = hiltViewModel(),
     showWidgetTitle: Boolean,
 ) {
-    val currencyUiState by currencyViewModel.uiState.collectAsStateWithLifecycle()
-    val calculatorValues by calculatorViewModel.calculatorValues.collectAsStateWithLifecycle()
-    var btcValue: String by rememberSaveable { mutableStateOf(calculatorValues.btcValue) }
-    var fiatValue: String by rememberSaveable { mutableStateOf(calculatorValues.fiatValue) }
-    val displayedBtcValue = btcValue.ifEmpty { calculatorValues.btcValue }
-    val displayedFiatValue = fiatValue
-
-    LaunchedEffect(
-        calculatorValues.btcValue,
-        calculatorValues.fiatValue,
-        currencyUiState.displayUnit,
-        currencyUiState.selectedCurrency,
-    ) {
-        if (!shouldHydrateFiatFromStoredBtc(
-                storedBtcValue = calculatorValues.btcValue,
-                storedFiatValue = calculatorValues.fiatValue,
-                currentFiatValue = fiatValue,
-                displayUnit = currencyUiState.displayUnit,
-            )
-        ) {
-            return@LaunchedEffect
-        }
-        val convertedFiat = CalculatorFormatter.convertBtcToFiat(
-            btcValue = calculatorValues.btcValue,
-            displayUnit = currencyUiState.displayUnit,
-            currencyViewModel = currencyViewModel,
-        ).orEmpty()
-        if (convertedFiat.isEmpty()) {
-            return@LaunchedEffect
-        }
-        fiatValue = convertedFiat
-        calculatorViewModel.updateCalculatorValues(
-            fiatValue = convertedFiat,
-            btcValue = calculatorValues.btcValue,
-        )
-    }
-
-    LaunchedEffect(currencyUiState.selectedCurrency, currencyUiState.displayUnit) {
-        val sourceBtc = btcValue.ifEmpty { calculatorValues.btcValue }
-        if (sourceBtc.isEmpty() || isZeroBtcValue(sourceBtc, currencyUiState.displayUnit)) {
-            return@LaunchedEffect
-        }
-        val convertedFiat = CalculatorFormatter.convertBtcToFiat(
-            btcValue = sourceBtc,
-            displayUnit = currencyUiState.displayUnit,
-            currencyViewModel = currencyViewModel,
-        ).orEmpty()
-        if (convertedFiat.isEmpty()) {
-            return@LaunchedEffect
-        }
-        fiatValue = convertedFiat
-        calculatorViewModel.updateCalculatorValues(
-            fiatValue = convertedFiat,
-            btcValue = sourceBtc,
-        )
-    }
+    val uiState by calculatorViewModel.uiState.collectAsStateWithLifecycle()
 
     CalculatorCardContent(
         modifier = modifier,
         showWidgetTitle = showWidgetTitle,
-        btcPrimaryDisplayUnit = currencyUiState.displayUnit,
-        btcValue = displayedBtcValue,
-        onBtcChange = { rawValue ->
-            val sanitized = if (currencyUiState.displayUnit.isModern()) {
-                sanitizeIntegerInput(rawValue)
-            } else {
-                sanitizeDecimalInput(rawValue)
-            }
-            btcValue = sanitized
-            fiatValue = if (sanitized.isEmpty()) {
-                ""
-            } else {
-                CalculatorFormatter.convertBtcToFiat(
-                    btcValue = btcValue,
-                    displayUnit = currencyUiState.displayUnit,
-                    currencyViewModel = currencyViewModel,
-                ).orEmpty()
-            }
-            calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
-        },
-        fiatSymbol = currencyUiState.currencySymbol,
-        fiatName = currencyUiState.selectedCurrency,
-        fiatValue = displayedFiatValue,
-        onFiatChange = { rawValue ->
-            val sanitized = sanitizeDecimalInput(rawValue, maxDecimalPlaces = FIAT_DECIMAL_PLACES)
-            fiatValue = sanitized
-            btcValue = if (sanitized.isEmpty()) {
-                ""
-            } else {
-                val converted = CalculatorFormatter.convertFiatToBtc(
-                    fiatValue = fiatValue,
-                    displayUnit = currencyUiState.displayUnit,
-                    currencyViewModel = currencyViewModel,
-                )
-                if (currencyUiState.displayUnit.isModern()) {
-                    converted.filter { it.isDigit() }
-                } else {
-                    converted
-                }
-            }
-            calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
-        },
+        btcPrimaryDisplayUnit = uiState.displayUnit,
+        btcValue = uiState.btcValue,
+        onBtcChange = calculatorViewModel::onBtcInputChanged,
+        fiatSymbol = uiState.currencySymbol,
+        fiatName = uiState.selectedCurrency,
+        fiatValue = uiState.fiatValue,
+        onFiatChange = calculatorViewModel::onFiatInputChanged,
     )
 }
 
@@ -195,7 +96,9 @@ fun CalculatorCardContent(
                 currencyName = stringResource(R.string.settings__general__unit_bitcoin),
                 keyboardType = if (btcPrimaryDisplayUnit.isModern()) KeyboardType.Number else KeyboardType.Decimal,
                 visualTransformation = BitcoinVisualTransformation(btcPrimaryDisplayUnit),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("CalculatorBtcInput")
             )
 
             VerticalSpacer(16.dp)
@@ -207,37 +110,13 @@ fun CalculatorCardContent(
                 currencySymbol = fiatSymbol,
                 currencyName = fiatName,
                 keyboardType = KeyboardType.Decimal,
-                visualTransformation = MonetaryVisualTransformation(decimalPlaces = FIAT_DECIMAL_PLACES),
-                modifier = Modifier.fillMaxWidth()
+                visualTransformation = MonetaryVisualTransformation(decimalPlaces = CALCULATOR_FIAT_DECIMAL_PLACES),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("CalculatorFiatInput")
             )
         }
     }
-}
-
-internal fun shouldHydrateFiatFromStoredBtc(
-    storedBtcValue: String,
-    storedFiatValue: String,
-    currentFiatValue: String,
-    displayUnit: BitcoinDisplayUnit,
-): Boolean {
-    if (storedBtcValue.isEmpty()) {
-        return false
-    }
-    if (isZeroBtcValue(storedBtcValue, displayUnit)) {
-        return false
-    }
-    if (storedFiatValue.isNotEmpty()) {
-        return false
-    }
-    return currentFiatValue.isEmpty()
-}
-
-internal fun isZeroBtcValue(
-    btcValue: String,
-    displayUnit: BitcoinDisplayUnit,
-): Boolean = when (displayUnit) {
-    BitcoinDisplayUnit.MODERN -> btcValue == "0"
-    BitcoinDisplayUnit.CLASSIC -> btcValue.toBigDecimalOrNull()?.compareTo(BigDecimal.ZERO) == 0
 }
 
 @Composable

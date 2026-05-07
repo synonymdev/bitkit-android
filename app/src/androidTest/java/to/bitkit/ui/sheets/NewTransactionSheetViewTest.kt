@@ -8,11 +8,13 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.test.annotations.ComposeUiTest
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 
 @HiltAndroidTest
+@ComposeUiTest
 class NewTransactionSheetViewTest {
 
     @get:Rule

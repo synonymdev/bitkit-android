@@ -23,8 +23,6 @@ import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import java.text.DecimalFormatSymbols
-import java.util.Locale
 
 @Composable
 fun CalculatorInput(
@@ -63,35 +61,6 @@ fun CalculatorInput(
         visualTransformation = visualTransformation,
         modifier = modifier
     )
-}
-
-internal fun sanitizeIntegerInput(raw: String): String {
-    val digits = raw.filter { it.isDigit() }
-    if (digits.isEmpty()) return digits
-    return digits.trimStart('0').ifEmpty { "0" }
-}
-
-internal fun sanitizeDecimalInput(
-    raw: String,
-    locale: Locale = Locale.getDefault(),
-    maxDecimalPlaces: Int? = null,
-): String {
-    val localDecimal = DecimalFormatSymbols.getInstance(locale).decimalSeparator
-    val normalized = if (localDecimal == ',') raw.replace(',', '.') else raw
-    val filtered = normalized.filter { it.isDigit() || it == '.' }
-    val dotIndex = filtered.indexOf('.')
-    val singleDot = if (dotIndex == -1) {
-        filtered
-    } else {
-        filtered.substring(0, dotIndex + 1) +
-            filtered.substring(dotIndex + 1).replace(".", "")
-    }
-    if (maxDecimalPlaces == null) return singleDot
-    val cappedDot = singleDot.indexOf('.')
-    if (cappedDot == -1) return singleDot
-    val fraction = singleDot.substring(cappedDot + 1)
-    if (fraction.length <= maxDecimalPlaces) return singleDot
-    return singleDot.substring(0, cappedDot + 1) + fraction.take(maxDecimalPlaces)
 }
 
 internal fun String.toCalculatorDisplaySymbol(): String {

@@ -14,6 +14,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.NodeException
+import to.bitkit.test.annotations.CoreServiceIntegrationTest
+import to.bitkit.test.annotations.DeviceIntegrationTest
 import to.bitkit.data.CacheStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
@@ -27,6 +29,8 @@ import kotlin.test.assertTrue
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
+@DeviceIntegrationTest
+@CoreServiceIntegrationTest
 class RoutingFeeEstimationTest {
 
     companion object {

@@ -13,6 +13,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import to.bitkit.test.annotations.CoreServiceIntegrationTest
+import to.bitkit.test.annotations.DeviceIntegrationTest
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.repositories.WalletRepo
@@ -25,6 +27,8 @@ import kotlin.test.fail
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
+@DeviceIntegrationTest
+@CoreServiceIntegrationTest
 class UtxoSelectionTests {
 
     @get:Rule

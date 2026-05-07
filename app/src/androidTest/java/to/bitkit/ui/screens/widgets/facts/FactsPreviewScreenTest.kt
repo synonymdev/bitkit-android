@@ -6,9 +6,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.test.annotations.ComposeUiTest
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.ui.theme.AppThemeSurface
 
+@ComposeUiTest
 class FactsPreviewContentTest {
 
     @get:Rule

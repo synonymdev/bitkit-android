@@ -118,7 +118,6 @@ import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
-import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
@@ -752,13 +751,10 @@ private fun Widgets(
                 }
 
                 WidgetType.CALCULATOR -> {
-                    currencyViewModel?.let {
-                        CalculatorCard(
-                            currencyViewModel = it,
-                            showWidgetTitle = homeUiState.showWidgetTitles,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    CalculatorCard(
+                        showWidgetTitle = homeUiState.showWidgetTitles,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 WidgetType.FACTS -> {

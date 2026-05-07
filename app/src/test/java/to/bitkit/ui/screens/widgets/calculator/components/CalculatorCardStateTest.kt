@@ -3,6 +3,9 @@ package to.bitkit.ui.screens.widgets.calculator.components
 import org.junit.Before
 import org.junit.Test
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.ui.screens.widgets.calculator.sanitizeDecimalInput
+import to.bitkit.ui.screens.widgets.calculator.sanitizeIntegerInput
+import to.bitkit.ui.screens.widgets.calculator.shouldHydrateFiatFromStoredBtc
 import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

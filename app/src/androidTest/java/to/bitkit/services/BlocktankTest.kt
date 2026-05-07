@@ -14,6 +14,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.test.annotations.CoreServiceIntegrationTest
+import to.bitkit.test.annotations.DeviceIntegrationTest
 import to.bitkit.env.Env
 import javax.inject.Inject
 import kotlin.test.assertEquals
@@ -22,6 +24,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @HiltAndroidTest
+@DeviceIntegrationTest
+@CoreServiceIntegrationTest
 class BlocktankTest {
     @get:Rule
     var hiltRule = HiltAndroidRule(this)

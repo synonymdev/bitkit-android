@@ -11,6 +11,8 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import to.bitkit.test.annotations.DeviceStorageIntegrationTest
+import to.bitkit.test.annotations.DeviceIntegrationTest
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.test.BaseAndroidTest
@@ -20,6 +22,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
+@DeviceIntegrationTest
+@DeviceStorageIntegrationTest
 class KeychainTest : BaseAndroidTest() {
 
     private val appContext by lazy { ApplicationProvider.getApplicationContext<Context>() }

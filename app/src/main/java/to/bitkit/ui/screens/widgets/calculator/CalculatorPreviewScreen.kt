@@ -41,22 +41,22 @@ import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.keyboardAsState
-import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
 fun CalculatorPreviewScreen(
     viewModel: CalculatorViewModel = hiltViewModel(),
-    currencyViewModel: CurrencyViewModel?,
     onClose: () -> Unit,
     onBack: () -> Unit,
 ) {
     val showWidgetTitles by viewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val isCalculatorWidgetEnabled by viewModel.isCalculatorWidgetEnabled.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     CalculatorPreviewContent(
         onBack = onBack,
         isCalculatorWidgetEnabled = isCalculatorWidgetEnabled,
         showWidgetTitles = showWidgetTitles,
+        currencySymbol = uiState.currencySymbol,
         onClickDelete = {
             viewModel.removeWidget()
             onClose()
@@ -65,7 +65,6 @@ fun CalculatorPreviewScreen(
             viewModel.saveWidget()
             onClose()
         },
-        currencyViewModel = currencyViewModel
     )
 }
 
@@ -75,8 +74,9 @@ fun CalculatorPreviewContent(
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
     showWidgetTitles: Boolean,
-    currencyViewModel: CurrencyViewModel?,
     isCalculatorWidgetEnabled: Boolean,
+    currencySymbol: String = "$",
+    showCalculatorCard: Boolean = true,
 ) {
     val isKeyboardVisible by keyboardAsState()
 
@@ -129,7 +129,10 @@ fun CalculatorPreviewContent(
                     }
 
                     BodyM(
-                        text = stringResource(R.string.widgets__facts__description),
+                        text = stringResource(R.string.widgets__calculator__description).replace(
+                            "{fiatSymbol}",
+                            currencySymbol
+                        ),
                         color = Colors.White64,
                         modifier = Modifier
                             .padding(vertical = 16.dp)
@@ -154,10 +157,9 @@ fun CalculatorPreviewContent(
                     .testTag("preview_label")
             )
 
-            currencyViewModel?.let {
+            if (showCalculatorCard) {
                 CalculatorCard(
                     showWidgetTitle = showWidgetTitles,
-                    currencyViewModel = it,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -203,7 +205,7 @@ private fun Preview() {
             onClickDelete = {},
             onClickSave = {},
             isCalculatorWidgetEnabled = false,
-            currencyViewModel = null
+            showCalculatorCard = false
         )
     }
 }

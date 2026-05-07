@@ -5,8 +5,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.test.annotations.ComposeUiTest
 import to.bitkit.ui.theme.AppThemeSurface
 
+@ComposeUiTest
 class FactsCardTest {
 
     @get:Rule
