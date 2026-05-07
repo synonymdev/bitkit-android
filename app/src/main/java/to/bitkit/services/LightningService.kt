@@ -46,6 +46,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
@@ -591,11 +592,19 @@ class LightningService @Inject constructor(
         return true
     }
 
-    suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
+    suspend fun receive(
+        sat: ULong? = null,
+        description: String,
+        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+    ): String {
         return receiveMsats(amountMsat = sat?.let { it * 1000u }, description = description, expirySecs = expirySecs)
     }
 
-    suspend fun receiveMsats(amountMsat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
+    suspend fun receiveMsats(
+        amountMsat: ULong? = null,
+        description: String,
+        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+    ): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val message = description

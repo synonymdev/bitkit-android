@@ -65,12 +65,12 @@ import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
-import to.bitkit.models.MSat
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.safe
+import to.bitkit.models.satsToMsat
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.models.toCoreNetwork
@@ -1413,7 +1413,7 @@ class LightningRepo @Inject constructor(
                 context = TAG,
             )
             val result = if (amountSats != null) {
-                val amountMsat = amountSats.safe() * MSat.PER_SAT.safe()
+                val amountMsat = satsToMsat(amountSats)
                 lightningService.sendProbesUsingAmount(bolt11, amountMsat)
             } else {
                 lightningService.sendProbes(bolt11)
@@ -1428,7 +1428,7 @@ class LightningRepo @Inject constructor(
                 "Sending keysend probe to nodeId='$nodeId' amountSats='$amountSats'",
                 context = TAG,
             )
-            val amountMsat = amountSats.safe() * MSat.PER_SAT.safe()
+            val amountMsat = satsToMsat(amountSats)
             lightningService.sendKeysendProbe(nodeId, amountMsat).map {
                 ProbeDispatch(paymentIds = it)
             }

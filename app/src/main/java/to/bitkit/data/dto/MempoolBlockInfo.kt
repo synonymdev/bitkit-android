@@ -15,5 +15,11 @@ data class MempoolBlockInfo(
     val size: Long,
     val weight: Long,
     val difficulty: Double,
-    @SerialName("merkle_root") val merkleRoot: String
+    @SerialName("merkle_root") val merkleRoot: String,
+    val extras: BlockExtras? = null,
+)
+
+@Serializable
+data class BlockExtras(
+    @SerialName("totalFees") val totalFees: Long? = null,
 )

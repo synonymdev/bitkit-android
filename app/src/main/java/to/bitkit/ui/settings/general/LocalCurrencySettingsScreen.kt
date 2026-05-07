@@ -122,7 +122,7 @@ fun LocalCurrencySettingsContent(
                     }
                     items(mostUsedRates) { rate ->
                         SettingsButtonRow(
-                            title = "${rate.quote} (${rate.currencySymbol})",
+                            title = formatCurrencyTitle(rate),
                             value = SettingsButtonValue.BooleanValue(selectedCurrency == rate.quote),
                             onClick = { onCurrencyClick(rate.quote) },
                         )
@@ -135,7 +135,7 @@ fun LocalCurrencySettingsContent(
 
                 items(otherCurrencies) { rate ->
                     SettingsButtonRow(
-                        title = rate.quote,
+                        title = formatCurrencyTitle(rate),
                         value = SettingsButtonValue.BooleanValue(selectedCurrency == rate.quote),
                         onClick = { onCurrencyClick(rate.quote) },
                     )
@@ -148,6 +148,11 @@ fun LocalCurrencySettingsContent(
             )
         }
     }
+}
+
+private fun formatCurrencyTitle(rate: FxRate): String {
+    val symbol = rate.currencySymbol.trim()
+    return if (symbol.isNotEmpty()) "${rate.quote} ($symbol)" else rate.quote
 }
 
 @Preview(showSystemUi = true)

@@ -1021,7 +1021,8 @@ class ActivityService(
         val updatedActivity = replacementActivity.copy(
             boostTxIds = replacementActivity.boostTxIds + txid,
             isBoosted = true,
-            updatedAt = System.currentTimeMillis().toULong() / 1000u
+            contact = replacementActivity.contact ?: replacedActivity?.contact,
+            updatedAt = System.currentTimeMillis().toULong() / 1000u,
         )
         updateActivity(replacementActivity.id, Activity.Onchain(updatedActivity))
 

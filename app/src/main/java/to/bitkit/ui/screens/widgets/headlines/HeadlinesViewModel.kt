@@ -43,13 +43,6 @@ class HeadlinesViewModel @Inject constructor(
             initialValue = false
         )
 
-    val showWidgetTitles: StateFlow<Boolean> = widgetsRepo.showWidgetTitles
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
-            initialValue = true
-        )
-
     val currentArticle: StateFlow<ArticleModel> = widgetsRepo.articlesFlow.map { articles ->
         articles.map { it.toArticleModel() }.randomOrNull() ?: DEFAULT_ARTICLE
     }.stateIn(

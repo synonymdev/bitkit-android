@@ -177,6 +177,85 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
+
+        <!-- AppWidget Config Activity -->
+        <activity
+            android:name=".appwidget.config.AppWidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:taskAffinity=""
+            android:theme="@style/Theme.App">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Price Widget -->
+        <receiver
+            android:name=".appwidget.ui.price.PriceGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__price__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_price" />
+        </receiver>
+
+        <!-- Headlines Widget -->
+        <receiver
+            android:name=".appwidget.ui.headlines.HeadlinesGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__news__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_headlines" />
+        </receiver>
+
+        <!-- Blocks Widget -->
+        <receiver
+            android:name=".appwidget.ui.blocks.BlocksGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__blocks__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_blocks" />
+        </receiver>
+
+        <!-- Facts Widget -->
+        <receiver
+            android:name=".appwidget.ui.facts.FactsGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__facts__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_facts" />
+        </receiver>
+
+        <!-- Weather Widget -->
+        <receiver
+            android:name=".appwidget.ui.weather.WeatherGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__weather__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_weather" />
+        </receiver>
+
     </application>
 
 </manifest>

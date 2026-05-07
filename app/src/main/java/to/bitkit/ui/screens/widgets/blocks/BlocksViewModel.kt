@@ -19,6 +19,7 @@ import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
 @HiltViewModel
+@Suppress("TooManyFunctions")
 class BlocksViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo
 ) : ViewModel() {
@@ -96,6 +97,12 @@ class BlocksViewModel @Inject constructor(
     fun toggleShowSize() {
         _customPreferences.update { preferences ->
             preferences.copy(showSize = !preferences.showSize)
+        }
+    }
+
+    fun toggleShowFees() {
+        _customPreferences.update { preferences ->
+            preferences.copy(showFees = !preferences.showFees)
         }
     }
 

@@ -18,7 +18,6 @@ import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.CalculatorValues
-import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
@@ -68,12 +67,6 @@ class WidgetsStore @Inject constructor(
     suspend fun updateHeadlinePreferences(preferences: HeadlinePreferences) {
         store.updateData {
             it.copy(headlinePreferences = preferences)
-        }
-    }
-
-    suspend fun updateFactsPreferences(preferences: FactsPreferences) {
-        store.updateData {
-            it.copy(factsPreferences = preferences)
         }
     }
 
@@ -146,7 +139,11 @@ class WidgetsStore @Inject constructor(
         if (!store.data.first().widgets.map { it.type }.contains(type)) return
 
         store.updateData { data ->
-            data.copy(widgets = data.widgets.filterNot { it.type == type })
+            val updated = data.copy(widgets = data.widgets.filterNot { it.type == type })
+            when (type) {
+                WidgetType.CALCULATOR -> updated.copy(calculatorValues = CalculatorValues())
+                else -> updated
+            }
         }
     }
 
@@ -169,7 +166,6 @@ data class WidgetsData(
         WidgetWithPosition(type = WidgetType.BLOCK, position = 2),
     ),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
-    val factsPreferences: FactsPreferences = FactsPreferences(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
     val weatherPreferences: WeatherPreferences = WeatherPreferences(),
     val pricePreferences: PricePreferences = PricePreferences(),

@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="appwidget__loading">Loading…</string>
+    <string name="appwidget__price__currency">Currency</string>
+    <string name="appwidget__price__day">Day</string>
+    <string name="appwidget__price__description">Bitcoin price tracker</string>
+    <string name="appwidget__price__month">Month</string>
+    <string name="appwidget__price__timeframe">Timeframe</string>
+    <string name="appwidget__price__week">Week</string>
+    <string name="appwidget__price__year">Year</string>
     <string name="cards__backupSeedPhrase__description">Store your bitcoin</string>
     <string name="cards__backupSeedPhrase__title">Back up</string>
     <string name="cards__buyBitcoin__description">Buy some bitcoin</string>
@@ -69,11 +77,14 @@
     <string name="common__usable">Usable</string>
     <string name="common__yes">Yes</string>
     <string name="common__yes_proceed">Yes, Proceed</string>
+    <string name="contacts__activity_received_from">Received from %1$s</string>
+    <string name="contacts__activity_sent_to">Sent to %1$s</string>
     <string name="contacts__add_button">Add</string>
     <string name="contacts__add_contact_saved">Contact saved</string>
     <string name="contacts__add_contact_title">Add Contact</string>
     <string name="contacts__add_description">Add a new contact by scanning their QR or pasting their pubky below.</string>
     <string name="contacts__add_discard">Discard</string>
+    <string name="contacts__add_error_existing">This pubky is already in your contacts.</string>
     <string name="contacts__add_error_fetch">Could not retrieve contact info. Please check the public key and try again.</string>
     <string name="contacts__add_error_invalid_key">Invalid pubky key format. Please check and try again.</string>
     <string name="contacts__add_error_self">You can\'t add your own pubky as a contact.</string>
@@ -535,6 +546,10 @@
     <string name="profile__intro_title">Portable\n&lt;accent&gt;pubky\nprofile&lt;/accent&gt;</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
+    <string name="profile__pay_contacts_error_invalid_payload">Payment endpoint data could not be prepared.</string>
+    <string name="profile__pay_contacts_error_no_endpoint">No supported payment endpoint is available.</string>
+    <string name="profile__pay_contacts_error_session">Reconnect your Pubky profile to share payment data.</string>
+    <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pay Contacts</string>
     <string name="profile__pay_contacts_toggle">Share payment data and enable payments with contacts</string>
@@ -882,6 +897,9 @@
     <string name="settings__widgets__section_display">Display</string>
     <string name="settings__widgets__section_reset">Reset To Defaults</string>
     <string name="settings__widgets__showWidgets">Show Widgets</string>
+    <string name="slashtags__error_pay_empty_msg">The contact you\'re trying to send to hasn\'t enabled payments.</string>
+    <string name="slashtags__error_pay_not_opened_msg">No compatible payment endpoint is available.</string>
+    <string name="slashtags__error_pay_title">Unable To Pay Contact</string>
     <string name="slashtags__onboarding_profile1_header">Own your\n&lt;accent&gt;profile&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Set up your public profile and links, so your Bitkit contacts can reach you or pay you anytime, anywhere.</string>
     <string name="slashtags__profile">Profile</string>
@@ -1134,6 +1152,7 @@
     <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks.</string>
     <string name="widgets__blocks__field__block">Block</string>
     <string name="widgets__blocks__field__date">Date</string>
+    <string name="widgets__blocks__field__fees">Fees</string>
     <string name="widgets__blocks__field__size">Size</string>
     <string name="widgets__blocks__field__time">Time</string>
     <string name="widgets__blocks__field__transactions">Transactions</string>
@@ -1145,6 +1164,9 @@
     <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__facts__description">Discover fun facts about Bitcoin, every time you open your wallet.</string>
     <string name="widgets__facts__name">Bitcoin Facts</string>
+    <string name="widgets__headline__preview_publisher">bitcoinmagazine.com</string>
+    <string name="widgets__headline__preview_time">21 minutes ago</string>
+    <string name="widgets__headline__preview_title">How Bitcoin changed El Salvador in more ways</string>
     <string name="widgets__news__description">Read the latest &amp; greatest Bitcoin headlines from various news sites.</string>
     <string name="widgets__news__name">Bitcoin Headlines</string>
     <string name="widgets__onboarding__description">Enjoy decentralized feeds from your favorite web services, by adding fun and useful widgets to your Bitkit wallet.</string>
@@ -1155,20 +1177,30 @@
     <string name="widgets__suggestions__description">Discover everything Bitkit has to offer.</string>
     <string name="widgets__suggestions__name">Bitkit Suggestions</string>
     <string name="widgets__weather__condition__average__description">The next block rate is close to the monthly averages.</string>
+    <string name="widgets__weather__condition__average__short_title">Average</string>
     <string name="widgets__weather__condition__average__title">Average Conditions</string>
     <string name="widgets__weather__condition__good__description">All clear. Now would be a good time to transact on the blockchain.</string>
+    <string name="widgets__weather__condition__good__short_title">Favorable</string>
     <string name="widgets__weather__condition__good__title">Favorable Conditions</string>
     <string name="widgets__weather__condition__poor__description">If you are not in a hurry to transact, it may be better to wait a bit.</string>
+    <string name="widgets__weather__condition__poor__short_title">Poor</string>
     <string name="widgets__weather__condition__poor__title">Poor Conditions</string>
-    <string name="widgets__weather__current_fee">Current average fee</string>
+    <string name="widgets__weather__current_fee">Current fee</string>
     <string name="widgets__weather__description">Find out when it’s a good time to transact on the Bitcoin blockchain.</string>
     <string name="widgets__weather__name">Bitcoin Weather</string>
     <string name="widgets__weather__next_block">Next block inclusion</string>
+    <string name="widgets__widget__content">CONTENT</string>
+    <string name="widgets__widget__data">DATA</string>
+    <string name="widgets__widget__display">DISPLAY</string>
     <string name="widgets__widget__edit">Widget Feed</string>
     <string name="widgets__widget__edit_custom">Custom</string>
     <string name="widgets__widget__edit_default">Default</string>
     <string name="widgets__widget__edit_description">Please select which fields you want to display in the {name} widget.</string>
     <string name="widgets__widget__nav_title">Widget</string>
+    <string name="widgets__widget__save">Save Widget</string>
+    <string name="widgets__widget__settings">Widget Settings</string>
+    <string name="widgets__widget__size_small">Small</string>
+    <string name="widgets__widget__size_wide">Wide</string>
     <string name="widgets__widget__source">Source</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>
