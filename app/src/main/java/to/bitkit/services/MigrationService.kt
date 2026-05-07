@@ -1124,14 +1124,10 @@ class MigrationService @Inject constructor(
                     else -> GraphPeriod.ONE_DAY
                 }
 
-                val showSource = priceJson["showSource"]?.jsonPrimitive?.content
-                    ?.toBooleanStrictOrNull() ?: false
-
                 widgetsStore.updatePricePreferences(
                     PricePreferences(
                         enabledPairs = selectedPairs,
                         period = period,
-                        showSource = showSource
                     )
                 )
             }.onFailure {

@@ -2660,6 +2660,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun handleDeeplinkIntent(intent: Intent) {
+        if (intent.action != Intent.ACTION_VIEW) return
         intent.data?.let { uri ->
             Logger.debug("Received deeplink: $uri")
             processDeeplink(uri)
