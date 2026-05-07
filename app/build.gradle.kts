@@ -286,6 +286,9 @@ dependencies {
     // WorkManager
     implementation(libs.hilt.work)
     implementation(libs.work.runtime.ktx)
+    // Glance - AppWidgets
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
     // Ktor - Networking
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
