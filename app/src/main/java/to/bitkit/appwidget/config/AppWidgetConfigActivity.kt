@@ -85,8 +85,8 @@ class AppWidgetConfigActivity : ComponentActivity() {
         val providerClass = AppWidgetManager.getInstance(this)
             .getAppWidgetInfo(appWidgetId)?.provider?.className
         return when (providerClass) {
-            HeadlinesGlanceReceiver::class.java.name -> AppWidgetType.HEADLINES
             PriceGlanceReceiver::class.java.name -> AppWidgetType.PRICE
+            HeadlinesGlanceReceiver::class.java.name -> AppWidgetType.HEADLINES
             BlocksGlanceReceiver::class.java.name -> AppWidgetType.BLOCKS
             WeatherGlanceReceiver::class.java.name -> AppWidgetType.WEATHER
             else -> {

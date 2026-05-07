@@ -212,7 +212,7 @@ private fun WeatherEditOptionRow(
                 Icon(
                     painter = painterResource(R.drawable.ic_checkmark),
                     contentDescription = null,
-                    tint = if (isSelected) Colors.Brand else Colors.White50,
+                    tint = if (isSelected) Colors.Brand else Colors.Gray3,
                     modifier = Modifier
                         .size(32.dp)
                         .testTag("${testTagPrefix}_toggle_icon")

@@ -157,7 +157,7 @@ fun HeadlinesEditContent(
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White50,
+                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.Gray3,
                         modifier = Modifier
                             .size(32.dp)
                             .testTag("source_toggle_icon")
@@ -192,7 +192,7 @@ fun HeadlinesEditContent(
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White50,
+                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.Gray3,
                         modifier = Modifier
                             .size(32.dp)
                             .testTag("time_toggle_icon")

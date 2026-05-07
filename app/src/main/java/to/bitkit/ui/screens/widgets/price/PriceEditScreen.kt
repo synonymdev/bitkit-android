@@ -199,16 +199,14 @@ private fun SelectableRow(
                     .weight(1f)
                     .testTag("${testTagPrefix}_label")
             )
-            if (isSelected) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_checkmark),
-                    contentDescription = null,
-                    tint = Colors.Brand,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .testTag("${testTagPrefix}_toggle_icon")
-                )
-            }
+            Icon(
+                painter = painterResource(R.drawable.ic_checkmark),
+                contentDescription = null,
+                tint = if (isSelected) Colors.Brand else Colors.Gray3,
+                modifier = Modifier
+                    .size(32.dp)
+                    .testTag("${testTagPrefix}_toggle_icon")
+            )
         }
 
         HorizontalDivider(

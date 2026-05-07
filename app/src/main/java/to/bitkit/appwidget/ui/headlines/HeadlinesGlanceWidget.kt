@@ -50,4 +50,12 @@ class HeadlinesGlanceWidget : GlanceAppWidget() {
             )
         }
     }
+
+    override suspend fun onDelete(context: Context, glanceId: GlanceId) {
+        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        EntryPointAccessors
+            .fromApplication(context, AppWidgetEntryPoint::class.java)
+            .appWidgetPreferencesStore()
+            .unregisterWidget(appWidgetId)
+    }
 }

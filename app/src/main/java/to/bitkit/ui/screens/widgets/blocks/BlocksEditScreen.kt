@@ -258,7 +258,7 @@ private fun BlockEditOptionRow(
                 Icon(
                     painter = painterResource(R.drawable.ic_checkmark),
                     contentDescription = null,
-                    tint = if (isEnabled) Colors.Brand else Colors.White50,
+                    tint = if (isEnabled) Colors.Brand else Colors.Gray3,
                     modifier = Modifier
                         .size(32.dp)
                         .testTag("${testTagPrefix}_toggle_icon")
