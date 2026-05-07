@@ -26,8 +26,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
+import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -37,6 +40,7 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
+    pubkyRepo: PubkyRepo,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
@@ -49,6 +53,9 @@ class ActivityListViewModel @Inject constructor(
 
     private val _latestActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val latestActivities = _latestActivities.asStateFlow()
+
+    val contacts: StateFlow<ImmutableList<PubkyProfile>> =
+        pubkyRepo.contacts.map { it.toImmutableList() }.stateInScope(persistentListOf())
 
     val availableTags: StateFlow<ImmutableList<String>> =
         activityRepo.state.map { it.tags }.stateInScope(persistentListOf())
@@ -140,19 +147,7 @@ class ActivityListViewModel @Inject constructor(
 
     private suspend fun filterOutReplacedSentTransactions(activities: List<Activity>): List<Activity> {
         val txIdsInBoostTxIds = activityRepo.getTxIdsInBoostTxIds()
-
-        return activities.filter {
-            if (it is Activity.Onchain) {
-                val onchain = it.v1
-                if (!onchain.doesExist &&
-                    onchain.txType == PaymentType.SENT &&
-                    txIdsInBoostTxIds.contains(onchain.txId)
-                ) {
-                    return@filter false
-                }
-            }
-            true
-        }
+        return activities.filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
     }
 
     fun updateAvailableTags() {

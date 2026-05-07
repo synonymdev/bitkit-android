@@ -302,11 +302,11 @@ fun SendSheet(
                             )
                         },
                         onPaymentPending = { paymentHash, amount ->
-                            navController.navigateTo(SendRoute.Pending(paymentHash, amount)) {
+                            appViewModel.preserveContactPaymentContext(paymentHash)navController.navigateTo(SendRoute.Pending(paymentHash, amount)) {
                                 popUpTo(startDestination) { inclusive = true }
                             }
                         },
-                        onShowError = { errorMessage ->
+                        onShowError = { errorMessage ->appViewModel.clearActiveContactPaymentContext()
                             navController.navigateTo(SendRoute.Error(errorMessage))
                         }
                     )

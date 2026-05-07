@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.contacts
 
 import org.junit.Test
+import to.bitkit.models.PubkyProfile
 import kotlin.test.assertEquals
 
 class ContactImportFlowTest {
@@ -29,6 +30,18 @@ class ContactImportFlowTest {
         assertEquals(
             AddContactValidationResult.OwnKey,
             resolveAddContactValidation(input = VALID_PUBLIC_KEY, ownPublicKey = VALID_PUBLIC_KEY),
+        )
+    }
+
+    @Test
+    fun `resolveAddContactValidation returns existing contact for saved contact`() {
+        assertEquals(
+            AddContactValidationResult.ExistingContact,
+            resolveAddContactValidation(
+                input = VALID_PUBLIC_KEY,
+                ownPublicKey = null,
+                contacts = listOf(PubkyProfile.placeholder(VALID_PUBLIC_KEY)),
+            ),
         )
     }
 

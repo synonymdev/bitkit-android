@@ -6,7 +6,6 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.SATS_GROUPING_SEPARATOR
-import to.bitkit.models.formatToModernDisplay
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -16,78 +15,125 @@ class BitcoinVisualTransformation(
 ) : VisualTransformation {
 
     override fun filter(text: AnnotatedString): TransformedText {
-        val originalText = text.text
+        val rawText = text.text
+        val sanitizedText = sanitizeInput(rawText)
 
-        if (originalText.isEmpty()) {
-            return TransformedText(text, OffsetMapping.Identity)
+        if (sanitizedText.isEmpty()) {
+            return TransformedText(AnnotatedString(""), OffsetMapping.Identity)
         }
 
         val formattedText = when (displayUnit) {
-            BitcoinDisplayUnit.MODERN -> formatModernDisplay(originalText)
-            BitcoinDisplayUnit.CLASSIC -> formatClassicDisplay(originalText)
+            BitcoinDisplayUnit.MODERN -> formatModernDisplay(sanitizedText)
+            BitcoinDisplayUnit.CLASSIC -> formatClassicDisplay(sanitizedText)
         }
-
-        val offsetMapping = createOffsetMapping(originalText, formattedText)
 
         return TransformedText(
             AnnotatedString(formattedText),
-            offsetMapping
+            createOffsetMapping(rawText, formattedText),
         )
     }
 
+    private fun sanitizeInput(text: String): String = when (displayUnit) {
+        BitcoinDisplayUnit.MODERN -> text.filter { it.isDigit() }
+        BitcoinDisplayUnit.CLASSIC -> sanitizeClassicInput(text)
+    }
+
+    private fun sanitizeClassicInput(text: String, locale: Locale = Locale.getDefault()): String {
+        val localDecimal = DecimalFormatSymbols.getInstance(locale).decimalSeparator
+        val normalized = if (localDecimal == ',') text.replace(',', '.') else text
+        val filtered = normalized.filter { it.isDigit() || it == '.' }
+        val dotIndex = filtered.indexOf('.')
+        if (dotIndex == -1) {
+            return filtered
+        }
+        return filtered.substring(0, dotIndex + 1) +
+            filtered.substring(dotIndex + 1).replace(".", "")
+    }
+
     private fun formatModernDisplay(text: String): String {
-        val longValue = text.replace("$SATS_GROUPING_SEPARATOR", "").toLongOrNull() ?: return text
-        return longValue.formatToModernDisplay()
+        val digits = text.replace("$SATS_GROUPING_SEPARATOR", "")
+        if (digits.isEmpty()) {
+            return ""
+        }
+        val normalizedDigits = digits.trimStart('0').ifEmpty { "0" }
+        return normalizedDigits.reversed().chunked(3).joinToString(" ").reversed()
     }
 
     private fun formatClassicDisplay(text: String): String {
         val cleanText = text.replace(" ", "").replace(",", "")
-        val doubleValue = cleanText.toDoubleOrNull() ?: return text
+        if (cleanText.isEmpty() || cleanText == ".") {
+            return cleanText
+        }
+
+        val endsWithDecimal = cleanText.endsWith(".")
+        val textToFormat = if (endsWithDecimal) cleanText.dropLast(1) else cleanText
+        if (textToFormat.isEmpty()) {
+            return cleanText
+        }
+
+        val doubleValue = textToFormat.toDoubleOrNull() ?: return cleanText
 
         val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
             groupingSeparator = ' '
             decimalSeparator = '.'
         }
         val formatter = DecimalFormat("#,##0.########", formatSymbols)
-        return formatter.format(doubleValue)
+        val formatted = formatter.format(doubleValue)
+        return if (endsWithDecimal) "$formatted." else formatted
     }
 
-    private fun createOffsetMapping(original: String, transformed: String): OffsetMapping {
+    private fun createOffsetMapping(rawOriginal: String, transformed: String): OffsetMapping {
+        val rawToSanitizedCount = IntArray(rawOriginal.length + 1)
+        var dotSeen = false
+        var sanitizedSoFar = 0
+        for (i in rawOriginal.indices) {
+            val char = rawOriginal[i]
+            val isKept = when {
+                displayUnit == BitcoinDisplayUnit.MODERN -> char.isDigit()
+                char.isDigit() -> true
+                char == '.' && !dotSeen -> {
+                    dotSeen = true
+                    true
+                }
+                else -> false
+            }
+            if (isKept) sanitizedSoFar++
+            rawToSanitizedCount[i + 1] = sanitizedSoFar
+        }
+        val totalSanitized = sanitizedSoFar
+        val transformedNonSpaceCount = transformed.count { it != ' ' }
+        // MODERN mode strips leading zeros via formatModernDisplay; account for that gap so
+        // cursor positions over stripped raw digits collapse to the start of the displayed text.
+        val leadingStripped = when (displayUnit) {
+            BitcoinDisplayUnit.MODERN -> (totalSanitized - transformedNonSpaceCount).coerceAtLeast(0)
+            BitcoinDisplayUnit.CLASSIC -> 0
+        }
+
         return object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
-                val cleanOriginal = original.take(offset).replace(" ", "")
+                val clamped = offset.coerceIn(0, rawOriginal.length)
+                val validCount = (rawToSanitizedCount[clamped] - leadingStripped).coerceAtLeast(0)
+                if (validCount >= transformedNonSpaceCount) return transformed.length
                 var transformedOffset = 0
-                var cleanOffset = 0
-
-                for (char in transformed) {
-                    if (char == ' ') {
-                        transformedOffset++
-                    } else {
-                        if (cleanOffset >= cleanOriginal.length) break
-                        cleanOffset++
-                        transformedOffset++
-                    }
+                var counted = 0
+                while (transformedOffset < transformed.length && counted < validCount) {
+                    if (transformed[transformedOffset] != ' ') counted++
+                    transformedOffset++
                 }
-
-                return transformedOffset.coerceAtMost(transformed.length)
+                while (transformedOffset < transformed.length && transformed[transformedOffset] == ' ') {
+                    transformedOffset++
+                }
+                return transformedOffset
             }
 
             override fun transformedToOriginal(offset: Int): Int {
-                val transformedSubstring = transformed.take(offset)
-                val cleanCount = transformedSubstring.count { it != ' ' }
-
-                var originalOffset = 0
-                var cleanOffset = 0
-
-                for (char in original) {
-                    if (char != ' ') {
-                        if (cleanOffset >= cleanCount) break
-                        cleanOffset++
-                    }
-                    originalOffset++
+                val clamped = offset.coerceIn(0, transformed.length)
+                if (clamped >= transformed.length) return rawOriginal.length
+                val validCount = transformed.take(clamped).count { it != ' ' } + leadingStripped
+                for (i in 0..rawOriginal.length) {
+                    if (rawToSanitizedCount[i] >= validCount) return i
                 }
-
-                return originalOffset.coerceAtMost(original.length)
+                return rawOriginal.length
             }
         }
     }

@@ -2,19 +2,16 @@ package to.bitkit.ui.screens.widgets.price
 
 import androidx.compose.animation.core.EaseInOutCubic
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Composable
@@ -22,11 +19,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ir.ehsannarmani.compose_charts.LineChart
@@ -44,131 +41,146 @@ import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
-import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.BodySB
-import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.Display34
+import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PriceCard(
-    modifier: Modifier = Modifier,
-    showWidgetTitle: Boolean,
     pricePreferences: PricePreferences,
-    priceDTO: PriceDTO
+    priceDTO: PriceDTO,
+    modifier: Modifier = Modifier,
 ) {
+    val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
+        priceDTO.resolveWidget(pricePreferences)
+    } ?: return
+
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
     ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
         ) {
-            if (showWidgetTitle) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("price_card_pair_row_${widgetData.pair.displayName}")
+            ) {
+                Caption13Up(
+                    text = "${widgetData.pair.displayName}  ${widgetData.period.value}",
+                    color = Colors.White64,
                     modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .testTag("price_card_widget_title_row")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.widget_chart_line),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("price_card_widget_title_icon"),
-                        tint = Color.Unspecified
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    BodyMSB(
-                        text = stringResource(R.string.widgets__price__name),
-                        modifier = Modifier.testTag("price_card_widget_title_text")
-                    )
-                }
-            }
-
-            val enabledPairs = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
-                priceDTO.widgets.filter { widgetData -> widgetData.pair in pricePreferences.enabledPairs }
-            }
-
-            enabledPairs.map { widgetData ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("price_card_pair_row_${widgetData.pair.displayName}"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    BodySB(
-                        text = widgetData.pair.displayName,
-                        color = Colors.White64,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("PriceWidgetRow-${widgetData.pair.displayName}")
-                    )
-
-                    BodySB(
-                        text = widgetData.change.formatted,
-                        color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                        modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
-                    )
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    BodySB(
-                        text = widgetData.price,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("price_card_pair_price_${widgetData.pair}")
-                    )
-                }
-            }
-
-            val chartData = remember(enabledPairs, pricePreferences.period) {
-                enabledPairs.firstOrNull() ?: priceDTO.widgets.firstOrNull()
-            }
-
-            chartData?.let { firstPriceData ->
-                ChartComponent(
-                    widgetData = firstPriceData,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.63.dp)
-                        .testTag("price_card_chart")
+                        .weight(1f)
+                        .testTag("PriceWidgetRow-${widgetData.pair.displayName}")
+                )
+                HorizontalSpacer(16.dp)
+                Title(
+                    text = widgetData.change.formatted,
+                    color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
+                    modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
                 )
             }
 
-            if (pricePreferences.showSource) {
-                Spacer(modifier = Modifier.height(8.dp))
+            Display34(
+                text = "${widgetData.pair.symbol} ${widgetData.price}",
+                color = Colors.White,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("price_card_pair_price_${widgetData.pair}")
+            )
 
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("PriceWidgetSource")
-                ) {
-                    CaptionB(
-                        text = stringResource(R.string.widgets__widget__source),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("source_label")
-                    )
-                    CaptionB(
-                        text = priceDTO.source,
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("source_text")
-                    )
-                }
-            }
+            ChartComponent(
+                widgetData = widgetData,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("price_card_chart")
+            )
         }
     }
 }
 
 @Composable
+fun PriceCardSmall(
+    pricePreferences: PricePreferences,
+    priceDTO: PriceDTO,
+    modifier: Modifier = Modifier,
+) {
+    val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
+        priceDTO.resolveWidget(pricePreferences)
+    } ?: return
+
+    Box(
+        modifier = modifier
+            .clip(shape = MaterialTheme.shapes.medium)
+            .background(Colors.White10)
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("price_card_small_pair_row_${widgetData.pair.displayName}")
+                ) {
+                    Caption13Up(
+                        text = widgetData.pair.displayName,
+                        color = Colors.White64,
+                    )
+                    Caption13Up(
+                        text = widgetData.period.value,
+                        color = Colors.White64,
+                    )
+                }
+                Title(
+                    text = "${widgetData.pair.symbol} ${widgetData.price}",
+                    color = Colors.White,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("price_card_small_pair_price_${widgetData.pair}")
+                )
+                BodySSB(
+                    text = widgetData.change.formatted,
+                    color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
+                    modifier = Modifier.testTag("price_card_small_pair_change_${widgetData.pair}")
+                )
+            }
+
+            ChartComponent(
+                widgetData = widgetData,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .testTag("price_card_small_chart")
+            )
+        }
+    }
+}
+
+private fun PriceDTO.resolveWidget(prefs: PricePreferences): PriceWidgetData? =
+    widgets.firstOrNull { it.pair in prefs.enabledPairs } ?: widgets.firstOrNull()
+
+@Composable
 fun ChartComponent(
     widgetData: PriceWidgetData,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val baseColor = if (widgetData.change.isPositive) Colors.Green else Colors.Red
 
@@ -180,107 +192,83 @@ fun ChartComponent(
     }
 
     Box(
-        modifier = modifier
-            .height(96.dp)
-            .clip(ShapeDefaults.Small)
+        modifier = modifier.clip(ShapeDefaults.Small)
     ) {
+        if (LocalInspectionMode.current) {
+            Image(
+                painter = painterResource(R.drawable.chart_preview),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize()
+            )
+            return@Box
+        }
+
         LineChart(
-            modifier = Modifier.fillMaxSize(),
             data = remember(widgetData.pastValues, baseColor) {
                 listOf(
                     Line(
                         label = widgetData.pair.displayName,
                         values = widgetData.pastValues,
                         color = SolidColor(baseColor),
-                        firstGradientFillColor = baseColor.copy(alpha = 0.8f),
-                        secondGradientFillColor = baseColor.copy(alpha = 0.3f),
                         strokeAnimationSpec = tween(1000, easing = EaseInOutCubic),
                         gradientAnimationDelay = 1000,
                         drawStyle = DrawStyle.Stroke(width = 1.dp),
-                        curvedEdges = true
-                    )
+                        curvedEdges = true,
+                    ),
                 )
             },
             labelProperties = LabelProperties(
-                enabled = false
+                enabled = false,
             ),
             labelHelperProperties = LabelHelperProperties(
-                enabled = false
+                enabled = false,
             ),
             gridProperties = GridProperties(
-                enabled = false
+                enabled = false,
             ),
             indicatorProperties = HorizontalIndicatorProperties(
-                enabled = false
+                enabled = false,
             ),
             dividerProperties = DividerProperties(
-                enabled = false
+                enabled = false,
             ),
             minValue = minValue,
-            maxValue = maxValue
-        )
-
-        CaptionB(
-            text = widgetData.period.value,
-            color = baseColor,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(7.dp)
+            maxValue = maxValue,
+            modifier = Modifier.fillMaxSize()
         )
     }
 }
+
+private val SAMPLE_PAST_VALUES = listOf(1.0, 2.0, 1.5, 3.0, 2.5, 4.0)
 
 @Preview(showBackground = true)
 @Composable
 private fun FullBlockCardPreview() {
     AppThemeSurface {
         Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
         ) {
             PriceCard(
-                modifier = Modifier.fillMaxWidth(),
-                showWidgetTitle = true,
-                pricePreferences = PricePreferences(
-                    showSource = true
-                ),
+                pricePreferences = PricePreferences(),
                 priceDTO = PriceDTO(
-                    source = "Bitfinex.com",
                     widgets = listOf(
                         PriceWidgetData(
                             pair = TradingPair.BTC_USD,
                             change = Change(
                                 isPositive = true,
-                                formatted = "$ 20,326"
+                                formatted = "+1.24%",
                             ),
-                            price = "$20,326",
-                            pastValues = listOf(
-                                1.0,
-                                2.0,
-                                3.0,
-                                4.0,
-                            ),
-                            period = GraphPeriod.ONE_DAY,
-                        ),
-                        PriceWidgetData(
-                            pair = TradingPair.BTC_USD,
-                            change = Change(
-                                isPositive = false,
-                                formatted = "€ 20,326"
-                            ),
-                            price = "€ 20,326",
-                            pastValues = listOf(
-                                1.0,
-                                2.0,
-                                3.0,
-                                4.0,
-                            ),
+                            price = "75,326",
+                            pastValues = SAMPLE_PAST_VALUES,
                             period = GraphPeriod.ONE_DAY,
                         ),
                     ),
-                )
+                ),
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

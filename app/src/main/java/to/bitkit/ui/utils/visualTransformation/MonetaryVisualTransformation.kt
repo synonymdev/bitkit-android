@@ -10,8 +10,12 @@ import java.util.Locale
 import kotlin.text.iterator
 
 class MonetaryVisualTransformation(
-    private val decimalPlaces: Int = 2
+    private val decimalPlaces: Int = 2,
 ) : VisualTransformation {
+
+    companion object {
+        private const val GROUPING_SEPARATOR = ' '
+    }
 
     override fun filter(text: AnnotatedString): TransformedText {
         val originalText = text.text
@@ -32,7 +36,7 @@ class MonetaryVisualTransformation(
     }
 
     private fun limitDecimalPlaces(text: String): String {
-        val cleanText = text.replace(",", "").replace(" ", "")
+        val cleanText = text.replace(",", "").replace("$GROUPING_SEPARATOR", "")
 
         val decimalIndex = cleanText.indexOf('.')
         if (decimalIndex == -1) {
@@ -72,11 +76,10 @@ class MonetaryVisualTransformation(
         val doubleValue = textToFormat.toDoubleOrNull() ?: return text
 
         val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
-            groupingSeparator = ','
+            groupingSeparator = GROUPING_SEPARATOR
             decimalSeparator = '.'
         }
 
-        // Only format the integer part if user is typing a decimal
         val formatter = if (endsWithDecimal) {
             DecimalFormat("#,##0", formatSymbols)
         } else {
@@ -105,8 +108,7 @@ class MonetaryVisualTransformation(
                 for (char in transformed) {
                     if (originalIndex >= originalSubstring.length) break
 
-                    if (char == ',') {
-                        // Skip comma in transformed, don't advance original
+                    if (char == GROUPING_SEPARATOR) {
                         transformedOffset++
                     } else if (originalIndex < originalSubstring.length &&
                         originalSubstring[originalIndex] == char
@@ -148,9 +150,8 @@ class MonetaryVisualTransformation(
                         transformedIndex++
                         originalOffset++
                     } else if (transformedIndex < transformedSubstring.length - 1 &&
-                        transformedSubstring[transformedIndex] == ','
+                        transformedSubstring[transformedIndex] == GROUPING_SEPARATOR
                     ) {
-                        // Skip comma in transformed
                         transformedIndex++
                         if (transformedIndex < transformedSubstring.length &&
                             char == transformedSubstring[transformedIndex]

@@ -40,7 +40,10 @@ if [[ "$target" != "next" && "$target" != "hotfix" && "$target" != "all" ]]; the
   exit 1
 fi
 
-python3 - "$target" <<'PY'
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+
+python3 - "$target" "$repo_root" <<'PY'
 from __future__ import annotations
 
 import re
@@ -48,7 +51,7 @@ import sys
 from pathlib import Path
 
 TARGET = sys.argv[1]
-ROOT = Path.cwd()
+ROOT = Path(sys.argv[2])
 CHANGELOG_DIR = ROOT / "changelog.d"
 
 CATEGORY_LABELS = {

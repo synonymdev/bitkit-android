@@ -17,8 +17,8 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
-import to.bitkit.repositories.ActivityRepo
 import to.bitkit.models.msatCeilOf
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject

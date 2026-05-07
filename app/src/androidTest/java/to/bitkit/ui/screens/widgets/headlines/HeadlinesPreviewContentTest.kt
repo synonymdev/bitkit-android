@@ -42,7 +42,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -52,18 +51,12 @@ class HeadlinesPreviewContentTest {
 
         // Assert main elements exist
         composeTestRule.onNodeWithTag("headlines_preview_screen").assertExists()
-        composeTestRule.onNodeWithTag("main_content").assertExists()
-
-        // Verify header elements
-        composeTestRule.onNodeWithTag("header_row").assertExists()
-        composeTestRule.onNodeWithTag("widget_title").assertExists()
-        composeTestRule.onNodeWithTag("widget_icon").assertExists()
         composeTestRule.onNodeWithTag("widget_description").assertExists()
 
         // Verify settings and preview section
         composeTestRule.onNodeWithTag("WidgetEdit").assertExists()
-        composeTestRule.onNodeWithTag("preview_label").assertExists()
-        composeTestRule.onNodeWithTag("headline_card").assertExists()
+        composeTestRule.onNodeWithTag("headlines_preview_carousel").assertExists()
+        composeTestRule.onNodeWithTag("headline_card_small").assertExists()
 
         // Verify buttons
         composeTestRule.onNodeWithTag("buttons_row").assertExists()
@@ -97,7 +90,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
                     onClickSave = { saveClicked = true },
-                    showWidgetTitles = false,
                     isHeadlinesImplemented = false,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -134,7 +126,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = customPreferences,
                     article = mockArticle
@@ -145,7 +136,7 @@ class HeadlinesPreviewContentTest {
         // Assert that all elements still exist with custom preferences
         composeTestRule.onNodeWithTag("headlines_preview_screen").assertExists()
         composeTestRule.onNodeWithTag("WidgetEdit").assertExists()
-        composeTestRule.onNodeWithTag("headline_card").assertExists()
+        composeTestRule.onNodeWithTag("headlines_preview_carousel").assertExists()
     }
 
     @Test
@@ -158,7 +149,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -168,15 +158,11 @@ class HeadlinesPreviewContentTest {
 
         // Assert all tagged elements exist
         composeTestRule.onNodeWithTag("headlines_preview_screen").assertExists()
-        composeTestRule.onNodeWithTag("main_content").assertExists()
-        composeTestRule.onNodeWithTag("header_row").assertExists()
-        composeTestRule.onNodeWithTag("widget_title").assertExists()
-        composeTestRule.onNodeWithTag("widget_icon").assertExists()
         composeTestRule.onNodeWithTag("widget_description").assertExists()
         composeTestRule.onNodeWithTag("divider").assertExists()
         composeTestRule.onNodeWithTag("WidgetEdit").assertExists()
-        composeTestRule.onNodeWithTag("preview_label").assertExists()
-        composeTestRule.onNodeWithTag("headline_card").assertExists()
+        composeTestRule.onNodeWithTag("headlines_preview_carousel").assertExists()
+        composeTestRule.onNodeWithTag("headline_card_small").assertExists()
         composeTestRule.onNodeWithTag("buttons_row").assertExists()
         composeTestRule.onNodeWithTag("WidgetDelete").assertExists()
         composeTestRule.onNodeWithTag("WidgetSave").assertExists()
@@ -194,7 +180,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = true,
                     isHeadlinesImplemented = true,
                     headlinePreferences = mockHeadlinePreferences,
                     article = mockArticle
@@ -219,7 +204,6 @@ class HeadlinesPreviewContentTest {
                     onClickEdit = {},
                     onClickDelete = {},
                     onClickSave = {},
-                    showWidgetTitles = false,
                     isHeadlinesImplemented = false,
                     headlinePreferences = minimalPreferences,
                     article = mockArticle
@@ -229,7 +213,7 @@ class HeadlinesPreviewContentTest {
 
         // Assert core elements still exist
         composeTestRule.onNodeWithTag("headlines_preview_screen").assertExists()
-        composeTestRule.onNodeWithTag("headline_card").assertExists()
+        composeTestRule.onNodeWithTag("headlines_preview_carousel").assertExists()
         composeTestRule.onNodeWithTag("WidgetSave").assertExists()
         composeTestRule.onNodeWithTag("WidgetDelete").assertDoesNotExist()
     }
