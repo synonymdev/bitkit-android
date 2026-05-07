@@ -83,9 +83,10 @@ class MainActivity : FragmentActivity() {
             desc = getString(R.string.notification__channel_node__body),
             importance = NotificationManager.IMPORTANCE_LOW
         )
-        // Skip on Activity recreation (e.g. locale change) — Android re-delivers the
-        // launching intent and would otherwise re-trigger deeplink flows like the gift sheet.
-        if (savedInstanceState == null) {
+
+        val consumedUri = savedInstanceState?.getString(KEY_CONSUMED_DEEPLINK_URI)
+        val currentUri = intent?.data?.toString()
+        if (currentUri == null || currentUri != consumedUri) {
             appViewModel.handleDeeplinkIntent(intent)
         }
 
@@ -203,6 +204,15 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         appViewModel.handleDeeplinkIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        intent?.data?.toString()?.let { outState.putString(KEY_CONSUMED_DEEPLINK_URI, it) }
+    }
+
+    private companion object {
+        const val KEY_CONSUMED_DEEPLINK_URI = "consumed_deeplink_uri"
     }
 
     override fun onDestroy() {
