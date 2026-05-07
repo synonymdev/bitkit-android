@@ -731,17 +731,18 @@ private fun Widgets(
                 WidgetType.BLOCK -> {
                     homeUiState.currentBlock?.run {
                         BlockCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             showBlock = homeUiState.blocksPreferences.showBlock,
                             showTime = homeUiState.blocksPreferences.showTime,
                             showDate = homeUiState.blocksPreferences.showDate,
                             showTransactions = homeUiState.blocksPreferences.showTransactions,
                             showSize = homeUiState.blocksPreferences.showSize,
+                            showFees = homeUiState.blocksPreferences.showFees,
                             showSource = homeUiState.blocksPreferences.showSource,
                             time = time,
                             date = date,
                             transactions = transactionCount,
                             size = size,
+                            fees = fees,
                             source = source,
                             block = height,
                             modifier = Modifier
@@ -978,6 +979,7 @@ private val previewBlock = BlockModel(
     transactionCount = "2,175",
     size = "1,606kB",
     source = "mempool.io",
+    fees = "25 059 357",
 )
 
 private val previewArticle = ArticleModel(

@@ -10,6 +10,7 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
@@ -51,7 +52,7 @@ fun PriceGlanceContent(
         putExtra(AppWidgetConfigActivity.EXTRA_WIDGET_TYPE, AppWidgetType.PRICE.name)
     }
 
-    GlanceWidgetScaffold(onClick = configIntent) {
+    GlanceWidgetScaffold(onClick = actionStartActivity(configIntent)) {
         if (widget == null) {
             CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold

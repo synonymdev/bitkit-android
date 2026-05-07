@@ -1150,6 +1150,7 @@
     <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks.</string>
     <string name="widgets__blocks__field__block">Block</string>
     <string name="widgets__blocks__field__date">Date</string>
+    <string name="widgets__blocks__field__fees">Fees</string>
     <string name="widgets__blocks__field__size">Size</string>
     <string name="widgets__blocks__field__time">Time</string>
     <string name="widgets__blocks__field__transactions">Transactions</string>
@@ -1184,6 +1185,7 @@
     <string name="widgets__weather__name">Bitcoin Weather</string>
     <string name="widgets__weather__next_block">Next block inclusion</string>
     <string name="widgets__widget__content">CONTENT</string>
+    <string name="widgets__widget__data">DATA</string>
     <string name="widgets__widget__edit">Widget Feed</string>
     <string name="widgets__widget__edit_custom">Custom</string>
     <string name="widgets__widget__edit_default">Default</string>
