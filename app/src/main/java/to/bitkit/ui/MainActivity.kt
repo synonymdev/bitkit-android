@@ -63,6 +63,10 @@ import to.bitkit.viewmodels.WalletViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+    private companion object {
+        const val KEY_CONSUMED_DEEPLINK_URI = "consumed_deeplink_uri"
+    }
+
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
@@ -209,10 +213,6 @@ class MainActivity : FragmentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         intent?.data?.toString()?.let { outState.putString(KEY_CONSUMED_DEEPLINK_URI, it) }
-    }
-
-    private companion object {
-        const val KEY_CONSUMED_DEEPLINK_URI = "consumed_deeplink_uri"
     }
 
     override fun onDestroy() {
