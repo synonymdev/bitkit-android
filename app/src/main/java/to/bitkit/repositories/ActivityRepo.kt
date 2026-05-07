@@ -36,6 +36,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.contact
+import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
@@ -345,10 +346,13 @@ class ActivityRepo @Inject constructor(
     suspend fun contactActivities(publicKey: String): Result<List<Activity>> = withContext(ioDispatcher) {
         runCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
+            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
             getActivities(
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,
-            ).getOrThrow().filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
+            ).getOrThrow()
+                .filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
+                .filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
         }.onFailure {
             Logger.error("Failed to load contact activities for '$publicKey'", it, context = TAG)
         }
@@ -382,9 +386,27 @@ class ActivityRepo @Inject constructor(
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(normalizedKey, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt)
         }.onFailure {
             Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)
         }
+    }
+
+    private suspend fun updateReplacementContactIfNeeded(
+        activity: Activity,
+        normalizedKey: String,
+        updatedAt: ULong,
+    ) {
+        if (activity !is Activity.Onchain || activity.v1.doesExist || activity.v1.txType != PaymentType.SENT) return
+
+        getActivities(filter = ActivityFilter.ONCHAIN).getOrThrow()
+            .filterIsInstance<Activity.Onchain>()
+            .filter { activity.v1.txId in it.v1.boostTxIds }
+            .filterNot { PubkyPublicKeyFormat.matches(it.v1.contact, normalizedKey) }
+            .forEach {
+                val updatedReplacement = Activity.Onchain(it.v1.copy(contact = normalizedKey, updatedAt = updatedAt))
+                updateActivity(updatedReplacement.rawId(), updatedReplacement).getOrThrow()
+            }
     }
 
     private suspend fun findActivityForPaymentId(forPaymentId: String, syncLdkPayments: Boolean): Activity? {

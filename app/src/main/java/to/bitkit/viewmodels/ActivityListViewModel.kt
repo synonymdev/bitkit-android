@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.ActivityRepo
@@ -146,19 +147,7 @@ class ActivityListViewModel @Inject constructor(
 
     private suspend fun filterOutReplacedSentTransactions(activities: List<Activity>): List<Activity> {
         val txIdsInBoostTxIds = activityRepo.getTxIdsInBoostTxIds()
-
-        return activities.filter {
-            if (it is Activity.Onchain) {
-                val onchain = it.v1
-                if (!onchain.doesExist &&
-                    onchain.txType == PaymentType.SENT &&
-                    txIdsInBoostTxIds.contains(onchain.txId)
-                ) {
-                    return@filter false
-                }
-            }
-            true
-        }
+        return activities.filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
     }
 
     fun updateAvailableTags() {

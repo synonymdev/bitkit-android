@@ -50,6 +50,13 @@ object AppTextStyles {
         letterSpacing = (-1).sp,
         fontFamily = InterFontFamily,
     )
+    val Display34 = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 34.sp,
+        lineHeight = 34.sp,
+        letterSpacing = (-1).sp,
+        fontFamily = InterFontFamily,
+    )
     val Headline = TextStyle(
         fontWeight = FontWeight.Black,
         fontSize = 30.sp,

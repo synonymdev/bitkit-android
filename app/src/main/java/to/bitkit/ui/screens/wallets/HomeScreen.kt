@@ -788,7 +788,6 @@ private fun Widgets(
                 WidgetType.PRICE -> {
                     homeUiState.currentPrice?.run {
                         PriceCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             pricePreferences = homeUiState.pricePreferences,
                             priceDTO = homeUiState.currentPrice,
                             modifier = Modifier
@@ -986,7 +985,6 @@ private val previewArticle = ArticleModel(
 )
 
 private val previewPrice = PriceDTO(
-    source = "Bitfinex.com",
     widgets = listOf(
         PriceWidgetData(
             pair = TradingPair.BTC_USD,

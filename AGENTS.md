@@ -198,7 +198,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS use `remember` for expensive Compose computations
 - ALWAYS declare `modifier: Modifier = Modifier,` as the FIRST optional parameter in composable declarations
 - ALWAYS pass `modifier = ...` as the LAST argument in composable calls
-- ALWAYS add trailing commas in multi-line declarations; NEVER add a trailing comma to `modifier = ...` at call sites
+- ALWAYS add trailing commas in multi-line declarations, EXCEPT after a `modifier = ...` last argument — never add a trailing comma there, whether the modifier is a single call (`modifier = Modifier.weight(1f)`) or a chain (`modifier = Modifier.fillMaxWidth().testTag("foo")`)
 - ALWAYS use `navController.navigateTo(route)` for simple navigation; NEVER use raw `navController.navigate(route)` — `navigateTo` prevents duplicate destinations
 - ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used

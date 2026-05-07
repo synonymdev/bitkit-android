@@ -87,6 +87,7 @@ class ActivityRepoTest : BaseUnitTest() {
         confirmTimestamp: ULong? = baseOnchainActivity.confirmTimestamp,
         channelId: String? = baseOnchainActivity.channelId,
         transferTxId: String? = baseOnchainActivity.transferTxId,
+        contact: String? = baseOnchainActivity.contact,
         createdAt: ULong? = baseOnchainActivity.createdAt,
         updatedAt: ULong? = baseOnchainActivity.updatedAt,
     ): Activity.Onchain {
@@ -107,6 +108,7 @@ class ActivityRepoTest : BaseUnitTest() {
                 confirmTimestamp = confirmTimestamp,
                 channelId = channelId,
                 transferTxId = transferTxId,
+                contact = contact,
                 createdAt = createdAt,
                 updatedAt = updatedAt
             )
@@ -265,6 +267,91 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertNull(result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities filters replaced sent transaction`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val replacedTxId = "replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            id = "replaced_activity_id",
+            txId = replacedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        val replacementActivity = createOnchainActivity(
+            id = "replacement_activity_id",
+            txId = "replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds()).thenReturn(setOf(replacedTxId))
+        whenever(
+            coreService.activity.get(
+                filter = ActivityFilter.ALL,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = SortDirection.DESC,
+            )
+        ).thenReturn(listOf(replacedActivity, replacementActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `setContact propagates contact to replacement transaction`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val replacedTxId = "replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            id = "replaced_activity_id",
+            txId = replacedTxId,
+            doesExist = false,
+        )
+        val replacementActivity = createOnchainActivity(
+            id = "replacement_activity_id",
+            txId = "replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+        )
+        whenever(coreService.activity.getActivity(replacedTxId)).thenReturn(null)
+        whenever(coreService.activity.getOnchainActivityByTxId(replacedTxId)).thenReturn(replacedActivity.v1)
+        whenever(
+            coreService.activity.get(
+                filter = ActivityFilter.ONCHAIN,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null,
+            )
+        ).thenReturn(listOf(replacedActivity, replacementActivity))
+
+        val result = sut.setContact(
+            contactPublicKey = contactPublicKey,
+            forPaymentId = replacedTxId,
+            syncLdkPayments = false,
+        )
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).update(
+            eq(replacedActivity.v1.id),
+            argThat {
+                this is Activity.Onchain && v1.contact == contactPublicKey
+            },
+        )
+        verify(coreService.activity).update(
+            eq(replacementActivity.v1.id),
+            argThat {
+                this is Activity.Onchain && v1.contact == contactPublicKey
+            },
+        )
     }
 
     @Test
