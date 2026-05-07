@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.PubkyRingAuthUrlBuilder
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -41,6 +42,16 @@ class PubkyChoiceViewModel @Inject constructor(
 
     private var approvalJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            pubkyRepo.authCancelEvents.collect {
+                approvalJob?.cancel()
+                approvalJob = null
+                _uiState.update { it.copy(isWaitingForRing = false, isLoadingAfterAuth = false) }
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         if (_uiState.value.isWaitingForRing) {
@@ -63,8 +74,12 @@ class PubkyChoiceViewModel @Inject constructor(
             }
 
             pubkyRepo.startAuthentication()
-                .onSuccess { authUrl ->
-                    val ringIntent = createRingAuthIntent(authUrl)
+                .onSuccess { authRequest ->
+                    val callbackAuthUrl = PubkyRingAuthUrlBuilder.addCallbacks(
+                        authUrl = authRequest.authUrl,
+                        nonce = authRequest.callbackNonce,
+                    ) ?: authRequest.authUrl
+                    val ringIntent = createRingAuthIntent(callbackAuthUrl)
                     if (!canOpenWithRing(ringIntent)) {
                         cancelAuthAndShowRingDialog()
                         return@launch

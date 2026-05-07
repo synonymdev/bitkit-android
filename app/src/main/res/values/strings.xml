@@ -69,11 +69,14 @@
     <string name="common__usable">Usable</string>
     <string name="common__yes">Yes</string>
     <string name="common__yes_proceed">Yes, Proceed</string>
+    <string name="contacts__activity_received_from">Received from %1$s</string>
+    <string name="contacts__activity_sent_to">Sent to %1$s</string>
     <string name="contacts__add_button">Add</string>
     <string name="contacts__add_contact_saved">Contact saved</string>
     <string name="contacts__add_contact_title">Add Contact</string>
     <string name="contacts__add_description">Add a new contact by scanning their QR or pasting their pubky below.</string>
     <string name="contacts__add_discard">Discard</string>
+    <string name="contacts__add_error_existing">This pubky is already in your contacts.</string>
     <string name="contacts__add_error_fetch">Could not retrieve contact info. Please check the public key and try again.</string>
     <string name="contacts__add_error_invalid_key">Invalid pubky key format. Please check and try again.</string>
     <string name="contacts__add_error_self">You can\'t add your own pubky as a contact.</string>
@@ -533,6 +536,10 @@
     <string name="profile__intro_title">Portable\n&lt;accent&gt;pubky\nprofile&lt;/accent&gt;</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
+    <string name="profile__pay_contacts_error_invalid_payload">Payment endpoint data could not be prepared.</string>
+    <string name="profile__pay_contacts_error_no_endpoint">No supported payment endpoint is available.</string>
+    <string name="profile__pay_contacts_error_session">Reconnect your Pubky profile to share payment data.</string>
+    <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pay Contacts</string>
     <string name="profile__pay_contacts_toggle">Share payment data and enable payments with contacts</string>
@@ -880,6 +887,9 @@
     <string name="settings__widgets__section_display">Display</string>
     <string name="settings__widgets__section_reset">Reset To Defaults</string>
     <string name="settings__widgets__showWidgets">Show Widgets</string>
+    <string name="slashtags__error_pay_empty_msg">The contact you\'re trying to send to hasn\'t enabled payments.</string>
+    <string name="slashtags__error_pay_not_opened_msg">No compatible payment endpoint is available.</string>
+    <string name="slashtags__error_pay_title">Unable To Pay Contact</string>
     <string name="slashtags__onboarding_profile1_header">Own your\n&lt;accent&gt;profile&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Set up your public profile and links, so your Bitkit contacts can reach you or pay you anytime, anywhere.</string>
     <string name="slashtags__profile">Profile</string>
