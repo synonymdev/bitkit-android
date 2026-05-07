@@ -125,25 +125,28 @@ When the user provides custom instructions after `--`:
 - Structure QA Notes according to user's specific manual testing instructions and automated coverage notes
 - Custom instructions take priority over default generation rules for sections they address
 - Preserve exact manual testing steps provided by the user (don't summarize or omit details)
-- If custom instructions include automated checks or coverage notes, place them under `#### Automated Checks`
+- If custom instructions include automated test coverage notes, place them under `#### Automated Tests`
+- If custom instructions include commands that were run or validation checks, place them under `#### Checks`
 
 **QA Notes / Validation:**
-- QA Notes separate actionable human QA instructions from automated verification coverage.
+- QA Notes separate actionable human QA instructions, automated test coverage, and command-based validation checks.
 - Always use this structure:
   ```md
   ### QA Notes
   #### Manual Tests
-  #### Automated Checks
+  #### Automated Tests
+  #### Checks
   ```
-- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
-- Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed with the test file name and a short explanation.
+- Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`.
+- Use `#### Automated Tests` to summarize automated test coverage added, modified, or removed with the test file name and a short explanation.
+- Use `#### Checks` to list raw commands only when they were run locally, are non-standard, use special flags or environment values, validate workflow behavior, or explain a meaningful verification gap.
 - When referencing changed test files in QA notes, use the file name only by default, e.g. `SendInvoiceTest.kt`. If multiple changed files share the same file name, use the shortest unique path suffix, e.g. `wallets/send/SendInvoiceTest.kt`.
 - For removed automated coverage, state why it was removed.
 - Do not list standard CI or PR bot commands as checkbox items just because they run for every PR. If standard CI coverage is worth mentioning, summarize it in one sentence.
-- List raw commands only when they were run locally, are non-standard, use special flags or environment values, validate workflow behavior, or explain a meaningful verification gap.
-- For workflow behavior validation, include `(after merge)` in the automated check item because workflow changes only take effect for PRs opened after the workflow update merges.
+- For workflow behavior validation, include `(after merge)` in the checks item because workflow changes only take effect for PRs opened after the workflow update merges.
 - If no actionable manual validation exists, write `N/A` under `#### Manual Tests`.
-- If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
+- If no automated test coverage changed, write `N/A` under `#### Automated Tests`.
+- If no commands or validation checks are worth listing, write `N/A` under `#### Checks`.
 - Write manual tests using this template:
   ```md
   - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation
@@ -158,7 +161,7 @@ When the user provides custom instructions after `--`:
 - Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
-Structure manual QA around integration validation only. Automated checks belong under `#### Automated Checks`.
+Structure manual QA around integration validation only. Automated test coverage belongs under `#### Automated Tests`, and commands belong under `#### Checks`.
 
 Example:
 ```
@@ -166,8 +169,9 @@ Example:
 #### Manual Tests
 - [ ] **1.** Consumer app → exercise updated binding flow: behavior matches previous release.
 - [ ] **2.** `regression:` Android integration screen → trigger changed API path: no crash or stale data.
-#### Automated Checks
+#### Automated Tests
 - Binding tests added: cover updated Android API path in `bindings/android/...`.
+#### Checks
 - CI: standard cargo and binding checks run by the PR bot.
 ```
 
@@ -184,10 +188,11 @@ Concrete style target:
 - [ ] **5a.** Settings → Lightning Connections → tap channel: still opens Channel Detail.
   - [ ] **5b.** back: returns to Connections List.
 - [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
-#### Automated Checks
+#### Automated Tests
 - Unit tests added: cover invoice timeout handling in `SendInvoiceTest.kt`.
 - Unit tests modified: update channel navigation assertions in `ChannelDetailTest.kt`.
 - Test coverage removed: delete stale mock-only assertions from `OldFlowTest.kt` because the flow no longer exists.
+#### Checks
 - CI: standard compile, unit test, and detekt checks run by the PR bot.
 ```
 
