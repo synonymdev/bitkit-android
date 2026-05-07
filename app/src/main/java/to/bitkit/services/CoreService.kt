@@ -70,6 +70,7 @@ import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
@@ -1521,11 +1522,15 @@ class BlocktankService(
         )
     }
 
-    suspend fun regtestCloseChannel(fundingTxId: String, vout: UInt, forceCloseAfterS: ULong = 86_400uL): String {
+    suspend fun regtestCloseChannel(
+        fundingTxId: String,
+        vout: UInt,
+        forceCloseAfterS: UInt = Defaults.bolt11ExpirySec,
+    ): String {
         return com.synonym.bitkitcore.regtestCloseChannel(
             fundingTxId = fundingTxId,
             vout = vout,
-            forceCloseAfterS = forceCloseAfterS,
+            forceCloseAfterS = forceCloseAfterS.toULong(),
         )
     }
 }

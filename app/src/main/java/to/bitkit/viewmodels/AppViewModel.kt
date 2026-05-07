@@ -1444,7 +1444,11 @@ class AppViewModel @Inject constructor(
     }
 
     @Suppress("CyclomaticComplexMethod")
-    private suspend fun handleDecodedScan(scan: Scanner?, input: String) = when (scan) {
+    private suspend fun handleDecodedScan(
+        scan: Scanner?,
+        input: String,
+        fromMainScanner: Boolean = false,
+    ) = when (scan) {
         is Scanner.OnChain -> onScanOnchain(scan.invoice, input, fromMainScanner)
         is Scanner.Lightning -> onScanLightning(scan.invoice, input, fromMainScanner)
         is Scanner.LnurlPay -> onScanLnurlPay(scan.data, fromMainScanner)
@@ -2090,7 +2094,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoiceMsats(
                     amountMsats = lnurl.data.maxWithdrawable,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
+                    expirySeconds = 3_600u,
                 )
             } else {
                 val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
@@ -2100,7 +2104,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoice(
                     amountSats = withdrawAmountSats,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
+                    expirySeconds = 3_600u,
                 )
             }.getOrNull()
 
