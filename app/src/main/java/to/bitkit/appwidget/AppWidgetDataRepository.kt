@@ -4,12 +4,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.BlockDTO
+import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.widgets.BlocksService
 import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
 import to.bitkit.data.widgets.PriceService
+import to.bitkit.data.widgets.WeatherService
 import to.bitkit.di.IoDispatcher
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,6 +23,7 @@ class AppWidgetDataRepository @Inject constructor(
     private val newsService: NewsService,
     private val blocksService: BlocksService,
     private val factsService: FactsService,
+    private val weatherService: WeatherService,
 ) {
     suspend fun fetchPriceData(period: GraphPeriod = GraphPeriod.ONE_DAY): Result<PriceDTO> =
         withContext(ioDispatcher) {
@@ -40,5 +43,10 @@ class AppWidgetDataRepository @Inject constructor(
     suspend fun fetchFacts(): Result<List<String>> =
         withContext(ioDispatcher) {
             factsService.fetchData()
+        }
+
+    suspend fun fetchWeather(): Result<WeatherDTO> =
+        withContext(ioDispatcher) {
+            weatherService.fetchData()
         }
 }

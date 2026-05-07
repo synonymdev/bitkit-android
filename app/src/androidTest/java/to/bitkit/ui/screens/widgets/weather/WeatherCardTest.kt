@@ -7,6 +7,7 @@ import org.junit.Rule
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -17,204 +18,128 @@ class WeatherCardTest {
     val composeTestRule = createComposeRule()
 
     private val testGoodWeatherModel = WeatherModel(
+        condition = FeeCondition.GOOD,
         title = R.string.widgets__weather__condition__good__title,
+        shortTitle = R.string.widgets__weather__condition__good__short_title,
         description = R.string.widgets__weather__condition__good__description,
-        currentFee = "15 sat/vB",
-        nextBlockFee = "12 sat/vB",
-        icon = FeeCondition.GOOD.icon
+        currentFee = "$ 0.52",
+        currentFeeSats = 520L,
+        currentFeeSatsFormatted = "520 ₿",
+        nextBlockFee = "6 ₿/vByte",
+        icon = FeeCondition.GOOD.icon,
     )
 
     private val testAverageWeatherModel = WeatherModel(
+        condition = FeeCondition.AVERAGE,
         title = R.string.widgets__weather__condition__average__title,
+        shortTitle = R.string.widgets__weather__condition__average__short_title,
         description = R.string.widgets__weather__condition__average__description,
-        currentFee = "45 sat/vB",
-        nextBlockFee = "50 sat/vB",
-        icon = FeeCondition.AVERAGE.icon
-    )
-
-    private val testAllEnabledPreferences = WeatherPreferences(
-        showTitle = true,
-        showDescription = true,
-        showCurrentFee = true,
-        showNextBlockFee = true
+        currentFee = "$ 1.27",
+        currentFeeSats = 1270L,
+        currentFeeSatsFormatted = "1,270 ₿",
+        nextBlockFee = "12 ₿/vByte",
+        icon = FeeCondition.AVERAGE.icon,
     )
 
     @Test
-    fun testWeatherCardWithAllElementsAndWidgetTitle() {
-        // Arrange & Act
+    fun testWeatherCardShowsTitleDescriptionAndCurrentFeeFiat() {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherCard(
-                    showWidgetTitle = true,
                     weatherModel = testGoodWeatherModel,
-                    preferences = testAllEnabledPreferences
+                    preferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_FIAT),
                 )
             }
         }
 
-        // Assert all elements exist
-        composeTestRule.onNodeWithTag("weather_card_widget_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_condition_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_widget_title_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_description_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_current_fee_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_next_block_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card").assertExists()
+        composeTestRule.onNodeWithTag("weather_card_title", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_description", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_icon", useUnmergedTree = true).assertExists()
 
-        // Verify text content
-        composeTestRule.onNodeWithTag("weather_card_current_fee_value", useUnmergedTree = true)
+        composeTestRule.onNodeWithTag("weather_card_current_fee_fiat_block", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_current_fee_fiat_value", useUnmergedTree = true)
             .assertTextEquals(testGoodWeatherModel.currentFee)
-        composeTestRule.onNodeWithTag("weather_card_next_block_fee_value", useUnmergedTree = true)
+
+        composeTestRule.onNodeWithTag("weather_card_current_fee_sats_block", useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag("weather_card_next_block_block", useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun testWeatherCardShowsNextBlockOnly() {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                WeatherCard(
+                    weatherModel = testGoodWeatherModel,
+                    preferences = WeatherPreferences(selectedOption = WeatherDataOption.NEXT_BLOCK_INCLUSION),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("weather_card_next_block_block", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_next_block_value", useUnmergedTree = true)
             .assertTextEquals(testGoodWeatherModel.nextBlockFee)
+
+        composeTestRule.onNodeWithTag("weather_card_current_fee_fiat_block", useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag("weather_card_current_fee_sats_block", useUnmergedTree = true)
+            .assertDoesNotExist()
     }
 
     @Test
-    fun testWeatherCardWithoutWidgetTitle() {
-        // Arrange & Act
+    fun testWeatherCardWithNothingSelectedHidesFeeBlock() {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherCard(
-                    showWidgetTitle = false,
                     weatherModel = testGoodWeatherModel,
-                    preferences = testAllEnabledPreferences
+                    preferences = WeatherPreferences(selectedOption = null),
                 )
             }
         }
 
-        // Assert main elements exist
-        composeTestRule.onNodeWithTag("weather_card_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_description_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_title", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_description", useUnmergedTree = true).assertExists()
 
-        // Assert widget title elements do not exist
-        composeTestRule.onNodeWithTag("weather_card_widget_title_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_condition_icon", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_widget_title_text", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("weather_card_current_fee_fiat_block", useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag("weather_card_current_fee_sats_block", useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag("weather_card_next_block_block", useUnmergedTree = true)
+            .assertDoesNotExist()
     }
 
     @Test
-    fun testWeatherCardWithoutNextBlockFee() {
-        // Arrange & Act
+    fun testWeatherCardSwitchesContentBasedOnConditionAndSelection() {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherCard(
-                    showWidgetTitle = true,
-                    weatherModel = testGoodWeatherModel,
-                    preferences = testAllEnabledPreferences.copy(showNextBlockFee = false)
-                )
-            }
-        }
-
-        // Assert main elements exist
-        composeTestRule.onNodeWithTag("weather_card_widget_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_current_fee_row", useUnmergedTree = true).assertExists()
-
-        // Assert next block fee elements do not exist
-        composeTestRule.onNodeWithTag("weather_card_next_block_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_next_block_fee_label", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_next_block_fee_value", useUnmergedTree = true).assertDoesNotExist()
-    }
-
-    @Test
-    fun testWeatherCardMinimalConfiguration() {
-        // Arrange & Act - Only title shown
-        composeTestRule.setContent {
-            AppThemeSurface {
-                WeatherCard(
-                    showWidgetTitle = false,
-                    weatherModel = testGoodWeatherModel,
-                    preferences = WeatherPreferences(
-                        showTitle = true,
-                        showDescription = false,
-                        showCurrentFee = false,
-                        showNextBlockFee = false
-                    )
-                )
-            }
-        }
-
-        // Assert only title row exists
-        composeTestRule.onNodeWithTag("weather_card_title_row", useUnmergedTree = true).assertExists()
-
-        // Assert other elements do not exist
-        composeTestRule.onNodeWithTag("weather_card_widget_title_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_description_text", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_current_fee_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_next_block_row", useUnmergedTree = true).assertDoesNotExist()
-    }
-
-    @Test
-    fun testWeatherCardWithDifferentConditions() {
-        // Arrange & Act - Test with average condition
-        composeTestRule.setContent {
-            AppThemeSurface {
-                WeatherCard(
-                    showWidgetTitle = true,
                     weatherModel = testAverageWeatherModel,
-                    preferences = testAllEnabledPreferences
+                    preferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_FIAT),
                 )
             }
         }
 
-        // Assert elements exist with average condition data
-        composeTestRule.onNodeWithTag("weather_card_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_current_fee_value", useUnmergedTree = true)
+        composeTestRule.onNodeWithTag("weather_card_current_fee_fiat_value", useUnmergedTree = true)
             .assertTextEquals(testAverageWeatherModel.currentFee)
-        composeTestRule.onNodeWithTag("weather_card_next_block_fee_value", useUnmergedTree = true)
-            .assertTextEquals(testAverageWeatherModel.nextBlockFee)
     }
 
     @Test
-    fun testAllElementsExistInFullConfiguration() {
-        // Arrange & Act
+    fun testWeatherCardSmallShowsTitleAndFee() {
         composeTestRule.setContent {
             AppThemeSurface {
-                WeatherCard(
-                    showWidgetTitle = true,
+                WeatherCardSmall(
                     weatherModel = testGoodWeatherModel,
-                    preferences = testAllEnabledPreferences
+                    preferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_FIAT),
                 )
             }
         }
 
-        // Assert all tagged elements exist
-        composeTestRule.onNodeWithTag("weather_card_widget_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_condition_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_widget_title_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_description_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_current_fee_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_current_fee_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_current_fee_value", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_next_block_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_next_block_fee_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_next_block_fee_value", useUnmergedTree = true).assertExists()
-    }
-
-    @Test
-    fun testWeatherCardWithTitleAndDescriptionOnly() {
-        // Arrange & Act
-        composeTestRule.setContent {
-            AppThemeSurface {
-                WeatherCard(
-                    showWidgetTitle = false,
-                    weatherModel = testGoodWeatherModel,
-                    preferences = WeatherPreferences(
-                        showTitle = true,
-                        showDescription = true,
-                        showCurrentFee = false,
-                        showNextBlockFee = false
-                    )
-                )
-            }
-        }
-
-        // Assert title and description exist
-        composeTestRule.onNodeWithTag("weather_card_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("weather_card_description_text", useUnmergedTree = true).assertExists()
-
-        // Assert fee elements do not exist
-        composeTestRule.onNodeWithTag("weather_card_current_fee_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("weather_card_next_block_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("weather_card_small").assertExists()
+        composeTestRule.onNodeWithTag("weather_card_small_title", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_icon", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("weather_card_current_fee_fiat_value", useUnmergedTree = true)
+            .assertTextEquals(testGoodWeatherModel.currentFee)
     }
 }

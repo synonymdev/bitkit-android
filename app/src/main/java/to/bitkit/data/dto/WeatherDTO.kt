@@ -7,5 +7,6 @@ import kotlinx.serialization.Serializable
 data class WeatherDTO(
     val condition: FeeCondition,
     val currentFee: String,
-    val nextBlockFee: Int
+    val nextBlockFee: Int,
+    val avgFeeSats: Long = 0L,
 )

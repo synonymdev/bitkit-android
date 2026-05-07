@@ -1,19 +1,15 @@
 package to.bitkit.ui.screens.widgets.weather
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -21,33 +17,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
-import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.InterFontFamily
 
 @Composable
 fun WeatherEditScreen(
     weatherViewModel: WeatherViewModel,
     onBack: () -> Unit,
     navigatePreview: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customPreferences by weatherViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentWeather by weatherViewModel.currentWeather.collectAsStateWithLifecycle()
@@ -55,13 +50,11 @@ fun WeatherEditScreen(
     WeatherEditContent(
         onBack = onBack,
         weatherPreferences = customPreferences,
-        onClickShowTitle = { weatherViewModel.toggleShowTitle() },
-        onClickShowDescription = { weatherViewModel.toggleShowDescription() },
-        onClickShowCurrentFee = { weatherViewModel.toggleShowCurrentFee() },
-        onClickShowNextBlockFee = { weatherViewModel.toggleShowNextBlockFee() },
+        weather = currentWeather,
+        onSelectOption = { weatherViewModel.selectOption(it) },
         onClickReset = { weatherViewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
-        weather = currentWeather
+        modifier = modifier
     )
 }
 
@@ -69,217 +62,146 @@ fun WeatherEditScreen(
 fun WeatherEditContent(
     onBack: () -> Unit,
     weather: WeatherModel?,
-    onClickShowTitle: () -> Unit,
-    onClickShowDescription: () -> Unit,
-    onClickShowCurrentFee: () -> Unit,
-    onClickShowNextBlockFee: () -> Unit,
+    onSelectOption: (WeatherDataOption) -> Unit,
     onClickReset: () -> Unit,
     onClickPreview: () -> Unit,
     weatherPreferences: WeatherPreferences,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
-        modifier = Modifier.testTag("weather_edit_screen")
+        noBackground = true,
+        modifier = modifier
+            .background(Colors.Gray7)
+            .testTag("weather_edit_screen")
     ) {
         AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__edit),
+            titleText = stringResource(R.string.widgets__weather__name),
             onBackClick = onBack,
-            actions = { DrawerNavIcon() },
         )
 
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
                 .testTag("WidgetEditScrollView")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            VerticalSpacer(16.dp)
 
-            BodyM(
-                text = stringResource(R.string.widgets__widget__edit_description).replace(
-                    "{name}",
-                    stringResource(R.string.widgets__weather__name)
-                ),
+            Caption13Up(
+                text = stringResource(R.string.widgets__widget__display),
                 color = Colors.White64,
-                modifier = Modifier.testTag("edit_description")
+                modifier = Modifier
+                    .padding(bottom = 16.dp)
+                    .testTag("display_section_header")
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            WeatherEditOptionRow(
+                label = stringResource(R.string.widgets__weather__current_fee),
+                value = rememberWeatherOptionValue(WeatherDataOption.CURRENT_FEE_FIAT, weather),
+                isSelected = weatherPreferences.selectedOption == WeatherDataOption.CURRENT_FEE_FIAT,
+                onClick = { onSelectOption(WeatherDataOption.CURRENT_FEE_FIAT) },
+                testTagPrefix = "current_fee_fiat",
+            )
+
+            WeatherEditOptionRow(
+                label = stringResource(R.string.widgets__weather__current_fee),
+                value = rememberWeatherOptionValue(WeatherDataOption.CURRENT_FEE_SATS, weather),
+                isSelected = weatherPreferences.selectedOption == WeatherDataOption.CURRENT_FEE_SATS,
+                onClick = { onSelectOption(WeatherDataOption.CURRENT_FEE_SATS) },
+                testTagPrefix = "current_fee_sats",
+            )
+
+            WeatherEditOptionRow(
+                label = stringResource(R.string.widgets__weather__next_block),
+                value = rememberWeatherOptionValue(WeatherDataOption.NEXT_BLOCK_INCLUSION, weather),
+                isSelected = weatherPreferences.selectedOption == WeatherDataOption.NEXT_BLOCK_INCLUSION,
+                onClick = { onSelectOption(WeatherDataOption.NEXT_BLOCK_INCLUSION) },
+                testTagPrefix = "next_block",
+            )
+
+            FillHeight()
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .padding(vertical = 21.dp)
                     .fillMaxWidth()
-                    .testTag("title_setting_row")
+                    .testTag("buttons_row")
             ) {
-                Text(
-                    text = weather?.title?.let { stringResource(it) }.orEmpty(),
-                    overflow = TextOverflow.Ellipsis,
-                    maxLines = 2,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 34.sp,
-                        lineHeight = 34.sp,
-                        letterSpacing = 0.sp,
-                        fontFamily = InterFontFamily,
-                        color = Colors.White,
-                    ),
+                SecondaryButton(
+                    text = stringResource(R.string.common__reset),
+                    enabled = weatherPreferences != WeatherPreferences(),
+                    fullWidth = false,
+                    onClick = onClickReset,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("title_text"),
+                        .testTag("WidgetEditReset")
                 )
 
-                weather?.icon?.let {
-                    Text(
-                        text = it,
-                        style = TextStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 100.sp,
-                            lineHeight = 80.sp,
-                            letterSpacing = 0.sp,
-                            fontFamily = InterFontFamily,
-                            color = Colors.White,
-                        ),
-                    )
-                }
-
-                IconButton(
-                    onClick = onClickShowTitle,
-                    modifier = Modifier.testTag("title_toggle_button")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_checkmark),
-                        contentDescription = null,
-                        tint = if (weatherPreferences.showTitle) Colors.Brand else Colors.White50,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("title_toggle_icon"),
-                    )
-                }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.testTag("title_divider")
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("description_setting_row")
-            ) {
-                BodyM(
-                    text = weather?.description?.let { stringResource(it) }.orEmpty(),
-                    color = Colors.White,
+                PrimaryButton(
+                    text = stringResource(R.string.common__preview),
+                    enabled = weatherPreferences.selectedOption != null,
+                    fullWidth = false,
+                    onClick = onClickPreview,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("description_text")
+                        .testTag("WidgetEditPreview")
                 )
-
-                IconButton(
-                    onClick = onClickShowDescription,
-                    modifier = Modifier.testTag("description_toggle_button")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_checkmark),
-                        contentDescription = null,
-                        tint = if (weatherPreferences.showDescription) Colors.Brand else Colors.White50,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("description_toggle_icon"),
-                    )
-                }
             }
-
-            HorizontalDivider(
-                modifier = Modifier.testTag("description_divider")
-            )
-
-            // Current fee toggle
-            WeatherEditOptionRow(
-                label = stringResource(R.string.widgets__weather__current_fee),
-                value = weather?.currentFee.orEmpty(),
-                isEnabled = weatherPreferences.showCurrentFee,
-                onClick = onClickShowCurrentFee,
-                testTagPrefix = "current_fee"
-            )
-
-            // Next block fee toggle
-            WeatherEditOptionRow(
-                label = stringResource(R.string.widgets__weather__next_block),
-                value = weather?.nextBlockFee.orEmpty(),
-                isEnabled = weatherPreferences.showNextBlockFee,
-                onClick = onClickShowNextBlockFee,
-                testTagPrefix = "next_block_fee"
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .padding(vertical = 21.dp, horizontal = 16.dp)
-                .fillMaxWidth()
-                .testTag("buttons_row"),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            SecondaryButton(
-                text = stringResource(R.string.common__reset),
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("WidgetEditReset"),
-                enabled = weatherPreferences != WeatherPreferences(),
-                fullWidth = false,
-                onClick = onClickReset
-            )
-
-            PrimaryButton(
-                text = stringResource(R.string.common__preview),
-                enabled = weatherPreferences.run {
-                    showTitle || showDescription || showCurrentFee || showNextBlockFee
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("WidgetEditPreview"),
-                fullWidth = false,
-                onClick = onClickPreview
-            )
         }
     }
 }
 
 @Composable
+private fun rememberWeatherOptionValue(
+    option: WeatherDataOption,
+    weather: WeatherModel?,
+): String = when (option) {
+    WeatherDataOption.CURRENT_FEE_FIAT -> weather?.currentFee.orEmpty()
+    WeatherDataOption.CURRENT_FEE_SATS -> rememberMoneyText(
+        sats = weather?.currentFeeSats ?: 0L,
+        unit = PrimaryDisplay.BITCOIN,
+        showSymbol = true,
+    ).orEmpty().stripAccentTags()
+    WeatherDataOption.NEXT_BLOCK_INCLUSION -> weather?.nextBlockFee.orEmpty()
+}
+
+private fun String.stripAccentTags(): String =
+    replace("<accent>", "").replace("</accent>", "")
+
+@Composable
 private fun WeatherEditOptionRow(
     label: String,
     value: String,
-    isEnabled: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
     testTagPrefix: String,
+    modifier: Modifier = Modifier,
 ) {
-    Column {
+    Column(modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(vertical = 21.dp)
+                .padding(vertical = 8.dp)
                 .fillMaxWidth()
                 .testTag("${testTagPrefix}_setting_row")
         ) {
-            BodySSB(
-                text = label,
-                color = Colors.White64,
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("${testTagPrefix}_label")
-            )
+                    .testTag("${testTagPrefix}_value_column")
+            ) {
+                Caption13Up(
+                    text = label,
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("${testTagPrefix}_label")
+                )
 
-            if (value.isNotEmpty()) {
-                BodySSB(
+                WeatherFeeValueText(
                     text = value,
-                    color = Colors.White,
-                    modifier = Modifier.testTag("${testTagPrefix}_text")
+                    color = Colors.Green,
+                    modifier = Modifier.testTag("${testTagPrefix}_value")
                 )
             }
 
@@ -290,10 +212,10 @@ private fun WeatherEditOptionRow(
                 Icon(
                     painter = painterResource(R.drawable.ic_checkmark),
                     contentDescription = null,
-                    tint = if (isEnabled) Colors.Brand else Colors.White50,
+                    tint = if (isSelected) Colors.Brand else Colors.White50,
                     modifier = Modifier
                         .size(32.dp)
-                        .testTag("${testTagPrefix}_toggle_icon"),
+                        .testTag("${testTagPrefix}_toggle_icon")
                 )
             }
         }
@@ -310,19 +232,20 @@ private fun Preview() {
     AppThemeSurface {
         WeatherEditContent(
             onBack = {},
-            onClickShowTitle = {},
-            onClickShowDescription = {},
-            onClickShowCurrentFee = {},
-            onClickShowNextBlockFee = {},
+            onSelectOption = {},
             onClickReset = {},
             onClickPreview = {},
             weatherPreferences = WeatherPreferences(),
             weather = WeatherModel(
+                condition = FeeCondition.GOOD,
                 title = R.string.widgets__weather__condition__good__title,
+                shortTitle = R.string.widgets__weather__condition__good__short_title,
                 description = R.string.widgets__weather__condition__good__description,
-                currentFee = "15 sat/vB",
-                nextBlockFee = "12 sat/vB",
-                icon = FeeCondition.GOOD.icon
+                currentFee = "$ 0.52",
+                currentFeeSats = 520L,
+                currentFeeSatsFormatted = "520 ₿",
+                nextBlockFee = "6 ₿/vByte",
+                icon = FeeCondition.GOOD.icon,
             ),
         )
     }
@@ -330,28 +253,24 @@ private fun Preview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun PreviewWithSomeOptionsEnabled() {
+private fun PreviewSelectedSats() {
     AppThemeSurface {
         WeatherEditContent(
             onBack = {},
-            onClickShowTitle = {},
-            onClickShowDescription = {},
-            onClickShowCurrentFee = {},
-            onClickShowNextBlockFee = {},
+            onSelectOption = {},
             onClickReset = {},
             onClickPreview = {},
-            weatherPreferences = WeatherPreferences(
-                showTitle = true,
-                showDescription = true,
-                showCurrentFee = true,
-                showNextBlockFee = false
-            ),
+            weatherPreferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_SATS),
             weather = WeatherModel(
+                condition = FeeCondition.AVERAGE,
                 title = R.string.widgets__weather__condition__average__title,
+                shortTitle = R.string.widgets__weather__condition__average__short_title,
                 description = R.string.widgets__weather__condition__average__description,
-                currentFee = "45 sat/vB",
-                nextBlockFee = "50 sat/vB",
-                icon = FeeCondition.AVERAGE.icon
+                currentFee = "$ 1.20",
+                currentFeeSats = 1200L,
+                currentFeeSatsFormatted = "1,200 ₿",
+                nextBlockFee = "12 ₿/vByte",
+                icon = FeeCondition.AVERAGE.icon,
             ),
         )
     }
@@ -359,28 +278,24 @@ private fun PreviewWithSomeOptionsEnabled() {
 
 @Preview(showBackground = true)
 @Composable
-private fun PreviewWithAllDisabled() {
+private fun PreviewNoneSelected() {
     AppThemeSurface {
         WeatherEditContent(
             onBack = {},
-            onClickShowTitle = {},
-            onClickShowDescription = {},
-            onClickShowCurrentFee = {},
-            onClickShowNextBlockFee = {},
+            onSelectOption = {},
             onClickReset = {},
             onClickPreview = {},
-            weatherPreferences = WeatherPreferences(
-                showTitle = false,
-                showDescription = false,
-                showCurrentFee = false,
-                showNextBlockFee = false
-            ),
+            weatherPreferences = WeatherPreferences(selectedOption = null),
             weather = WeatherModel(
+                condition = FeeCondition.POOR,
                 title = R.string.widgets__weather__condition__poor__title,
+                shortTitle = R.string.widgets__weather__condition__poor__short_title,
                 description = R.string.widgets__weather__condition__poor__description,
-                currentFee = "45 sat/vB",
-                nextBlockFee = "50 sat/vB",
-                icon = FeeCondition.POOR.icon
+                currentFee = "$ 4.50",
+                currentFeeSats = 4500L,
+                currentFeeSatsFormatted = "4,500 ₿",
+                nextBlockFee = "45 ₿/vByte",
+                icon = FeeCondition.POOR.icon,
             ),
         )
     }

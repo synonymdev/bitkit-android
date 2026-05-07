@@ -15,6 +15,7 @@ import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.BlockDTO
+import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.AppWidgetDataSerializer
@@ -104,5 +105,9 @@ class AppWidgetPreferencesStore @Inject constructor(
 
     suspend fun bumpFactsRotationTick() {
         store.updateData { it.copy(factsRotationTick = it.factsRotationTick + 1) }
+    }
+
+    suspend fun cacheWeather(weather: WeatherDTO) {
+        store.updateData { it.copy(cachedWeather = weather) }
     }
 }

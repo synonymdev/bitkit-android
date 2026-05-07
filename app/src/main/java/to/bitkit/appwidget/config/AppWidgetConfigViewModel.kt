@@ -11,19 +11,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.appwidget.AppWidgetDataRepository
 import to.bitkit.appwidget.AppWidgetPreferencesStore
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.model.HomeBlocksPreferences
 import to.bitkit.appwidget.model.HomeHeadlinePreferences
 import to.bitkit.appwidget.model.HomePricePreferences
+import to.bitkit.appwidget.model.HomeWeatherPreferences
+import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
+import to.bitkit.models.widget.WeatherDataOption
+import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.models.widget.toArticleModel
+import to.bitkit.ui.screens.widgets.blocks.WeatherModel
+import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -44,8 +51,9 @@ class AppWidgetConfigViewModel @Inject constructor(
     fun init(appWidgetId: Int, type: AppWidgetType) {
         viewModelScope.launch {
             val entry = preferencesStore.getEntry(appWidgetId)
-            val cachedArticles = preferencesStore.data.first().cachedArticles
-            val previewArticle = cachedArticles.randomOrNull()?.toArticleModel() ?: DEFAULT_PREVIEW_ARTICLE
+            val data = preferencesStore.data.first()
+            val previewArticle = data.cachedArticles.randomOrNull()?.toArticleModel() ?: DEFAULT_PREVIEW_ARTICLE
+            val previewWeather = data.cachedWeather?.toWeatherModel() ?: DEFAULT_PREVIEW_WEATHER
 
             _uiState.update {
                 it.copy(
@@ -54,9 +62,28 @@ class AppWidgetConfigViewModel @Inject constructor(
                     pricePreferences = entry?.pricePreferences?.toInApp() ?: PricePreferences(),
                     headlinePreferences = entry?.headlinePreferences?.toInApp() ?: HeadlinePreferences(),
                     blocksPreferences = entry?.blocksPreferences?.toInApp() ?: BlocksPreferences(),
+                    weatherPreferences = entry?.weatherPreferences?.toInApp() ?: WeatherPreferences(),
                     previewArticle = previewArticle,
+                    previewWeather = previewWeather,
                 )
             }
+
+            if (type == AppWidgetType.WEATHER && data.cachedWeather == null) {
+                dataRepository.fetchWeather()
+                    .onSuccess { fetched ->
+                        preferencesStore.cacheWeather(fetched)
+                        _uiState.update { it.copy(previewWeather = fetched.toWeatherModel()) }
+                    }
+                    .onFailure { Logger.warn("Failed to fetch weather for config preview", it, context = TAG) }
+            }
+        }
+    }
+
+    fun selectWeatherOption(option: WeatherDataOption) {
+        _uiState.update {
+            val current = it.weatherPreferences.selectedOption
+            val next = if (current == option) null else option
+            it.copy(weatherPreferences = it.weatherPreferences.copy(selectedOption = next))
         }
     }
 
@@ -141,6 +168,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                 AppWidgetType.HEADLINES -> it.copy(headlinePreferences = HeadlinePreferences())
                 AppWidgetType.BLOCKS -> it.copy(blocksPreferences = BlocksPreferences())
                 AppWidgetType.FACTS -> it
+                AppWidgetType.WEATHER -> it.copy(weatherPreferences = WeatherPreferences())
             }
         }
     }
@@ -155,6 +183,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                 AppWidgetType.HEADLINES -> saveHeadlines(state)
                 AppWidgetType.BLOCKS -> saveBlocks(state)
                 AppWidgetType.FACTS -> Unit
+                AppWidgetType.WEATHER -> saveWeather(state)
             }
 
             onComplete()
@@ -198,6 +227,18 @@ class AppWidgetConfigViewModel @Inject constructor(
             .onSuccess { preferencesStore.cacheBlock(it) }
             .onFailure { Logger.warn("Failed to fetch initial block", it, context = TAG) }
     }
+
+    private suspend fun saveWeather(state: AppWidgetConfigUiState) {
+        val appWidgetId = state.appWidgetId
+        val weatherPreferences = state.weatherPreferences
+        preferencesStore.registerWidget(appWidgetId, AppWidgetType.WEATHER)
+        preferencesStore.updateEntry(appWidgetId) { entry ->
+            entry.copy(weatherPreferences = weatherPreferences.toHome())
+        }
+        dataRepository.fetchWeather()
+            .onSuccess { preferencesStore.cacheWeather(it) }
+            .onFailure { Logger.warn("Failed to fetch initial weather", it, context = TAG) }
+    }
 }
 
 private val DEFAULT_PREVIEW_ARTICLE = ArticleModel(
@@ -207,6 +248,18 @@ private val DEFAULT_PREVIEW_ARTICLE = ArticleModel(
     link = "",
 )
 
+private val DEFAULT_PREVIEW_WEATHER = WeatherModel(
+    condition = FeeCondition.GOOD,
+    title = R.string.widgets__weather__condition__good__title,
+    shortTitle = R.string.widgets__weather__condition__good__short_title,
+    description = R.string.widgets__weather__condition__good__description,
+    currentFee = "$ 0.52",
+    currentFeeSats = 520L,
+    currentFeeSatsFormatted = "520 ₿",
+    nextBlockFee = "6 ₿/vByte",
+    icon = FeeCondition.GOOD.icon,
+)
+
 @Stable
 data class AppWidgetConfigUiState(
     val appWidgetId: Int = -1,
@@ -214,7 +267,9 @@ data class AppWidgetConfigUiState(
     val pricePreferences: PricePreferences = PricePreferences(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
+    val weatherPreferences: WeatherPreferences = WeatherPreferences(),
     val previewArticle: ArticleModel = DEFAULT_PREVIEW_ARTICLE,
+    val previewWeather: WeatherModel = DEFAULT_PREVIEW_WEATHER,
     val isSaving: Boolean = false,
 )
 
@@ -257,3 +312,7 @@ private fun BlocksPreferences.toHome() = HomeBlocksPreferences(
     showFees = showFees,
     showSource = showSource,
 )
+
+private fun HomeWeatherPreferences.toInApp() = WeatherPreferences(selectedOption = selectedOption)
+
+private fun WeatherPreferences.toHome() = HomeWeatherPreferences(selectedOption = selectedOption)

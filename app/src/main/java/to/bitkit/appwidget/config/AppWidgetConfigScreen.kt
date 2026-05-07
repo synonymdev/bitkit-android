@@ -47,5 +47,13 @@ fun AppWidgetConfigScreen(
         )
 
         AppWidgetType.FACTS -> Unit
+
+        AppWidgetType.WEATHER -> WeatherConfigContent(
+            state = state,
+            onSelectOption = { viewModel.selectWeatherOption(it) },
+            onReset = { viewModel.resetPreferences() },
+            onSave = { viewModel.saveAndFinish(onConfirm) },
+            onCancel = onCancel,
+        )
     }
 }

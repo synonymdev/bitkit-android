@@ -453,6 +453,8 @@ fun Caption13Up(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text.uppercase(),
@@ -460,6 +462,8 @@ fun Caption13Up(
             color = color,
             textAlign = textAlign,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier
     )
 }

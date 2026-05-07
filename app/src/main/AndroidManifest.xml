@@ -243,6 +243,19 @@
                 android:resource="@xml/appwidget_info_facts" />
         </receiver>
 
+        <!-- Weather Widget -->
+        <receiver
+            android:name=".appwidget.ui.weather.WeatherGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__weather__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_weather" />
+        </receiver>
+
     </application>
 
 </manifest>
