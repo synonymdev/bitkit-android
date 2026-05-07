@@ -1439,7 +1439,7 @@ class AppViewModel @Inject constructor(
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
-                if (isMainScanner && scan.isLightningRelated()) {
+        if (isMainScanner && scan.isLightningRelated()) {
             showSheet(Sheet.Send())
         }
 
@@ -1458,7 +1458,10 @@ class AppViewModel @Inject constructor(
         is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
         else -> {
             hideSheet()
-            Logger.warn(if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'", TAG)
+            Logger.warn(
+                if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'",
+                context = TAG,
+            )
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__qr_error_header),
