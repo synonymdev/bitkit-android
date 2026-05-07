@@ -1440,7 +1440,7 @@ class AppViewModel @Inject constructor(
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
-        handleDecodedScan(scan, input)
+        handleDecodedScan(scan, input, fromMainScanner)
     }
 
     @Suppress("CyclomaticComplexMethod")
