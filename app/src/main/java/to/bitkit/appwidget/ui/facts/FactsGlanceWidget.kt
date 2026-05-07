@@ -48,4 +48,12 @@ class FactsGlanceWidget : GlanceAppWidget() {
             FactsGlanceContent(fact = fact)
         }
     }
+
+    override suspend fun onDelete(context: Context, glanceId: GlanceId) {
+        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        EntryPointAccessors
+            .fromApplication(context, AppWidgetEntryPoint::class.java)
+            .appWidgetPreferencesStore()
+            .unregisterWidget(appWidgetId)
+    }
 }
