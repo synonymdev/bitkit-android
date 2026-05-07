@@ -155,6 +155,7 @@ import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -2094,7 +2095,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoiceMsats(
                     amountMsats = lnurl.data.maxWithdrawable,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = 3_600u,
+                    expirySeconds = LNURL_EXPIRY_SEC,
                 )
             } else {
                 val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
@@ -2104,7 +2105,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoice(
                     amountSats = withdrawAmountSats,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = 3_600u,
+                    expirySeconds = LNURL_EXPIRY_SEC,
                 )
             }.getOrNull()
 
@@ -2804,6 +2805,7 @@ class AppViewModel @Inject constructor(
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
+        private val LNURL_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
     }
 }
 
