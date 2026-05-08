@@ -384,6 +384,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `main scanner zero amount lightning scan opens amount sheet`() = test {
+        val bolt11 = "lnbcrt1zeroamount"
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `main scanner lightning scan opens QuickPay when enabled`() = test {
+        val bolt11 = "lnbcrt1scannerquickpay"
+        enableQuickPay(thresholdSats = 1000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
     fun `lightning scan uses QuickPay when enabled`() = test {
         val bolt11 = "lnbcrt1quickpay"
         enableQuickPay(thresholdSats = 1000u)

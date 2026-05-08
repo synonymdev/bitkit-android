@@ -1448,7 +1448,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleDecodedScan(
         scan: Scanner?,
         input: String,
-        fromMainScanner: Boolean = false,
+        fromMainScanner: Boolean,
     ) = when (scan) {
         is Scanner.OnChain -> onScanOnchain(scan.invoice, input, fromMainScanner)
         is Scanner.Lightning -> onScanLightning(scan.invoice, input, fromMainScanner)
