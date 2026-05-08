@@ -48,6 +48,7 @@ fun ActivityListGrouped(
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(top = 20.dp),
+    activityTestTagPrefix: String = "Activity",
     titleProvider: @Composable (Activity) -> String? = { null },
 ) {
     val contacts by activityListViewModel?.contacts?.collectAsStateWithLifecycle() ?: remember {
@@ -108,7 +109,7 @@ fun ActivityListGrouped(
                                 ActivityRow(
                                     item = item,
                                     onClick = onActivityItemClick,
-                                    testTag = "Activity-$index",
+                                    testTag = "$activityTestTagPrefix-$index",
                                     title = titleProvider(item) ?: contactActivityTitle(item, contacts),
                                 )
                                 VerticalSpacer(16.dp)
