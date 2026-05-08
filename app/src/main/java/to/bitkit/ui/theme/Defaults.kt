@@ -46,6 +46,8 @@ object AppTextFieldDefaults {
             unfocusedIndicatorColor = Color.Transparent,
             focusedContainerColor = Colors.White10,
             unfocusedContainerColor = Colors.White10,
+            cursorColor = Colors.Brand,
+            errorCursorColor = Colors.Brand,
             errorIndicatorColor = Color.Transparent,
             errorContainerColor = Colors.White10,
             errorTextColor = Colors.Red,
@@ -66,6 +68,7 @@ object AppButtonDefaults {
     val secondaryColors: ButtonColors
         @Composable
         get() = ButtonDefaults.outlinedButtonColors(
+            containerColor = Colors.White.copy(alpha = 0.01f),
             contentColor = Colors.White80,
             disabledContentColor = Colors.White32,
         )

@@ -48,6 +48,7 @@ import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.msatFloorOf
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
@@ -374,7 +375,7 @@ private fun ChannelItem(
         LightningChannel(
             capacity = channelUi.details.channelValueSats.toLong(),
             localBalance = channelUi.details.amountOnClose.toLong(),
-            remoteBalance = (channelUi.details.inboundCapacityMsat / 1000u).toLong(),
+            remoteBalance = msatFloorOf(channelUi.details.inboundCapacityMsat).toLong(),
             status = status,
         )
         VerticalSpacer(16.dp)

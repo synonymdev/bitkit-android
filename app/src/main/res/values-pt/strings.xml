@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Começar</string>
     <string name="lightning__funding__nav_title">Saldo de Gastos</string>
     <string name="lightning__funding__title">Transfira para seu &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Use seu saldo de poupança ou receba bitcoin de outra carteira.</string>
+    <string name="lightning__funding__text">A forma mais fácil é usar as suas poupanças Bitkit ou enviar bitcoin de uma carteira diferente.</string>
     <string name="lightning__funding__text_blocked">Bitkit não fornece serviços de Lightning no seu paús atualmente, mas você ainda pode se conectar diretamente a outros nodes</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit não fornece serviços de Lightning no seu paús atualmente, mas você ainda pode se conectar diretamente a outros nodes</string>
     <string name="lightning__funding__button1">Transferir do Saldo de Poupança</string>
     <string name="lightning__funding__button2">Transferir de Outra Carteira</string>
-    <string name="lightning__funding__button3">Avançado</string>
     <string name="lightning__funding_advanced__nav_title">Saldo de Gastos</string>
     <string name="lightning__funding_advanced__title">&lt;accent&gt;Configuração&lt;/accent&gt; avançada</string>
     <string name="lightning__funding_advanced__text">Escaneie um QR para reivindicar seu canal LNURL de outro LSP ou escolha o setup manual.</string>
@@ -101,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Setup Manual</string>
     <string name="lightning__no_funds__title">Não há Fundos Disponíveis</string>
     <string name="lightning__no_funds__description">Antes de transferir fundos de seu saldo de poupança, receba bitcoin na sua carteira Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Financiar Carteira</string>
     <string name="lightning__transfer__nav_title">Transf. fundos</string>
     <string name="lightning__transfer__confirm">Por favor\n&lt;accent&gt;confirme&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">&lt;accent&gt;Taxa&lt;/accent&gt; personalizada</string>
@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Colar URI do nó</string>
     <string name="lightning__external_manual__scan">Escanear QR</string>
     <string name="lightning__external_amount__title">Saldo de\n&lt;accent&gt;gastos&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Conexão\n&lt;accent&gt;iniciada&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo de gastos</string>
+    <string name="lightning__external_success__title">Abertura\n&lt;accent&gt;de canal&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">Conexão Lightning iniciada. Você poderá usar seu saldo de gastos em &lt;accent&gt;±30 minutos&lt;/accent&gt; (depende da configuração do nó).</string>
     <string name="lightning__error_channel_purchase">Setup dos Pagamentos Instantâneos falhou</string>
     <string name="lightning__error_channel_setup_msg">Ocorreu um erro ao configurar seu saldo de gastos. {raw}</string>
@@ -734,10 +735,6 @@
     <string name="settings__cs__srd_title">Single Random Draw</string>
     <string name="settings__language_system_default">Configurações do sistema</string>
     <string name="settings__language_title">Idioma</string>
-    <string name="slashtags__onboarding_profile1_header">Tenha seu próprio\n&lt;accent&gt;perfil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Configure seu perfil público e seus links, para que seus contatos possam pagá-lo a qualquer hora e em qualquer lugar.</string>
-    <string name="slashtags__profile">Perfil</string>
-    <string name="slashtags__profile_create">Criar Perfil</string>
     <string name="wallet__drawer__wallet">Carteira</string>
     <string name="wallet__drawer__activity">Atividade</string>
     <string name="wallet__drawer__contacts">Contatos</string>

@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Commencer</string>
     <string name="lightning__funding__nav_title">Solde Dépenses</string>
     <string name="lightning__funding__title">Financez votre &lt;accent&gt;solde Dépenses&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Vous pouvez utiliser votre épargne Bitkit ou envoyer des bitcoins à partir d\'un autre portefeuille.</string>
+    <string name="lightning__funding__text">Le plus simple est d\'utiliser vos économies Bitkit ou d\'envoyer des bitcoins depuis un autre portefeuille.</string>
     <string name="lightning__funding__text_blocked">Bitkit ne fournit pas actuellement de services Lightning dans votre pays, mais vous pouvez toujours vous connecter directement à d\'autres nœuds.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit ne fournit pas actuellement de services Lightning dans votre pays, mais vous pouvez toujours vous connecter directement à d\'autres nœuds.</string>
     <string name="lightning__funding__button1">Transfert depuis l\'épargne</string>
     <string name="lightning__funding__button2">Utiliser un autre portefeuille</string>
-    <string name="lightning__funding__button3">Avancé</string>
     <string name="lightning__funding_advanced__nav_title">Solde Dépenses</string>
     <string name="lightning__funding_advanced__title">&lt;accent&gt;Configuration&lt;/accent&gt; avancée</string>
     <string name="lightning__funding_advanced__text">Scannez un QR code pour réclamer votre canal LNURL à un autre LSP, ou choisissez la configuration manuelle.</string>
@@ -101,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Configuration manuelle</string>
     <string name="lightning__no_funds__title">Pas de fonds disponibles</string>
     <string name="lightning__no_funds__description">Avant de pouvoir transférer des fonds depuis votre solde d\'épargne, vous devez envoyer des bitcoins à votre portefeuille Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Approvisionner le portefeuille</string>
     <string name="lightning__transfer__nav_title">Transfert de fonds</string>
     <string name="lightning__transfer__confirm">Veuillez\n&lt;accent&gt;confirmer&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">&lt;accent&gt;Frais&lt;/accent&gt; sur mesure</string>
@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Coller l\'URI du nœud</string>
     <string name="lightning__external_manual__scan">Scanner QR</string>
     <string name="lightning__external_amount__title">Dépenses \n&lt;accent&gt;solde&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Connexion \n&lt;accent&gt;initiée&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Solde de dépenses</string>
+    <string name="lightning__external_success__title">Ouverture\n&lt;accent&gt;du canal&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">La connexion Lightning est initiée. Vous pourrez utiliser votre compte courant dans &lt;accent&gt;±30 minutes&lt;/accent&gt; (en fonction de la configuration du nœud).</string>
     <string name="lightning__error_channel_purchase">Échec de la configuration des paiements instantanés</string>
     <string name="lightning__error_channel_setup_msg">Une erreur s\'est produite lors de l\'établissement de votre solde du compte courant. {raw}</string>
@@ -735,10 +736,6 @@
     <string name="settings__rgs__button_connect">Connecter</string>
     <string name="settings__rgs__update_success_title">Mise à jour du serveur Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">Il se peut que vous deviez redémarrer l\'application une ou deux fois pour que cette modification prenne effet.</string>
-    <string name="slashtags__onboarding_profile1_header">Détenez votre \n&lt;accent&gt;profil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Configurez votre profil public et vos liens, afin que vos contacts Bitkit puissent vous joindre ou vous payer à tout moment et en tout lieu.</string>
-    <string name="slashtags__profile">Profil</string>
-    <string name="slashtags__profile_create">Créer un profil</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Veuillez patienter pendant que Bitkit recherche des fonds dans les adresses non prises en charge (Legacy, Nested SegWit et Taproot).</string>
     <string name="sweep__checking_loading">RECHERCHE DE FONDS...</string>

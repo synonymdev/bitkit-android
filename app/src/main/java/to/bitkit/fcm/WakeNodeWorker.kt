@@ -35,6 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
+import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -192,7 +193,7 @@ class WakeNodeWorker @AssistedInject constructor(
         showDetails: Boolean,
         hiddenBody: String,
     ) {
-        val sats = event.amountMsat / 1000u
+        val sats = msatCeilOf(event.amountMsat)
         // Save for UI to pick up
         cacheStore.setBackgroundReceive(
             NewTransactionSheetDetails(

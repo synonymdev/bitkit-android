@@ -80,6 +80,8 @@ private fun ProbingToolContent(
     onPasteInvoice: () -> Unit,
     onSendProbe: () -> Unit,
 ) {
+    val requiresAmount = uiState.isLnurlPay || uiState.isNodeId
+
     ScreenColumn {
         AppTopBar(
             titleText = "Probing Tool",
@@ -92,13 +94,13 @@ private fun ProbingToolContent(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
         ) {
-            SectionHeader("PROBE INVOICE", padding = PaddingValues(0.dp))
-            SectionFooter("Enter a Lightning invoice or LNURL to probe the payment route")
+            SectionHeader("PROBE TARGET", padding = PaddingValues(0.dp))
+            SectionFooter("Enter a Lightning invoice, LNURL, node ID, or node URI to probe the payment route")
 
             TextInput(
                 value = uiState.invoice,
                 onValueChange = onInvoiceChange,
-                placeholder = "lnbc...",
+                placeholder = "Invoice, node ID, or node URI",
                 singleLine = false,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -125,7 +127,10 @@ private fun ProbingToolContent(
                 )
             }
 
-            if (uiState.isLnurlPay) {
+            if (uiState.isNodeId) {
+                SectionHeader("AMOUNT (REQUIRED)")
+                SectionFooter("Enter the amount in sats to keysend-probe to the node")
+            } else if (uiState.isLnurlPay) {
                 SectionHeader("AMOUNT (REQUIRED)")
                 SectionFooter("Enter the amount in sats to probe via LNURL")
             } else if (uiState.isZeroAmountInvoice) {
@@ -156,7 +161,7 @@ private fun ProbingToolContent(
                 text = "Send Probe",
                 onClick = onSendProbe,
                 enabled = !uiState.isLoading && uiState.invoice.isNotBlank() &&
-                    (!uiState.isLnurlPay || uiState.amountSats.isNotBlank()),
+                    (!requiresAmount || uiState.amountSats.isNotBlank()),
                 isLoading = uiState.isLoading,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -242,6 +247,32 @@ private fun PreviewFailed() {
                     durationMs = 1250,
                     errorMessage = "No route found to destination",
                 ),
+            )
+        )
+    }
+
+    AppThemeSurface {
+        ProbingToolContent(
+            uiState = uiState,
+            onBackClick = {},
+            onScanClick = {},
+            onInvoiceChange = { uiState = uiState.copy(invoice = it) },
+            onAmountChange = { uiState = uiState.copy(amountSats = it) },
+            onPasteInvoice = {},
+            onSendProbe = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewNodeId() {
+    var uiState by remember {
+        mutableStateOf(
+            ProbingToolUiState(
+                invoice = "02abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef",
+                amountSats = "1000",
+                isNodeId = true,
             )
         )
     }

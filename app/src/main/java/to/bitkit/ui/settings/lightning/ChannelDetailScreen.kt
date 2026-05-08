@@ -61,6 +61,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Toast
+import to.bitkit.models.msatFloorOf
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
@@ -221,7 +222,7 @@ private fun ChannelDetailContent(
 
         val capacity = channel.details.channelValueSats.toLong()
         val localBalance = channel.details.amountOnClose.toLong()
-        val remoteBalance = (channel.details.inboundCapacityMsat / 1000u).toLong()
+        val remoteBalance = msatFloorOf(channel.details.inboundCapacityMsat).toLong()
         val reserveBalance = (channel.details.unspendablePunishmentReserve ?: 0u).toLong()
 
         PullToRefreshBox(
@@ -376,7 +377,7 @@ private fun ChannelDetailContent(
                     name = stringResource(R.string.lightning__base_fee),
                     valueContent = {
                         MoneyCaptionB(
-                            sats = (channel.details.config.forwardingFeeBaseMsat / 1000u).toLong(),
+                            sats = msatFloorOf(channel.details.config.forwardingFeeBaseMsat.toULong()).toLong(),
                             symbol = true
                         )
                     }

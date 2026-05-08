@@ -7,5 +7,4 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class PriceDTO(
     @Stable val widgets: List<PriceWidgetData>,
-    val source: String
 )

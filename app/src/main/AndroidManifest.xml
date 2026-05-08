@@ -3,8 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
+        <package android:name="to.pubky.ring" />
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="pubkyauth" />
         </intent>
     </queries>
 
@@ -119,6 +124,7 @@
                 <data android:scheme="lnurlw" />
                 <data android:scheme="lnurlc" />
                 <data android:scheme="lnurlp" />
+                <data android:scheme="pubkyauth" />
             </intent-filter>
 
             <!-- NFC -->
@@ -198,6 +204,33 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
+
+        <!-- AppWidget Config Activity -->
+        <activity
+            android:name=".appwidget.config.AppWidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:taskAffinity=""
+            android:theme="@style/Theme.App">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Price Widget -->
+        <receiver
+            android:name=".appwidget.ui.price.PriceGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__price__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_price" />
+        </receiver>
+
     </application>
 
 </manifest>

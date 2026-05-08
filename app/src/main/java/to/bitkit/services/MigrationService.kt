@@ -1014,6 +1014,7 @@ class MigrationService @Inject constructor(
                     message = item.message ?: "",
                     timestamp = timestampSecs,
                     preimage = item.preimage,
+                    contact = null,
                     createdAt = timestampSecs,
                     updatedAt = timestampSecs,
                     seenAt = timestampSecs,
@@ -1123,14 +1124,10 @@ class MigrationService @Inject constructor(
                     else -> GraphPeriod.ONE_DAY
                 }
 
-                val showSource = priceJson["showSource"]?.jsonPrimitive?.content
-                    ?.toBooleanStrictOrNull() ?: false
-
                 widgetsStore.updatePricePreferences(
                     PricePreferences(
                         enabledPairs = selectedPairs,
                         period = period,
-                        showSource = showSource
                     )
                 )
             }.onFailure {
@@ -1998,6 +1995,7 @@ class MigrationService @Inject constructor(
                     confirmTimestamp = item.confirmTimestamp?.let { (it / MS_PER_SEC).toULong() },
                     channelId = item.channelId,
                     transferTxId = item.transferTxId,
+                    contact = null,
                     doesExist = item.exists ?: true,
                     createdAt = activityTimestamp,
                     updatedAt = activityTimestamp,

@@ -88,12 +88,11 @@
     <string name="lightning__transfer_intro__button">Rozpocznij</string>
     <string name="lightning__funding__nav_title">Saldo wydatków</string>
     <string name="lightning__funding__title">Zasil swoje &lt;accent&gt;saldo wydatków&lt;/accent&gt;</string>
-    <string name="lightning__funding__text">Możesz użyć oszczędności zgromadzonych w Twoim portfelu Bitkit lub wysłać bitcoiny z innego portfela.</string>
+    <string name="lightning__funding__text">Najłatwiejszą opcją jest użycie oszczędności Bitkit lub wysłanie bitcoinów z innego portfela.</string>
     <string name="lightning__funding__text_blocked">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się z innymi węzłami.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się bezpośrednio z innymi węzłami.</string>
     <string name="lightning__funding__button1">Prześlij z Oszczędności</string>
     <string name="lightning__funding__button2">Użyj innego portfela</string>
-    <string name="lightning__funding__button3">Zaawansowane</string>
     <string name="lightning__funding_advanced__nav_title">Saldo do wydawania</string>
     <string name="lightning__funding_advanced__title">&lt;accent&gt;Ustawienia&lt;/accent&gt; zaawansowane</string>
     <string name="lightning__funding_advanced__text">Zeskanuj kod QR, aby odebrać swój kanał LNURL od innego LSP, lub wybierz ręczną konfigurację.</string>
@@ -101,6 +100,7 @@
     <string name="lightning__funding_advanced__button2">Konfiguracja ręczna</string>
     <string name="lightning__no_funds__title">Brak dostępnych środków</string>
     <string name="lightning__no_funds__description">Zanim będzie można przelać środki z salda oszczędności, należy wysłać bitcoiny do portfela Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Doładuj portfel</string>
     <string name="lightning__transfer__nav_title">Prześlij środki</string>
     <string name="lightning__transfer__confirm">Proszę \n&lt;accent&gt;potwierdzić&lt;/accent&gt;</string>
     <string name="lightning__transfer__custom_fee">&lt;accent&gt;Niestandardowa&lt;/accent&gt; opłata transakcyjna</string>
@@ -152,7 +152,8 @@
     <string name="lightning__external_manual__paste">Wklej adres URI węzła</string>
     <string name="lightning__external_manual__scan">Skanuj QR</string>
     <string name="lightning__external_amount__title">Saldo\n&lt;accent&gt;wydatków&lt;/accent&gt;</string>
-    <string name="lightning__external_success__title">Połączenie\n&lt;accent&gt;zainicjowane&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Saldo wydatków</string>
+    <string name="lightning__external_success__title">Otwieranie\n&lt;accent&gt;kanału&lt;/accent&gt;</string>
     <string name="lightning__external_success__text">Połączenie Lightning zostało zainicjowane. Będą Państwo mogli wykorzystać swoje saldo wydatków w ciągu &lt;accent&gt;±30 minut&lt;/accent&gt; (w zależności od konfiguracji węzła).</string>
     <string name="lightning__error_channel_purchase">Konfiguracja płatności natychmiastowych nie powiodła się</string>
     <string name="lightning__error_channel_setup_msg">Wystąpił błąd podczas konfigurowania salda natychmiastowego. {raw}</string>
@@ -735,10 +736,6 @@
     <string name="settings__rgs__button_connect">Połącz</string>
     <string name="settings__rgs__update_success_title">Rapid-Gossip-Sync zaktualizowany</string>
     <string name="settings__rgs__update_success_description">Zmiana może wymagać ponownego uruchomienia aplikacji raz lub dwa razy.</string>
-    <string name="slashtags__onboarding_profile1_header">Własny\n&lt;accent&gt;profil&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Skonfiguruj swój publiczny profil i linki, aby Twoje kontakty w Bitkit mogły skontaktować się z Tobą lub zapłacić Ci w dowolnym miejscu i czasie.</string>
-    <string name="slashtags__profile">Profil</string>
-    <string name="slashtags__profile_create">Utwórz profil</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Proszę czekać, Bitkit szuka środków na nieobsługiwanych adresach (Legacy, Nested SegWit i Taproot).</string>
     <string name="sweep__checking_loading">SZUKANIE ŚRODKÓW...</string>

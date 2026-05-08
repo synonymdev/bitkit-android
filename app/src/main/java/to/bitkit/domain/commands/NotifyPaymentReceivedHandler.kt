@@ -17,6 +17,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.utils.Logger
@@ -97,7 +98,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             is NotifyPaymentReceived.Command.Onchain -> command.event.txid
         },
         sats = when (command) {
-            is NotifyPaymentReceived.Command.Lightning -> (command.event.amountMsat / 1000u).toLong()
+            is NotifyPaymentReceived.Command.Lightning -> msatCeilOf(command.event.amountMsat).toLong()
             is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
         },
     )

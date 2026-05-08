@@ -3,6 +3,7 @@ package to.bitkit.ext
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.MaxDustHtlcExposure
+import to.bitkit.models.msatFloorOf
 
 /**
  * Calculates our total balance in the channel (see `value_to_self_msat` in rust-lightning).
@@ -18,7 +19,7 @@ val ChannelDetails.amountOnClose: ULong
     @Suppress("ForbiddenComment")
     get() {
         // TODO: use channelDetails.claimableOnCloseSats
-        val outboundCapacitySat = this.outboundCapacityMsat / 1000u
+        val outboundCapacitySat = msatFloorOf(this.outboundCapacityMsat)
         val ourReserve = this.unspendablePunishmentReserve ?: 0u
 
         return outboundCapacitySat + ourReserve
@@ -32,13 +33,13 @@ fun List<ChannelDetails>.filterPending(): List<ChannelDetails> = this.filterNot 
 
 /** Returns a limit in sats as close as possible to the HTLC limit we can currently send. */
 fun List<ChannelDetails>?.totalNextOutboundHtlcLimitSats(): ULong = this?.filter { it.isUsable }
-    ?.sumOf { it.nextOutboundHtlcLimitMsat / 1000u }
+    ?.sumOf { msatFloorOf(it.nextOutboundHtlcLimitMsat) }
     ?: 0u
 
 /** Calculates the total remote balance (inbound capacity) from open channels. */
 fun List<ChannelDetails>.calculateRemoteBalance(): ULong = this
     .filterOpen()
-    .sumOf { it.inboundCapacityMsat / 1000u }
+    .sumOf { msatFloorOf(it.inboundCapacityMsat) }
 
 fun createChannelDetails(): ChannelDetails = ChannelDetails(
     channelId = "channelId",
