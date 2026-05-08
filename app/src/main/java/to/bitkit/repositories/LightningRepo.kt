@@ -1020,22 +1020,49 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
-        val state = _lightningState.value
+        var state = _lightningState.value
+        if (!state.nodeLifecycleState.canRun()) return@withContext
+        if (state.hasUsableChannels()) return@withContext
+
+        state = waitForChannelsToLoadIfNeeded(state) ?: return@withContext
         if (!state.nodeLifecycleState.canRun()) return@withContext
 
-        if (state.channels.isEmpty()) return@withContext // no channel exists, don't wait
-        if (state.channels.any { it.isUsable }) return@withContext
+        if (state.channels.isEmpty()) {
+            if (state.nodeLifecycleState.isRunning()) {
+                syncState()
+                state = _lightningState.value
+            }
+
+            if (state.channels.isEmpty()) return@withContext // no channel exists, don't wait
+            if (state.hasUsableChannels()) return@withContext
+        }
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
         withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
-            _lightningState.first {
-                !it.nodeLifecycleState.canRun() ||
-                    it.channels.isEmpty() ||
-                    it.channels.any { channel -> channel.isUsable }
-            }
+            _lightningState.first { it.shouldStopWaitingForUsableChannels() }
         } ?: Logger.warn("Timed out waiting for usable channels", context = TAG)
     }
+
+    private suspend fun waitForChannelsToLoadIfNeeded(state: LightningState): LightningState? {
+        if (state.channels.isNotEmpty() || state.nodeLifecycleState.isRunning()) return state
+
+        Logger.info("Waiting for node to load channels before sending payment", context = TAG)
+        return withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+            _lightningState.first { it.shouldStopWaitingForLoadedChannels() }
+        } ?: run {
+            Logger.warn("Timed out waiting for node to load channels", context = TAG)
+            null
+        }
+    }
+
+    private fun LightningState.hasUsableChannels() = channels.any { it.isUsable }
+
+    private fun LightningState.shouldStopWaitingForLoadedChannels() =
+        !nodeLifecycleState.canRun() || nodeLifecycleState.isRunning() || channels.isNotEmpty()
+
+    private fun LightningState.shouldStopWaitingForUsableChannels() =
+        !nodeLifecycleState.canRun() || channels.isEmpty() || hasUsableChannels()
 
     @Suppress("LongParameterList")
     suspend fun sendOnChain(

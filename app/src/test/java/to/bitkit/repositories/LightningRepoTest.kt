@@ -393,6 +393,25 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `waitForUsableChannels waits for running state before treating empty channels as absent`() = test {
+        sut.setInitNodeLifecycleState()
+        val channel = createChannelDetails().copy(
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 2_000_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+
+        val wait = async { sut.waitForUsableChannels() }
+
+        assertFalse(wait.isCompleted)
+
+        startNodeForTesting()
+
+        assertTrue(wait.isCompleted)
+        assertEquals(listOf(channel), sut.lightningState.value.channels)
+    }
+
+    @Test
     fun `wipeStorage should stop node and call service wipe`() = test {
         startNodeForTesting()
         whenever(lightningService.stop()).thenReturn(Unit)
