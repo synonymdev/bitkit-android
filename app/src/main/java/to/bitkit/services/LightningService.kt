@@ -632,8 +632,26 @@ class LightningService @Inject constructor(
             Logger.info("Channel close initiated (force=$force): '$channelId'", context = TAG)
         } catch (e: NodeException) {
             val error = LdkError(e)
-            Logger.error("Error initiating channel close (force=$force): '$channelId'", error, context = TAG)
+            Logger.error("Failed to initiate channel close for '$channelId' with force '$force'", error, context = TAG)
+            logCloseChannelPeerState(node, channel)
             throw LdkError(e)
+        }
+    }
+
+    private fun logCloseChannelPeerState(node: Node, channel: ChannelDetails) {
+        runCatching {
+            val peer = node.listPeers().firstOrNull { it.nodeId == channel.counterpartyNodeId }
+            Logger.info(
+                "Collected close peer state for channel '${channel.channelId}': " +
+                    "counterparty='${channel.counterpartyNodeId}', " +
+                    "peerFound='${peer != null}', " +
+                    "peerAddress='${peer?.address}', " +
+                    "peerConnected='${peer?.isConnected}', " +
+                    "peerPersisted='${peer?.isPersisted}'",
+                context = TAG,
+            )
+        }.onFailure {
+            Logger.warn("Failed to collect close peer state for channel '${channel.channelId}'", it, context = TAG)
         }
     }
     // endregion

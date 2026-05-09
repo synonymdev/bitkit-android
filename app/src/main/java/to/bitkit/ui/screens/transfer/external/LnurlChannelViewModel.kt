@@ -12,10 +12,12 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
 import to.bitkit.ext.of
+import to.bitkit.ext.uri
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.Routes
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -57,6 +59,15 @@ class LnurlChannelViewModel @Inject constructor(
 
             // Connect to peer if not connected
             lightningRepo.connectPeer(peer)
+                .onSuccess {
+                    Logger.info("Connected LNURL channel peer '${peer.uri}'", context = TAG)
+                }.onFailure {
+                    Logger.warn(
+                        "Failed to connect LNURL channel peer '${peer.uri}' before channel request",
+                        it,
+                        context = TAG,
+                    )
+                }
 
             lightningRepo.requestLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
                 .onSuccess {
@@ -80,6 +91,10 @@ class LnurlChannelViewModel @Inject constructor(
             title = context.getString(R.string.other__lnurl_channel_error),
             description = error.message ?: "Unknown error",
         )
+    }
+
+    private companion object {
+        const val TAG = "LnurlChannelViewModel"
     }
 }
 
