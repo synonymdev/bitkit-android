@@ -6,14 +6,19 @@ import androidx.core.content.FileProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import to.bitkit.data.ChatwootHttpClient
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.DatePattern
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.getEnumValueOf
 import to.bitkit.ext.toBase64
+import to.bitkit.ext.utcDateFormatterOf
 import to.bitkit.models.ChatwootMessage
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.utils.LogSource
 import to.bitkit.utils.Logger
 import java.io.BufferedReader
@@ -21,10 +26,12 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileReader
+import java.util.Date
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import to.bitkit.di.json as appJson
 
 @Singleton
 class LogsRepo @Inject constructor(
@@ -32,11 +39,12 @@ class LogsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val chatwootHttpClient: ChatwootHttpClient,
+    private val lightningRepo: LightningRepo,
 ) {
     suspend fun postQuestion(email: String, message: String): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
-            val logsBase64 = zipLogs().getOrDefault("")
-            val logsFileName = "bitkit_logs_${System.currentTimeMillis()}.zip"
+            val logsBase64 = zipLogs(maxEncodedBytes = MAX_SUPPORT_UPLOAD_BASE64_BYTES).getOrDefault("")
+            val logsFileName = createLogsArchiveFileName()
 
             chatwootHttpClient.postQuestion(
                 message = ChatwootMessage(
@@ -49,7 +57,7 @@ class LogsRepo @Inject constructor(
                 )
             )
         }.onFailure {
-            Logger.error(it.message, e = it, context = TAG)
+            Logger.error("Failed to post support question", it, context = TAG)
         }
     }
 
@@ -61,22 +69,7 @@ class LogsRepo @Inject constructor(
 
             val logFiles = logDir
                 .listFiles { file -> file.extension == "log" }
-                ?.map { file ->
-                    val fileName = file.name
-                    val components = fileName.split("_")
-
-                    val serviceName = components.firstOrNull()
-                        ?.let { c -> c.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
-                        ?: LogSource.Unknown.name
-                    val timestamp = if (components.size >= 3) components[components.size - 2] else ""
-                    val displayName = "$serviceName Log: $timestamp"
-
-                    LogFile(
-                        displayName = displayName,
-                        file = file,
-                        source = getEnumValueOf<LogSource>(serviceName).getOrDefault(LogSource.Unknown),
-                    )
-                }
+                ?.map { it.toLogFile() }
                 ?.sortedByDescending { it.file.lastModified() }
                 ?: emptyList()
 
@@ -115,7 +108,7 @@ class LogsRepo @Inject constructor(
             val file = withContext(ioDispatcher) {
                 val tempDir = context.cacheDir.resolve("logs").apply { mkdirs() }
 
-                val zipFileName = "bitkit_logs_${System.currentTimeMillis()}.zip"
+                val zipFileName = createLogsArchiveFileName()
                 val tempFile = File(tempDir, zipFileName)
 
                 // Convert base64 back to bytes and write to file
@@ -128,7 +121,7 @@ class LogsRepo @Inject constructor(
 
             return@mapCatching contentUri
         }.onFailure {
-            Logger.error("Error preparing logs for sharing", it)
+            Logger.error("Failed to prepare logs for sharing", it, context = TAG)
         }
     }
 
@@ -136,6 +129,7 @@ class LogsRepo @Inject constructor(
     suspend fun zipLogs(
         limit: Int = 20,
         source: LogSource? = null,
+        maxEncodedBytes: Int? = null,
     ): Result<String> = withContext(bgDispatcher) {
         runCatching {
             val logsResult = getLogs().onFailure {
@@ -146,30 +140,38 @@ class LogsRepo @Inject constructor(
             val logsToZip = if (source != null) {
                 allLogs.filter { it.source == source }.take(limit)
             } else {
-                // Group by source and take most recent from each
-                allLogs.groupBy { it.source }
-                    .values
-                    .flatMap { logs ->
-                        val sourcesCount = LogSource.entries.filter { it != LogSource.Unknown }.size
-                        logs.take(limit / sourcesCount.coerceAtLeast(1))
-                    }
-                    .take(limit)
+                allLogs.take(limit)
             }
 
-            if (logsToZip.isEmpty()) {
-                return@withContext Result.failure(Exception("No log files found"))
-            }
-
-            return@runCatching createZipBase64(logsToZip)
+            return@runCatching createZipBase64(logsToZip, maxEncodedBytes)
         }.onFailure {
             Logger.error("Failed to zip logs", it, context = TAG)
         }
     }
 
     @Suppress("NestedBlockDepth")
-    private fun createZipBase64(logFiles: List<LogFile>): String {
-        val zipBytes = ByteArrayOutputStream().use { byteArrayOut ->
+    private fun createZipBase64(logFiles: List<LogFile>, maxEncodedBytes: Int?): String {
+        val selectedLogFiles = logFiles.toMutableList()
+
+        while (true) {
+            val encoded = createZipBytes(selectedLogFiles).toBase64()
+            if (maxEncodedBytes == null || encoded.length <= maxEncodedBytes || selectedLogFiles.isEmpty()) {
+                Logger.info("Created support logs archive with '${selectedLogFiles.size}' log file(s)", context = TAG)
+                return encoded
+            }
+
+            selectedLogFiles.removeAt(selectedLogFiles.lastIndex)
+        }
+    }
+
+    @Suppress("NestedBlockDepth")
+    private fun createZipBytes(logFiles: List<LogFile>): ByteArray {
+        return ByteArrayOutputStream().use { byteArrayOut ->
             ZipOutputStream(byteArrayOut).use { zipOut ->
+                zipOut.putNextEntry(ZipEntry(SUPPORT_SNAPSHOT_FILE_NAME))
+                zipOut.write(createSupportSnapshot().toByteArray())
+                zipOut.closeEntry()
+
                 logFiles.forEach { logFile ->
                     if (logFile.file.exists()) {
                         val zipEntry = ZipEntry("${logFile.source.name.lowercase()}/${logFile.fileName}")
@@ -184,12 +186,97 @@ class LogsRepo @Inject constructor(
             }
             byteArrayOut.toByteArray()
         }
+    }
 
-        return zipBytes.toBase64()
+    private fun File.toLogFile(): LogFile {
+        val match = LOG_FILE_NAME_REGEX.matchEntire(name)
+        val serviceName = match
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            ?: LogSource.Unknown.name
+        val timestamp = match?.groupValues?.getOrNull(2)?.replace("_", " ")
+        val part = match?.groupValues?.getOrNull(3)?.ifBlank { null }
+        val partSuffix = part?.let { " part $it" }.orEmpty()
+        val displayName = if (timestamp != null) {
+            "$serviceName Log: $timestamp$partSuffix"
+        } else {
+            "$serviceName Log: $name"
+        }
+
+        return LogFile(
+            displayName = displayName,
+            file = this,
+            source = getEnumValueOf<LogSource>(serviceName).getOrDefault(LogSource.Unknown),
+        )
+    }
+
+    private fun createSupportSnapshot(): String {
+        val state = lightningRepo.lightningState.value
+        val snapshot = SupportSnapshot(
+            generatedAt = currentLogTimestamp(),
+            platform = Env.platform,
+            version = Env.version,
+            network = Env.network.name,
+            nodeId = state.nodeId,
+            lifecycle = state.nodeLifecycleState.supportName(),
+            isSyncingWallet = state.isSyncingWallet,
+            isGeoBlocked = state.isGeoBlocked,
+            lastSuccessfulSyncAt = state.lastSuccessfulSyncAt?.toString(),
+            lastSyncError = state.lastSyncError?.javaClass?.simpleName,
+            blockHeight = state.nodeStatus?.currentBestBlock?.height?.toString(),
+            blockHash = state.nodeStatus?.currentBestBlock?.blockHash,
+            latestRgsSnapshotTimestamp = state.nodeStatus?.latestRgsSnapshotTimestamp?.toString(),
+            peers = state.peers.map {
+                SupportPeerSnapshot(
+                    nodeId = it.nodeId,
+                    address = it.address,
+                    isConnected = it.isConnected,
+                    isPersisted = it.isPersisted,
+                )
+            },
+            channels = state.channels.map {
+                SupportChannelSnapshot(
+                    channelId = it.channelId,
+                    counterpartyNodeId = it.counterpartyNodeId,
+                    isChannelReady = it.isChannelReady,
+                    isUsable = it.isUsable,
+                    isAnnounced = it.isAnnounced,
+                    channelValueSats = it.channelValueSats.toString(),
+                    outboundCapacityMsat = it.outboundCapacityMsat.toString(),
+                    inboundCapacityMsat = it.inboundCapacityMsat.toString(),
+                )
+            },
+            balances = state.balances?.let {
+                SupportBalanceSnapshot(
+                    totalOnchainBalanceSats = it.totalOnchainBalanceSats.toString(),
+                    spendableOnchainBalanceSats = it.spendableOnchainBalanceSats.toString(),
+                    totalAnchorChannelsReserveSats = it.totalAnchorChannelsReserveSats.toString(),
+                    totalLightningBalanceSats = it.totalLightningBalanceSats.toString(),
+                    lightningBalancesCount = it.lightningBalances.size,
+                    pendingChannelClosureBalancesCount = it.pendingBalancesFromChannelClosures.size,
+                )
+            },
+        )
+
+        return appJson.encodeToString(snapshot)
+    }
+
+    private fun createLogsArchiveFileName(): String {
+        return "bitkit_logs_${currentLogTimestamp()}.zip"
+    }
+
+    private fun currentLogTimestamp(): String {
+        return utcDateFormatterOf(DatePattern.LOG_FILE).format(Date())
     }
 
     private companion object {
         const val TAG = "SupportRepo"
+        const val MAX_SUPPORT_UPLOAD_BASE64_BYTES = 900 * 1024
+        const val SUPPORT_SNAPSHOT_FILE_NAME = "support_snapshot.json"
+        val LOG_FILE_NAME_REGEX = Regex(
+            "^([A-Za-z]+)_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})(?:\\.part_(\\d{3}))?\\.log$"
+        )
     }
 }
 
@@ -200,3 +287,62 @@ data class LogFile(
 ) {
     val fileName: String get() = file.name
 }
+
+private fun NodeLifecycleState.supportName(): String = when (this) {
+    is NodeLifecycleState.Stopped -> "Stopped"
+    is NodeLifecycleState.Starting -> "Starting"
+    is NodeLifecycleState.Running -> "Running"
+    is NodeLifecycleState.Stopping -> "Stopping"
+    is NodeLifecycleState.Initializing -> "Initializing"
+    is NodeLifecycleState.ErrorStarting -> "ErrorStarting"
+}
+
+@Serializable
+private data class SupportSnapshot(
+    val generatedAt: String,
+    val platform: String,
+    val version: String,
+    val network: String,
+    val nodeId: String,
+    val lifecycle: String,
+    val isSyncingWallet: Boolean,
+    val isGeoBlocked: Boolean,
+    val lastSuccessfulSyncAt: String?,
+    val lastSyncError: String?,
+    val blockHeight: String?,
+    val blockHash: String?,
+    val latestRgsSnapshotTimestamp: String?,
+    val peers: List<SupportPeerSnapshot>,
+    val channels: List<SupportChannelSnapshot>,
+    val balances: SupportBalanceSnapshot?,
+)
+
+@Serializable
+private data class SupportPeerSnapshot(
+    val nodeId: String,
+    val address: String,
+    val isConnected: Boolean,
+    val isPersisted: Boolean,
+)
+
+@Serializable
+private data class SupportChannelSnapshot(
+    val channelId: String,
+    val counterpartyNodeId: String,
+    val isChannelReady: Boolean,
+    val isUsable: Boolean,
+    val isAnnounced: Boolean,
+    val channelValueSats: String,
+    val outboundCapacityMsat: String,
+    val inboundCapacityMsat: String,
+)
+
+@Serializable
+private data class SupportBalanceSnapshot(
+    val totalOnchainBalanceSats: String,
+    val spendableOnchainBalanceSats: String,
+    val totalAnchorChannelsReserveSats: String,
+    val totalLightningBalanceSats: String,
+    val lightningBalancesCount: Int,
+    val pendingChannelClosureBalancesCount: Int,
+)
