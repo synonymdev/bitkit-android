@@ -43,6 +43,7 @@ import to.bitkit.utils.measured
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LongParameterList", "TooManyFunctions")
 @Singleton
@@ -176,7 +177,7 @@ class WalletRepo @Inject constructor(
         val startHeight = lightningRepo.lightningState.value.block()?.height
         Logger.debug("Sync $sourceLabel started at block height=$startHeight", context = TAG)
 
-        val result = measured(label = "Sync $sourceLabel", context = TAG) {
+        val result = measured(label = "Sync $sourceLabel", context = TAG, slowThreshold = SLOW_SYNC_THRESHOLD) {
             syncBalances()
             lightningRepo.sync().onSuccess {
                 syncBalances()
@@ -602,6 +603,7 @@ class WalletRepo @Inject constructor(
     private companion object {
         const val TAG = "WalletRepo"
         const val EVENT_SYNC_DEBOUNCE_MS = 500L
+        val SLOW_SYNC_THRESHOLD = 5.seconds
     }
 }
 

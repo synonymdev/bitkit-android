@@ -21,7 +21,9 @@ import java.io.FileOutputStream
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.time.measureTime
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTimedValue
 
 private const val APP = "APP"
 private const val COMPACT = false
@@ -30,6 +32,7 @@ private const val MAX_LOG_FILE_BYTES = 1L * 1024L * 1024L
 private const val MAX_LOG_RETENTION_BYTES = 500L * 1024L * 1024L
 private const val MAX_LOG_RETENTION_DAYS = 60L
 private const val MILLIS_IN_DAY = 24L * 60L * 60L * 1000L
+private val DEFAULT_SLOW_OPERATION_THRESHOLD = 1.seconds
 
 enum class LogSource { Ldk, Bitkit, Unknown }
 enum class LogLevel { PERF, VERBOSE, GOSSIP, TRACE, DEBUG, INFO, WARN, ERROR }
@@ -425,12 +428,12 @@ fun errorLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"
 internal inline fun <T> measured(
     label: String,
     context: String,
+    slowThreshold: Duration = DEFAULT_SLOW_OPERATION_THRESHOLD,
     block: () -> T,
 ): T {
-    var result: T
-    val elapsed = measureTime {
-        result = block()
+    val timedValue = measureTimedValue(block)
+    if (Env.isDebug && timedValue.duration >= slowThreshold) {
+        Logger.perf("Measured '$label' in '${timedValue.duration}'", context = context)
     }
-    Logger.perf("$label took $elapsed", context = context)
-    return result
+    return timedValue.value
 }
