@@ -2095,7 +2095,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoiceMsats(
                     amountMsats = lnurl.data.maxWithdrawable,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = LNURL_EXPIRY_SEC,
+                    expirySeconds = LNURL_WITHDRAW_EXPIRY_SEC,
                 )
             } else {
                 val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
@@ -2105,7 +2105,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoice(
                     amountSats = withdrawAmountSats,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = LNURL_EXPIRY_SEC,
+                    expirySeconds = LNURL_WITHDRAW_EXPIRY_SEC,
                 )
             }.getOrNull()
 
@@ -2805,7 +2805,7 @@ class AppViewModel @Inject constructor(
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
-        private val LNURL_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
+        private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
     }
 }
 

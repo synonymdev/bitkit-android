@@ -41,7 +41,6 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
