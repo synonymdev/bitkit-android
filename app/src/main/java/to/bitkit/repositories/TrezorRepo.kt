@@ -462,16 +462,21 @@ class TrezorRepo @Inject constructor(
     suspend fun forgetDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
-            if (_state.value.connectedDeviceId == deviceId) {
-                trezorService.disconnect()
-                _state.update { it.copy(connectedDevice = null, connectedDeviceId = null) }
+            val disconnectResult = if (_state.value.connectedDeviceId == deviceId) {
+                runCatching { trezorService.disconnect() }.also {
+                    _state.update { it.copy(connectedDevice = null, connectedDeviceId = null) }
+                }
+            } else {
+                Result.success(Unit)
             }
             TrezorDebugLog.log("FORGET", "Clearing credentials...")
             trezorTransport.clearDeviceCredential(deviceId)
-            trezorService.clearCredentials(deviceId)
+            val clearCredentialsResult = runCatching { trezorService.clearCredentials(deviceId) }
             val updated = _state.value.knownDevices.filter { it.id != deviceId }
             saveKnownDevices(updated)
             _state.update { it.copy(knownDevices = updated.toImmutableList()) }
+            disconnectResult.getOrThrow()
+            clearCredentialsResult.getOrThrow()
             TrezorDebugLog.log("FORGET", "Device forgotten successfully")
             Logger.info("Forgot device: '$deviceId'", context = TAG)
         }.onFailure { e ->

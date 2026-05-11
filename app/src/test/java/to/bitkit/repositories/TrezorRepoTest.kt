@@ -17,6 +17,7 @@ import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.TrezorStore
 import to.bitkit.env.Env
@@ -101,6 +102,22 @@ class TrezorRepoTest : BaseUnitTest() {
         on { this.label }.thenReturn(label)
         on { this.model }.thenReturn(model)
     }
+
+    private fun mockKnownDevice(
+        id: String = DEVICE_ID,
+        name: String? = DEVICE_NAME,
+        path: String = DEVICE_PATH,
+        label: String? = DEVICE_LABEL,
+        model: String? = DEVICE_MODEL,
+    ) = KnownDevice(
+        id = id,
+        name = name,
+        path = path,
+        transportType = "usb",
+        label = label,
+        model = model,
+        lastConnectedAt = 123L,
+    )
 
     // region initialize
 
@@ -421,6 +438,38 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(devices, result.getOrNull())
         assertEquals(devices, sut.state.value.nearbyDevices)
+    }
+
+    // endregion
+
+    // region forgetDevice
+
+    @Test
+    fun `forgetDevice should remove known device when service cleanup fails`() = test {
+        val knownDevice = mockKnownDevice()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.initialize()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.disconnect()).thenThrow(RuntimeException("disconnect failed"))
+        whenever(trezorService.clearCredentials(DEVICE_ID)).thenThrow(RuntimeException("clear failed"))
+
+        val result = sut.forgetDevice(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertTrue(sut.state.value.knownDevices.isEmpty())
+        assertNull(sut.state.value.connectedDevice)
+        assertNull(sut.state.value.connectedDeviceId)
+        assertEquals("disconnect failed", sut.state.value.error)
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+        verify(trezorStore).saveKnownDevices(emptyList())
     }
 
     // endregion
