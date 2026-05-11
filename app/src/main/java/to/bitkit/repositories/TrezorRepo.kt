@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.bitkit.data.TrezorStore
 import to.bitkit.di.IoDispatcher
@@ -136,10 +137,7 @@ class TrezorRepo @Inject constructor(
                 ?: _state.value.knownDevices.find { it.id == deviceId }?.let { known ->
                     TrezorDeviceInfo(
                         id = known.id,
-                        transportType = when (known.transportType) {
-                            "bluetooth" -> TrezorTransportType.BLUETOOTH
-                            else -> TrezorTransportType.USB
-                        },
+                        transportType = known.transportType.toCoreTransportType(),
                         name = known.name,
                         path = known.path,
                         label = known.label,
@@ -153,8 +151,7 @@ class TrezorRepo @Inject constructor(
             _state.update {
                 it.copy(
                     isConnecting = false,
-                    connectedDevice = features,
-                    connectedDeviceId = deviceId,
+                    connected = ConnectedTrezorDevice(id = deviceId, features = features),
                     nearbyDevices = it.nearbyDevices.filter { d -> d.id != deviceId }.toImmutableList(),
                 )
             }
@@ -323,7 +320,7 @@ class TrezorRepo @Inject constructor(
         TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=${_state.value.connectedDeviceId}")
         val result = runCatching { trezorService.disconnect() }
         _state.update {
-            it.copy(connectedDevice = null, connectedDeviceId = null, lastAddress = null, lastPublicKey = null)
+            it.copy(connected = null, lastAddress = null, lastPublicKey = null)
         }
         result.onSuccess {
             TrezorDebugLog.log("DISCONNECT", "disconnect() complete (credentials NOT cleared)")
@@ -448,7 +445,7 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("RECONNECT", "Connected! label=${features.label}, model=${features.model}")
             addOrUpdateKnownDevice(device, features)
             _state.update {
-                it.copy(isConnecting = false, connectedDevice = features, connectedDeviceId = device.id)
+                it.copy(isConnecting = false, connected = ConnectedTrezorDevice(id = device.id, features = features))
             }
             TrezorDebugLog.log("RECONNECT", "=== connectKnownDevice SUCCESS ===")
             features
@@ -464,7 +461,7 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             val disconnectResult = if (_state.value.connectedDeviceId == deviceId) {
                 runCatching { trezorService.disconnect() }.also {
-                    _state.update { it.copy(connectedDevice = null, connectedDeviceId = null) }
+                    _state.update { it.copy(connected = null) }
                 }
             } else {
                 Result.success(Unit)
@@ -497,7 +494,7 @@ class TrezorRepo @Inject constructor(
             if (knownDevice?.id == currentId || path.contains(currentId)) {
                 Logger.warn("External disconnect detected for '$currentId'", context = TAG)
                 _state.update {
-                    it.copy(connectedDevice = null, connectedDeviceId = null, error = "Device disconnected")
+                    it.copy(connected = null, error = "Device disconnected")
                 }
             }
         }.launchIn(scope)
@@ -509,10 +506,7 @@ class TrezorRepo @Inject constructor(
             id = deviceInfo.id,
             name = deviceInfo.name,
             path = deviceInfo.path,
-            transportType = when (deviceInfo.transportType) {
-                TrezorTransportType.BLUETOOTH -> "bluetooth"
-                TrezorTransportType.USB -> "usb"
-            },
+            transportType = deviceInfo.transportType.toKnownTransportType(),
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = System.currentTimeMillis(),
@@ -548,7 +542,7 @@ class TrezorRepo @Inject constructor(
         val device = devices.find { it.id == deviceId }
             ?: throw AppError("Device not found during reconnect")
         val features = connectWithThpRetry(device.id)
-        _state.update { it.copy(connectedDevice = features, connectedDeviceId = deviceId) }
+        _state.update { it.copy(connected = ConnectedTrezorDevice(id = deviceId, features = features)) }
     }
 
     suspend fun clearCredentials(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
@@ -609,11 +603,22 @@ data class TrezorState(
     val isAutoReconnecting: Boolean = false,
     val knownDevices: ImmutableList<KnownDevice> = persistentListOf(),
     val nearbyDevices: ImmutableList<TrezorDeviceInfo> = persistentListOf(),
-    val connectedDevice: TrezorFeatures? = null,
-    val connectedDeviceId: String? = null,
+    val connected: ConnectedTrezorDevice? = null,
     val lastAddress: TrezorAddressResponse? = null,
     val lastPublicKey: TrezorPublicKeyResponse? = null,
     val error: String? = null,
+) {
+    val connectedDevice: TrezorFeatures?
+        get() = connected?.features
+
+    val connectedDeviceId: String?
+        get() = connected?.id
+}
+
+@Stable
+data class ConnectedTrezorDevice(
+    val id: String,
+    val features: TrezorFeatures,
 )
 
 @Serializable
@@ -622,8 +627,27 @@ data class KnownDevice(
     val id: String,
     val name: String?,
     val path: String,
-    val transportType: String,
+    val transportType: KnownDeviceTransportType,
     val label: String?,
     val model: String?,
     val lastConnectedAt: Long,
 )
+
+@Serializable
+enum class KnownDeviceTransportType {
+    @SerialName("bluetooth")
+    BLUETOOTH,
+
+    @SerialName("usb")
+    USB,
+}
+
+private fun TrezorTransportType.toKnownTransportType(): KnownDeviceTransportType = when (this) {
+    TrezorTransportType.BLUETOOTH -> KnownDeviceTransportType.BLUETOOTH
+    TrezorTransportType.USB -> KnownDeviceTransportType.USB
+}
+
+private fun KnownDeviceTransportType.toCoreTransportType(): TrezorTransportType = when (this) {
+    KnownDeviceTransportType.BLUETOOTH -> TrezorTransportType.BLUETOOTH
+    KnownDeviceTransportType.USB -> TrezorTransportType.USB
+}

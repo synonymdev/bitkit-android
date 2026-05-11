@@ -113,7 +113,7 @@ class TrezorRepoTest : BaseUnitTest() {
         id = id,
         name = name,
         path = path,
-        transportType = "usb",
+        transportType = KnownDeviceTransportType.USB,
         label = label,
         model = model,
         lastConnectedAt = 123L,
