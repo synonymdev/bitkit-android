@@ -2,26 +2,18 @@ package to.bitkit.ui.screens.widgets.price
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,7 +25,6 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -42,12 +33,10 @@ import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
+import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-
-private const val PAGE_SMALL = 0
-private const val PAGE_WIDE = 1
-private const val PAGE_COUNT = 2
 
 @Composable
 fun PricePreviewScreen(
@@ -146,12 +135,29 @@ fun PricePreviewContent(
             )
 
             if (priceDTO != null) {
-                WidgetCarousel(
-                    pricePreferences = pricePreferences,
-                    priceDTO = priceDTO,
+                WidgetSizeCarousel(
+                    smallContent = {
+                        PriceCardSmall(
+                            pricePreferences = pricePreferences,
+                            priceDTO = priceDTO,
+                            modifier = Modifier
+                                .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                                .testTag("price_card_small")
+                        )
+                    },
+                    wideContent = {
+                        PriceCard(
+                            pricePreferences = pricePreferences,
+                            priceDTO = priceDTO,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("price_card_wide")
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
+                        .testTag("price_preview_carousel")
                 )
             } else {
                 FillHeight()
@@ -190,90 +196,6 @@ fun PricePreviewContent(
                     .weight(1f)
                     .testTag("WidgetSave")
             )
-        }
-    }
-}
-
-@Composable
-private fun WidgetCarousel(
-    pricePreferences: PricePreferences,
-    priceDTO: PriceDTO,
-    modifier: Modifier = Modifier,
-) {
-    val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
-
-    Column(
-        verticalArrangement = Arrangement.Center,
-        modifier = modifier.testTag("price_preview_carousel")
-    ) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .testTag("price_preview_pager")
-        ) { page ->
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                when (page) {
-                    PAGE_SMALL -> PriceCardSmall(
-                        pricePreferences = pricePreferences,
-                        priceDTO = priceDTO,
-                        modifier = Modifier
-                            .width(163.dp)
-                            .height(192.dp)
-                            .testTag("price_card_small")
-                    )
-
-                    PAGE_WIDE -> PriceCard(
-                        pricePreferences = pricePreferences,
-                        priceDTO = priceDTO,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("price_card_wide")
-                    )
-                }
-            }
-        }
-
-        VerticalSpacer(16.dp)
-
-        Caption13Up(
-            text = stringResource(
-                if (pagerState.currentPage == PAGE_SMALL) {
-                    R.string.widgets__widget__size_small
-                } else {
-                    R.string.widgets__widget__size_wide
-                },
-            ),
-            color = Colors.White64,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("widget_size_label")
-        )
-
-        VerticalSpacer(16.dp)
-
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("page_indicator")
-        ) {
-            repeat(PAGE_COUNT) { index ->
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .size(8.dp)
-                        .background(
-                            color = if (pagerState.currentPage == index) Colors.White else Colors.White32,
-                            shape = CircleShape,
-                        )
-                )
-            }
         }
     }
 }

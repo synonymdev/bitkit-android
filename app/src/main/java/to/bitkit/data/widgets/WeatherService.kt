@@ -77,6 +77,7 @@ class WeatherService @Inject constructor(
             condition = condition,
             currentFee = currentFee,
             nextBlockFee = feeEstimates.fast,
+            avgFeeSats = avgFeeSats,
         )
     }.onFailure {
         Logger.warn("Failed to fetch weather data", it, context = TAG)

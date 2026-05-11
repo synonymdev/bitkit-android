@@ -24,14 +24,11 @@ class NewsService @Inject constructor(
 
     override suspend fun fetchData(): Result<List<ArticleDTO>> = runCatching {
         get<List<ArticleDTO>>(Env.newsBaseUrl + "/articles").take(10)
-    }.onFailure {
-        Logger.warn(e = it, msg = "Failed to fetch news", context = TAG)
     }
 
-    // Future services can be added here
     private suspend inline fun <reified T> get(url: String): T {
         val response: HttpResponse = client.get(url)
-        Logger.debug("Http call: $response")
+        Logger.verbose("Http call: $response", context = TAG)
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {
@@ -39,6 +36,7 @@ class NewsService @Inject constructor(
                 }
                 responseBody
             }
+
             else -> throw NewsError.InvalidResponse(response.status.description)
         }
     }

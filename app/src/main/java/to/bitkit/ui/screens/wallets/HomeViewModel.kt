@@ -91,7 +91,6 @@ class HomeViewModel @Inject constructor(
                             widgetsData.widgets.toImmutableList()
                         },
                         headlinePreferences = widgetsData.headlinePreferences,
-                        factsPreferences = widgetsData.factsPreferences,
                         blocksPreferences = widgetsData.blocksPreferences,
                         weatherPreferences = widgetsData.weatherPreferences,
                         pricePreferences = widgetsData.pricePreferences,

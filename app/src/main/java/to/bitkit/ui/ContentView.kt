@@ -135,7 +135,6 @@ import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
 import to.bitkit.ui.screens.widgets.calculator.CalculatorPreviewScreen
-import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
 import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsViewModel
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
@@ -1532,17 +1531,6 @@ private fun NavGraphBuilder.widgets(
                 factsViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.FactsEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.FactsEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Facts) }
-            val viewModel = hiltViewModel<FactsViewModel>(parentEntry)
-
-            FactsEditScreen(
-                factsViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.FactsPreview) }
             )
         }
     }
@@ -2004,9 +1992,6 @@ sealed interface Routes {
 
     @Serializable
     data object FactsPreview : Routes
-
-    @Serializable
-    data object FactsEdit : Routes
 
     @Serializable
     data object Blocks : Routes

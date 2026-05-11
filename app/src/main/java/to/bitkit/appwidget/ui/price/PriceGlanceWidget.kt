@@ -58,6 +58,14 @@ class PriceGlanceWidget : GlanceAppWidget() {
         }
     }
 
+    override suspend fun onDelete(context: Context, glanceId: GlanceId) {
+        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        EntryPointAccessors
+            .fromApplication(context, AppWidgetEntryPoint::class.java)
+            .appWidgetPreferencesStore()
+            .unregisterWidget(appWidgetId)
+    }
+
     private fun resolveWidget(price: PriceDTO?, entry: AppWidgetEntry): PriceWidgetData? {
         val widgets = price?.widgets ?: return null
         val enabledPairs = entry.pricePreferences.enabledPairs
