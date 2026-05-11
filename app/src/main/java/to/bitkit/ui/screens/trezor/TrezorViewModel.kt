@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -720,7 +721,7 @@ data class TrezorNetworkState(
     val isGettingPublicKey: Boolean = false,
 )
 
-@Stable
+@Immutable
 data class TrezorMessageState(
     val messageToSign: String = "Hello, Trezor!",
     val lastSignature: String? = null,
