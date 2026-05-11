@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.ILspNode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +65,10 @@ import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LargeClass")
 class LightningRepoTest : BaseUnitTest() {
+    companion object {
+        private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
+    }
+
     private lateinit var sut: LightningRepo
 
     private val lightningService = mock<LightningService>()
@@ -409,6 +414,43 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(wait.isCompleted)
         assertEquals(listOf(channel), sut.lightningState.value.channels)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `waitForUsableChannels delays before returning when node cannot run`() = test {
+        val wait = async { sut.waitForUsableChannels() }
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS - 1)
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(1)
+        testScheduler.runCurrent()
+
+        assertTrue(wait.isCompleted)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `waitForUsableChannels delays before returning when running node has no channels`() = test {
+        whenever(lightningService.channels).thenReturn(emptyList())
+        startNodeForTesting()
+
+        val wait = async { sut.waitForUsableChannels() }
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS - 1)
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(1)
+        testScheduler.runCurrent()
+
+        assertTrue(wait.isCompleted)
     }
 
     @Test

@@ -95,6 +95,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -1021,11 +1022,17 @@ class LightningRepo @Inject constructor(
 
     suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
         var state = _lightningState.value
-        if (!state.nodeLifecycleState.canRun()) return@withContext
+        if (!state.nodeLifecycleState.canRun()) {
+            delayNoUsableChannelsFeedback()
+            return@withContext
+        }
         if (state.hasUsableChannels()) return@withContext
 
         state = waitForChannelsToLoadIfNeeded(state) ?: return@withContext
-        if (!state.nodeLifecycleState.canRun()) return@withContext
+        if (!state.nodeLifecycleState.canRun()) {
+            delayNoUsableChannelsFeedback()
+            return@withContext
+        }
 
         if (state.channels.isEmpty()) {
             if (state.nodeLifecycleState.isRunning()) {
@@ -1033,15 +1040,25 @@ class LightningRepo @Inject constructor(
                 state = _lightningState.value
             }
 
-            if (state.channels.isEmpty()) return@withContext // no channel exists, don't wait
+            if (state.channels.isEmpty()) {
+                delayNoUsableChannelsFeedback()
+                return@withContext
+            }
             if (state.hasUsableChannels()) return@withContext
         }
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
-        withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+        val finalState = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
             _lightningState.first { it.shouldStopWaitingForUsableChannels() }
-        } ?: Logger.warn("Timed out waiting for usable channels", context = TAG)
+        } ?: run {
+            Logger.warn("Timed out waiting for usable channels", context = TAG)
+            return@withContext
+        }
+
+        if (!finalState.nodeLifecycleState.canRun() || finalState.channels.isEmpty()) {
+            delayNoUsableChannelsFeedback()
+        }
     }
 
     private suspend fun waitForChannelsToLoadIfNeeded(state: LightningState): LightningState? {
@@ -1063,6 +1080,10 @@ class LightningRepo @Inject constructor(
 
     private fun LightningState.shouldStopWaitingForUsableChannels() =
         !nodeLifecycleState.canRun() || channels.isEmpty() || hasUsableChannels()
+
+    private suspend fun delayNoUsableChannelsFeedback() {
+        delay(NO_USABLE_CHANNELS_FEEDBACK_DELAY)
+    }
 
     @Suppress("LongParameterList")
     suspend fun sendOnChain(
@@ -1524,6 +1545,7 @@ class LightningRepo @Inject constructor(
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
+        private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
         val SEND_LN_TIMEOUT = 10.seconds
         private val PROBE_TIMEOUT = 60.seconds
     }
