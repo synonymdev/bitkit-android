@@ -9,13 +9,15 @@ import java.io.InputStream
 import java.io.OutputStream
 
 object TrezorDataSerializer : Serializer<TrezorData> {
+    private const val TAG = "TrezorDataSerializer"
+
     override val defaultValue: TrezorData = TrezorData()
 
     override suspend fun readFrom(input: InputStream): TrezorData {
         return try {
             json.decodeFromString(input.readBytes().decodeToString())
         } catch (e: SerializationException) {
-            Logger.error("Failed to deserialize: $e")
+            Logger.error("Deserialize Trezor data failed", e, context = TAG)
             defaultValue
         }
     }
