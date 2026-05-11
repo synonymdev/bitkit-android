@@ -894,6 +894,7 @@ class TrezorTransport @Inject constructor(
             connection.gatt.disconnect()
 
             val disconnected = disconnectLatch.await(DISCONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val timeoutError = if (disconnected) null else "BLE disconnect timed out; forced close"
             if (!disconnected) {
                 Logger.warn("BLE disconnect timeout, forcing close: '$path'", context = TAG)
             }
@@ -902,7 +903,7 @@ class TrezorTransport @Inject constructor(
             connection.gatt.close()
             Thread.sleep(100)
             Logger.info("BLE device closed: '$path'", context = TAG)
-            TrezorTransportWriteResult(success = true, error = "")
+            TrezorTransportWriteResult(success = timeoutError == null, error = timeoutError.orEmpty())
         } catch (e: Exception) {
             Logger.error("BLE close failed", e, context = TAG)
             TrezorTransportWriteResult(success = false, error = e.message ?: "BLE close failed")
