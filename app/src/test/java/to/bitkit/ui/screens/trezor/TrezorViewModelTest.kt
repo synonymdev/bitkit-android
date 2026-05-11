@@ -2,10 +2,12 @@ package to.bitkit.ui.screens.trezor
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -244,6 +246,39 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `composeTx should not call repo when destination address is blank`() = test {
+        loadAccountInfo()
+        sut.setSendAmount("1000")
+        sut.setSendFeeRate("2")
+
+        sut.composeTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).composeTransaction(any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `composeTx should not call repo when fee rate is invalid`() = test {
+        loadAccountInfo()
+        sut.setSendAddress("bc1qtest123")
+        sut.setSendAmount("1000")
+        sut.setSendFeeRate("0")
+
+        sut.composeTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).composeTransaction(any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `signComposedTx should not call repo when no compose result exists`() = test {
+        sut.signComposedTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
     fun `clearError should call trezorRepo clearError`() {
         sut.clearError()
 
@@ -279,4 +314,13 @@ class TrezorViewModelTest : BaseUnitTest() {
         bgDispatcher = testDispatcher,
         trezorRepo = trezorRepo,
     )
+
+    private suspend fun TestScope.loadAccountInfo() {
+        whenever(trezorRepo.getAccountInfo(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(TrezorPreviewData.sampleAccountInfoResult))
+
+        sut.setLookupInput("xpub6test123")
+        sut.lookupBalanceInfo()
+        advanceUntilIdle()
+    }
 }
