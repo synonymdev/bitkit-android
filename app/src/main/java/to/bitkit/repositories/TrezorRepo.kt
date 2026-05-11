@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
@@ -21,6 +22,9 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.WalletParams
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,7 +92,7 @@ class TrezorRepo @Inject constructor(
             Logger.debug("Initializing Trezor with credential path: '$credentialPath'", context = TAG)
             trezorService.initialize(credentialPath)
             val known = loadKnownDevices()
-            _state.update { it.copy(isInitialized = true, knownDevices = known, error = null) }
+            _state.update { it.copy(isInitialized = true, knownDevices = known.toImmutableList(), error = null) }
         }.onFailure { e ->
             Logger.error("Trezor init failed", e, context = TAG)
             _state.update { it.copy(error = e.message) }
@@ -101,7 +105,7 @@ class TrezorRepo @Inject constructor(
             val devices = trezorService.scan()
             val knownIds = _state.value.knownDevices.map { it.id }.toSet()
             val nearby = devices.filter { it.id !in knownIds }
-            _state.update { it.copy(isScanning = false, nearbyDevices = nearby) }
+            _state.update { it.copy(isScanning = false, nearbyDevices = nearby.toImmutableList()) }
             devices
         }.onFailure { e ->
             Logger.error("Trezor scan failed", e, context = TAG)
@@ -114,7 +118,7 @@ class TrezorRepo @Inject constructor(
             val devices = trezorService.listDevices()
             val knownIds = _state.value.knownDevices.map { it.id }.toSet()
             val nearby = devices.filter { it.id !in knownIds }
-            _state.update { it.copy(nearbyDevices = nearby) }
+            _state.update { it.copy(nearbyDevices = nearby.toImmutableList()) }
             devices
         }.onFailure { e ->
             Logger.error("Trezor listDevices failed", e, context = TAG)
@@ -151,7 +155,7 @@ class TrezorRepo @Inject constructor(
                     isConnecting = false,
                     connectedDevice = features,
                     connectedDeviceId = deviceId,
-                    nearbyDevices = it.nearbyDevices.filter { d -> d.id != deviceId },
+                    nearbyDevices = it.nearbyDevices.filter { d -> d.id != deviceId }.toImmutableList(),
                 )
             }
             features
@@ -467,7 +471,7 @@ class TrezorRepo @Inject constructor(
             trezorService.clearCredentials(deviceId)
             val updated = _state.value.knownDevices.filter { it.id != deviceId }
             saveKnownDevices(updated)
-            _state.update { it.copy(knownDevices = updated) }
+            _state.update { it.copy(knownDevices = updated.toImmutableList()) }
             TrezorDebugLog.log("FORGET", "Device forgotten successfully")
             Logger.info("Forgot device: '$deviceId'", context = TAG)
         }.onFailure { e ->
@@ -510,7 +514,7 @@ class TrezorRepo @Inject constructor(
         )
         val updated = existing.filter { it.id != known.id } + known
         saveKnownDevices(updated)
-        _state.update { it.copy(knownDevices = updated) }
+        _state.update { it.copy(knownDevices = updated.toImmutableList()) }
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
@@ -598,8 +602,8 @@ data class TrezorState(
     val isScanning: Boolean = false,
     val isConnecting: Boolean = false,
     val isAutoReconnecting: Boolean = false,
-    val knownDevices: List<KnownDevice> = emptyList(),
-    val nearbyDevices: List<TrezorDeviceInfo> = emptyList(),
+    val knownDevices: ImmutableList<KnownDevice> = persistentListOf(),
+    val nearbyDevices: ImmutableList<TrezorDeviceInfo> = persistentListOf(),
     val connectedDevice: TrezorFeatures? = null,
     val connectedDeviceId: String? = null,
     val lastAddress: TrezorAddressResponse? = null,
@@ -608,6 +612,7 @@ data class TrezorState(
 )
 
 @Serializable
+@Immutable
 data class KnownDevice(
     val id: String,
     val name: String?,
