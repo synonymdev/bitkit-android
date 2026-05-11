@@ -64,6 +64,7 @@ class TrezorViewModel @Inject constructor(
                     val label = it.label ?: it.model ?: "Trezor"
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Reconnected to $label")
                 }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
