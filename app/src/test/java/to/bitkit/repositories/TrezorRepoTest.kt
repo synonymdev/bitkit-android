@@ -218,6 +218,48 @@ class TrezorRepoTest : BaseUnitTest() {
         assertNull(sut.state.value.lastPublicKey)
     }
 
+    @Test
+    fun `disconnect should clear connectedDevice state on service failure`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        val addressResponse = mock<TrezorAddressResponse>()
+        val publicKeyResponse = mock<TrezorPublicKeyResponse>()
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(
+            trezorService.getAddress(
+                path = any(),
+                coin = any(),
+                showOnTrezor = any(),
+                scriptType = anyOrNull(),
+            )
+        ).thenReturn(addressResponse)
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = any(),
+                showOnTrezor = any(),
+            )
+        ).thenReturn(publicKeyResponse)
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        sut.getAddress()
+        sut.getPublicKey()
+        whenever(trezorService.disconnect()).thenThrow(RuntimeException("disconnect failed"))
+
+        val result = sut.disconnect()
+
+        assertTrue(result.isFailure)
+        assertNull(sut.state.value.connectedDevice)
+        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.lastAddress)
+        assertNull(sut.state.value.lastPublicKey)
+        assertEquals("disconnect failed", sut.state.value.error)
+    }
+
     // endregion
 
     // region getAddress

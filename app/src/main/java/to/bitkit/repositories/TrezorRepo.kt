@@ -320,12 +320,12 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
-            TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=${_state.value.connectedDeviceId}")
-            trezorService.disconnect()
-            _state.update {
-                it.copy(connectedDevice = null, connectedDeviceId = null, lastAddress = null, lastPublicKey = null)
-            }
+        TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=${_state.value.connectedDeviceId}")
+        val result = runCatching { trezorService.disconnect() }
+        _state.update {
+            it.copy(connectedDevice = null, connectedDeviceId = null, lastAddress = null, lastPublicKey = null)
+        }
+        result.onSuccess {
             TrezorDebugLog.log("DISCONNECT", "disconnect() complete (credentials NOT cleared)")
         }.onFailure { e ->
             TrezorDebugLog.log("DISCONNECT", "FAILED: ${e.message}")
