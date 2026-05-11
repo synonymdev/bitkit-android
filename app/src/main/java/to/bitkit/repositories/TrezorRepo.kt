@@ -318,7 +318,7 @@ class TrezorRepo @Inject constructor(
     suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=${_state.value.connectedDeviceId}")
-            runCatching { trezorService.disconnect() }
+            trezorService.disconnect()
             _state.update {
                 it.copy(connectedDevice = null, connectedDeviceId = null, lastAddress = null, lastPublicKey = null)
             }
@@ -386,7 +386,7 @@ class TrezorRepo @Inject constructor(
                 initialize(walletIndex).getOrThrow()
             }
             if (trezorService.isConnected()) {
-                _state.value.connectedDevice ?: error("Connected but no features")
+                _state.value.connectedDevice ?: throw AppError("Connected but no features")
             } else {
                 val scannedDevices = scan().getOrThrow()
                 val knownIds = knownDevices.map { it.id }.toSet()
@@ -396,7 +396,7 @@ class TrezorRepo @Inject constructor(
                 val idMatch = knownDevices.firstNotNullOfOrNull { known ->
                     scannedDevices.find { it.id == known.id }
                 }
-                val match = idMatch ?: usbDevice ?: error("No known device found nearby")
+                val match = idMatch ?: usbDevice ?: throw AppError("No known device found nearby")
                 connect(match.id).getOrThrow()
             }
         }.onSuccess {
@@ -436,7 +436,7 @@ class TrezorRepo @Inject constructor(
                 TrezorDebugLog.log("RECONNECT", "Preferring USB over BLE")
                 usbDevice
             } else {
-                exactMatch ?: error("Device not found nearby — is it powered on?")
+                exactMatch ?: throw AppError("Device not found nearby — is it powered on?")
             }
             TrezorDebugLog.log("RECONNECT", "Found matching device: id=${device.id}, name=${device.name}")
             TrezorDebugLog.log("RECONNECT", "Calling connectWithThpRetry...")
@@ -459,12 +459,12 @@ class TrezorRepo @Inject constructor(
         runCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             if (_state.value.connectedDeviceId == deviceId) {
-                runCatching { trezorService.disconnect() }
+                trezorService.disconnect()
                 _state.update { it.copy(connectedDevice = null, connectedDeviceId = null) }
             }
             TrezorDebugLog.log("FORGET", "Clearing credentials...")
             trezorTransport.clearDeviceCredential(deviceId)
-            runCatching { trezorService.clearCredentials(deviceId) }
+            trezorService.clearCredentials(deviceId)
             val updated = _state.value.knownDevices.filter { it.id != deviceId }
             saveKnownDevices(updated)
             _state.update { it.copy(knownDevices = updated) }
@@ -531,13 +531,13 @@ class TrezorRepo @Inject constructor(
         if (trezorService.isConnected()) return
         val deviceId = _state.value.connectedDeviceId
             ?: _state.value.knownDevices.firstOrNull()?.id
-            ?: error("No device to reconnect")
+            ?: throw AppError("No device to reconnect")
         if (!_state.value.isInitialized) {
             initialize().getOrThrow()
         }
         val devices = trezorService.scan()
         val device = devices.find { it.id == deviceId }
-            ?: error("Device not found during reconnect")
+            ?: throw AppError("Device not found during reconnect")
         val features = connectWithThpRetry(device.id)
         _state.update { it.copy(connectedDevice = features, connectedDeviceId = deviceId) }
     }
