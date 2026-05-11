@@ -882,7 +882,7 @@ class TrezorTransport @Inject constructor(
             ?: return TrezorTransportWriteResult(success = true, error = "")
 
         userInitiatedCloseSet.add(path)
-        try {
+        return try {
             val disconnectLatch = CountDownLatch(1)
             bleConnections[path] = connection.copy(disconnectLatch = disconnectLatch)
 
@@ -896,14 +896,14 @@ class TrezorTransport @Inject constructor(
             bleConnections.remove(path)
             connection.gatt.close()
             Thread.sleep(100)
+            Logger.info("BLE device closed: '$path'", context = TAG)
+            TrezorTransportWriteResult(success = true, error = "")
         } catch (e: Exception) {
             Logger.error("BLE close failed", e, context = TAG)
+            TrezorTransportWriteResult(success = false, error = e.message ?: "BLE close failed")
         } finally {
             userInitiatedCloseSet.remove(path)
         }
-
-        Logger.info("BLE device closed: '$path'", context = TAG)
-        return TrezorTransportWriteResult(success = true, error = "")
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -1029,6 +1029,17 @@ class TrezorTransport @Inject constructor(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path]
+
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Logger.warn("BLE connection state changed with status '$status' for '$path'", context = TAG)
+                connection?.isConnected = false
+                connection?.connectionLatch?.countDown()
+                connection?.disconnectLatch?.countDown()
+                if (!userInitiatedCloseSet.remove(path)) {
+                    _externalDisconnect.tryEmit(path)
+                }
+                return
+            }
 
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
