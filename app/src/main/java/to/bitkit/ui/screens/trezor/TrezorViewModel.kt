@@ -369,6 +369,8 @@ class TrezorViewModel @Inject constructor(
                 .onSuccess { txid ->
                     TrezorDebugLog.log("BROADCAST", "SUCCESS txid=$txid")
                     _uiState.update {
+                        if (it.send.step != signedStep) return@update it
+
                         it.copy(
                             send = it.send.copy(
                                 isBroadcasting = false,

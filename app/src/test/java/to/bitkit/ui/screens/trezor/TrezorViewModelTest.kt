@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -8,6 +9,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -246,6 +248,26 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `broadcastSignedTx should not restore signed step after reset`() = test {
+        loadSignedTx()
+        val broadcastResult = CompletableDeferred<Result<String>>()
+        whenever(trezorRepo.broadcastRawTx(any(), any()))
+            .doSuspendableAnswer { broadcastResult.await() }
+
+        sut.broadcastSignedTx()
+        assertTrue(sut.uiState.value.isBroadcasting)
+
+        sut.resetSendFlow()
+        broadcastResult.complete(Result.success("broadcast-txid"))
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertEquals(SendStep.Form, state.sendStep)
+        assertFalse(state.isBroadcasting)
+        assertNull(state.broadcastTxid)
+    }
+
+    @Test
     fun `composeTx should not call repo when destination address is blank`() = test {
         loadAccountInfo()
         sut.setSendAmount("1000")
@@ -321,6 +343,21 @@ class TrezorViewModelTest : BaseUnitTest() {
 
         sut.setLookupInput("xpub6test123")
         sut.lookupBalanceInfo()
+        advanceUntilIdle()
+    }
+
+    private suspend fun TestScope.loadSignedTx() {
+        loadAccountInfo()
+        whenever(trezorRepo.composeTransaction(any(), any(), any(), any(), anyOrNull(), any()))
+            .thenReturn(Result.success(listOf(TrezorPreviewData.sampleComposeResult)))
+        whenever(trezorRepo.signTxFromPsbt(any(), anyOrNull()))
+            .thenReturn(Result.success(TrezorPreviewData.sampleSignedTx))
+
+        sut.setSendAddress("bc1qtest123")
+        sut.setSendAmount("1000")
+        sut.composeTx()
+        advanceUntilIdle()
+        sut.signComposedTx()
         advanceUntilIdle()
     }
 }
