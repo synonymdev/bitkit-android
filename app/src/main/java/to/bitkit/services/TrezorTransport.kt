@@ -396,8 +396,12 @@ class TrezorTransport @Inject constructor(
 
             if (credentialJson.isEmpty()) {
                 val existed = file.exists()
-                file.delete()
+                val deleted = !existed || file.delete()
                 TrezorDebugLog.log("SAVE", "CLEARED credential (file existed=$existed)")
+                if (!deleted) {
+                    Logger.warn("Clear THP credential file failed for '${file.absolutePath}'", context = TAG)
+                    return false
+                }
                 Logger.info(
                     "Cleared THP credential for device: '$deviceId' (path='${file.absolutePath}')",
                     context = TAG,
@@ -416,6 +420,7 @@ class TrezorTransport @Inject constructor(
             )
             if (!verifyExists || verifySize == 0L) {
                 TrezorDebugLog.log("SAVE", "WARNING: File verification FAILED after write!")
+                return false
             }
 
             Logger.info(
