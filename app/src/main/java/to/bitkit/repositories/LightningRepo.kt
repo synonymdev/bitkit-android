@@ -1049,7 +1049,7 @@ class LightningRepo @Inject constructor(
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
-        val finalState = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+        val finalState = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
             _lightningState.first { it.shouldStopWaitingForUsableChannels() }
         } ?: run {
             Logger.warn("Timed out waiting for usable channels", context = TAG)
@@ -1065,7 +1065,7 @@ class LightningRepo @Inject constructor(
         if (state.channels.isNotEmpty() || state.nodeLifecycleState.isRunning()) return state
 
         Logger.info("Waiting for node to load channels before sending payment", context = TAG)
-        return withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
+        return withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
             _lightningState.first { it.shouldStopWaitingForLoadedChannels() }
         } ?: run {
             Logger.warn("Timed out waiting for node to load channels", context = TAG)
@@ -1544,7 +1544,7 @@ class LightningRepo @Inject constructor(
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
-        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
+        private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
         val SEND_LN_TIMEOUT = 10.seconds
         private val PROBE_TIMEOUT = 60.seconds
