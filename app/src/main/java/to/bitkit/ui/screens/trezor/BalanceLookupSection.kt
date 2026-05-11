@@ -330,7 +330,12 @@ private fun PreviewBalanceLookupWithAddressInfo() {
 private fun PreviewBalanceLookupLoading() {
     AppThemeSurface {
         BalanceLookupSection(
-            uiState = TrezorUiState(lookupInput = "xpub6C...", isLookingUp = true),
+            uiState = TrezorUiState(
+                lookup = TrezorLookupState(
+                    input = "xpub6C...",
+                    isLookingUp = true,
+                ),
+            ),
             isDeviceConnected = false,
             onInputChange = {},
             onLookup = {},

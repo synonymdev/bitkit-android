@@ -150,7 +150,7 @@ private fun PreviewAddressSectionLoading() {
     AppThemeSurface {
         AddressSection(
             trezorState = TrezorPreviewData.connectedState,
-            uiState = TrezorUiState(isGettingAddress = true),
+            uiState = TrezorUiState(network = TrezorNetworkState(isGettingAddress = true)),
             onGetAddress = {},
             onIncrementIndex = {},
         )

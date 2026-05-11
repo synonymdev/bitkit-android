@@ -176,7 +176,7 @@ private fun PreviewPublicKeySectionLoading() {
     AppThemeSurface {
         PublicKeySection(
             trezorState = TrezorPreviewData.connectedState,
-            uiState = TrezorUiState(isGettingPublicKey = true),
+            uiState = TrezorUiState(network = TrezorNetworkState(isGettingPublicKey = true)),
             onGetPublicKey = {},
         )
     }

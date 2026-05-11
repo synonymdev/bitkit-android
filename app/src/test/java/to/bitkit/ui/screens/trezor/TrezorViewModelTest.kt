@@ -137,7 +137,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         assertFalse(state.isSigning)
         assertNull(state.composeResult)
         assertNull(state.signedTxResult)
-        assertEquals(SendStep.FORM, state.sendStep)
+        assertEquals(SendStep.Form, state.sendStep)
         assertFalse(state.isBroadcasting)
         assertNull(state.broadcastTxid)
     }
