@@ -3,11 +3,14 @@ package to.bitkit.ui.screens.wallets
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,7 +22,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -48,14 +51,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -118,7 +136,6 @@ import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
-import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
@@ -150,6 +167,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.math.roundToInt
 
 private const val SMALL_SCREEN_HEIGHT_DP = 800
 private const val SMALL_SCREEN_SLOT_CAPACITY = 3
@@ -167,6 +185,7 @@ fun HomeScreen(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
     activityListViewModel: ActivityListViewModel,
+    onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     homeViewModel: HomeViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -322,6 +341,7 @@ fun HomeScreen(
         onNavigateToActivityItem = { rootNavController.navigateToActivityItem(it) },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
+        onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
     )
 }
 
@@ -352,20 +372,41 @@ private fun Content(
     onNavigateToActivityItem: (String) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
+    onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     hazeState: HazeState = rememberHazeState(),
     balances: BalanceState = LocalBalances.current,
 ) {
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var calculatorInputDismissKey by remember { mutableIntStateOf(0) }
+    var isCalculatorInputActive by remember { mutableStateOf(false) }
+    val onCalculatorInputActiveChange = { isActive: Boolean ->
+        isCalculatorInputActive = isActive
+        onCalculatorInputActiveChanged(isActive)
+    }
     val pageCount = if (homeUiState.showWidgets) 2 else 1
     val pagerState = rememberPagerState(
         initialPage = homeUiState.currentPage,
         pageCount = { pageCount },
     )
+    fun dismissKeyboard(callback: (() -> Unit)? = null) {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        calculatorInputDismissKey++
+        callback?.invoke()
+    }
 
     LaunchedEffect(pagerState.currentPage) {
         onPageChanged(pagerState.currentPage)
         if (pagerState.currentPage == 1 && !latestActivities.isNullOrEmpty()) {
             onDismissWidgetsOnboardingHint()
+        }
+    }
+
+    LaunchedEffect(pagerState.currentPage, isCalculatorInputActive) {
+        if (pagerState.currentPage == 0 && isCalculatorInputActive) {
+            dismissKeyboard()
         }
     }
 
@@ -385,12 +426,28 @@ private fun Content(
             hazeState = hazeState,
             profileDisplayName = profileDisplayName,
             profileDisplayImageUri = profileDisplayImageUri,
-            onClickProfile = onClickProfile,
+            onClickProfile = {
+                dismissKeyboard {
+                    onClickProfile()
+                }
+            },
             showEditWidgets = homeUiState.currentPage == 1 && homeUiState.showWidgets,
             isEditingWidgets = homeUiState.isEditingWidgets,
-            onClickEditWidgetList = onClickEditWidgetList,
-            onNavigateToAppStatus = onNavigateToAppStatus,
-            onOpenDrawer = { scope.launch { drawerState.open() } },
+            onClickEditWidgetList = {
+                dismissKeyboard {
+                    onClickEditWidgetList()
+                }
+            },
+            onNavigateToAppStatus = {
+                dismissKeyboard {
+                    onNavigateToAppStatus()
+                }
+            },
+            onOpenDrawer = {
+                dismissKeyboard {
+                    scope.launch { drawerState.open() }
+                }
+            },
         )
 
         VerticalPager(
@@ -407,7 +464,6 @@ private fun Content(
             ),
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding()
                 .hazeSource(state = hazeState)
                 .zIndex(0f)
         ) { page ->
@@ -428,6 +484,10 @@ private fun Content(
 
                 1 -> WidgetsPage(
                     homeUiState = homeUiState,
+                    calculatorInputDismissKey = calculatorInputDismissKey,
+                    isCalculatorInputActive = isCalculatorInputActive,
+                    onDismissCalculatorInput = ::dismissKeyboard,
+                    onCalculatorInputActiveChanged = onCalculatorInputActiveChange,
                     onRemoveSuggestion = onRemoveSuggestion,
                     onClickSuggestion = onClickSuggestion,
                     onClickAddWidget = onClickAddWidget,
@@ -592,10 +652,14 @@ private fun BalancesSection(
     }
 }
 
-@Suppress("MagicNumber")
+@Suppress("CyclomaticComplexMethod", "MagicNumber")
 @Composable
 private fun WidgetsPage(
     homeUiState: HomeUiState,
+    calculatorInputDismissKey: Int,
+    isCalculatorInputActive: Boolean,
+    onDismissCalculatorInput: () -> Unit,
+    onCalculatorInputActiveChanged: (Boolean) -> Unit,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
     onClickAddWidget: () -> Unit,
@@ -603,12 +667,79 @@ private fun WidgetsPage(
     onClickDeleteWidget: (WidgetType) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val widgetsScrollState = rememberScrollState()
+    val density = LocalDensity.current
+    var pageBounds by remember { mutableStateOf<Rect?>(null) }
+    var calculatorBounds by remember { mutableStateOf<Rect?>(null) }
+    var numberPadBounds by remember { mutableStateOf<Rect?>(null) }
+    var firstCalculatorTopPaddingTarget by remember { mutableStateOf(0.dp) }
+    val firstCalculatorTopPadding by animateDpAsState(
+        targetValue = firstCalculatorTopPaddingTarget,
+        animationSpec = tween(durationMillis = AnimationConstants.DefaultDurationMillis),
+        label = "firstCalculatorTopPadding",
+    )
+    val latestPageBounds by rememberUpdatedState(pageBounds)
+    val latestNumberPadBounds by rememberUpdatedState(numberPadBounds)
+    val isCalculatorFirst = homeUiState.widgetsWithPosition.firstOrNull()?.type == WidgetType.CALCULATOR
+
+    LaunchedEffect(homeUiState.widgetsWithPosition, homeUiState.isEditingWidgets) {
+        val hasCalculator = homeUiState.widgetsWithPosition.any { it.type == WidgetType.CALCULATOR }
+        if (homeUiState.isEditingWidgets || !hasCalculator) {
+            calculatorBounds = null
+            numberPadBounds = null
+            firstCalculatorTopPaddingTarget = 0.dp
+        }
+    }
+
+    LaunchedEffect(isCalculatorInputActive, numberPadBounds != null, isCalculatorFirst) {
+        if (!isCalculatorInputActive || numberPadBounds == null) {
+            firstCalculatorTopPaddingTarget = 0.dp
+            return@LaunchedEffect
+        }
+        withFrameNanos { }
+
+        val page = latestPageBounds ?: return@LaunchedEffect
+        val numberPad = latestNumberPadBounds ?: return@LaunchedEffect
+        val firstCalculatorBottomGap = page.bottom - numberPad.bottom
+
+        if (isCalculatorFirst && widgetsScrollState.value == 0 && firstCalculatorBottomGap > 0f) {
+            firstCalculatorTopPaddingTarget = with(density) { firstCalculatorBottomGap.toDp() }
+            return@LaunchedEffect
+        }
+
+        firstCalculatorTopPaddingTarget = 0.dp
+        val targetScroll = calculatorRevealScrollTarget(
+            currentScroll = widgetsScrollState.value,
+            maxScroll = widgetsScrollState.maxValue,
+            pageBounds = page,
+            numberPadBounds = numberPad,
+        )
+
+        if (targetScroll != widgetsScrollState.value) {
+            widgetsScrollState.animateScrollTo(targetScroll)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { pageBounds = it.boundsInRoot() }
+            .dismissCalculatorInputOnOutsideTap(
+                isCalculatorInputActive = isCalculatorInputActive,
+                pageBounds = pageBounds,
+                calculatorBounds = calculatorBounds,
+                onDismiss = onDismissCalculatorInput,
+            )
+    ) {
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(
+                    state = widgetsScrollState,
+                    enabled = !isCalculatorInputActive,
+                )
         ) {
             StatusBarSpacer()
             TopBarSpacer()
@@ -631,25 +762,81 @@ private fun WidgetsPage(
                     )
                 }
             } else {
+                VerticalSpacer(firstCalculatorTopPadding)
+
                 Widgets(
                     homeUiState = homeUiState,
+                    calculatorInputDismissKey = calculatorInputDismissKey,
+                    showOnlyCalculator = isCalculatorInputActive && isCalculatorFirst,
+                    onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
+                    onCalculatorBoundsChanged = { calculatorBounds = it },
+                    onNumberPadBoundsChanged = { numberPadBounds = it },
                     onRemoveSuggestion = onRemoveSuggestion,
                     onClickSuggestion = onClickSuggestion,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            val footerAlpha = if (isCalculatorInputActive) 0f else 1f
 
             VerticalSpacer(16.dp)
 
             TertiaryButton(
                 text = stringResource(R.string.widgets__add),
                 onClick = onClickAddWidget,
-                modifier = Modifier.testTag("WidgetsAdd")
+                enabled = !isCalculatorInputActive,
+                modifier = Modifier
+                    .alpha(footerAlpha)
+                    .testTag("WidgetsAdd")
             )
 
-            VerticalSpacer(150.dp)
+            VerticalSpacer(150.dp + imeBottomPadding)
         }
     }
 }
+
+private fun calculatorRevealScrollTarget(
+    currentScroll: Int,
+    maxScroll: Int,
+    pageBounds: Rect,
+    numberPadBounds: Rect,
+): Int {
+    val delta = numberPadBounds.bottom - pageBounds.bottom
+    return (currentScroll + delta.roundToInt()).coerceIn(0, maxScroll)
+}
+
+private fun Modifier.dismissCalculatorInputOnOutsideTap(
+    isCalculatorInputActive: Boolean,
+    pageBounds: Rect?,
+    calculatorBounds: Rect?,
+    onDismiss: () -> Unit,
+): Modifier = pointerInput(isCalculatorInputActive, pageBounds, calculatorBounds) {
+    if (!isCalculatorInputActive) return@pointerInput
+
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val page = pageBounds ?: return@awaitEachGesture
+        val calculator = calculatorBounds ?: return@awaitEachGesture
+        val tapPositionInRoot = down.position.toRootPosition(page)
+        var isTap = true
+        var isPointerUp = false
+
+        while (!isPointerUp) {
+            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+            val pointer = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+            if ((pointer.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                isTap = false
+            }
+            isPointerUp = pointer.changedToUpIgnoreConsumed()
+        }
+
+        if (isTap && !calculator.contains(tapPositionInRoot)) {
+            onDismiss()
+        }
+    }
+}
+
+private fun Offset.toRootPosition(bounds: Rect): Offset = this + Offset(bounds.left, bounds.top)
 
 @Composable
 private fun SuggestionsSection(
@@ -720,14 +907,26 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
 @Composable
 private fun Widgets(
     homeUiState: HomeUiState,
+    calculatorInputDismissKey: Int,
+    showOnlyCalculator: Boolean,
+    onCalculatorInputActiveChanged: (Boolean) -> Unit,
+    onCalculatorBoundsChanged: (Rect) -> Unit,
+    onNumberPadBoundsChanged: (Rect?) -> Unit,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val widgets = if (showOnlyCalculator) {
+        homeUiState.widgetsWithPosition.take(1)
+    } else {
+        homeUiState.widgetsWithPosition
+    }
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        homeUiState.widgetsWithPosition.forEach { widgetsWithPosition ->
+        widgets.forEach { widgetsWithPosition ->
             when (widgetsWithPosition.type) {
                 WidgetType.BLOCK -> {
                     homeUiState.currentBlock?.run {
@@ -754,13 +953,16 @@ private fun Widgets(
                 }
 
                 WidgetType.CALCULATOR -> {
-                    currencyViewModel?.let {
-                        CalculatorCard(
-                            currencyViewModel = it,
-                            showWidgetTitle = homeUiState.showWidgetTitles,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    CalculatorCard(
+                        dismissNumberPadKey = calculatorInputDismissKey,
+                        onInputActiveChange = onCalculatorInputActiveChanged,
+                        onNumberPadBoundsChanged = onNumberPadBoundsChanged,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned {
+                                onCalculatorBoundsChanged(it.boundsInRoot())
+                            }
+                    )
                 }
 
                 WidgetType.FACTS -> {

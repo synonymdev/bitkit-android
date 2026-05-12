@@ -58,13 +58,20 @@ fun RowScope.FillWidth(
 @Composable
 fun StatusBarSpacer(modifier: Modifier = Modifier) {
     Spacer(
-        modifier = modifier.height(Insets.Top),
+        modifier = modifier.height(Insets.Top)
     )
 }
 
 @Composable
 fun TopBarSpacer(modifier: Modifier = Modifier) {
     Spacer(
-        modifier = modifier.height(TopBarHeight),
+        modifier = modifier.height(TopBarHeight)
+    )
+}
+
+@Composable
+fun NavBarSpacer(modifier: Modifier = Modifier) {
+    Spacer(
+        modifier = modifier.height(Insets.Bottom)
     )
 }

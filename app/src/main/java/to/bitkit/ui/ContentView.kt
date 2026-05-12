@@ -497,6 +497,8 @@ fun ContentView(
                 }
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
+
                     RootNavHost(
                         navController = navController,
                         drawerState = drawerState,
@@ -506,6 +508,7 @@ fun ContentView(
                         settingsViewModel = settingsViewModel,
                         currencyViewModel = currencyViewModel,
                         transferViewModel = transferViewModel,
+                        onHomeCalculatorInputActiveChanged = { isHomeCalculatorInputActive = it },
                     )
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -516,9 +519,18 @@ fun ContentView(
                         Routes.Savings::class.qualifiedName,
                         Routes.Spending::class.qualifiedName,
                     )
+                    val hideTabBarForCalculator =
+                        currentRoute == Routes.Home::class.qualifiedName && isHomeCalculatorInputActive
+
+                    LaunchedEffect(currentRoute) {
+                        if (currentRoute != Routes.Home::class.qualifiedName) {
+                            isHomeCalculatorInputActive = false
+                        }
+                    }
 
                     if (showTabBar) {
                         TabBar(
+                            isVisible = !hideTabBarForCalculator,
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
                             onScanClick = { appViewModel.showSheet(Sheet.Send(SendRoute.QrScanner)) },
@@ -557,6 +569,7 @@ private fun RootNavHost(
     settingsViewModel: SettingsViewModel,
     currencyViewModel: CurrencyViewModel,
     transferViewModel: TransferViewModel,
+    onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -568,6 +581,7 @@ private fun RootNavHost(
             settingsViewModel = settingsViewModel,
             navController = navController,
             drawerState = drawerState,
+            onCalculatorInputActiveChanged = onHomeCalculatorInputActiveChanged,
         )
         allActivity(
             activityListViewModel = activityListViewModel,
@@ -594,7 +608,7 @@ private fun RootNavHost(
         logs(navController)
         suggestions(navController)
         support(navController)
-        widgets(navController, settingsViewModel, currencyViewModel)
+        widgets(navController, settingsViewModel)
         update()
         recoveryMode(navController, appViewModel)
 
@@ -811,6 +825,7 @@ private fun NavGraphBuilder.home(
     settingsViewModel: SettingsViewModel,
     navController: NavHostController,
     drawerState: DrawerState,
+    onCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     composable<Routes.Home> {
         val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -837,6 +852,7 @@ private fun NavGraphBuilder.home(
                 walletViewModel = walletViewModel,
                 appViewModel = appViewModel,
                 activityListViewModel = activityListViewModel,
+                onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
             )
         }
     }
@@ -1465,7 +1481,6 @@ private fun NavGraphBuilder.support(
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
-    currencyViewModel: CurrencyViewModel,
 ) {
     composableWithDefaultTransitions<Routes.WidgetsIntro> {
         WidgetsIntroScreen(
@@ -1508,7 +1523,6 @@ private fun NavGraphBuilder.widgets(
         CalculatorPreviewScreen(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
-            currencyViewModel = currencyViewModel
         )
     }
     navigationWithDefaultTransitions<Routes.Headlines>(
