@@ -1,6 +1,11 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
@@ -11,13 +16,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
+import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
@@ -31,6 +39,7 @@ import to.bitkit.viewmodels.SettingsViewModel
 fun ReceiveSheet(
     navigateToExternalConnection: () -> Unit,
     walletState: WalletState,
+    isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
@@ -56,138 +65,155 @@ fun ReceiveSheet(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .sheetHeight()
-            .imePadding()
-            .testTag("ReceiveScreen")
+            .sheetHeight(),
     ) {
-        NavHost(
-            navController = navController,
-            startDestination = ReceiveRoute.QR,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .testTag("ReceiveScreen"),
         ) {
-            composableWithDefaultTransitions<ReceiveRoute.QR> {
-                LaunchedEffect(cjitInvoice.value) {
-                    showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
-                }
-
-                ReceiveQrScreen(
-                    cjitInvoice = cjitInvoice.value,
-                    walletState = walletState,
-                    lightningState = lightningState,
-                    onClickReceiveCjit = {
-                        if (lightningState.isGeoBlocked) {
-                            navController.navigateTo(ReceiveRoute.GeoBlock)
-                        } else {
-                            showCreateCjit.value = true
-                            navController.navigateTo(ReceiveRoute.Amount)
-                        }
-                    },
-                    onClickEditInvoice = { navController.navigateTo(ReceiveRoute.EditInvoice) },
-                )
-            }
-            composableWithDefaultTransitions<ReceiveRoute.Amount> {
-                ReceiveAmountScreen(
-                    onCjitCreated = { entry ->
-                        cjitEntryDetails.value = entry
-                        navController.navigateTo(ReceiveRoute.Confirm)
-                    },
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composableWithDefaultTransitions<ReceiveRoute.GeoBlock> {
-                LocationBlockScreen(
-                    onBackPressed = { navController.popBackStack() },
-                    navigateAdvancedSetup = navigateToExternalConnection,
-                )
-            }
-            composableWithDefaultTransitions<ReceiveRoute.Confirm> {
-                cjitEntryDetails.value?.let { entryDetails ->
-                    ReceiveConfirmScreen(
-                        entry = entryDetails,
-                        onLearnMore = { navController.navigateTo(ReceiveRoute.Liquidity) },
-                        onContinue = { invoice ->
-                            cjitInvoice.value = invoice
-                            navController.navigateTo(ReceiveRoute.QR) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
-                        },
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-            }
-            composableWithDefaultTransitions<ReceiveRoute.ConfirmIncreaseInbound> {
-                cjitEntryDetails.value?.let { entryDetails ->
-                    ReceiveConfirmScreen(
-                        entry = entryDetails,
-                        onLearnMore = { navController.navigateTo(ReceiveRoute.LiquidityAdditional) },
-                        onContinue = { invoice ->
-                            cjitInvoice.value = invoice
-                            navController.navigateTo(ReceiveRoute.QR) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
-                        },
-                        isAdditional = true,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-            }
-            composableWithDefaultTransitions<ReceiveRoute.Liquidity> {
-                cjitEntryDetails.value?.let { entryDetails ->
-                    val context = LocalContext.current
-                    val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-
-                    ReceiveLiquidityScreen(
-                        entry = entryDetails,
-                        onContinue = { navController.popBackStack() },
-                        onBack = { navController.popBackStack() },
-                        hasNotificationPermission = notificationsGranted,
-                        onSwitchClick = { context.openNotificationSettings() },
-                    )
-                }
-            }
-            composableWithDefaultTransitions<ReceiveRoute.LiquidityAdditional> {
-                cjitEntryDetails.value?.let { entryDetails ->
-                    val context = LocalContext.current
-                    val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-
-                    ReceiveLiquidityScreen(
-                        entry = entryDetails,
-                        onContinue = { navController.popBackStack() },
-                        isAdditional = true,
-                        onBack = { navController.popBackStack() },
-                        hasNotificationPermission = notificationsGranted,
-                        onSwitchClick = { context.openNotificationSettings() },
-                    )
-                }
-            }
-            composableWithDefaultTransitions<ReceiveRoute.EditInvoice> {
-                val walletUiState by wallet.walletState.collectAsStateWithLifecycle()
-                @Suppress("ViewModelForwarding")
-                EditInvoiceScreen(
-                    amountInputViewModel = editInvoiceAmountViewModel,
-                    walletUiState = walletUiState,
-                    onBack = { navController.popBackStack() },
-                    updateInvoice = wallet::updateBip21Invoice,
-                    onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
-                    onClickTag = wallet::removeTag,
-                    onDescriptionUpdate = wallet::updateBip21Description,
-                    navigateReceiveConfirm = { entry ->
-                        cjitEntryDetails.value = entry
-                        navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
+            NavHost(
+                navController = navController,
+                startDestination = ReceiveRoute.QR,
+            ) {
+                composableWithDefaultTransitions<ReceiveRoute.QR> {
+                    LaunchedEffect(cjitInvoice.value) {
+                        showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
                     }
-                )
+
+                    ReceiveQrScreen(
+                        cjitInvoice = cjitInvoice.value,
+                        walletState = walletState,
+                        lightningState = lightningState,
+                        onClickReceiveCjit = {
+                            if (lightningState.isGeoBlocked) {
+                                navController.navigateTo(ReceiveRoute.GeoBlock)
+                            } else {
+                                showCreateCjit.value = true
+                                navController.navigateTo(ReceiveRoute.Amount)
+                            }
+                        },
+                        onClickEditInvoice = { navController.navigateTo(ReceiveRoute.EditInvoice) },
+                    )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.Amount> {
+                    ReceiveAmountScreen(
+                        onCjitCreated = { entry ->
+                            cjitEntryDetails.value = entry
+                            navController.navigateTo(ReceiveRoute.Confirm)
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.GeoBlock> {
+                    LocationBlockScreen(
+                        onBackPressed = { navController.popBackStack() },
+                        navigateAdvancedSetup = navigateToExternalConnection,
+                    )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.Confirm> {
+                    cjitEntryDetails.value?.let { entryDetails ->
+                        ReceiveConfirmScreen(
+                            entry = entryDetails,
+                            onLearnMore = { navController.navigateTo(ReceiveRoute.Liquidity) },
+                            onContinue = { invoice ->
+                                cjitInvoice.value = invoice
+                                navController.navigateTo(
+                                    ReceiveRoute.QR
+                                ) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                }
+                composableWithDefaultTransitions<ReceiveRoute.ConfirmIncreaseInbound> {
+                    cjitEntryDetails.value?.let { entryDetails ->
+                        ReceiveConfirmScreen(
+                            entry = entryDetails,
+                            onLearnMore = { navController.navigateTo(ReceiveRoute.LiquidityAdditional) },
+                            onContinue = { invoice ->
+                                cjitInvoice.value = invoice
+                                navController.navigateTo(
+                                    ReceiveRoute.QR
+                                ) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
+                            },
+                            isAdditional = true,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                }
+                composableWithDefaultTransitions<ReceiveRoute.Liquidity> {
+                    cjitEntryDetails.value?.let { entryDetails ->
+                        val context = LocalContext.current
+                        val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
+
+                        ReceiveLiquidityScreen(
+                            entry = entryDetails,
+                            onContinue = { navController.popBackStack() },
+                            onBack = { navController.popBackStack() },
+                            hasNotificationPermission = notificationsGranted,
+                            onSwitchClick = { context.openNotificationSettings() },
+                        )
+                    }
+                }
+                composableWithDefaultTransitions<ReceiveRoute.LiquidityAdditional> {
+                    cjitEntryDetails.value?.let { entryDetails ->
+                        val context = LocalContext.current
+                        val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
+
+                        ReceiveLiquidityScreen(
+                            entry = entryDetails,
+                            onContinue = { navController.popBackStack() },
+                            isAdditional = true,
+                            onBack = { navController.popBackStack() },
+                            hasNotificationPermission = notificationsGranted,
+                            onSwitchClick = { context.openNotificationSettings() },
+                        )
+                    }
+                }
+                composableWithDefaultTransitions<ReceiveRoute.EditInvoice> {
+                    val walletUiState by wallet.walletState.collectAsStateWithLifecycle()
+                    @Suppress("ViewModelForwarding")
+                    EditInvoiceScreen(
+                        amountInputViewModel = editInvoiceAmountViewModel,
+                        walletUiState = walletUiState,
+                        onBack = { navController.popBackStack() },
+                        updateInvoice = wallet::updateBip21Invoice,
+                        onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
+                        onClickTag = wallet::removeTag,
+                        onDescriptionUpdate = wallet::updateBip21Description,
+                        navigateReceiveConfirm = { entry ->
+                            cjitEntryDetails.value = entry
+                            navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
+                        },
+                    )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.AddTag> {
+                    AddTagScreen(
+                        onBack = {
+                            navController.popBackStack()
+                        },
+                        onTagSelected = { tag ->
+                            wallet.addTagToSelected(tag)
+                            navController.popBackStack()
+                        },
+                        tqgInputTestTag = "TagInputReceive",
+                        addButtonTestTag = "ReceiveTagsSubmit",
+                    )
+                }
             }
-            composableWithDefaultTransitions<ReceiveRoute.AddTag> {
-                AddTagScreen(
-                    onBack = {
-                        navController.popBackStack()
-                    },
-                    onTagSelected = { tag ->
-                        wallet.addTagToSelected(tag)
-                        navController.popBackStack()
-                    },
-                    tqgInputTestTag = "TagInputReceive",
-                    addButtonTestTag = "ReceiveTagsSubmit",
-                )
-            }
+        }
+
+        AnimatedVisibility(
+            visible = isOffline,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            ConnectionIssuesView(titleText = stringResource(R.string.wallet__receive_bitcoin))
         }
     }
 }

@@ -45,7 +45,7 @@ class BlocksService @Inject constructor(
     }
 
     private suspend fun getBlockInfo(hash: String): MempoolBlockInfo {
-        val response: HttpResponse = client.get("${Env.mempoolBaseUrl}/block/$hash")
+        val response: HttpResponse = client.get("${Env.mempoolBaseUrl}/v1/block/$hash")
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<MempoolBlockInfo>() }.getOrElse {
@@ -75,6 +75,7 @@ class BlocksService @Inject constructor(
         // Format other numbers
         val formattedHeight = numberFormat.format(blockInfo.height)
         val formattedTransactionCount = numberFormat.format(blockInfo.txCount)
+        val formattedFees = blockInfo.extras?.totalFees?.let { numberFormat.format(it).replace(',', ' ') }.orEmpty()
 
         // Format timestamp to date and time
         val timestamp = blockInfo.timestamp * 1000L // Convert to milliseconds
@@ -88,7 +89,8 @@ class BlocksService @Inject constructor(
             weight = formattedWeight,
             difficulty = difficulty,
             merkleRoot = blockInfo.merkleRoot,
-            source = Env.mempoolBaseUrl.replace("https://", "").replaceAfter("/", "").replace("/", "")
+            source = Env.mempoolBaseUrl.replace("https://", "").replaceAfter("/", "").replace("/", ""),
+            fees = formattedFees,
         )
     }
 

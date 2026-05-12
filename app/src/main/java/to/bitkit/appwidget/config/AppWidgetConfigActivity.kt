@@ -11,14 +11,23 @@ import androidx.glance.appwidget.updateAll
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.appwidget.ui.blocks.BlocksGlanceReceiver
+import to.bitkit.appwidget.ui.blocks.BlocksGlanceWidget
+import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
+import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
+import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
 import to.bitkit.appwidget.ui.price.PriceGlanceWidget
+import to.bitkit.appwidget.ui.weather.WeatherGlanceReceiver
+import to.bitkit.appwidget.ui.weather.WeatherGlanceWidget
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.utils.Logger
 
 @AndroidEntryPoint
 class AppWidgetConfigActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_WIDGET_TYPE = "extra_widget_type"
+        private const val TAG = "AppWidgetConfigActivity"
     }
 
     private val viewModel: AppWidgetConfigViewModel by viewModels()
@@ -38,9 +47,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
             return
         }
 
-        val typeName = intent?.getStringExtra(EXTRA_WIDGET_TYPE)
-        val type = typeName?.let { runCatching { AppWidgetType.valueOf(it) }.getOrNull() }
-            ?: AppWidgetType.PRICE
+        val type = resolveWidgetType(appWidgetId)
 
         if (savedInstanceState == null) viewModel.init(appWidgetId, type)
 
@@ -49,7 +56,13 @@ class AppWidgetConfigActivity : ComponentActivity() {
                 AppWidgetConfigScreen(
                     viewModel = viewModel,
                     onConfirm = {
-                        PriceGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                        when (viewModel.uiState.value.type) {
+                            AppWidgetType.PRICE -> PriceGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                            AppWidgetType.HEADLINES -> HeadlinesGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                            AppWidgetType.BLOCKS -> BlocksGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                            AppWidgetType.FACTS -> Unit
+                            AppWidgetType.WEATHER -> WeatherGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                        }
                         AppWidgetRefreshWorker.enqueue(this@AppWidgetConfigActivity)
                         val result = Intent().putExtra(
                             AppWidgetManager.EXTRA_APPWIDGET_ID,
@@ -60,6 +73,29 @@ class AppWidgetConfigActivity : ComponentActivity() {
                     },
                     onCancel = { finish() },
                 )
+            }
+        }
+    }
+
+    private fun resolveWidgetType(appWidgetId: Int): AppWidgetType {
+        val extraType = intent?.getStringExtra(EXTRA_WIDGET_TYPE)
+            ?.let { runCatching { AppWidgetType.valueOf(it) }.getOrNull() }
+        if (extraType != null) return extraType
+
+        val providerClass = AppWidgetManager.getInstance(this)
+            .getAppWidgetInfo(appWidgetId)?.provider?.className
+        return when (providerClass) {
+            PriceGlanceReceiver::class.java.name -> AppWidgetType.PRICE
+            HeadlinesGlanceReceiver::class.java.name -> AppWidgetType.HEADLINES
+            BlocksGlanceReceiver::class.java.name -> AppWidgetType.BLOCKS
+            WeatherGlanceReceiver::class.java.name -> AppWidgetType.WEATHER
+            else -> {
+                Logger.warn(
+                    "Encountered unknown provider class '$providerClass' " +
+                        "for appWidgetId='$appWidgetId', defaulting to PRICE",
+                    context = TAG,
+                )
+                AppWidgetType.PRICE
             }
         }
     }

@@ -53,7 +53,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -83,6 +82,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
@@ -143,6 +143,7 @@ import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
+import to.bitkit.ui.theme.TopBarGradient
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -730,17 +731,18 @@ private fun Widgets(
                 WidgetType.BLOCK -> {
                     homeUiState.currentBlock?.run {
                         BlockCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             showBlock = homeUiState.blocksPreferences.showBlock,
                             showTime = homeUiState.blocksPreferences.showTime,
                             showDate = homeUiState.blocksPreferences.showDate,
                             showTransactions = homeUiState.blocksPreferences.showTransactions,
                             showSize = homeUiState.blocksPreferences.showSize,
+                            showFees = homeUiState.blocksPreferences.showFees,
                             showSource = homeUiState.blocksPreferences.showSource,
                             time = time,
                             date = date,
                             transactions = transactionCount,
                             size = size,
+                            fees = fees,
                             source = source,
                             block = height,
                             modifier = Modifier
@@ -760,8 +762,6 @@ private fun Widgets(
                 WidgetType.FACTS -> {
                     homeUiState.currentFact?.run {
                         FactsCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
-                            showSource = homeUiState.factsPreferences.showSource,
                             headline = homeUiState.currentFact,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -771,7 +771,6 @@ private fun Widgets(
                 WidgetType.NEWS -> {
                     homeUiState.currentArticle?.run {
                         HeadlineCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             showTime = homeUiState.headlinePreferences.showTime,
                             showSource = homeUiState.headlinePreferences.showSource,
                             headline = title,
@@ -800,7 +799,6 @@ private fun Widgets(
                 WidgetType.WEATHER -> {
                     homeUiState.currentWeather?.run {
                         WeatherCard(
-                            showWidgetTitle = homeUiState.showWidgetTitles,
                             weatherModel = this,
                             preferences = homeUiState.weatherPreferences,
                             modifier = Modifier.fillMaxWidth()
@@ -835,20 +833,13 @@ private fun TopBar(
     onNavigateToAppStatus: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
 ) {
-    val topbarGradient = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0.5f to Colors.Black,
-            1.0f to Color.Transparent,
-        )
-    )
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .hazeEffect(state = hazeState) {
-                mask = topbarGradient
+                mask = TopBarGradient
             }
-            .background(topbarGradient)
+            .background(TopBarGradient)
             .zIndex(1f)
     ) {
         TopAppBar(
@@ -975,6 +966,7 @@ private val previewBlock = BlockModel(
     transactionCount = "2,175",
     size = "1,606kB",
     source = "mempool.io",
+    fees = "25 059 357",
 )
 
 private val previewArticle = ArticleModel(
@@ -997,10 +989,14 @@ private val previewPrice = PriceDTO(
 )
 
 private val previewWeather = WeatherModel(
+    condition = FeeCondition.GOOD,
     title = R.string.widgets__weather__condition__good__title,
+    shortTitle = R.string.widgets__weather__condition__good__short_title,
     description = R.string.widgets__weather__condition__good__description,
-    currentFee = "15 sat/vB",
-    nextBlockFee = "12 sat/vB",
+    currentFee = "$ 0.52",
+    currentFeeSats = 520L,
+    currentFeeSatsFormatted = "520 \u20BF",
+    nextBlockFee = "6 \u20BF/vByte",
     icon = "\u2600\uFE0F",
 )
 

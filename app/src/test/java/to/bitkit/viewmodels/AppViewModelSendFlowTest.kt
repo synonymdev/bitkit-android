@@ -135,7 +135,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(100uL))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
-        whenever { lightningRepo.canSend(any(), any()) }.thenReturn(true)
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
     }
 
     private fun createViewModel() = AppViewModel(
@@ -369,6 +369,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertNull(activeContactPaymentContext())
         assertEquals(contactKey, pendingContactPaymentContext(paymentHash)?.publicKey)
+    }
+
+    @Test
+    fun `main scanner lightning scan opens send sheet`() = test {
+        val bolt11 = "lnbcrt1scanner"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `main scanner zero amount lightning scan opens amount sheet`() = test {
+        val bolt11 = "lnbcrt1zeroamount"
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `main scanner lightning scan opens QuickPay when enabled`() = test {
+        val bolt11 = "lnbcrt1scannerquickpay"
+        enableQuickPay(thresholdSats = 1000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
     @Test

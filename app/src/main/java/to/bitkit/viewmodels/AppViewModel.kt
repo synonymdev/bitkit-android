@@ -155,6 +155,7 @@ import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -991,8 +992,9 @@ class AppViewModel @Inject constructor(
         }
 
         if (invoice.amountSatoshis > 0uL) {
-            val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
-            if (maxSendLightning == 0uL || !lightningRepo.canSend(invoice.amountSatoshis)) {
+            lightningRepo.syncState()
+            if (!lightningRepo.canSend(invoice.amountSatoshis)) {
+                val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
                 val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
                 showAddressValidationError(
                     titleRes = R.string.other__pay_insufficient_spending,
@@ -1078,6 +1080,7 @@ class AppViewModel @Inject constructor(
                         )
                         return@takeIf false
                     }
+                    lightningRepo.waitForUsableChannels()
                     val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                     if (!canSend) {
                         val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
@@ -1396,10 +1399,12 @@ class AppViewModel @Inject constructor(
         resetSendState()
         resetQuickPay()
 
+        val fromMainScanner = isMainScanner
         val input = result.removeLightningSchemes()
 
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
         if (Bip21Utils.isDuplicatedBip21(input)) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1436,25 +1441,29 @@ class AppViewModel @Inject constructor(
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
-        handleDecodedScan(scan, input)
+        handleDecodedScan(scan, input, fromMainScanner)
     }
 
     @Suppress("CyclomaticComplexMethod")
-    private suspend fun handleDecodedScan(scan: Scanner?, input: String) = when (scan) {
-        is Scanner.OnChain -> onScanOnchain(scan.invoice, input)
-        is Scanner.Lightning -> onScanLightning(scan.invoice, input)
-        is Scanner.LnurlPay -> onScanLnurlPay(scan.data)
-        is Scanner.LnurlWithdraw -> handleNonPaymentScan { onScanLnurlWithdraw(scan.data) }
-        is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data) }
+    private suspend fun handleDecodedScan(
+        scan: Scanner?,
+        input: String,
+        fromMainScanner: Boolean,
+    ) = when (scan) {
+        is Scanner.OnChain -> onScanOnchain(scan.invoice, input, fromMainScanner)
+        is Scanner.Lightning -> onScanLightning(scan.invoice, input, fromMainScanner)
+        is Scanner.LnurlPay -> onScanLnurlPay(scan.data, fromMainScanner)
+        is Scanner.LnurlWithdraw -> handleNonPaymentScan { onScanLnurlWithdraw(scan.data, fromMainScanner) }
+        is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
         is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
         is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
         is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
         else -> {
-            if (scan == null) {
-                Logger.warn("Failed to decode scan data", context = TAG)
-            } else {
-                Logger.warn("Received unhandled scan data '$scan'", context = TAG)
-            }
+            hideSheet()
+            Logger.warn(
+                if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'",
+                context = TAG,
+            )
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__qr_error_header),
@@ -1486,9 +1495,14 @@ class AppViewModel @Inject constructor(
     }
 
     @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
-    private suspend fun onScanOnchain(invoice: OnChainInvoice, scanResult: String) {
+    private suspend fun onScanOnchain(
+        invoice: OnChainInvoice,
+        scanResult: String,
+        fromMainScanner: Boolean,
+    ) {
         val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
             .getOrElse {
+                hideSheet()
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),
@@ -1500,6 +1514,7 @@ class AppViewModel @Inject constructor(
             }
 
         if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1533,16 +1548,13 @@ class AppViewModel @Inject constructor(
             val quickPayHandled = handleQuickPayIfApplicable(
                 amountSats = lnAmountSats,
                 invoice = lnInvoice,
+                fromMainScanner = fromMainScanner,
             )
             if (quickPayHandled) return
 
+            navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
             refreshOnchainSendIfNeeded()
             estimateLightningRoutingFeesIfNeeded()
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.Confirm))
-            } else {
-                setSendEffect(SendEffect.NavigateToConfirm)
-            }
             return
         }
 
@@ -1584,15 +1596,16 @@ class AppViewModel @Inject constructor(
             context = TAG,
         )
 
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
-    private suspend fun onScanLightning(invoice: LightningInvoice, scanResult: String) {
+    private suspend fun onScanLightning(
+        invoice: LightningInvoice,
+        scanResult: String,
+        fromMainScanner: Boolean,
+    ) {
         if (invoice.isExpired) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -1603,10 +1616,16 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val quickPayHandled = handleQuickPayIfApplicable(amountSats = invoice.amountSatoshis, invoice = invoice)
+        val quickPayHandled = handleQuickPayIfApplicable(
+            amountSats = invoice.amountSatoshis,
+            invoice = invoice,
+            fromMainScanner = fromMainScanner,
+        )
         if (quickPayHandled) return
 
+        lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(invoice.amountSatoshis)) {
+            hideSheet()
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
             toast(
@@ -1633,29 +1652,23 @@ class AppViewModel @Inject constructor(
         if (invoice.amountSatoshis > 0uL) {
             Logger.info("Found amount in invoice, proceeding with payment", context = TAG)
 
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.Confirm))
-            } else {
-                setSendEffect(SendEffect.NavigateToConfirm)
-            }
+            navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
             return
         }
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)
 
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
-    private suspend fun onScanLnurlPay(data: LnurlPayData) {
+    private suspend fun onScanLnurlPay(data: LnurlPayData, fromMainScanner: Boolean) {
         Logger.debug("LNURL: $data", context = TAG)
 
         val isFixed = data.isFixedAmount()
         val displaySats = data.minSendableSat()
 
+        lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(displaySats.coerceAtLeast(1u))) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_pay_error),
@@ -1678,26 +1691,22 @@ class AppViewModel @Inject constructor(
         if (isFixed) {
             Logger.info("Found fixed amount '$displaySats' sats in lnurlPay, proceeding with payment", context = TAG)
 
-            val quickPayHandled = handleQuickPayIfApplicable(amountSats = displaySats, lnurlPay = data)
+            val quickPayHandled = handleQuickPayIfApplicable(
+                amountSats = displaySats,
+                lnurlPay = data,
+                fromMainScanner = fromMainScanner,
+            )
             if (quickPayHandled) return
 
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.Confirm))
-            } else {
-                setSendEffect(SendEffect.NavigateToConfirm)
-            }
+            navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
             return
         }
 
         Logger.info("No amount found in lnurlPay, proceeding to enter amount manually", context = TAG)
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
-    private suspend fun onScanLnurlWithdraw(data: LnurlWithdrawData) {
+    private suspend fun onScanLnurlWithdraw(data: LnurlWithdrawData, fromMainScanner: Boolean) {
         Logger.debug("LNURL: $data", context = TAG)
 
         val isFixed = data.isFixedAmount()
@@ -1705,6 +1714,7 @@ class AppViewModel @Inject constructor(
         val maxWithdrawable = data.maxWithdrawableSat()
 
         if (!isFixed && minWithdrawable > maxWithdrawable) {
+            hideSheet()
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_withdr_error),
@@ -1725,28 +1735,37 @@ class AppViewModel @Inject constructor(
 
         if (isFixed || minWithdrawable == maxWithdrawable) {
             delay(TRANSITION_SCREEN_MS)
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.WithdrawConfirm))
-            } else {
-                setSendEffect(SendEffect.NavigateToWithdrawConfirm)
-            }
+            navigateToSendRoute(
+                fromMainScanner,
+                SendRoute.WithdrawConfirm,
+                SendEffect.NavigateToWithdrawConfirm,
+            )
             return
         }
 
-        if (isMainScanner) {
-            showSheet(Sheet.Send(SendRoute.Amount))
-        } else {
-            setSendEffect(SendEffect.NavigateToAmount)
-        }
+        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
-    private suspend fun onScanLnurlAuth(data: LnurlAuthData) {
+    private suspend fun onScanLnurlAuth(data: LnurlAuthData, fromMainScanner: Boolean) {
         Logger.debug("LNURL: $data", context = TAG)
-        if (!isMainScanner) {
+        if (!fromMainScanner) {
             hideSheet()
             delay(TRANSITION_SCREEN_MS)
         }
         showSheet(Sheet.LnurlAuth(domain = data.domain, lnurl = data.uri, k1 = data.k1))
+    }
+
+    private fun navigateToSendRoute(
+        fromMainScanner: Boolean,
+        route: SendRoute,
+        effect: SendEffect,
+    ) {
+        if (fromMainScanner) {
+            showSheet(Sheet.Send(route))
+            return
+        }
+
+        setSendEffect(effect)
     }
 
     fun requestLnurlAuth(callback: String, k1: String, domain: String) {
@@ -1816,6 +1835,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleQuickPayIfApplicable(
         amountSats: ULong,
+        fromMainScanner: Boolean,
         lnurlPay: LnurlPayData? = null,
         invoice: LightningInvoice? = null,
     ): Boolean {
@@ -1851,11 +1871,7 @@ class AppViewModel @Inject constructor(
 
             Logger.debug("QuickPayData: $quickPayData", context = TAG)
 
-            if (isMainScanner) {
-                showSheet(Sheet.Send(SendRoute.QuickPay))
-            } else {
-                setSendEffect(SendEffect.NavigateToQuickPay)
-            }
+            navigateToSendRoute(fromMainScanner, SendRoute.QuickPay, SendEffect.NavigateToQuickPay)
             return true
         }
 
@@ -2079,7 +2095,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoiceMsats(
                     amountMsats = lnurl.data.maxWithdrawable,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
+                    expirySeconds = LNURL_WITHDRAW_EXPIRY_SEC,
                 )
             } else {
                 val withdrawAmountSats = _sendUiState.value.amount.coerceAtLeast(
@@ -2089,7 +2105,7 @@ class AppViewModel @Inject constructor(
                 lightningRepo.createInvoice(
                     amountSats = withdrawAmountSats,
                     description = lnurl.data.defaultDescription,
-                    expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
+                    expirySeconds = LNURL_WITHDRAW_EXPIRY_SEC,
                 )
             }.getOrNull()
 
@@ -2789,6 +2805,7 @@ class AppViewModel @Inject constructor(
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
+        private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
     }
 }
 

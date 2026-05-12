@@ -305,6 +305,7 @@ jobs:
       matrix:
         shard:
           - { name: multi_address_2_regtest, grep: "@multi_address_2" }
+          - { name: pubky_paykit, grep: "@pubky" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 

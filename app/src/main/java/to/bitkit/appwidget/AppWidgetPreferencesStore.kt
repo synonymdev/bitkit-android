@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.map
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
+import to.bitkit.data.dto.ArticleDTO
+import to.bitkit.data.dto.BlockDTO
+import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.AppWidgetDataSerializer
@@ -28,9 +31,11 @@ private val Context.appWidgetDataStore: DataStore<AppWidgetData> by dataStore(
 @InstallIn(SingletonComponent::class)
 interface AppWidgetEntryPoint {
     fun appWidgetPreferencesStore(): AppWidgetPreferencesStore
+    fun appWidgetDataRepository(): AppWidgetDataRepository
 }
 
 @Singleton
+@Suppress("TooManyFunctions")
 class AppWidgetPreferencesStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
@@ -78,5 +83,31 @@ class AppWidgetPreferencesStore @Inject constructor(
 
     suspend fun cachePriceData(period: GraphPeriod, price: PriceDTO) {
         store.updateData { it.copy(cachedPrices = it.cachedPrices + (period to price)) }
+    }
+
+    suspend fun cacheArticlesAndRotate(articles: List<ArticleDTO>) {
+        if (articles.isEmpty()) return
+        store.updateData {
+            it.copy(
+                cachedArticles = articles,
+                articleRotationTick = it.articleRotationTick + 1,
+            )
+        }
+    }
+
+    suspend fun cacheBlock(block: BlockDTO) {
+        store.updateData { it.copy(cachedBlock = block) }
+    }
+
+    suspend fun cacheFacts(facts: List<String>) {
+        store.updateData { it.copy(cachedFacts = facts) }
+    }
+
+    suspend fun bumpFactsRotationTick() {
+        store.updateData { it.copy(factsRotationTick = it.factsRotationTick + 1) }
+    }
+
+    suspend fun cacheWeather(weather: WeatherDTO) {
+        store.updateData { it.copy(cachedWeather = weather) }
     }
 }
