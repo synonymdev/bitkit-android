@@ -460,6 +460,7 @@ class TransferViewModel @Inject constructor(
     ): Pair<List<ChannelDetails>, List<ChannelDetails>> = lightningRepo.separateTrustedChannels(channels)
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
+        lightningRepo.awaitPeerConnected()
         val channelsFailedToClose = coroutineScope {
             channels.map { channel ->
                 async {

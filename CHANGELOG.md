@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 
 ### Changed
 - Improve Pubky profile restore, contact editing, and contact routing flows #905
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Show loading state on Spending tab when node is not running #875
 
 ### Added
+- Transfer from Savings button on empty Spending screen when savings balance exists #882
 - Pubky profile onboarding with contact sync, import, and editing #824
 - Lightning Connections empty state with onboarding screen #857
 - Unified PIN management screen (enable/disable/change in one place) #857

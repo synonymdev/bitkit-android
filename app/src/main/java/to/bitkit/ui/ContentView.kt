@@ -48,6 +48,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.WidgetType
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.DrawerMenu
@@ -194,6 +195,7 @@ import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
+import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.utils.AutoReadClipboardHandler
@@ -410,13 +412,15 @@ fun ContentView(
 
                         is Sheet.Receive -> {
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
+                            val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                             ReceiveSheet(
                                 startRoute = sheet.route,
                                 walletState = walletState,
+                                isOffline = connectivityState != ConnectivityState.CONNECTED,
                                 navigateToExternalConnection = {
                                     navController.navigateTo(ExternalConnection())
                                     appViewModel.hideSheet()
-                                }
+                                },
                             )
                         }
 
@@ -516,7 +520,7 @@ fun ContentView(
                         TabBar(
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
-                            onScanClick = { appViewModel.showScannerSheet() },
+                            onScanClick = { appViewModel.showSheet(Sheet.Send(SendRoute.QrScanner)) },
                         )
                     }
                 }
@@ -623,7 +627,9 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SavingsConfirmScreen(
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onConfirm = { navController.navigateTo(Routes.SavingsProgress) },
                     onAdvancedClick = { navController.navigateTo(Routes.SavingsAdvanced) },
                     onBackClick = { navController.popBackStack() },
@@ -654,8 +660,10 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingAmount> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
@@ -663,14 +671,16 @@ private fun RootNavHost(
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
                             title = title,
-                            description = description
+                            description = description,
                         )
                     },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingConfirmScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                     onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
@@ -854,6 +864,7 @@ private fun NavGraphBuilder.home(
     }
     composableWithDefaultTransitions<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
@@ -868,6 +879,13 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsIntro()
                 } else {
                     navController.navigateToTransferSavingsAvailability()
+                }
+            },
+            onTransferFromSavingsClick = {
+                if (!hasSeenSpendingIntro) {
+                    navController.navigateToTransferSpendingIntro()
+                } else {
+                    navController.navigateToTransferSpendingAmount()
                 }
             },
             onBackClick = { navController.popBackStack() },

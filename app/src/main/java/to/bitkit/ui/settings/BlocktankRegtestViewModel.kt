@@ -2,6 +2,7 @@ package to.bitkit.ui.settings
 
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import to.bitkit.env.Defaults
 import to.bitkit.services.CoreService
 import javax.inject.Inject
 
@@ -28,7 +29,11 @@ class BlocktankRegtestViewModel @Inject constructor(
         )
     }
 
-    suspend fun regtestCloseChannel(fundingTxId: String, vout: UInt, forceCloseAfterS: ULong = 86_400uL): String {
+    suspend fun regtestCloseChannel(
+        fundingTxId: String,
+        vout: UInt,
+        forceCloseAfterS: UInt = Defaults.bolt11ExpirySec,
+    ): String {
         return coreService.blocktank.regtestCloseChannel(
             fundingTxId = fundingTxId,
             vout = vout,

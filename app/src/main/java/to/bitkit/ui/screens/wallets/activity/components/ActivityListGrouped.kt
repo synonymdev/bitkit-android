@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -59,7 +60,7 @@ fun ActivityListGrouped(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxSize()
     ) {
-        if (items != null && items.isNotEmpty()) {
+        if (!items.isNullOrEmpty()) {
             val groupedItems = groupActivityItems(items)
 
             LazyColumn(
@@ -138,6 +139,92 @@ fun ActivityListGrouped(
                 EmptyActivityRow(onClick = onEmptyActivityRowClick)
             } else {
                 // On all activity screen when filtered list is empty
+                BodyM(
+                    text = stringResource(R.string.wallet__activity_no),
+                    color = Colors.White64,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Suppress("LongMethod")
+fun LazyListScope.activityListGroupedItems(
+    items: ImmutableList<Activity>?,
+    onActivityItemClick: (String) -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
+    showFooter: Boolean = false,
+    onAllActivityButtonClick: () -> Unit = {},
+) {
+    if (!items.isNullOrEmpty()) {
+        val groupedItems = groupActivityItems(items)
+        itemsIndexed(
+            items = groupedItems,
+            key = { index, item ->
+                when (item) {
+                    is String -> "header_$item"
+                    is Activity -> when (item) {
+                        is Activity.Lightning -> "lightning_${item.rawId()}"
+                        is Activity.Onchain -> "onchain_${item.rawId()}"
+                    }
+
+                    else -> "item_$index"
+                }
+            },
+        ) { index, item ->
+            when (item) {
+                is String -> {
+                    Caption13Up(
+                        text = item,
+                        color = Colors.White64,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .animateItem(
+                                fadeInSpec = tween(durationMillis = 300),
+                                fadeOutSpec = tween(durationMillis = 300),
+                                placementSpec = tween(durationMillis = 300),
+                            )
+                    )
+                }
+
+                is Activity -> {
+                    Column(
+                        modifier = Modifier
+                            .animateItem(
+                                fadeInSpec = tween(durationMillis = 300),
+                                fadeOutSpec = tween(durationMillis = 300),
+                                placementSpec = tween(durationMillis = 300),
+                            )
+                    ) {
+                        ActivityRow(item, onActivityItemClick, testTag = "Activity-$index")
+                        VerticalSpacer(16.dp)
+                    }
+                }
+            }
+        }
+        if (showFooter) {
+            item {
+                TertiaryButton(
+                    text = stringResource(R.string.wallet__activity_show_all),
+                    onClick = onAllActivityButtonClick,
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .padding(top = 8.dp)
+                )
+            }
+        }
+        item {
+            VerticalSpacer(120.dp)
+        }
+    } else {
+        if (showFooter) {
+            item { EmptyActivityRow(onClick = onEmptyActivityRowClick) }
+        } else {
+            item {
                 BodyM(
                     text = stringResource(R.string.wallet__activity_no),
                     color = Colors.White64,
