@@ -18,6 +18,8 @@ import dagger.assisted.AssistedInject
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceReceiver
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceWidget
+import to.bitkit.appwidget.ui.calculator.CalculatorGlanceReceiver
+import to.bitkit.appwidget.ui.calculator.CalculatorGlanceWidget
 import to.bitkit.appwidget.ui.facts.FactsGlanceReceiver
 import to.bitkit.appwidget.ui.facts.FactsGlanceWidget
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
@@ -74,6 +76,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
             AppWidgetType.BLOCKS -> BlocksGlanceReceiver::class.java
             AppWidgetType.FACTS -> FactsGlanceReceiver::class.java
             AppWidgetType.WEATHER -> WeatherGlanceReceiver::class.java
+            AppWidgetType.CALCULATOR -> CalculatorGlanceReceiver::class.java
         }
     }
 
@@ -132,6 +135,10 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                             Logger.warn("Failed to refresh weather", it, context = TAG)
                         }
                     WeatherGlanceWidget().updateAll(appContext)
+                }
+
+                AppWidgetType.CALCULATOR -> {
+                    CalculatorGlanceWidget().updateAll(appContext)
                 }
             }
         }

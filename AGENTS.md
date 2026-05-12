@@ -34,7 +34,7 @@ GEO=false E2E=true ./gradlew assembleDevRelease
 E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
 
 # Lint using detekt
-./gradlew detekt
+./gradlew detekt --rerun-tasks
 
 # Auto-format using detekt
 ./gradlew detekt --auto-correct
@@ -133,6 +133,13 @@ suspend fun getData() = withContext(Dispatchers.IO) { }
 
 ## Common Patterns
 
+### Naming: Use Context, Avoid Redundant Prefixes
+- 
+- Infer names from the surrounding context: file name, component/class name, enclosing function, module, and call site.
+- Avoid repeating domain prefixes or suffixes that are already obvious from the context, especially for private, nested, local and file-local symbols, i.e., inner-scoped parts invisible outside their context.
+- Only add a prefix/suffix when it resolves real ambiguity at the call site. Preserve existing concise names unless there is a concrete readability or correctness reason to rename them.
+- Examples: `Numpad` or `formatAmount`, instead of `CalculatorNumpad` or `formatCalculatorAmount`.
+
 ### ViewModel State
 
 ```kotlin
@@ -141,7 +148,7 @@ val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
 fun updateState(action: Action) {
   viewModelScope.launch {
-    _uiState.update { it.copy(/* fields */) }
+    _uiState.update { it.copy(/*…*/) }
   }
 }
 ```
@@ -160,7 +167,6 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 
 ### Rules
 
-- USE coding rules from `.cursor/default.rules.mdc`
 - ALWAYS run `./gradlew compileDevDebugKotlin` after code changes to verify code compiles
 - ALWAYS run `./gradlew testDevDebugUnitTest` after code changes to verify tests succeed and fix accordingly
 - ALWAYS run `./gradlew detekt` after code changes to check for new lint issues and fix accordingly
@@ -201,7 +207,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add trailing commas in multi-line declarations, EXCEPT after a `modifier = ...` last argument — never add a trailing comma there, whether the modifier is a single call (`modifier = Modifier.weight(1f)`) or a chain (`modifier = Modifier.fillMaxWidth().testTag("foo")`)
 - ALWAYS use `navController.navigateTo(route)` for simple navigation; NEVER use raw `navController.navigate(route)` — `navigateTo` prevents duplicate destinations
 - ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
-- PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
+- PREFER declaring small dependant classes, constants, interfaces, or top-level functions in the same file with the core class where these are used
 - ALWAYS create data classes for state AFTER viewModel class in same file
 - ALWAYS return early where applicable, PREFER guard-like `if` conditions like `if (condition) return`
 - USE `docs/` as target dir of saved files when asked to create documentation for new features
@@ -278,3 +284,6 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use `WakeNodeWorker` to manage the handling of remote notifications received via cloud messages
 - Use `*Services` to wrap rust library code exposed via bindings
 - Use CQRS pattern of Command + Handler like it's done in the `NotifyPaymentReceived` + `NotifyPaymentReceivedHandler` setup
+
+### Other Sources
+- Use coding rules from `.cursor/default.rules.mdc`

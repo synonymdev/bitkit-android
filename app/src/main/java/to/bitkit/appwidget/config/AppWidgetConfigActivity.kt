@@ -13,6 +13,7 @@ import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceReceiver
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceWidget
+import to.bitkit.appwidget.ui.calculator.CalculatorGlanceReceiver
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceReceiver
 import to.bitkit.appwidget.ui.headlines.HeadlinesGlanceWidget
 import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
@@ -62,6 +63,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
                             AppWidgetType.BLOCKS -> BlocksGlanceWidget().updateAll(this@AppWidgetConfigActivity)
                             AppWidgetType.FACTS -> Unit
                             AppWidgetType.WEATHER -> WeatherGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                            AppWidgetType.CALCULATOR -> Unit
                         }
                         AppWidgetRefreshWorker.enqueue(this@AppWidgetConfigActivity)
                         val result = Intent().putExtra(
@@ -89,6 +91,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
             HeadlinesGlanceReceiver::class.java.name -> AppWidgetType.HEADLINES
             BlocksGlanceReceiver::class.java.name -> AppWidgetType.BLOCKS
             WeatherGlanceReceiver::class.java.name -> AppWidgetType.WEATHER
+            CalculatorGlanceReceiver::class.java.name -> AppWidgetType.CALCULATOR
             else -> {
                 Logger.warn(
                     "Encountered unknown provider class '$providerClass' " +

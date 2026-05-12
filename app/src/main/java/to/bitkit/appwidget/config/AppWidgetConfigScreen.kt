@@ -48,6 +48,8 @@ fun AppWidgetConfigScreen(
 
         AppWidgetType.FACTS -> Unit
 
+        AppWidgetType.CALCULATOR -> Unit
+
         AppWidgetType.WEATHER -> WeatherConfigContent(
             state = state,
             onSelectOption = { viewModel.selectWeatherOption(it) },

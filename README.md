@@ -57,7 +57,7 @@ The following IDE plugins are recommended for development with Android Studio or
 
 **Commands** 
 ```sh
-./gradlew detekt # run analysis + formatting check
+./gradlew detekt --rerun-tasks # run analysis + formatting check (rerun flag ensures issues are always listed.)
 ./gradlew detekt --auto-correct # auto-fix formatting issues
 ```
 Reports are generated in: `app/build/reports/detekt/`.

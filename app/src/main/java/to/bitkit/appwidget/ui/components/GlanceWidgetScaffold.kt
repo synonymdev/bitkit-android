@@ -15,11 +15,12 @@ import to.bitkit.R
 @Composable
 fun GlanceWidgetScaffold(
     onClick: Action? = null,
+    backgroundProvider: ImageProvider = ImageProvider(R.drawable.appwidget_background),
     content: @Composable () -> Unit,
 ) {
     val modifier = GlanceModifier
         .fillMaxSize()
-        .background(ImageProvider(R.drawable.appwidget_background))
+        .background(backgroundProvider)
         .padding(16.dp)
         .let { mod ->
             if (onClick != null) mod.clickable(onClick) else mod

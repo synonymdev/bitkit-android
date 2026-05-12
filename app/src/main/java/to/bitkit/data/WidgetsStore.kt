@@ -139,11 +139,7 @@ class WidgetsStore @Inject constructor(
         if (!store.data.first().widgets.map { it.type }.contains(type)) return
 
         store.updateData { data ->
-            val updated = data.copy(widgets = data.widgets.filterNot { it.type == type })
-            when (type) {
-                WidgetType.CALCULATOR -> updated.copy(calculatorValues = CalculatorValues())
-                else -> updated
-            }
+            data.copy(widgets = data.widgets.filterNot { it.type == type })
         }
     }
 

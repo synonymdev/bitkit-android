@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -71,13 +72,20 @@ fun NumberPad(
     modifier: Modifier = Modifier,
     type: NumberPadType = NumberPadType.SIMPLE,
     availableHeight: Dp = defaultHeight,
+    decimalSeparator: String = KEY_DECIMAL,
     errorKey: String? = null,
+    includeNavigationBarsPadding: Boolean = false,
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    val safeAreaModifier = if (includeNavigationBarsPadding) {
+        modifier.navigationBarsPadding()
+    } else {
+        modifier
+    }
 
     BoxWithConstraints(
-        modifier = modifier
+        modifier = safeAreaModifier
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -124,9 +132,10 @@ fun NumberPad(
                     )
 
                     NumberPadType.DECIMAL -> NumberPadKeyButton(
-                        text = KEY_DECIMAL,
+                        text = decimalSeparator,
                         onPress = onPress,
                         height = buttonHeight,
+                        key = KEY_DECIMAL,
                         hasError = errorKey == KEY_DECIMAL,
                         testTag = "NDecimal",
                     )
@@ -161,6 +170,8 @@ fun NumberPad(
     currencies: CurrencyState = LocalCurrencies.current,
     type: NumberPadType = viewModel.getNumberPadType(currencies),
     availableHeight: Dp = defaultHeight,
+    decimalSeparator: String = KEY_DECIMAL,
+    includeNavigationBarsPadding: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     NumberPad(
@@ -168,7 +179,9 @@ fun NumberPad(
         modifier = modifier,
         type = type,
         availableHeight = availableHeight,
+        decimalSeparator = decimalSeparator,
         errorKey = uiState.errorKey,
+        includeNavigationBarsPadding = includeNavigationBarsPadding,
     )
 }
 
@@ -186,7 +199,7 @@ private val hardwareKeyMap = mapOf(
     Key.Eight to "8", Key.NumPad8 to "8",
     Key.Nine to "9", Key.NumPad9 to "9",
     Key.Backspace to KEY_DELETE, Key.Delete to KEY_DELETE,
-    Key.Period to KEY_DECIMAL, Key.NumPadDot to KEY_DECIMAL,
+    Key.Period to KEY_DECIMAL, Key.NumPadDot to KEY_DECIMAL, Key.Comma to KEY_DECIMAL,
 )
 
 private fun mapHardwareKey(key: Key, type: NumberPadType): String? {
@@ -201,11 +214,12 @@ fun NumberPadKeyButton(
     onPress: (String) -> Unit,
     height: Dp,
     modifier: Modifier = Modifier,
+    key: String = text,
     hasError: Boolean = false,
     testTag: String = "N$text",
 ) {
     NumberPadKey(
-        onClick = { onPress(text) },
+        onClick = { onPress(key) },
         height = height,
         haptic = if (hasError) errorHaptic else pressHaptic,
         modifier = modifier.testTag(testTag),
