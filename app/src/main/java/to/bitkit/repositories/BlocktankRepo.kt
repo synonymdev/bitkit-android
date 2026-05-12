@@ -20,13 +20,17 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -37,7 +41,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
@@ -46,6 +53,7 @@ import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.EUR
+import to.bitkit.models.msatCeilOf
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
@@ -459,26 +467,52 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    private suspend fun claimGiftCodeWithLiquidity(code: String, amount: ULong): GiftClaimResult {
+    private suspend fun claimGiftCodeWithLiquidity(code: String, amount: ULong): GiftClaimResult = coroutineScope {
         val invoice = lightningRepo.createInvoice(
             amountSats = null,
             description = "blocktank-gift-code:$code",
             expirySeconds = 1.hours.inWholeSeconds.toUInt(),
         ).getOrThrow()
 
+        val expectedPaymentHash = Bolt11Invoice.fromStr(invoice).paymentHash()
+
         Logger.debug("Created invoice for gift code, requesting payment from LSP", context = TAG)
+
+        val paymentReceivedDeferred = async(start = CoroutineStart.UNDISPATCHED) {
+            lightningRepo.nodeEvents
+                .filterIsInstance<Event.PaymentReceived>()
+                .first { it.paymentHash == expectedPaymentHash }
+        }
 
         val giftResponse = ServiceQueue.CORE.background {
             giftPay(invoice = invoice)
         }
 
-        Logger.debug("Gift payment request completed: id=${giftResponse.id}", context = TAG)
+        Logger.debug(
+            "Gift payment request completed: id='${giftResponse.id}', awaiting LDK PaymentReceived",
+            context = TAG,
+        )
 
-        return GiftClaimResult.SuccessWithLiquidity(
-            paymentHashOrTxId = giftResponse.bolt11PaymentId ?: giftResponse.id,
-            sats = giftResponse.bolt11Payment?.paidSat?.toLong()
-                ?: giftResponse.appliedGiftCode?.giftSat?.toLong()
-                ?: amount.toLong(),
+        val paymentReceived = withTimeoutOrNull(GIFT_PAYMENT_RECEIVE_TIMEOUT) {
+            paymentReceivedDeferred.await()
+        }
+
+        if (paymentReceived == null) {
+            paymentReceivedDeferred.cancel()
+            throw ServiceError.GiftClaimPaymentNotReceived()
+        }
+
+        Logger.debug(
+            "Gift payment confirmed by LDK: hash='${paymentReceived.paymentHash}', " +
+                "amountMsat='${paymentReceived.amountMsat}'",
+            context = TAG,
+        )
+
+        val receivedSats = msatCeilOf(paymentReceived.amountMsat).toLong()
+
+        GiftClaimResult.SuccessWithLiquidity(
+            paymentHashOrTxId = paymentReceived.paymentHash,
+            sats = receivedSats.takeIf { it > 0 } ?: amount.toLong(),
             invoice = invoice,
             code = code,
         )
@@ -518,6 +552,7 @@ class BlocktankRepo @Inject constructor(
         private const val DEFAULT_SOURCE = "bitkit-android"
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
         private val TIMEOUT_GIFT_CODE = 30.seconds
+        private val GIFT_PAYMENT_RECEIVE_TIMEOUT = 45.seconds
     }
 }
 
