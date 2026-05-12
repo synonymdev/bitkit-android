@@ -595,7 +595,7 @@ class LightningService @Inject constructor(
     suspend fun receive(
         sat: ULong? = null,
         description: String,
-        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
     ): String {
         return receiveMsats(amountMsat = sat?.let { it * 1000u }, description = description, expirySecs = expirySecs)
     }
@@ -603,7 +603,7 @@ class LightningService @Inject constructor(
     suspend fun receiveMsats(
         amountMsat: ULong? = null,
         description: String,
-        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
     ): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 

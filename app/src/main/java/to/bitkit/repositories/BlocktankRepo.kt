@@ -41,7 +41,6 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
@@ -57,6 +56,7 @@ import javax.inject.Named
 import javax.inject.Singleton
 import kotlin.math.ceil
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -463,7 +463,7 @@ class BlocktankRepo @Inject constructor(
         val invoice = lightningRepo.createInvoice(
             amountSats = null,
             description = "blocktank-gift-code:$code",
-            expirySeconds = Defaults.bolt11InvoiceExpirySeconds,
+            expirySeconds = 1.hours.inWholeSeconds.toUInt(),
         ).getOrThrow()
 
         Logger.debug("Created invoice for gift code, requesting payment from LSP", context = TAG)
