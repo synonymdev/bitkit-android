@@ -14,6 +14,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import to.bitkit.async.ServiceQueue
+import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.ProbeOutcome
 import to.bitkit.utils.Logger
@@ -101,7 +102,7 @@ private sealed interface DevCommand {
         )
 
         override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult {
-            val amountSats = args.amountSats ?: args.amountMsat?.div(1_000u)
+            val amountSats = args.amountSats ?: args.amountMsat?.let { msatCeilOf(it) }
             val timeout = args.timeoutSeconds.coerceAtLeast(1).seconds
 
             Logger.info(

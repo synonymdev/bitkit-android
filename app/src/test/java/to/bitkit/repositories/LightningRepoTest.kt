@@ -1277,7 +1277,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(setOf(probePaymentA), result.getOrThrow().paymentIds)
-        verifyBlocking(lightningService) { sendProbesUsingAmount("lnbc1", 42_000uL) }
+        verify(lightningService).sendProbesUsingAmount("lnbc1", 42_000uL)
     }
 
     @Test
