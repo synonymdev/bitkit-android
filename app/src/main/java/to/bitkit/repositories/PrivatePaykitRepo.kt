@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.FfiPaymentEntry
-import com.synonym.paykit.PaykitFfiException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,32 +17,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.App
-import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
-import to.bitkit.data.PrivatePaykitContactCacheData
-import to.bitkit.data.PrivatePaykitStoredInvoiceData
-import to.bitkit.data.PrivatePaykitStoredPaymentEntryData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
-import to.bitkit.di.json
 import to.bitkit.ext.toHex
 import to.bitkit.models.PrivatePaykitContactLinkBackupV1
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
 import to.bitkit.services.PubkyService
-import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
-import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -54,13 +41,6 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
-
-sealed class PrivatePaykitError(message: String, cause: Throwable? = null) : AppError(message, cause) {
-    data object PrivateUnavailable : PrivatePaykitError("Private Paykit is not available")
-    data object PayloadTooLarge : PrivatePaykitError("Private Paykit payload is too large")
-    data object StaleLinkState : PrivatePaykitError("Private Paykit link state changed")
-    class StatePersistenceFailed(cause: Throwable) : PrivatePaykitError("Failed to persist private Paykit state", cause)
-}
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @Singleton
@@ -80,23 +60,15 @@ class PrivatePaykitRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "PrivatePaykitRepo"
-        private const val MAX_NOISE_PAYLOAD_BYTES = 1000
         private const val MAX_RECEIVED_INVOICE_HASHES_PER_CONTACT = 100
         private const val STALE_LINK_FAILURE_THRESHOLD = 3
         private const val HANDSHAKE_COMPLETE = "complete"
-        private const val PRIVATE_ENDPOINT_REMOVAL_PAYLOAD = """{"value":""}"""
         private const val RECOVERY_MARKER_STAGE_INIT = "init"
         private const val RECOVERY_MARKER_STAGE_RESPONSE = "response"
         private const val RECOVERY_MARKER_STAGE_FINAL = "final"
         private const val COMPLETED_LINK_RECOVERY_MARKER_GRACE_SECONDS = 5 * 60L
         private const val FRESH_LINK_INITIAL_PUBLISH_DELAY_SECONDS = 8L
-        private const val PRIVATE_STORAGE_ROOT_PATH = "/pub/paykit/v0/private/"
-        private const val PRIVATE_STORAGE_PURGE_MAX_ENTRIES = 500
-        private const val PRIVATE_STORAGE_PURGE_MAX_DEPTH = 3
         private const val PENDING_PUBLICATION_RETRY_ATTEMPTS = 60
-        private val noisePayloadJson = Json(json) {
-            prettyPrint = false
-        }
         private val privateInvoiceExpiry = 24.hours
         private val invoiceRefreshBuffer = 30.minutes
         private val pendingPublicationRetryDelay = 5.seconds
@@ -107,18 +79,12 @@ class PrivatePaykitRepo @Inject constructor(
             return own > remote
         }
 
-        fun isDuplicatePaymentError(error: Throwable): Boolean {
-            val errors = generateSequence(error) { it.cause }.toList()
-            if (errors.any { it is NodeException.DuplicatePayment }) return true
-
-            val reason = errors.mapNotNull { it.message }
-                .joinToString(separator = " ")
-                .lowercase()
-            return "duplicate payment" in reason || "duplicatepayment" in reason
-        }
+        fun isDuplicatePaymentError(error: Throwable): Boolean =
+            PrivatePaykitErrorClassifier.isDuplicatePaymentError(error)
     }
 
-    private var state: PrivatePaykitState? = null
+    private val stateStore = PrivatePaykitStateStore(keychain, cacheStore)
+    private val recoveryStore = PrivatePaykitRecoveryStore(pubkyService, keychain) { ensureState() }
     private val activeHandlesByContact = mutableMapOf<String, ContactPaykitHandles>()
     private val knownSavedContactKeys = mutableSetOf<String>()
     private val linkEstablishmentMutex = Mutex()
@@ -241,7 +207,7 @@ class PrivatePaykitRepo @Inject constructor(
                     closeActiveHandles()
                     activeHandlesByContact.clear()
                     knownSavedContactKeys.clear()
-                    state = PrivatePaykitState()
+                    stateStore.replaceState(PrivatePaykitState())
                     keychain.delete(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name)
                     cacheStore.reset()
                     addressReservationRepo.clearContactAssignments(excludingPublicKeys = emptySet())
@@ -302,7 +268,7 @@ class PrivatePaykitRepo @Inject constructor(
                         it,
                         context = TAG,
                     )
-                    if (hadCachedPrivateEndpoint && !shouldCountAsStaleLinkFailure(it)) {
+                    if (hadCachedPrivateEndpoint && !PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(it)) {
                         return@runCatching true
                     }
                     return@runCatching publicPaykitRepo.hasPayablePublicEndpoint(normalizedKey).getOrThrow()
@@ -464,7 +430,7 @@ class PrivatePaykitRepo @Inject constructor(
                         knownSavedContactKeys.clear()
 
                         if (backup == null) {
-                            state = PrivatePaykitState()
+                            stateStore.replaceState(PrivatePaykitState())
                             persistState()
                             notifyBackupStateChanged()
                             return@runCatching
@@ -485,7 +451,9 @@ class PrivatePaykitRepo @Inject constructor(
                             normalizedKey to ContactState(
                                 linkSnapshotHex = linkSnapshotHex,
                                 handshakeSnapshotHex = handshakeSnapshotHex,
-                                remoteEndpoints = storedPaymentEntries(contactBackup.remoteEndpoints),
+                                remoteEndpoints = PrivatePaykitPayloads.storedPaymentEntries(
+                                    contactBackup.remoteEndpoints,
+                                ),
                                 linkCompletedAt = contactBackup.linkCompletedAt,
                                 handshakeUpdatedAt = contactBackup.handshakeUpdatedAt,
                                 recoveryStartedAt = contactBackup.recoveryStartedAt,
@@ -494,7 +462,7 @@ class PrivatePaykitRepo @Inject constructor(
                             )
                         }.toMap()
 
-                        state = PrivatePaykitState(contacts = contacts.toMutableMap())
+                        stateStore.replaceState(PrivatePaykitState(contacts = contacts.toMutableMap()))
                     }
                 }
                 persistState()
@@ -520,7 +488,7 @@ class PrivatePaykitRepo @Inject constructor(
                 }
 
                 val fetchedCount = fetchRemoteEndpoints(publicKey, linkId, generation).getOrElse {
-                    if (shouldCountAsStaleLinkFailure(it)) throw it
+                    if (PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(it)) throw it
                     Logger.warn(
                         "Failed to refresh private Paykit endpoints for '${redacted(publicKey)}'",
                         it,
@@ -637,7 +605,7 @@ class PrivatePaykitRepo @Inject constructor(
                 it
             },
             onFailure = {
-                val shouldRetry = shouldRetryLinkEstablishmentFailure(it)
+                val shouldRetry = PrivatePaykitErrorClassifier.shouldRetryLinkEstablishmentFailure(it)
                 if (scheduleRetries && shouldRetry) schedulePendingPublicationRetry(publicKey)
                 Logger.debug(
                     if (shouldRetry) {
@@ -695,7 +663,7 @@ class PrivatePaykitRepo @Inject constructor(
                 it,
                 context = TAG,
             )
-            if (shouldCountAsStaleLinkFailure(it)) null else 0
+            if (PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(it)) null else 0
         },
     )
 
@@ -790,8 +758,16 @@ class PrivatePaykitRepo @Inject constructor(
 
                 val endpoints = buildLocalEndpoints(publicKey).getOrThrow()
                 ensureCurrentGeneration(generation)
-                val entries = entriesWithinNoiseLimit(endpoints, publicKey)
-                val payloadHash = localPayloadHash(entries)
+                val payloadSelection = PrivatePaykitPayloads.entriesWithinNoiseLimit(endpoints)
+                if (payloadSelection.droppedLightning) {
+                    ensureState().contacts[publicKey]?.localInvoice = null
+                    Logger.warn(
+                        "Published private Paykit on-chain only for '${redacted(publicKey)}'",
+                        context = TAG,
+                    )
+                }
+                val entries = payloadSelection.entries
+                val payloadHash = PrivatePaykitPayloads.localPayloadHash(entries)
                 val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
                 if (!force && contactState.lastLocalPayloadHash == payloadHash) return@withLock
 
@@ -888,7 +864,7 @@ class PrivatePaykitRepo @Inject constructor(
         withContext(serializedDispatcher) {
             runCatching {
                 readRemoteEndpoints(publicKey, linkId, generation).getOrElse { error ->
-                    if (!shouldCountAsStaleLinkFailure(error)) throw error
+                    if (!PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(error)) throw error
 
                     val restoredLinkId = restoreLinkHandleForReadRetry(publicKey, generation).getOrNull()
                         ?: throw error
@@ -994,7 +970,7 @@ class PrivatePaykitRepo @Inject constructor(
 
         val contactState = ensureState().contacts.getOrPut(normalizedKey) { ContactState() }
         activeHandlesByContact[normalizedKey]?.linkId?.let { linkId ->
-            val remoteRecoveryMarker = freshRecoveryMarker(
+            val remoteRecoveryMarker = recoveryStore.freshRecoveryMarker(
                 from = normalizedKey,
                 to = ownPublicKey,
                 stages = setOf(RECOVERY_MARKER_STAGE_INIT),
@@ -1028,7 +1004,7 @@ class PrivatePaykitRepo @Inject constructor(
                 persistState(markWalletBackup = true)
             }.getOrNull()
             if (restoredLinkId != null) {
-                val remoteRecoveryMarker = freshRecoveryMarker(
+                val remoteRecoveryMarker = recoveryStore.freshRecoveryMarker(
                     from = normalizedKey,
                     to = ownPublicKey,
                     stages = setOf(RECOVERY_MARKER_STAGE_INIT),
@@ -1047,7 +1023,7 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
         val isRecovering = shouldStartRecoveryHandshake(normalizedKey)
-        val fetchedRemoteRecoveryInitMarker = freshRecoveryMarker(
+        val fetchedRemoteRecoveryInitMarker = recoveryStore.freshRecoveryMarker(
             from = normalizedKey,
             to = ownPublicKey,
             stages = setOf(RECOVERY_MARKER_STAGE_INIT),
@@ -1055,7 +1031,7 @@ class PrivatePaykitRepo @Inject constructor(
         val remoteRecoveryInitMarker = fetchedRemoteRecoveryInitMarker
             ?.takeUnless { isCompletedRecoveryMarker(it, normalizedKey) }
         val remoteRecoveryFinalForResponder = contactState.responderRecoveryAttemptId?.let {
-            freshRecoveryMarker(
+            recoveryStore.freshRecoveryMarker(
                 from = normalizedKey,
                 to = ownPublicKey,
                 stages = setOf(RECOVERY_MARKER_STAGE_FINAL),
@@ -1066,7 +1042,7 @@ class PrivatePaykitRepo @Inject constructor(
 
         val initialMainRecoveryAttemptId = contactState.mainRecoveryAttemptId
         val localMainRecoveryMarker = initialMainRecoveryAttemptId?.let {
-            freshRecoveryMarker(
+            recoveryStore.freshRecoveryMarker(
                 from = ownPublicKey,
                 to = normalizedKey,
                 stages = setOf(RECOVERY_MARKER_STAGE_INIT, RECOVERY_MARKER_STAGE_FINAL),
@@ -1089,7 +1065,7 @@ class PrivatePaykitRepo @Inject constructor(
         if (shouldAcceptRemoteRecovery && remoteRecoveryMarker != null) {
             val isNewResponderAttempt = contactState.responderRecoveryAttemptId != remoteRecoveryMarker.attemptId
             if (isNewResponderAttempt) {
-                if (!purgePrivatePaymentOutbox(normalizedKey, "recovery responder")) return null
+                if (!recoveryStore.purgePrivatePaymentOutbox(normalizedKey, "recovery responder")) return null
                 ensureCurrentGeneration(generation)
                 activeHandlesByContact[normalizedKey]?.handshakeId?.let {
                     runCatching { pubkyService.dropEncryptedLinkHandshake(it) }
@@ -1103,7 +1079,7 @@ class PrivatePaykitRepo @Inject constructor(
                 contactState.remoteEndpoints = emptyList()
                 persistState(markWalletBackup = true)
             }
-            publishRecoveryMarker(
+            recoveryStore.publishRecoveryMarker(
                 from = ownPublicKey,
                 to = normalizedKey,
                 stage = RECOVERY_MARKER_STAGE_RESPONSE,
@@ -1114,7 +1090,7 @@ class PrivatePaykitRepo @Inject constructor(
 
         val shouldInitiateRecovery = isRecovering && !shouldAcceptRemoteRecovery
         if (shouldInitiateRecovery && contactState.mainRecoveryAttemptId == null) {
-            if (!purgePrivatePaymentOutbox(normalizedKey, "recovery initiator")) return null
+            if (!recoveryStore.purgePrivatePaymentOutbox(normalizedKey, "recovery initiator")) return null
             ensureCurrentGeneration(generation)
             activeHandlesByContact[normalizedKey]?.handshakeId?.let {
                 runCatching { pubkyService.dropEncryptedLinkHandshake(it) }
@@ -1129,7 +1105,7 @@ class PrivatePaykitRepo @Inject constructor(
             contactState.lastLocalPayloadHash = null
             contactState.remoteEndpoints = emptyList()
             persistState(markWalletBackup = true)
-            publishRecoveryMarker(
+            recoveryStore.publishRecoveryMarker(
                 from = ownPublicKey,
                 to = normalizedKey,
                 stage = RECOVERY_MARKER_STAGE_INIT,
@@ -1144,7 +1120,7 @@ class PrivatePaykitRepo @Inject constructor(
             contactState.mainRecoveryAttemptId != null &&
             localMainRecoveryMarker == null
         ) {
-            publishRecoveryMarker(
+            recoveryStore.publishRecoveryMarker(
                 from = ownPublicKey,
                 to = normalizedKey,
                 stage = RECOVERY_MARKER_STAGE_INIT,
@@ -1164,14 +1140,14 @@ class PrivatePaykitRepo @Inject constructor(
             contactState.handshakeSnapshotHex != null
         ) {
             val attemptId = checkNotNull(contactState.mainRecoveryAttemptId)
-            publishRecoveryMarker(
+            recoveryStore.publishRecoveryMarker(
                 from = ownPublicKey,
                 to = normalizedKey,
                 stage = RECOVERY_MARKER_STAGE_INIT,
                 attemptId = attemptId,
                 createdAt = clock.now().epochSeconds,
             )
-            val hasPeerProgress = freshRecoveryMarker(
+            val hasPeerProgress = recoveryStore.freshRecoveryMarker(
                 from = normalizedKey,
                 to = ownPublicKey,
                 stages = setOf(RECOVERY_MARKER_STAGE_RESPONSE, RECOVERY_MARKER_STAGE_FINAL),
@@ -1186,14 +1162,14 @@ class PrivatePaykitRepo @Inject constructor(
             contactState.handshakeSnapshotHex != null
         ) {
             val attemptId = checkNotNull(contactState.responderRecoveryAttemptId)
-            val hasPeerFinal = freshRecoveryMarker(
+            val hasPeerFinal = recoveryStore.freshRecoveryMarker(
                 from = normalizedKey,
                 to = ownPublicKey,
                 stages = setOf(RECOVERY_MARKER_STAGE_FINAL),
                 attemptId = attemptId,
             ) != null
             if (!hasPeerFinal) {
-                publishRecoveryMarker(
+                recoveryStore.publishRecoveryMarker(
                     from = ownPublicKey,
                     to = normalizedKey,
                     stage = RECOVERY_MARKER_STAGE_RESPONSE,
@@ -1249,7 +1225,7 @@ class PrivatePaykitRepo @Inject constructor(
         repeat(maxAdvanceSteps) {
             val progress = runCatching { pubkyService.advanceHandshake(checkNotNull(handshakeId)) }
                 .getOrElse {
-                    if (isEncryptedHandshakePendingError(it)) {
+                    if (PrivatePaykitErrorClassifier.isEncryptedHandshakePendingError(it)) {
                         val snapshot = pubkyService.serializeEncryptedLinkHandshake(checkNotNull(handshakeId))
                         ensureCurrentGeneration(generation)
                         contactState.handshakeSnapshotHex = snapshot
@@ -1258,7 +1234,7 @@ class PrivatePaykitRepo @Inject constructor(
                         persistState(markWalletBackup = true)
                         return null
                     }
-                    if (isEncryptedHandshakeStateFailure(it)) {
+                    if (PrivatePaykitErrorClassifier.isEncryptedHandshakeStateFailure(it)) {
                         ensureCurrentGeneration(generation)
                         activeHandlesByContact[normalizedKey] = ContactPaykitHandles()
                         contactState.handshakeSnapshotHex = null
@@ -1282,7 +1258,7 @@ class PrivatePaykitRepo @Inject constructor(
                     generation = generation,
                 ).getOrThrow()
                 if (isRecoveryHandshake && attemptId != null) {
-                    publishRecoveryMarker(
+                    recoveryStore.publishRecoveryMarker(
                         from = ownPublicKey,
                         to = normalizedKey,
                         stage = RECOVERY_MARKER_STAGE_FINAL,
@@ -1304,7 +1280,7 @@ class PrivatePaykitRepo @Inject constructor(
             if (isRecoveryHandshake) {
                 val createdAt = clock.now().epochSeconds
                 if (shouldInitiateRecovery && contactState.mainRecoveryAttemptId != null) {
-                    publishRecoveryMarker(
+                    recoveryStore.publishRecoveryMarker(
                         from = ownPublicKey,
                         to = normalizedKey,
                         stage = RECOVERY_MARKER_STAGE_INIT,
@@ -1312,7 +1288,7 @@ class PrivatePaykitRepo @Inject constructor(
                         createdAt = createdAt,
                     )
                 } else if (shouldAcceptRemoteRecovery && contactState.responderRecoveryAttemptId != null) {
-                    publishRecoveryMarker(
+                    recoveryStore.publishRecoveryMarker(
                         from = ownPublicKey,
                         to = normalizedKey,
                         stage = RECOVERY_MARKER_STAGE_RESPONSE,
@@ -1379,8 +1355,8 @@ class PrivatePaykitRepo @Inject constructor(
                         }
                     if (linkId == null) return@withLock
 
-                    val entries = privateEndpointRemovalEntries()
-                    validateNoisePayload(entries)
+                    val entries = PrivatePaykitPayloads.privateEndpointRemovalEntries()
+                    PrivatePaykitPayloads.validateNoisePayload(entries)
                     pubkyService.setPrivatePayments(
                         linkId,
                         entries.map { FfiPaymentEntry(it.methodId, it.endpointData) },
@@ -1396,7 +1372,7 @@ class PrivatePaykitRepo @Inject constructor(
                     ).getOrThrow()
                     pubkyService.currentPublicKey()
                         ?.let { PubkyPublicKeyFormat.normalized(it) }
-                        ?.let { clearRecoveryMarker(from = it, to = publicKey) }
+                        ?.let { recoveryStore.clearRecoveryMarker(from = it, to = publicKey) }
                 }
             }
             Unit
@@ -1422,7 +1398,7 @@ class PrivatePaykitRepo @Inject constructor(
         cancelPendingPublicationRetry(publicKey)
         pubkyService.currentPublicKey()
             ?.let { PubkyPublicKeyFormat.normalized(it) }
-            ?.let { clearRecoveryMarker(from = it, to = publicKey) }
+            ?.let { recoveryStore.clearRecoveryMarker(from = it, to = publicKey) }
         activeHandlesByContact[publicKey]?.linkId?.let { runCatching { pubkyService.closeEncryptedLink(it) } }
         activeHandlesByContact[publicKey]?.handshakeId?.let {
             runCatching { pubkyService.dropEncryptedLinkHandshake(it) }
@@ -1591,7 +1567,7 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private fun shouldRequirePrivateEndpointRemoval(publicKey: String): Boolean {
-        val contactState = state?.contacts?.get(publicKey) ?: return false
+        val contactState = stateStore.currentState()?.contacts?.get(publicKey) ?: return false
         return contactState.linkSnapshotHex != null ||
             contactState.lastLocalPayloadHash != null ||
             contactState.localInvoice != null ||
@@ -1660,256 +1636,12 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private fun isCompletedRecoveryMarker(marker: RecoveryMarker, publicKey: String): Boolean =
-        state?.contacts?.get(publicKey)?.lastCompletedRecoveryAttemptId == marker.attemptId
+        stateStore.currentState()?.contacts?.get(publicKey)?.lastCompletedRecoveryAttemptId == marker.attemptId
 
     private fun shouldReplaceUsableLink(marker: RecoveryMarker, publicKey: String): Boolean {
         if (isCompletedRecoveryMarker(marker, publicKey)) return false
-        val linkCompletedAt = state?.contacts?.get(publicKey)?.linkCompletedAt ?: return true
+        val linkCompletedAt = stateStore.currentState()?.contacts?.get(publicKey)?.linkCompletedAt ?: return true
         return marker.createdAt > linkCompletedAt + COMPLETED_LINK_RECOVERY_MARKER_GRACE_SECONDS
-    }
-
-    @Suppress("ReturnCount")
-    private suspend fun freshRecoveryMarker(
-        from: String,
-        to: String,
-        stages: Set<String>,
-        attemptId: String? = null,
-    ): RecoveryMarker? {
-        val markerUri = recoveryMarkerUri(from, to) ?: return null
-        val markerPath = recoveryMarkerPath(from, to) ?: return null
-        val marker = runCatching {
-            json.decodeFromString<RecoveryMarker>(pubkyService.fetchFileString(markerUri))
-        }.getOrNull() ?: return null
-
-        if (marker.version != 1) return null
-        if (marker.path != markerPath) return null
-        if (marker.stage !in stages) return null
-        if (marker.attemptId.isBlank()) return null
-
-        val contactKey = listOf(from, to)
-            .mapNotNull { normalizedPublicKey(it) }
-            .firstOrNull { ensureState().contacts[it] != null }
-        val linkCompletedAt = contactKey?.let { ensureState().contacts[it]?.linkCompletedAt } ?: 0L
-        if (marker.createdAt <= linkCompletedAt) return null
-        if (attemptId != null && marker.attemptId != attemptId) return null
-        return marker
-    }
-
-    private suspend fun publishRecoveryMarker(
-        from: String,
-        to: String,
-        stage: String,
-        attemptId: String,
-        createdAt: Long,
-    ) {
-        val markerPath = recoveryMarkerPath(from, to) ?: return
-        val sessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) ?: return
-        if (sessionSecret.isBlank() || attemptId.isBlank()) return
-
-        val marker = RecoveryMarker(
-            version = 1,
-            path = markerPath,
-            stage = stage,
-            attemptId = attemptId,
-            createdAt = createdAt,
-        )
-        runCatching {
-            pubkyService.sessionPut(sessionSecret, markerPath, json.encodeToString(marker).encodeToByteArray())
-        }.onFailure {
-            Logger.warn(
-                "Failed to publish private Paykit recovery marker for '${redacted(to)}'",
-                it,
-                context = TAG,
-            )
-        }
-    }
-
-    private suspend fun clearRecoveryMarker(from: String, to: String) {
-        val markerPath = recoveryMarkerPath(from, to) ?: return
-        val sessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) ?: return
-        if (sessionSecret.isBlank()) return
-        runCatching { pubkyService.sessionDelete(sessionSecret, markerPath) }
-    }
-
-    @Suppress("ReturnCount")
-    private suspend fun purgePrivatePaymentOutbox(publicKey: String, reason: String): Boolean {
-        val otherContactCount = ensureState().contacts.keys.count { it != publicKey }
-        if (otherContactCount > 0) {
-            Logger.warn(
-                "Skipping broad private Paykit transport cleanup during '$reason' because " +
-                    "'$otherContactCount' other private contact(s) have state",
-                context = TAG,
-            )
-            return true
-        }
-
-        val sessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) ?: return false
-        if (sessionSecret.isBlank()) return false
-        val rootPath = PRIVATE_STORAGE_ROOT_PATH.removeSuffix("/")
-        val deletedRoot = runCatching {
-            pubkyService.sessionDelete(sessionSecret, rootPath)
-        }.onSuccess {
-            Logger.info("Cleared stale private Paykit transport directory during '$reason'", context = TAG)
-        }.onFailure {
-            if (!isMissingPrivateStorageError(it)) {
-                Logger.warn("Failed to clear private Paykit transport directory during '$reason'", it, context = TAG)
-            }
-        }.isSuccess
-        if (deletedRoot) return true
-
-        val purgeResult = runCatching {
-            purgePrivatePaymentStorageTree(sessionSecret, PRIVATE_STORAGE_ROOT_PATH, depth = 0, deletedSoFar = 0)
-        }.getOrElse {
-            if (!isMissingPrivateStorageError(it)) {
-                Logger.warn("Failed to purge private Paykit transport messages during '$reason'", it, context = TAG)
-                return false
-            }
-            return true
-        }
-        if (purgeResult.deletedCount > 0) {
-            Logger.info(
-                "Cleared '${purgeResult.deletedCount}' stale private Paykit transport messages during '$reason'",
-                context = TAG,
-            )
-        }
-        if (purgeResult.didHitLimit) {
-            Logger.warn("Stopped private Paykit transport cleanup after reaching the safety limit", context = TAG)
-        }
-        return !purgeResult.didHitLimit && !purgeResult.didFail
-    }
-
-    private suspend fun purgePrivatePaymentStorageTree(
-        sessionSecret: String,
-        dirPath: String,
-        depth: Int,
-        deletedSoFar: Int,
-    ): PrivateStoragePurgeResult {
-        if (deletedSoFar >= PRIVATE_STORAGE_PURGE_MAX_ENTRIES) {
-            return PrivateStoragePurgeResult(deletedCount = 0, didHitLimit = true, didFail = false)
-        }
-        if (depth >= PRIVATE_STORAGE_PURGE_MAX_DEPTH) {
-            return PrivateStoragePurgeResult(deletedCount = 0, didHitLimit = true, didFail = false)
-        }
-
-        val entries = pubkyService.sessionList(sessionSecret, dirPath.withTrailingSlash())
-        var deletedCount = 0
-        var didHitLimit = false
-        var didFail = false
-
-        entries.forEach { entry ->
-            if (deletedSoFar + deletedCount >= PRIVATE_STORAGE_PURGE_MAX_ENTRIES) {
-                didHitLimit = true
-                return@forEach
-            }
-            val path = privateStoragePath(entry) ?: return@forEach
-            val deleted = runCatching {
-                pubkyService.sessionDelete(sessionSecret, path.removeSuffix("/"))
-            }.isSuccess
-            if (deleted) {
-                deletedCount += 1
-                return@forEach
-            }
-
-            val childResult = runCatching {
-                purgePrivatePaymentStorageTree(
-                    sessionSecret = sessionSecret,
-                    dirPath = path.withTrailingSlash(),
-                    depth = depth + 1,
-                    deletedSoFar = deletedSoFar + deletedCount,
-                )
-            }.getOrElse {
-                if (!isMissingPrivateStorageError(it)) didFail = true
-                return@forEach
-            }
-            deletedCount += childResult.deletedCount
-            didHitLimit = didHitLimit || childResult.didHitLimit
-            didFail = didFail || childResult.didFail
-        }
-
-        return PrivateStoragePurgeResult(
-            deletedCount = deletedCount,
-            didHitLimit = didHitLimit,
-            didFail = didFail,
-        )
-    }
-
-    private fun privateStoragePath(entry: String): String? {
-        val path = if (entry.startsWith("pubky://")) {
-            "/${entry.substringAfter("://").substringAfter("/")}"
-        } else {
-            entry
-        }
-        val normalizedPath = if (path.startsWith("/")) path else "/$path"
-        return normalizedPath.takeIf { it.startsWith(PRIVATE_STORAGE_ROOT_PATH) }
-    }
-
-    private fun String.withTrailingSlash(): String = if (endsWith("/")) this else "$this/"
-
-    private fun isMissingPrivateStorageError(error: Throwable): Boolean {
-        val reason = error.message.orEmpty().lowercase()
-        return "404" in reason && "not found" in reason
-    }
-
-    private fun recoveryMarkerPath(writerPublicKey: String, readerPublicKey: String): String? {
-        val writer = normalizedPublicKey(writerPublicKey) ?: return null
-        val reader = normalizedPublicKey(readerPublicKey) ?: return null
-        val material = "bitkit-private-paykit-recovery-v1|$writer|$reader"
-        val markerId = MessageDigest.getInstance("SHA-256")
-            .digest(material.encodeToByteArray())
-            .joinToString(separator = "") { "%02x".format(it) }
-        return "/pub/paykit/v0/private-recovery/$markerId.json"
-    }
-
-    private fun recoveryMarkerUri(writerPublicKey: String, readerPublicKey: String): String? {
-        val writer = normalizedPublicKey(writerPublicKey) ?: return null
-        val path = recoveryMarkerPath(writer, readerPublicKey) ?: return null
-        return "pubky://${writer.removePrefix("pubky")}$path"
-    }
-
-    private suspend fun entriesWithinNoiseLimit(
-        endpoints: List<Endpoint>,
-        publicKey: String,
-    ): List<StoredPaymentEntry> {
-        val entries = endpoints.map { StoredPaymentEntry(it.methodId.rawValue, it.rawPayload) }
-        if (isNoisePayloadWithinLimit(entries)) return entries
-
-        val onchainOnlyEntries = entries.filter { it.methodId != MethodId.Bolt11.rawValue }
-        if (onchainOnlyEntries.size < entries.size && onchainOnlyEntries.isNotEmpty()) {
-            if (isNoisePayloadWithinLimit(onchainOnlyEntries)) {
-                ensureState().contacts[publicKey]?.localInvoice = null
-                Logger.warn(
-                    "Published private Paykit on-chain only for '${redacted(publicKey)}'",
-                    context = TAG,
-                )
-                return onchainOnlyEntries
-            }
-        }
-
-        throw PrivatePaykitError.PayloadTooLarge
-    }
-
-    private fun privateEndpointRemovalEntries(): List<StoredPaymentEntry> =
-        MethodId.entries
-            .filter { it.isBitkitManaged }
-            .map { StoredPaymentEntry(it.rawValue, PRIVATE_ENDPOINT_REMOVAL_PAYLOAD) }
-
-    private fun validateNoisePayload(entries: List<StoredPaymentEntry>) {
-        if (!isNoisePayloadWithinLimit(entries)) throw PrivatePaykitError.PayloadTooLarge
-    }
-
-    private fun isNoisePayloadWithinLimit(entries: List<StoredPaymentEntry>): Boolean {
-        val payload = entries.associate { it.methodId to it.endpointData }
-        return noisePayloadJson.encodeToString(payload).encodeToByteArray().size <= MAX_NOISE_PAYLOAD_BYTES
-    }
-
-    private fun localPayloadHash(entries: List<StoredPaymentEntry>): String {
-        val payload = entries.sortedBy { it.methodId }
-            .joinToString(separator = "") {
-                "${it.methodId.length}:${it.methodId}${it.endpointData.length}:${it.endpointData}"
-            }
-        return MessageDigest.getInstance("SHA-256")
-            .digest(payload.encodeToByteArray())
-            .joinToString(separator = "") { "%02x".format(it) }
     }
 
     private suspend fun settledPrivateInvoicePaymentHashes(): List<String> {
@@ -1957,7 +1689,7 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun recordLinkFailure(publicKey: String, error: Throwable, generation: Long? = null) {
         if (generation != null && stateGeneration.get() != generation) return
-        if (!shouldCountAsStaleLinkFailure(error)) return
+        if (!PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(error)) return
         val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
         contactState.linkFailureCount += 1
         if (contactState.linkFailureCount < STALE_LINK_FAILURE_THRESHOLD) {
@@ -1984,61 +1716,6 @@ class PrivatePaykitRepo @Inject constructor(
         if (contactState.linkFailureCount == 0) return
         contactState.linkFailureCount = 0
         persistState()
-    }
-
-    private fun shouldCountAsStaleLinkFailure(error: Throwable): Boolean {
-        val errors = error.causes()
-        if (errors.any { it is PaykitFfiException.Session }) return false
-
-        return errors.flatMap { it.staleLinkFailureReasons() }
-            .any { isNoiseStateFailure(it) || isEncryptedLinkStateFailure(it) }
-    }
-
-    private fun shouldRetryLinkEstablishmentFailure(error: Throwable): Boolean =
-        error.causes().none {
-            it is PrivatePaykitError.PrivateUnavailable || it is PrivatePaykitError.StaleLinkState
-        }
-
-    private fun Throwable.causes(): List<Throwable> = generateSequence(this) { it.cause }.toList()
-
-    private fun Throwable.staleLinkFailureReasons(): List<String> = when (this) {
-        is PaykitFfiException.Transport -> listOf(reason)
-        is PaykitFfiException.InvalidData -> listOf(reason)
-        is PaykitFfiException.NotFound -> listOf(reason)
-        is PaykitFfiException.Validation -> listOf(reason)
-        is PaykitFfiException.Session -> emptyList()
-        else -> listOfNotNull(message)
-    }
-
-    private fun isNoiseStateFailure(reason: String): Boolean {
-        val lowercasedReason = reason.lowercase()
-        return listOf("decrypt", "decryption", "cipher", "noise state", "counter", "invalid tag", "bad mac")
-            .any { it in lowercasedReason }
-    }
-
-    private fun isEncryptedLinkStateFailure(reason: String): Boolean {
-        val lowercasedReason = reason.lowercase()
-        return listOf(
-            "unknown encrypted-link handle",
-            "unknown encrypted link handle",
-            "encrypted-link handle is closed",
-            "encrypted link handle is closed",
-            "failed to restore encrypted link",
-            "encrypted link restore requires transport-phase snapshot",
-            "remote_pubkey does not match snapshot recipient",
-        ).any { it in lowercasedReason }
-    }
-
-    private fun isEncryptedHandshakeStateFailure(error: Throwable): Boolean {
-        val reason = error.message.orEmpty().lowercase()
-        return isNoiseStateFailure(reason) ||
-            isEncryptedLinkStateFailure(reason) ||
-            listOf("restoreplayerror", "handshake restore failed").any { it in reason }
-    }
-
-    private fun isEncryptedHandshakePendingError(error: Throwable): Boolean {
-        val reason = error.message.orEmpty().lowercase()
-        return "transition_transport failed" in reason && "ishandshake" in reason
     }
 
     private suspend fun validatedSnapshot(
@@ -2090,186 +1767,13 @@ class PrivatePaykitRepo @Inject constructor(
 
     private fun redacted(publicKey: String): String = PubkyPublicKeyFormat.redacted(publicKey)
 
-    private fun storedPaymentEntries(endpoints: Map<String, String>): List<StoredPaymentEntry> =
-        endpoints.toSortedMap().map { StoredPaymentEntry(it.key, it.value) }
-
-    private suspend fun ensureState(): PrivatePaykitState {
-        state?.let { return it }
-        val secretState = runCatching {
-            keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name)
-                ?.let { json.decodeFromString<PrivatePaykitSecretState>(it) }
-        }.getOrNull() ?: PrivatePaykitSecretState()
-        val cacheState = cacheStore.data.first()
-
-        return PrivatePaykitState(secretState, cacheState).also { state = it }
-    }
+    private suspend fun ensureState(): PrivatePaykitState = stateStore.ensureState()
 
     private suspend fun persistState(markWalletBackup: Boolean = false) {
-        val current = state ?: return
-        runCatching {
-            val secretState = current.secretState()
-            if (secretState.contacts.isEmpty()) {
-                keychain.delete(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name)
-            } else {
-                keychain.upsertString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name, json.encodeToString(secretState))
-            }
-
-            cacheStore.update { stored ->
-                current.cacheState(
-                    cleanupPending = stored.cleanupPending,
-                    deletedContactCleanupPendingPublicKeys = stored.deletedContactCleanupPendingPublicKeys,
-                )
-            }
-            if (markWalletBackup) notifyBackupStateChanged()
-        }.getOrElse { throw PrivatePaykitError.StatePersistenceFailed(it) }
+        stateStore.persistState(markWalletBackup, ::notifyBackupStateChanged)
     }
 
     private fun notifyBackupStateChanged() {
         _backupStateVersion.update { it + 1 }
     }
 }
-
-private data class ContactPaykitHandles(
-    val linkId: String? = null,
-    val handshakeId: String? = null,
-)
-
-private data class PrivatePaykitState(
-    val contacts: MutableMap<String, ContactState> = mutableMapOf(),
-) {
-    constructor(secretState: PrivatePaykitSecretState, cacheState: PrivatePaykitCacheData) : this(
-        contacts = cacheState.contacts.mapValues { (_, cache) -> ContactState(cache) }.toMutableMap(),
-    ) {
-        secretState.contacts.forEach { (publicKey, secret) ->
-            val contactState = contacts.getOrPut(publicKey) { ContactState() }
-            contactState.linkSnapshotHex = secret.linkSnapshotHex
-            contactState.handshakeSnapshotHex = secret.handshakeSnapshotHex
-        }
-    }
-
-    fun secretState() = PrivatePaykitSecretState(
-        contacts = contacts.mapNotNull { (publicKey, contactState) ->
-            val secretState = ContactSecretState(contactState.linkSnapshotHex, contactState.handshakeSnapshotHex)
-            (publicKey to secretState).takeIf { secretState.hasSecretState }
-        }.toMap(),
-    )
-
-    fun cacheState(
-        cleanupPending: Boolean,
-        deletedContactCleanupPendingPublicKeys: Set<String>,
-    ) = PrivatePaykitCacheData(
-        contacts = contacts.mapNotNull { (publicKey, contactState) ->
-            (publicKey to contactState.cacheState()).takeIf { contactState.hasCacheState }
-        }.toMap(),
-        cleanupPending = cleanupPending,
-        deletedContactCleanupPendingPublicKeys = deletedContactCleanupPendingPublicKeys,
-    )
-}
-
-private data class ContactState(
-    var linkSnapshotHex: String? = null,
-    var handshakeSnapshotHex: String? = null,
-    var remoteEndpoints: List<StoredPaymentEntry> = emptyList(),
-    var localInvoice: StoredInvoice? = null,
-    var receivedInvoicePaymentHashes: List<String> = emptyList(),
-    var lastLocalPayloadHash: String? = null,
-    var linkCompletedAt: Long? = null,
-    var handshakeUpdatedAt: Long? = null,
-    var recoveryStartedAt: Long? = null,
-    var mainRecoveryAttemptId: String? = null,
-    var responderRecoveryAttemptId: String? = null,
-    var lastCompletedRecoveryAttemptId: String? = null,
-    var linkFailureCount: Int = 0,
-) {
-    constructor(cache: PrivatePaykitContactCacheData) : this(
-        remoteEndpoints = cache.remoteEndpoints.map { StoredPaymentEntry(it.methodId, it.endpointData) },
-        localInvoice = cache.localInvoice?.let { StoredInvoice(it.bolt11, it.paymentHash, it.expiresAt) },
-        receivedInvoicePaymentHashes = cache.receivedInvoicePaymentHashes,
-        lastLocalPayloadHash = cache.lastLocalPayloadHash,
-        linkCompletedAt = cache.linkCompletedAt,
-        handshakeUpdatedAt = cache.handshakeUpdatedAt,
-        recoveryStartedAt = cache.recoveryStartedAt,
-        mainRecoveryAttemptId = cache.mainRecoveryAttemptId,
-        responderRecoveryAttemptId = cache.responderRecoveryAttemptId,
-        lastCompletedRecoveryAttemptId = cache.lastCompletedRecoveryAttemptId,
-        linkFailureCount = cache.linkFailureCount,
-    )
-
-    val hasBackupState: Boolean
-        get() = linkSnapshotHex != null ||
-            handshakeSnapshotHex != null ||
-            remoteEndpoints.isNotEmpty() ||
-            linkCompletedAt != null ||
-            handshakeUpdatedAt != null ||
-            recoveryStartedAt != null ||
-            mainRecoveryAttemptId != null ||
-            responderRecoveryAttemptId != null ||
-            lastCompletedRecoveryAttemptId != null
-
-    val hasCacheState: Boolean
-        get() = remoteEndpoints.isNotEmpty() ||
-            localInvoice != null ||
-            receivedInvoicePaymentHashes.isNotEmpty() ||
-            lastLocalPayloadHash != null ||
-            linkCompletedAt != null ||
-            handshakeUpdatedAt != null ||
-            recoveryStartedAt != null ||
-            mainRecoveryAttemptId != null ||
-            responderRecoveryAttemptId != null ||
-            lastCompletedRecoveryAttemptId != null ||
-            linkFailureCount != 0
-
-    fun cacheState() = PrivatePaykitContactCacheData(
-        remoteEndpoints = remoteEndpoints.map { PrivatePaykitStoredPaymentEntryData(it.methodId, it.endpointData) },
-        localInvoice = localInvoice?.let { PrivatePaykitStoredInvoiceData(it.bolt11, it.paymentHash, it.expiresAt) },
-        receivedInvoicePaymentHashes = receivedInvoicePaymentHashes,
-        lastLocalPayloadHash = lastLocalPayloadHash,
-        linkCompletedAt = linkCompletedAt,
-        handshakeUpdatedAt = handshakeUpdatedAt,
-        recoveryStartedAt = recoveryStartedAt,
-        mainRecoveryAttemptId = mainRecoveryAttemptId,
-        responderRecoveryAttemptId = responderRecoveryAttemptId,
-        lastCompletedRecoveryAttemptId = lastCompletedRecoveryAttemptId,
-        linkFailureCount = linkFailureCount,
-    )
-}
-
-@Serializable
-private data class PrivatePaykitSecretState(
-    val contacts: Map<String, ContactSecretState> = emptyMap(),
-)
-
-@Serializable
-private data class ContactSecretState(
-    val linkSnapshotHex: String? = null,
-    val handshakeSnapshotHex: String? = null,
-) {
-    val hasSecretState: Boolean
-        get() = linkSnapshotHex != null || handshakeSnapshotHex != null
-}
-
-private data class StoredPaymentEntry(
-    val methodId: String,
-    val endpointData: String,
-)
-
-private data class StoredInvoice(
-    val bolt11: String,
-    val paymentHash: String,
-    val expiresAt: Long,
-)
-
-private data class PrivateStoragePurgeResult(
-    val deletedCount: Int,
-    val didHitLimit: Boolean,
-    val didFail: Boolean,
-)
-
-@Serializable
-private data class RecoveryMarker(
-    val version: Int,
-    val path: String,
-    val stage: String,
-    val attemptId: String,
-    val createdAt: Long,
-)
