@@ -63,6 +63,10 @@ import to.bitkit.viewmodels.WalletViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+    private companion object {
+        const val KEY_CONSUMED_DEEPLINK_URI = "consumed_deeplink_uri"
+    }
+
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
@@ -83,7 +87,12 @@ class MainActivity : FragmentActivity() {
             desc = getString(R.string.notification__channel_node__body),
             importance = NotificationManager.IMPORTANCE_LOW
         )
-        appViewModel.handleDeeplinkIntent(intent)
+
+        val consumedUri = savedInstanceState?.getString(KEY_CONSUMED_DEEPLINK_URI)
+        val currentUri = intent?.data?.toString()
+        if (currentUri == null || currentUri != consumedUri) {
+            appViewModel.handleDeeplinkIntent(intent)
+        }
 
         installSplashScreen()
         enableAppEdgeToEdge()
@@ -199,6 +208,11 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         appViewModel.handleDeeplinkIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        intent?.data?.toString()?.let { outState.putString(KEY_CONSUMED_DEEPLINK_URI, it) }
     }
 
     override fun onDestroy() {
