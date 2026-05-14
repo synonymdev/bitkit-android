@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -30,6 +31,7 @@ import javax.inject.Inject
 class EditProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val privatePaykitRepo: PrivatePaykitRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "EditProfileViewModel"
@@ -225,6 +227,8 @@ class EditProfileViewModel @Inject constructor(
     fun disconnectProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
+            privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
+            privatePaykitRepo.closeAndClear()
             pubkyRepo.signOut()
                 .onSuccess {
                     _uiState.update { it.copy(isSaving = false) }
@@ -250,6 +254,8 @@ class EditProfileViewModel @Inject constructor(
                 isSaving = true,
             )
         }
+        privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
+        privatePaykitRepo.closeAndClear()
         pubkyRepo.deleteProfileWithSessionRetry()
             .onSuccess {
                 _uiState.update { it.copy(isSaving = false) }

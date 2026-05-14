@@ -19,6 +19,7 @@ import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -28,6 +29,7 @@ import javax.inject.Inject
 class ProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val privatePaykitRepo: PrivatePaykitRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "ProfileViewModel"
@@ -75,6 +77,8 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _isSigningOut.update { true }
             _showSignOutDialog.update { false }
+            privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
+            privatePaykitRepo.closeAndClear()
             pubkyRepo.signOut()
                 .onSuccess {
                     _effects.emit(ProfileEffect.SignedOut)

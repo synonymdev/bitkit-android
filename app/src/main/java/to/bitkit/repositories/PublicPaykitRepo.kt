@@ -153,6 +153,10 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
+    suspend fun payableEndpoints(endpoints: List<Endpoint>): List<Endpoint> = withContext(ioDispatcher) {
+        endpoints.filter { isPayable(it) }
+    }
+
     suspend fun syncPublishedEndpoints(publish: Boolean): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (!publish) {
@@ -243,6 +247,7 @@ class PublicPaykitRepo @Inject constructor(
                 Result.success(Unit)
             }.getOrThrow()
         }
+        walletRepo.refreshReusableReceiveAddressIfReserved().getOrThrow()
 
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()

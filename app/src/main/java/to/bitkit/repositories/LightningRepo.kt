@@ -76,6 +76,7 @@ import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
@@ -925,6 +926,36 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.newAddress() }
     }
 
+    suspend fun newAddressForType(addressType: AddressType): Result<String> =
+        executeWhenNodeRunning("newAddressForType") {
+            runCatching { lightningService.newAddressForType(addressType) }
+        }
+
+    suspend fun newAddressInfoForType(addressType: AddressType): Result<AddressDerivationInfo> =
+        executeWhenNodeRunning("newAddressInfoForType") {
+            runCatching { lightningService.newAddressInfoForType(addressType) }
+        }
+
+    suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): Result<AddressDerivationInfo> =
+        executeWhenNodeRunning("addressInfoForType") {
+            runCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
+        }
+
+    suspend fun addressInfosForType(
+        addressType: AddressType,
+        isChange: Boolean,
+        startIndex: Int,
+        count: Int,
+    ): Result<List<AddressDerivationInfo>> =
+        executeWhenNodeRunning("addressInfosForType") {
+            runCatching { lightningService.addressInfosForType(addressType, isChange, startIndex, count) }
+        }
+
+    suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType): Result<Unit> =
+        executeWhenNodeRunning("revealReceiveAddresses") {
+            runCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
+        }
+
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
@@ -1185,7 +1216,8 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("getPayments") {
-        val payments = lightningService.payments ?: return@executeWhenNodeRunning Result.failure(GetPaymentsError())
+        val payments = lightningService.listPayments()
+            ?: return@executeWhenNodeRunning Result.failure(GetPaymentsError())
         Result.success(payments)
     }
 
@@ -1221,7 +1253,7 @@ class LightningRepo @Inject constructor(
         }.recoverCatching {
             if (it is CancellationException) throw it
             val fallbackFee = 1000uL
-            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", e = it, context = TAG)
+            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", it, context = TAG)
             return@recoverCatching fallbackFee
         }
     }

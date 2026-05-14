@@ -25,7 +25,6 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
@@ -40,7 +39,6 @@ import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import to.bitkit.utils.measured
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -54,6 +52,7 @@ class WalletRepo @Inject constructor(
     private val coreService: CoreService,
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
+    private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val deriveBalanceStateUseCase: DeriveBalanceStateUseCase,
@@ -200,7 +199,7 @@ class WalletRepo @Inject constructor(
             _balanceState.update { balanceState }
         }.onFailure {
             if (it !is CancellationException) {
-                Logger.warn("Could not sync balances", e = it, context = TAG)
+                Logger.warn("Could not sync balances", it, context = TAG)
             }
         }
     }
@@ -261,6 +260,8 @@ class WalletRepo @Inject constructor(
     private suspend fun refreshAddressIfNeeded() = withContext(bgDispatcher) {
         val address = getOnchainAddress()
         if (address.isEmpty()) {
+            newAddress()
+        } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
             newAddress()
         } else {
             checkAddressUsage(address).onSuccess { wasUsed ->
@@ -347,9 +348,22 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun newAddress(): Result<String> = withContext(bgDispatcher) {
-        lightningRepo.newAddress()
+        privatePaykitAddressReservationRepo.nextReusableReceiveAddress()
             .onSuccess { address -> setOnchainAddress(address) }
-            .onFailure { error -> Logger.error("Error generating new address", error, context = TAG) }
+            .onFailure { error -> Logger.error("Failed to generate new address", error, context = TAG) }
+    }
+
+    suspend fun refreshReusableReceiveAddressIfReserved(): Result<Unit> = withContext(bgDispatcher) {
+        runCatching {
+            if (!privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(getOnchainAddress())) {
+                return@runCatching
+            }
+
+            newAddress().getOrThrow()
+            updateBip21Url()
+        }.onFailure {
+            Logger.error("Failed to refresh reserved receive address", it, context = TAG)
+        }
     }
 
     suspend fun refreshReceiveAddressAfterTypeChange(): Result<Unit> = withContext(bgDispatcher) {
@@ -371,31 +385,18 @@ class WalletRepo @Inject constructor(
         addressType: AddressType = AddressType.P2WPKH,
     ): Result<List<AddressModel>> = withContext(bgDispatcher) {
         runCatching {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: throw ServiceError.MnemonicNotFound()
-
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-
-            val baseDerivationPath = addressType.toDerivationPath(
-                index = 0,
+            val result = lightningRepo.addressInfosForType(
+                addressType = addressType,
                 isChange = isChange,
-            ).substringBeforeLast("/0")
+                startIndex = startIndex,
+                count = count,
+            ).getOrThrow()
 
-            val result = coreService.onchain.deriveBitcoinAddresses(
-                mnemonicPhrase = mnemonic,
-                derivationPathStr = baseDerivationPath,
-                network = Env.network,
-                bip39Passphrase = passphrase,
-                isChange = isChange,
-                startIndex = startIndex.toUInt(),
-                count = count.toUInt(),
-            )
-
-            val addresses = result.addresses.mapIndexed { index, address ->
+            val addresses = result.map { address ->
                 AddressModel(
                     address = address.address,
-                    index = startIndex + index,
-                    path = address.path,
+                    index = address.index,
+                    path = addressType.toDerivationPath(index = address.index, isChange = isChange),
                 )
             }
 

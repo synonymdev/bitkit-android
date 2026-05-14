@@ -18,6 +18,8 @@ import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -29,6 +31,8 @@ class PayContactsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val publicPaykitRepo: PublicPaykitRepo,
+    private val privatePaykitRepo: PrivatePaykitRepo,
+    private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "PayContactsViewModel"
@@ -58,16 +62,17 @@ class PayContactsViewModel @Inject constructor(
     fun continueToProfile() {
         viewModelScope.launch {
             val shouldPublish = _uiState.value.isPaymentSharingEnabled
+            val contacts = pubkyRepo.contacts.value.map { it.publicKey }
             _uiState.update { it.copy(isLoading = true) }
 
-            publicPaykitRepo.syncPublishedEndpoints(shouldPublish)
+            val result = if (shouldPublish) {
+                enableContactPayments(contacts)
+            } else {
+                disableContactPayments(contacts)
+            }
+
+            result
                 .onSuccess {
-                    settingsStore.update {
-                        it.copy(
-                            hasConfirmedPublicPaykitEndpoints = true,
-                            sharesPublicPaykitEndpoints = shouldPublish,
-                        )
-                    }
                     _uiState.update { it.copy(isLoading = false) }
                     _effects.emit(PayContactsEffect.Continue)
                 }
@@ -88,6 +93,72 @@ class PayContactsViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    private suspend fun enableContactPayments(contacts: List<String>): Result<Unit> {
+        publicPaykitRepo.syncPublishedEndpoints(publish = true)
+            .onFailure { return Result.failure(it) }
+
+        runCatching {
+            settingsStore.update {
+                it.copy(
+                    hasConfirmedPublicPaykitEndpoints = true,
+                    sharesPublicPaykitEndpoints = true,
+                )
+            }
+        }.onFailure {
+            return Result.failure(it)
+        }
+
+        privatePaykitRepo.setContactSharingCleanupPending(false)
+            .onFailure {
+                Logger.warn("Failed to clear private Paykit cleanup marker", it, context = TAG)
+            }
+        privatePaykitRepo.prepareSavedContacts(contacts)
+            .onFailure {
+                Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG)
+            }
+
+        return Result.success(Unit)
+    }
+
+    private suspend fun disableContactPayments(contacts: List<String>): Result<Unit> {
+        runCatching {
+            settingsStore.update {
+                it.copy(
+                    hasConfirmedPublicPaykitEndpoints = true,
+                    sharesPublicPaykitEndpoints = false,
+                )
+            }
+        }.onFailure {
+            return Result.failure(it)
+        }
+
+        var cleanupError: Throwable? = null
+        publicPaykitRepo.syncPublishedEndpoints(publish = false)
+            .onFailure {
+                cleanupError = it
+                Logger.warn("Failed to remove public Paykit endpoints", it, context = TAG)
+            }
+
+        privatePaykitRepo.disableSharingAndClearLocalState(contacts)
+            .onFailure {
+                if (cleanupError == null) cleanupError = it
+                Logger.warn("Failed to remove private Paykit endpoints", it, context = TAG)
+            }
+
+        cleanupError?.let {
+            privatePaykitRepo.setContactSharingCleanupPending(true)
+                .onFailure { error ->
+                    Logger.warn("Failed to mark private Paykit cleanup pending", error, context = TAG)
+                }
+            return Result.failure(it)
+        }
+
+        privatePaykitRepo.setContactSharingCleanupPending(false)
+            .onFailure { return Result.failure(it) }
+
+        return Result.success(Unit)
     }
 
     private fun syncErrorMessage(error: Throwable): String = when (error) {

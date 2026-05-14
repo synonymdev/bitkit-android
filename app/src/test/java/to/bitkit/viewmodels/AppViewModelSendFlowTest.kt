@@ -28,6 +28,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
+import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
@@ -42,12 +43,14 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.services.ActivityService
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -86,9 +89,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val transferRepo = mock<TransferRepo>()
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
+    private val activityService = mock<ActivityService>()
     private val keychain = mock<Keychain>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
+    private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
 
@@ -96,6 +101,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val settingsData = MutableStateFlow(SettingsData())
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEvents = MutableSharedFlow<Event>()
+    private val pubkyPublicKey = MutableStateFlow<String?>(null)
+    private val pubkyContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+    private val pubkyContactsLoadVersion = MutableStateFlow(0L)
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
     private val timedSheetManager = mock<TimedSheetManager>()
@@ -112,6 +120,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
+        whenever(coreService.activity).thenReturn(activityService)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(walletRepo.walletExists()).thenReturn(true)
@@ -127,8 +136,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
-        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
-        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
+        whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
+        whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
+        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.reconcileReservedReceiveIndexes() }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.retryPendingEndpointRemoval(any<Collection<String>>()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.disableSharingAndClearLocalState(any<Collection<String>>()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.removeSavedContact(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.reconcileReceivedPayments() }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.handleOnchainActivity(any<Collection<String>>()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(any()) }
+            .thenReturn(null)
+        whenever { privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()) }
+            .thenReturn(null)
+        whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.discardRemoteOnchainEndpoints(any(), any()) }
+            .thenReturn(Result.success(Unit))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
         whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
@@ -162,6 +196,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         migrationService = migrationService,
         coreService = coreService,
         publicPaykitRepo = publicPaykitRepo,
+        privatePaykitRepo = privatePaykitRepo,
         appUpdateSheet = mock(),
         backupSheet = mock(),
         notificationsSheet = mock(),
@@ -524,6 +559,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lastLightningFee is zero initially`() = test {
         assertEquals(0L, sut.sendUiState.value.lastLightningFee)
+    }
+
+    @Test
+    fun `private Paykit waits for contacts load before pruning`() = test {
+        clearInvocations(privatePaykitRepo)
+
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).pruneUnsavedContactState(any<Collection<String>>())
+
+        pubkyContactsLoadVersion.value = 1L
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).prepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>())
+    }
+
+    @Test
+    fun `private Paykit removes stale contact without duplicate load version cleanup`() = test {
+        val contact = PubkyProfile(
+            publicKey = "pubkycytinw71a3ge1esmzj5e53hsr3jtj6t4pogpgr6k75w9mzmyokzo",
+            name = "Bob",
+            bio = "",
+            imageUrl = null,
+            links = emptyList(),
+            status = null,
+        )
+        pubkyPublicKey.value = testPublicKey
+        pubkyContacts.value = listOf(contact)
+        pubkyContactsLoadVersion.value = 1L
+        advanceUntilIdle()
+        clearInvocations(privatePaykitRepo)
+
+        pubkyContacts.value = emptyList()
+        pubkyContactsLoadVersion.value = 2L
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
+        verify(privatePaykitRepo).prepareSavedContacts(emptySet<String>())
+        verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
     }
 
     private fun enableQuickPay(thresholdSats: ULong) {

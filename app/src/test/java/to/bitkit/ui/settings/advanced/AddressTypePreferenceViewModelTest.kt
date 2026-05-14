@@ -19,6 +19,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -30,6 +31,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     private val settingsStore: SettingsStore = mock()
     private val lightningRepo: LightningRepo = mock()
     private val walletRepo: WalletRepo = mock()
+    private val privatePaykitRepo: PrivatePaykitRepo = mock()
 
     private lateinit var sut: AddressTypePreferenceViewModel
 
@@ -70,6 +72,8 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
                 )
             )
         )
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any()) }
+            .thenReturn(Result.success(Unit))
     }
 
     private fun createSut(): AddressTypePreferenceViewModel =
@@ -79,6 +83,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             lightningRepo = lightningRepo,
             walletRepo = walletRepo,
+            privatePaykitRepo = privatePaykitRepo,
         )
 
     @Test

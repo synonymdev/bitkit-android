@@ -27,8 +27,10 @@ import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toSettingsString
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -38,7 +40,11 @@ class AddressTypePreferenceViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
+    private val privatePaykitRepo: PrivatePaykitRepo,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "AddressTypePreferenceViewModel"
+    }
 
     private val _uiState = MutableStateFlow(AddressTypePreferenceUiState())
     val uiState: StateFlow<AddressTypePreferenceUiState> = _uiState.asStateFlow()
@@ -83,6 +89,10 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 monitoredTypes = currentMonitored.toList(),
             ).onSuccess {
                 walletRepo.refreshReceiveAddressAfterTypeChange()
+                privatePaykitRepo.refreshKnownSavedContactEndpoints("address type changed")
+                    .onFailure {
+                        Logger.warn("Failed to refresh private Paykit after address type change", it, context = TAG)
+                    }
             }
 
             _uiState.update { it.copy(isLoading = false) }
@@ -122,6 +132,16 @@ class AddressTypePreferenceViewModel @Inject constructor(
             )
 
             val repoResult = lightningRepo.setMonitoring(addressType, enabled)
+                .onSuccess {
+                    privatePaykitRepo.refreshKnownSavedContactEndpoints("address monitoring changed")
+                        .onFailure {
+                            Logger.warn(
+                                "Failed to refresh private Paykit after address monitoring changed",
+                                it,
+                                context = TAG,
+                            )
+                        }
+                }
 
             _uiState.update { it.copy(isLoading = false) }
             loadState()

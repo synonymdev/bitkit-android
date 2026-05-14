@@ -2,8 +2,6 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
-import com.synonym.bitkitcore.GetAddressResponse
-import com.synonym.bitkitcore.GetAddressesResponse
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +13,6 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
-import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -27,6 +24,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.BalanceState
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
@@ -48,6 +46,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val deriveBalanceStateUseCase = mock<DeriveBalanceStateUseCase>()
     private val wipeWalletUseCase = mock<WipeWalletUseCase>()
+    private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val transferRepo = mock<TransferRepo>()
     private val onchainService = mock<OnchainService>()
     private val activityRepo = mock<ActivityRepo>()
@@ -87,12 +86,13 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull()))
             .thenReturn(Result.success(SATS))
         whenever(lightningRepo.canReceive()).thenReturn(false)
+        whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }
+            .thenReturn(Result.success(ADDRESS_NEW))
+        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(any()) }
+            .thenReturn(false)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(BalanceState()))
-
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
-        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
 
         whenever(coreService.onchain).thenReturn(onchainService)
         whenever(preActivityMetadataRepo.addPreActivityMetadataTags(any(), any())).thenReturn(Result.success(Unit))
@@ -102,24 +102,17 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(preActivityMetadataRepo.resetPreActivityMetadataTags(any())).thenReturn(Result.success(Unit))
         whenever(preActivityMetadataRepo.deletePreActivityMetadata(any())).thenReturn(Result.success(Unit))
-        val mockAddressForGetAddresses = mock<GetAddressResponse> {
-            on { address } doReturn "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
-            on { path } doReturn "m/84'/0'/0'/0/0"
-        }
-        val mockGetAddressesResponse = mock<GetAddressesResponse> {
-            on { addresses } doReturn listOf(mockAddressForGetAddresses)
-        }
-        whenever {
-            onchainService.deriveBitcoinAddresses(
-                any(),
-                any(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
+        whenever { lightningRepo.addressInfosForType(any(), any(), any(), any()) }
+            .thenReturn(
+                Result.success(
+                    listOf(
+                        AddressDerivationInfo(
+                            address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+                            index = 0,
+                        ),
+                    ),
+                ),
             )
-        }.thenReturn(mockGetAddressesResponse)
         sut = createSut()
     }
 
@@ -133,6 +126,7 @@ class WalletRepoTest : BaseUnitTest() {
         preActivityMetadataRepo = preActivityMetadataRepo,
         deriveBalanceStateUseCase = deriveBalanceStateUseCase,
         wipeWalletUseCase = wipeWalletUseCase,
+        privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
         transferRepo = transferRepo,
         activityRepo = activityRepo,
     )
@@ -225,24 +219,21 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should generate new address when current is empty`() = test {
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success(ADDRESS_NEW))
-
         val result = sut.refreshBip21()
 
         assertTrue(result.isSuccess)
-        verify(lightningRepo).newAddress()
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
     }
 
     @Test
     fun `refreshBip21 should generate new address when current has transactions`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS)))
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success(ADDRESS_NEW))
         whenever(coreService.isAddressUsed(any())).thenReturn(true)
 
         val result = sut.refreshBip21()
 
         assertTrue(result.isSuccess)
-        verify(lightningRepo).newAddress()
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
     }
 
     @Test
@@ -256,7 +247,7 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.refreshBip21()
 
         assertTrue(result.isSuccess)
-        verify(lightningRepo, never()).newAddress()
+        verify(privatePaykitAddressReservationRepo, never()).nextReusableReceiveAddress()
     }
 
     @Test
@@ -584,7 +575,6 @@ class WalletRepoTest : BaseUnitTest() {
     fun `refreshBip21ForEvent PaymentReceived should refresh address if used`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS)))
         whenever(coreService.isAddressUsed(any())).thenReturn(true)
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success(ADDRESS_NEW))
         sut = createSut()
         sut.loadFromCache()
 
@@ -597,7 +587,7 @@ class WalletRepoTest : BaseUnitTest() {
             )
         )
 
-        verify(lightningRepo).newAddress()
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
     }
 
     @Test
@@ -616,7 +606,7 @@ class WalletRepoTest : BaseUnitTest() {
             )
         )
 
-        verify(lightningRepo, never()).newAddress()
+        verify(privatePaykitAddressReservationRepo, never()).nextReusableReceiveAddress()
     }
 
     @Test
@@ -639,36 +629,22 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `getAddresses should call deriveBitcoinAddresses with P2WPKH path by default`() = test {
+    fun `getAddresses should call ldk address infos with P2WPKH by default`() = test {
         val result = sut.getAddresses()
 
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrNull()?.size)
-        verify(onchainService).deriveBitcoinAddresses(
-            any(),
-            argThat { path -> path?.contains("m/84") == true },
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
-        )
+        assertTrue(result.getOrNull()?.firstOrNull()?.path?.startsWith("m/84'") == true)
+        verify(lightningRepo).addressInfosForType(AddressType.P2WPKH, isChange = false, startIndex = 0, count = 20)
     }
 
     @Test
-    fun `getAddresses should call deriveBitcoinAddresses with P2TR path when addressType is Taproot`() = test {
+    fun `getAddresses should call ldk address infos with P2TR when addressType is Taproot`() = test {
         val result = sut.getAddresses(addressType = AddressType.P2TR)
 
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrNull()?.size)
-        verify(onchainService).deriveBitcoinAddresses(
-            any(),
-            argThat { path -> path?.contains("m/86") == true },
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
-            anyOrNull(),
-        )
+        assertTrue(result.getOrNull()?.firstOrNull()?.path?.startsWith("m/86'") == true)
+        verify(lightningRepo).addressInfosForType(AddressType.P2TR, isChange = false, startIndex = 0, count = 20)
     }
 }

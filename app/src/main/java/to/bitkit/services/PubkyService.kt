@@ -19,17 +19,32 @@ import com.synonym.bitkitcore.pubkySessionPut
 import com.synonym.bitkitcore.pubkySignIn
 import com.synonym.bitkitcore.pubkySignUp
 import com.synonym.bitkitcore.startPubkyAuth
+import com.synonym.paykit.FfiHandshakeProgress
 import com.synonym.paykit.FfiPaymentEntry
 import com.synonym.paykit.PaykitAndroid
+import com.synonym.paykit.paykitAcceptEncryptedLink
+import com.synonym.paykit.paykitAdvanceHandshake
+import com.synonym.paykit.paykitCloseEncryptedLink
+import com.synonym.paykit.paykitDropEncryptedLinkHandshake
+import com.synonym.paykit.paykitEncryptedLinkHandshakeSnapshotRecipient
+import com.synonym.paykit.paykitEncryptedLinkSnapshotRecipient
 import com.synonym.paykit.paykitExportSession
 import com.synonym.paykit.paykitForceSignOut
 import com.synonym.paykit.paykitGetCurrentPublicKey
+import com.synonym.paykit.paykitGetPaymentEndpoint
 import com.synonym.paykit.paykitGetPaymentList
+import com.synonym.paykit.paykitGetPrivatePayments
 import com.synonym.paykit.paykitImportSession
 import com.synonym.paykit.paykitInitialize
+import com.synonym.paykit.paykitInitiateEncryptedLink
 import com.synonym.paykit.paykitIsAuthenticated
 import com.synonym.paykit.paykitRemovePaymentEndpoint
+import com.synonym.paykit.paykitRestoreEncryptedLink
+import com.synonym.paykit.paykitRestoreEncryptedLinkHandshake
+import com.synonym.paykit.paykitSerializeEncryptedLink
+import com.synonym.paykit.paykitSerializeEncryptedLinkHandshake
 import com.synonym.paykit.paykitSetPaymentEndpoint
+import com.synonym.paykit.paykitSetPrivatePayments
 import com.synonym.paykit.paykitSignOut
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
@@ -96,6 +111,11 @@ class PubkyService @Inject constructor(
         paykitGetPaymentList(publicKey)
     }
 
+    suspend fun getPaymentEndpoint(publicKey: String, methodId: String): String? = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitGetPaymentEndpoint(publicKey, methodId)
+    }
+
     suspend fun setPaymentEndpoint(methodId: String, endpointData: String) = ServiceQueue.CORE.background {
         isSetup.await()
         paykitSetPaymentEndpoint(methodId, endpointData)
@@ -104,6 +124,81 @@ class PubkyService @Inject constructor(
     suspend fun removePaymentEndpoint(methodId: String) = ServiceQueue.CORE.background {
         isSetup.await()
         paykitRemovePaymentEndpoint(methodId)
+    }
+
+    // endregion
+
+    // region Private payment endpoints
+
+    suspend fun initiateEncryptedLink(secretKeyHex: String, receiverPublicKey: String): String =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            paykitInitiateEncryptedLink(secretKeyHex, receiverPublicKey)
+        }
+
+    suspend fun acceptEncryptedLink(secretKeyHex: String, senderPublicKey: String): String =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            paykitAcceptEncryptedLink(secretKeyHex, senderPublicKey)
+        }
+
+    suspend fun advanceHandshake(handshakeId: String): FfiHandshakeProgress = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitAdvanceHandshake(handshakeId)
+    }
+
+    suspend fun restoreEncryptedLink(secretKeyHex: String, snapshotHex: String): String =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            paykitRestoreEncryptedLink(secretKeyHex, snapshotHex)
+        }
+
+    suspend fun encryptedLinkSnapshotRecipient(snapshotHex: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitEncryptedLinkSnapshotRecipient(snapshotHex)
+    }
+
+    suspend fun restoreEncryptedLinkHandshake(secretKeyHex: String, snapshotHex: String): String =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            paykitRestoreEncryptedLinkHandshake(secretKeyHex, snapshotHex)
+        }
+
+    suspend fun encryptedLinkHandshakeSnapshotRecipient(snapshotHex: String): String =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            paykitEncryptedLinkHandshakeSnapshotRecipient(snapshotHex)
+        }
+
+    suspend fun serializeEncryptedLink(linkId: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitSerializeEncryptedLink(linkId)
+    }
+
+    suspend fun serializeEncryptedLinkHandshake(handshakeId: String): String = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitSerializeEncryptedLinkHandshake(handshakeId)
+    }
+
+    suspend fun closeEncryptedLink(linkId: String) = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitCloseEncryptedLink(linkId)
+    }
+
+    suspend fun dropEncryptedLinkHandshake(handshakeId: String) = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitDropEncryptedLinkHandshake(handshakeId)
+    }
+
+    suspend fun setPrivatePayments(linkId: String, entries: List<FfiPaymentEntry>) =
+        ServiceQueue.CORE.background {
+            isSetup.await()
+            paykitSetPrivatePayments(linkId, entries)
+        }
+
+    suspend fun getPrivatePayments(linkId: String): List<FfiPaymentEntry> = ServiceQueue.CORE.background {
+        isSetup.await()
+        paykitGetPrivatePayments(linkId)
     }
 
     // endregion

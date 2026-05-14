@@ -110,7 +110,7 @@ private fun Content(
             currentProfile != null -> ContactBody(
                 profile = currentProfile,
                 tags = uiState.tags,
-                hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
+                hasPaymentEndpoint = uiState.hasPaymentEndpoint,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickPay = onClickPay,
@@ -136,7 +136,7 @@ private fun Content(
 private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
-    hasPublicPaymentEndpoint: Boolean,
+    hasPaymentEndpoint: Boolean,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickPay: () -> Unit,
@@ -170,7 +170,7 @@ private fun ContactBody(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (hasPublicPaymentEndpoint) {
+            if (hasPaymentEndpoint) {
                 ActionButton(
                     onClick = onClickPay,
                     iconRes = R.drawable.ic_coins,

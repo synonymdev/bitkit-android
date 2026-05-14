@@ -110,7 +110,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
         // Simulate activity update
         whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(updatedActivity))
-        activitiesChangedFlow.value = System.currentTimeMillis()
+        activitiesChangedFlow.value += 1
 
         // Verify ViewModel reflects updated activity
         val updatedState = sut.uiState.value.activityLoadState
@@ -135,7 +135,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
         // Trigger activity change
         val callCountBefore = mockingDetails(activityRepo).invocations.size
-        activitiesChangedFlow.value = System.currentTimeMillis()
+        activitiesChangedFlow.value += 1
 
         // Verify no reload after clear (getActivity not called again)
         val callCountAfter = mockingDetails(activityRepo).invocations.size
@@ -156,7 +156,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
         // Simulate reload failure
         whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.failure(Exception("Network error")))
-        activitiesChangedFlow.value = System.currentTimeMillis()
+        activitiesChangedFlow.value += 1
 
         // Verify last known state is preserved
         val state = sut.uiState.value.activityLoadState

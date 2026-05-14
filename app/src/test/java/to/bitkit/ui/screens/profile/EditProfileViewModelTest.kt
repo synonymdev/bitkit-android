@@ -13,6 +13,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -28,6 +29,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
+    private val privatePaykitRepo: PrivatePaykitRepo = mock()
 
     @Test
     fun `updateLinkUrl should update existing profile link`() = test {
@@ -131,10 +133,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
+        whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 
         return EditProfileViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
+            privatePaykitRepo = privatePaykitRepo,
         )
     }
 

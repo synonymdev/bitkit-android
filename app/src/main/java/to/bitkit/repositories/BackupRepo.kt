@@ -52,6 +52,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -85,6 +86,8 @@ class BackupRepo @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val pubkyRepo: PubkyRepo,
+    private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
+    private val privatePaykitAddressReservationRepo: Provider<PrivatePaykitAddressReservationRepo>,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
     private val clock: Clock,
@@ -279,6 +282,26 @@ class BackupRepo @Inject constructor(
         }
         dataListenerJobs.add(pubkyStateJob)
 
+        val privatePaykitStateJob = scope.launch {
+            privatePaykitRepo.get().backupStateVersion
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.WALLET)
+                }
+        }
+        dataListenerJobs.add(privatePaykitStateJob)
+
+        val privatePaykitReservationJob = scope.launch {
+            privatePaykitAddressReservationRepo.get().backupStateVersion
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.WALLET)
+                }
+        }
+        dataListenerJobs.add(privatePaykitReservationJob)
+
         // BLOCKTANK - Observe blocktank state changes (orders, cjitEntries, info)
         val blocktankJob = scope.launch {
             blocktankRepo.blocktankState
@@ -438,7 +461,7 @@ class BackupRepo @Inject constructor(
                 cacheStore.updateBackupStatus(category) {
                     it.copy(running = false)
                 }
-                Logger.error("Backup failed for: '$category'", e = e, context = TAG)
+                Logger.error("Backup failed for: '$category'", e, context = TAG)
             }
     }
 
@@ -461,16 +484,7 @@ class BackupRepo @Inject constructor(
             json.encodeToString(payload).toByteArray()
         }
 
-        BackupCategory.WALLET -> {
-            val transfers = db.transferDao().getAll()
-
-            val payload = WalletBackupV1(
-                createdAt = currentTimeMillis(),
-                transfers = transfers
-            )
-
-            json.encodeToString(payload).toByteArray()
-        }
+        BackupCategory.WALLET -> getWalletBackupDataBytes()
 
         BackupCategory.METADATA -> getMetadataBackupDataBytes()
 
@@ -520,6 +534,29 @@ class BackupRepo @Inject constructor(
         json.encodeToString(payload).toByteArray()
     }
 
+    private suspend fun getWalletBackupDataBytes(): ByteArray {
+        val transfers = db.transferDao().getAll()
+        val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot()
+            .onFailure {
+                Logger.warn("Failed to snapshot private Paykit reservations", it, context = TAG)
+            }
+            .getOrDefault(null)
+        val privateLinks = privatePaykitRepo.get().backupSnapshot()
+            .onFailure {
+                Logger.warn("Failed to snapshot private Paykit contact links", it, context = TAG)
+            }
+            .getOrDefault(null)
+
+        val payload = WalletBackupV1(
+            createdAt = currentTimeMillis(),
+            transfers = transfers,
+            privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
+            privatePaykitContactLinks = privateLinks,
+        )
+
+        return json.encodeToString(payload).toByteArray()
+    }
+
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
     ): Result<Unit> = withContext(ioDispatcher) {
@@ -553,10 +590,7 @@ class BackupRepo @Inject constructor(
                 parsed.createdAt
             }
             performRestore(BackupCategory.WALLET) { dataBytes ->
-                val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
-                db.transferDao().upsert(parsed.transfers)
-                Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
-                parsed.createdAt
+                restoreWalletBackup(dataBytes)
             }
             performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
                 val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
@@ -573,12 +607,33 @@ class BackupRepo @Inject constructor(
         }.onSuccess {
             settingsStore.update { it.copy(backupVerified = true) }
         }.onFailure { e ->
-            Logger.warn("Full restore error", e = e, context = TAG)
+            Logger.warn("Full restore error", e, context = TAG)
         }
 
         _isRestoring.update { false }
 
         return@withContext result
+    }
+
+    private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
+        val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
+        db.transferDao().upsert(parsed.transfers)
+        privatePaykitAddressReservationRepo.get()
+            .restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType)
+            .onFailure {
+                Logger.warn("Failed to restore private Paykit reservations", it, context = TAG)
+            }
+        privatePaykitRepo.get().restoreBackup(parsed.privatePaykitContactLinks)
+            .onFailure {
+                Logger.warn("Failed to restore private Paykit contact links", it, context = TAG)
+            }
+        privatePaykitAddressReservationRepo.get()
+            .reconcileReservedIndexesWithLdk()
+            .onFailure {
+                Logger.warn("Failed to reconcile restored private Paykit reservations", it, context = TAG)
+            }
+        Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
+        return parsed.createdAt
     }
 
     suspend fun getLatestBackupTime(): ULong? = withContext(ioDispatcher) {

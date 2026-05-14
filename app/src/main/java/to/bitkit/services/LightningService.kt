@@ -30,6 +30,7 @@ import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
+import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -69,6 +70,11 @@ import kotlin.time.Duration
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
+
+data class AddressDerivationInfo(
+    val address: String,
+    val index: Int,
+)
 
 @Suppress("LargeClass", "TooManyFunctions")
 @Singleton
@@ -416,6 +422,62 @@ class LightningService @Inject constructor(
         }
     }
 
+    suspend fun newAddressForType(addressType: AddressType): String {
+        val addressInfo = newAddressInfoForType(addressType)
+        return addressInfo.address
+    }
+
+    suspend fun newAddressInfoForType(addressType: AddressType): AddressDerivationInfo {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            val addressInfo = node.onchainPayment().newAddressInfoForType(addressType.toLdkAddressType())
+            AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
+        }
+    }
+
+    suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): AddressDerivationInfo {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            val addressInfo = node.onchainPayment().addressInfoForTypeAtIndex(
+                addressType.toLdkAddressType(),
+                KeychainKind.EXTERNAL,
+                receiveIndex.toUInt(),
+            )
+            AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
+        }
+    }
+
+    suspend fun addressInfosForType(
+        addressType: AddressType,
+        isChange: Boolean,
+        startIndex: Int,
+        count: Int,
+    ): List<AddressDerivationInfo> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        val keychain = if (isChange) KeychainKind.INTERNAL else KeychainKind.EXTERNAL
+
+        return ServiceQueue.LDK.background {
+            node.onchainPayment()
+                .addressInfosForType(
+                    addressType.toLdkAddressType(),
+                    keychain,
+                    startIndex.toUInt(),
+                    count.toUInt(),
+                )
+                .map { AddressDerivationInfo(address = it.address, index = it.index.toInt()) }
+        }
+    }
+
+    suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        ServiceQueue.LDK.background {
+            node.onchainPayment().revealReceiveAddressesTo(forType.toLdkAddressType(), toReceiveIndex.toUInt())
+        }
+    }
+
     // region peers
     suspend fun connectToTrustedPeers() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
@@ -584,8 +646,8 @@ class LightningService @Inject constructor(
             return false
         }
 
-        if (channels.none { it.isChannelReady }) {
-            Logger.warn("canReceive = false: Found no LN channel ready to enable receive: '$channels'", context = TAG)
+        if (channels.none { it.isUsable }) {
+            Logger.warn("canReceive = false: Found no LN channel usable to enable receive: '$channels'", context = TAG)
             return false
         }
 
@@ -1028,7 +1090,13 @@ class LightningService @Inject constructor(
     val config: Config? get() = node?.config()
     val peers: List<PeerDetails>? get() = node?.listPeers()
     val channels: List<ChannelDetails>? get() = node?.listChannels()
-    val payments: List<PaymentDetails>? get() = node?.listPayments()
+
+    suspend fun listPayments(): List<PaymentDetails>? {
+        val node = this.node ?: return null
+        return ServiceQueue.LDK.background {
+            node.listPayments()
+        }
+    }
     // endregion
 
     // region debug
