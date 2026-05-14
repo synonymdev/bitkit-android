@@ -1347,6 +1347,19 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `sendProbeForInvoice delegates amount probes when sats are provided`() = test {
+        startNodeForTesting()
+        whenever(lightningService.sendProbesUsingAmount("lnbc1", 42_000uL))
+            .thenReturn(Result.success(setOf(probePaymentA)))
+
+        val result = sut.sendProbeForInvoice("lnbc1", amountSats = 42uL)
+
+        assertTrue(result.isSuccess)
+        assertEquals(setOf(probePaymentA), result.getOrThrow().paymentIds)
+        verify(lightningService).sendProbesUsingAmount("lnbc1", 42_000uL)
+    }
+
+    @Test
     fun `sendProbeForNode delegates to keysend probe and returns payment IDs`() = test {
         startNodeForTesting()
         whenever(lightningService.sendKeysendProbe(probeNodeId, 42_000uL))
