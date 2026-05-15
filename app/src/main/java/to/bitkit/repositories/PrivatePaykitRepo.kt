@@ -118,10 +118,18 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
-    suspend fun refreshKnownSavedContactEndpoints(reason: String): Result<Unit> = withContext(serializedDispatcher) {
+    suspend fun refreshKnownSavedContactEndpoints(
+        reason: String,
+        forceRefreshLightning: Boolean = false,
+    ): Result<Unit> = withContext(serializedDispatcher) {
         runCatching {
             if (!canPublishPrivateEndpoints()) return@runCatching
-            publishLocalEndpoints(knownSavedContactKeys.toList(), maxAdvanceSteps = 1, reason = reason).getOrThrow()
+            publishLocalEndpoints(
+                publicKeys = knownSavedContactKeys.toList(),
+                maxAdvanceSteps = 1,
+                reason = reason,
+                forceRefreshLightning = forceRefreshLightning,
+            ).getOrThrow()
         }.onFailure {
             Logger.warn("Failed to refresh private Paykit endpoints for '$reason'", it, context = TAG)
         }
@@ -444,40 +452,60 @@ class PrivatePaykitRepo @Inject constructor(
                     )
                 }
 
+                var staleFetchError: Throwable? = null
                 val fetchedCount = fetchRemoteEndpoints(publicKey, linkId, generation).getOrElse {
-                    if (PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(it)) throw it
-                    Logger.warn(
-                        "Failed to refresh private Paykit endpoints for '${redacted(publicKey)}'",
-                        it,
-                        context = TAG,
-                    )
+                    if (PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(it)) {
+                        Logger.warn(
+                            "Private Paykit link is stale for '${redacted(publicKey)}'; using cached private endpoints",
+                            it,
+                            context = TAG,
+                        )
+                        staleFetchError = it
+                        schedulePendingPublicationRetry(publicKey)
+                    } else {
+                        Logger.warn(
+                            "Failed to refresh private Paykit endpoints for '${redacted(publicKey)}'",
+                            it,
+                            context = TAG,
+                        )
+                    }
                     0
                 }
-                val publishLinkId = activeHandlesByContact[publicKey]?.linkId ?: linkId
-                publishLocalEndpointsBestEffort(
-                    publicKey = publicKey,
-                    linkId = publishLinkId,
-                    fetchedRemoteCount = fetchedCount,
-                    context = "payment",
-                    generation = generation,
-                    respectInitialPublishDelay = false,
-                )
-
-                val cachedEntries = ensureState().contacts[publicKey]?.remoteEndpoints.orEmpty()
-                val endpoints = cachedEntries.mapNotNull {
-                    PublicPaykitRepo.parseEndpoint(it.methodId, it.endpointData)
-                }
-                val payable = privatePayableEndpoints(endpoints, publicKey)
-                if (payable.isEmpty()) {
-                    return@runCatching when {
-                        cachedEntries.isEmpty() -> PublicPaykitPaymentResult.NoEndpoint
-                        else -> PublicPaykitPaymentResult.NotOpened
-                    }
+                if (staleFetchError == null) {
+                    val publishLinkId = activeHandlesByContact[publicKey]?.linkId ?: linkId
+                    publishLocalEndpointsBestEffort(
+                        publicKey = publicKey,
+                        linkId = publishLinkId,
+                        fetchedRemoteCount = fetchedCount,
+                        context = "payment",
+                        generation = generation,
+                        respectInitialPublishDelay = false,
+                    )
                 }
 
-                PublicPaykitPaymentResult.Opened(PublicPaykitRepo.paymentRequest(payable))
+                val cachedResult = cachedPrivatePaymentResult(publicKey)
+                if (cachedResult is PublicPaykitPaymentResult.Opened) return@runCatching cachedResult
+                staleFetchError?.let { throw it }
+
+                cachedResult
             }
         }
+
+    private suspend fun cachedPrivatePaymentResult(publicKey: String): PublicPaykitPaymentResult {
+        val cachedEntries = ensureState().contacts[publicKey]?.remoteEndpoints.orEmpty()
+        val endpoints = cachedEntries.mapNotNull {
+            PublicPaykitRepo.parseEndpoint(it.methodId, it.endpointData)
+        }
+        val payable = privatePayableEndpoints(endpoints, publicKey)
+        if (payable.isEmpty()) {
+            return when {
+                cachedEntries.isEmpty() -> PublicPaykitPaymentResult.NoEndpoint
+                else -> PublicPaykitPaymentResult.NotOpened
+            }
+        }
+
+        return PublicPaykitPaymentResult.Opened(PublicPaykitRepo.paymentRequest(payable))
+    }
 
     @Suppress("CyclomaticComplexMethod")
     private suspend fun publishLocalEndpoints(
@@ -486,6 +514,7 @@ class PrivatePaykitRepo @Inject constructor(
         reason: String,
         scheduleRetries: Boolean = true,
         forceLocalPublishWhenRemoteEmpty: Boolean = false,
+        forceRefreshLightning: Boolean = false,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runCatching {
             val generation = currentStateGeneration()
@@ -521,6 +550,7 @@ class PrivatePaykitRepo @Inject constructor(
                     linkId = publishLinkId,
                     force = shouldForcePublish,
                     generation = generation,
+                    forceRefreshLightning = forceRefreshLightning,
                 ).onFailure {
                     if (scheduleRetries) schedulePendingPublicationRetry(normalizedKey)
                     Logger.warn(
@@ -631,12 +661,18 @@ class PrivatePaykitRepo @Inject constructor(
         context: String,
         generation: Long = currentStateGeneration(),
         respectInitialPublishDelay: Boolean = true,
+        forceRefreshLightning: Boolean = false,
     ) {
         if (!canPublishPrivateEndpoints()) return
         if (!shouldPublishLocalEndpoints(publicKey, fetchedRemoteCount)) return
         if (respectInitialPublishDelay && shouldDeferInitialLocalPublish(publicKey, fetchedRemoteCount)) return
 
-        publishLocalEndpoints(publicKey, linkId, generation = generation).onFailure {
+        publishLocalEndpoints(
+            publicKey = publicKey,
+            linkId = linkId,
+            generation = generation,
+            forceRefreshLightning = forceRefreshLightning,
+        ).onFailure {
             schedulePendingPublicationRetry(publicKey)
             Logger.warn(
                 "Failed to publish private Paykit endpoints during '$context' for '${redacted(publicKey)}'",
@@ -707,13 +743,14 @@ class PrivatePaykitRepo @Inject constructor(
         linkId: String,
         force: Boolean = false,
         generation: Long = currentStateGeneration(),
+        forceRefreshLightning: Boolean = false,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runCatching {
             publicationMutex.withLock {
                 ensureCurrentGeneration(generation)
                 if (!canPublishPrivateEndpoints() || knownSavedContact(publicKey) == null) return@withLock
 
-                val endpoints = buildLocalEndpoints(publicKey).getOrThrow()
+                val endpoints = buildLocalEndpoints(publicKey, forceRefreshLightning).getOrThrow()
                 ensureCurrentGeneration(generation)
                 val payloadSelection = PrivatePaykitPayloads.entriesWithinNoiseLimit(endpoints)
                 if (payloadSelection.droppedLightning) {
@@ -741,7 +778,10 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private suspend fun buildLocalEndpoints(publicKey: String): Result<List<Endpoint>> =
+    private suspend fun buildLocalEndpoints(
+        publicKey: String,
+        forceRefreshLightning: Boolean = false,
+    ): Result<List<Endpoint>> =
         withContext(serializedDispatcher) {
             runCatching {
                 val endpoints = mutableListOf<Endpoint>()
@@ -754,7 +794,7 @@ class PrivatePaykitRepo @Inject constructor(
                 )
 
                 if (lightningRepo.canReceive()) {
-                    currentOrRotatedInvoice(publicKey).onSuccess { invoice ->
+                    currentOrRotatedInvoice(publicKey, forceRefresh = forceRefreshLightning).onSuccess { invoice ->
                         endpoints += Endpoint(
                             methodId = MethodId.Bolt11,
                             value = invoice.bolt11,
@@ -778,17 +818,20 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
-    private suspend fun currentOrRotatedInvoice(publicKey: String): Result<StoredInvoice> =
+    private suspend fun currentOrRotatedInvoice(
+        publicKey: String,
+        forceRefresh: Boolean = false,
+    ): Result<StoredInvoice> =
         withContext(serializedDispatcher) {
             runCatching {
-                reusablePrivateInvoice(publicKey)?.let { return@runCatching it }
+                if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runCatching it }
 
                 val bolt11 = lightningRepo.createInvoice(
                     amountSats = null,
                     description = "",
                     expirySeconds = privateInvoiceExpiry.inWholeSeconds.toUInt(),
                 ).getOrThrow()
-                reusablePrivateInvoice(publicKey)?.let { return@runCatching it }
+                if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runCatching it }
 
                 val decoded = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
                     ?: throw PublicPaykitError.InvalidPayload

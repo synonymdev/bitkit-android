@@ -169,9 +169,14 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun syncCurrentPublishedEndpoints(): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun syncCurrentPublishedEndpoints(
+        forceRefreshLightning: Boolean = false,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
-            val desired = buildWalletEndpoints(refresh = false)
+            val desired = buildWalletEndpoints(
+                refresh = false,
+                forceRefreshLightning = forceRefreshLightning,
+            )
             applyPublishedEndpoints(desired)
         }
     }
@@ -239,7 +244,10 @@ class PublicPaykitRepo @Inject constructor(
         return currentPublicKey
     }
 
-    private suspend fun buildWalletEndpoints(refresh: Boolean): List<Endpoint> {
+    private suspend fun buildWalletEndpoints(
+        refresh: Boolean,
+        forceRefreshLightning: Boolean = false,
+    ): List<Endpoint> {
         if (refresh) {
             lightningRepo.executeWhenNodeRunning(
                 operationName = "sync public Paykit endpoints",
@@ -251,7 +259,7 @@ class PublicPaykitRepo @Inject constructor(
 
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
-        buildPublicBolt11Endpoint()?.let { endpoints += it }
+        buildPublicBolt11Endpoint(forceRefreshLightning)?.let { endpoints += it }
 
         val onchainAddress = state.onchainAddress
         if (onchainAddress.isNotBlank()) {
@@ -268,7 +276,7 @@ class PublicPaykitRepo @Inject constructor(
         return endpoints
     }
 
-    private suspend fun buildPublicBolt11Endpoint(): Endpoint? {
+    private suspend fun buildPublicBolt11Endpoint(forceRefreshLightning: Boolean = false): Endpoint? {
         if (!lightningRepo.canReceive()) {
             clearPublicBolt11Metadata()
             return null
@@ -276,7 +284,10 @@ class PublicPaykitRepo @Inject constructor(
 
         val settings = settingsStore.data.first()
         val cachedBolt11 = settings.publicPaykitBolt11
-        if (cachedBolt11.isNotBlank() && !settings.shouldRefreshPublicBolt11(clock.now().toEpochMilliseconds())) {
+        val shouldReuseCachedBolt11 = !forceRefreshLightning &&
+            cachedBolt11.isNotBlank() &&
+            !settings.shouldRefreshPublicBolt11(clock.now().toEpochMilliseconds())
+        if (shouldReuseCachedBolt11) {
             return Endpoint(
                 methodId = MethodId.Bolt11,
                 value = cachedBolt11,

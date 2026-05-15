@@ -147,7 +147,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any()) }
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.reconcileReservedReceiveIndexes() }
             .thenReturn(Result.success(Unit))
@@ -685,7 +685,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints()
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = true)
     }
 
     @Test
@@ -704,7 +705,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncCurrentPublishedEndpoints()
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(forceRefreshLightning = false)
     }
 
     @Test
@@ -834,7 +835,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private suspend fun enablePublicPaykitSharing() {
         settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)
         walletState.value = WalletState(onchainAddress = "bc1qtest")
-        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints() }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any()) }.thenReturn(Result.success(Unit))
     }
 
     @Suppress("UNCHECKED_CAST")

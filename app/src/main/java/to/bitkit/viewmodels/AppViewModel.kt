@@ -343,6 +343,7 @@ class AppViewModel @Inject constructor(
             }
         }
         observeLdkNodeEvents()
+        observeLightningUsableChannels()
         observePublicPaykitEndpoints()
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
@@ -382,6 +383,24 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun observeLightningUsableChannels() {
+        viewModelScope.launch {
+            var hadUsableChannels = false
+            lightningRepo.lightningState
+                .map { state -> state.channels.any { it.isUsable } }
+                .distinctUntilChanged()
+                .collect { hasUsableChannels ->
+                    if (hasUsableChannels && !hadUsableChannels) {
+                        refreshPaykitEndpointsAfterChannelAvailabilityChanged(
+                            reason = "channel usable",
+                            forceRefreshLightning = true,
+                        )
+                    }
+                    hadUsableChannels = hasUsableChannels
+                }
+        }
+    }
+
     @OptIn(FlowPreview::class)
     private fun observePublicPaykitEndpoints() {
         viewModelScope.launch {
@@ -417,14 +436,14 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { refreshPrivatePaykitEndpointsIfEnabled("foreground") }
     }
 
-    private suspend fun refreshPublicPaykitEndpointsIfEnabled() {
+    private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
         val shouldPublish = settingsStore.data.first().sharesPublicPaykitEndpoints
         if (!shouldPublish) return
 
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 
-        publicPaykitRepo.syncCurrentPublishedEndpoints()
+        publicPaykitRepo.syncCurrentPublishedEndpoints(forceRefreshLightning = forceRefreshLightning)
             .onFailure { Logger.warn("Failed to refresh public Paykit endpoints", it, context = TAG) }
     }
 
@@ -470,7 +489,10 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshPrivatePaykitEndpointsIfEnabled(reason: String) {
+    private suspend fun refreshPrivatePaykitEndpointsIfEnabled(
+        reason: String,
+        forceRefreshLightning: Boolean = false,
+    ) {
         privatePaykitRepo.reconcileReservedReceiveIndexes()
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
@@ -480,7 +502,7 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to retry private Paykit endpoint removal for '$reason'", it, context = TAG)
             }
-        privatePaykitRepo.refreshKnownSavedContactEndpoints(reason)
+        privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -525,11 +547,23 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleChannelReady(event: Event.ChannelReady) {
+        refreshPaykitEndpointsAfterChannelAvailabilityChanged("channel ready")
+        notifyChannelReady(event)
+        delay(PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS)
+        refreshPaykitEndpointsAfterChannelAvailabilityChanged(
+            reason = "channel ready delayed",
+            forceRefreshLightning = true,
+        )
+    }
+
+    private suspend fun refreshPaykitEndpointsAfterChannelAvailabilityChanged(
+        reason: String,
+        forceRefreshLightning: Boolean = false,
+    ) {
         transferRepo.syncTransferStates()
         walletRepo.syncBalances()
-        refreshPublicPaykitEndpointsIfEnabled()
-        refreshPrivatePaykitEndpointsIfEnabled("channel ready")
-        notifyChannelReady(event)
+        refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning = forceRefreshLightning)
+        refreshPrivatePaykitEndpointsIfEnabled(reason, forceRefreshLightning = forceRefreshLightning)
     }
 
     private suspend fun handleChannelPending() = transferRepo.syncTransferStates()
@@ -2957,6 +2991,7 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_INITIAL_DELAY_MS = 1000L
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
+        private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
