@@ -165,7 +165,7 @@ fun SendSheet(
                         onBack = { navController.popBackStack() },
                         onScanSuccess = {
                             navController.popBackStack()
-                            appViewModel.onScanResult(data = it)
+                            appViewModel.onScanResult(data = it, routePubkyKeys = true)
                         },
                     )
                 }
