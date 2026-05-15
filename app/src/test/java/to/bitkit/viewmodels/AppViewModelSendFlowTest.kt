@@ -10,6 +10,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +41,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
@@ -60,6 +62,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -67,6 +70,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass")
 class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private lateinit var sut: AppViewModel
@@ -149,7 +153,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.retryPendingEndpointRemoval(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.disableSharingAndClearLocalState(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removeSavedContact(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.reconcileReceivedPayments() }.thenReturn(Result.success(Unit))
@@ -395,6 +399,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `active lightning send failure hides send sheet`() = test {
+        val bolt11 = "lnbcrt1activefailure"
+        val paymentHash = "010203"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        nodeEvents.emit(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
     fun `preserveContactPaymentContext moves active context to pending`() = test {
         val paymentHash = "pending_hash"
         val contactKey = "pubkycontact"
@@ -468,6 +500,173 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertNull(sut.quickPayData.value)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `private onchain contact payment discards remote address after send`() = test {
+        val address = "bcrt1qprivatecontact"
+        val contactKey = "pubkycontact"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = 1000u,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("txid"))
+        setActiveContactPaymentContext(contactKey)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 1000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(privatePaykitRepo).discardRemoteOnchainEndpoints(contactKey, setOf(address))
+    }
+
+    @Test
+    fun `non-contact onchain payment does not discard private endpoint`() = test {
+        val address = "bcrt1qpublicpayment"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = 1000u,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("txid"))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 1000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(privatePaykitRepo, never()).discardRemoteOnchainEndpoints(any(), any())
+    }
+
+    @Test
+    fun `private lightning contact payment discards remote invoice after send`() = test {
+        val bolt11 = "lnbcrt1privatecontact"
+        val paymentHash = "payment_hash"
+        val contactKey = "pubkycontact"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        setActiveContactPaymentContext(contactKey)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        nodeEvents.emit(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).discardRemoteLightningEndpoints(contactKey, setOf(paymentHash))
+    }
+
+    @Test
+    fun `private lightning pending payment discards remote invoice`() = test {
+        val bolt11 = "lnbcrt1pending"
+        val paymentHash = "pending_hash"
+        val contactKey = "pubkycontact"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        setActiveContactPaymentContext(contactKey)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).discardRemoteLightningEndpoints(contactKey, setOf(paymentHash))
+    }
+
+    @Test
+    fun `private lightning duplicate payment discards decoded invoice`() = test {
+        val bolt11 = "lnbcrt1duplicate"
+        val contactKey = "pubkycontact"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
+            .thenReturn(Result.failure(AppError("DuplicatePayment")))
+        setActiveContactPaymentContext(contactKey)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).discardRemoteLightningEndpoints(contactKey, setOf("010203"))
+    }
+
+    @Test
+    fun `non-contact lightning payment does not discard private invoice`() = test {
+        val bolt11 = "lnbcrt1public"
+        val paymentHash = "payment_hash"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        nodeEvents.emit(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo, never()).discardRemoteLightningEndpoints(any(), any())
     }
 
     @Test
@@ -601,6 +800,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
         verify(privatePaykitRepo).prepareSavedContacts(emptySet<String>())
         verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
+    }
+
+    private suspend fun TestScope.confirmCurrentPayment() {
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
     }
 
     private fun enableQuickPay(thresholdSats: ULong) {

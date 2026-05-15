@@ -540,12 +540,12 @@ class BackupRepo @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to snapshot private Paykit reservations", it, context = TAG)
             }
-            .getOrDefault(null)
+            .getOrThrow()
         val privateLinks = privatePaykitRepo.get().backupSnapshot()
             .onFailure {
                 Logger.warn("Failed to snapshot private Paykit contact links", it, context = TAG)
             }
-            .getOrDefault(null)
+            .getOrThrow()
 
         val payload = WalletBackupV1(
             createdAt = currentTimeMillis(),
@@ -618,6 +618,9 @@ class BackupRepo @Inject constructor(
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         db.transferDao().upsert(parsed.transfers)
+        if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
+            cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
+        }
         privatePaykitAddressReservationRepo.get()
             .restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType)
             .onFailure {

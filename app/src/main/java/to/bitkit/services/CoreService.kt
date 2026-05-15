@@ -84,10 +84,12 @@ import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
+import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.random.Random
 import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
@@ -103,6 +105,7 @@ class CoreService @Inject constructor(
     private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
+    private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
 ) {
     private var walletIndex: Int = 0
 
@@ -112,6 +115,7 @@ class CoreService @Inject constructor(
             cacheStore = cacheStore,
             lightningService = lightningService,
             settingsStore = settingsStore,
+            privatePaykitContactResolver = privatePaykitContactResolver,
         )
     }
     val blocktank: BlocktankService by lazy {
@@ -219,18 +223,8 @@ class ActivityService(
     private val cacheStore: CacheStore,
     private val lightningService: LightningService,
     private val settingsStore: SettingsStore,
+    private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
 ) {
-    private var privateInvoiceContactResolver: (suspend (String) -> String?)? = null
-    private var privateOnchainAddressContactResolver: (suspend (String) -> String?)? = null
-
-    fun setPrivatePaykitContactResolvers(
-        invoice: (suspend (String) -> String?)?,
-        onchainAddress: (suspend (String) -> String?)?,
-    ) {
-        privateInvoiceContactResolver = invoice
-        privateOnchainAddressContactResolver = onchainAddress
-    }
-
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
             // Get all activities and delete them one by one
@@ -592,22 +586,17 @@ class ActivityService(
             return null
         }
 
-        findAddressInPreActivityMetadata(details)?.let {
-            return it
-        }
-
         val currentWalletAddress = cacheStore.data.first().onchainAddress
         val selectedAddressType = settingsStore.data.first().selectedAddressType.toAddressType() ?: DEFAULT_ADDRESS_TYPE
-        searchReceivingAddressWithLdk(
-            details = details,
-            value = payment.amountSats ?: 0u,
-            currentWalletAddress = currentWalletAddress,
-            selectedAddressType = selectedAddressType,
-        )?.let {
-            return it
-        }
 
-        return findPrivateReservedAddress(details)
+        return findAddressInPreActivityMetadata(details)
+            ?: searchReceivingAddressWithLdk(
+                details = details,
+                value = payment.amountSats ?: 0u,
+                currentWalletAddress = currentWalletAddress,
+                selectedAddressType = selectedAddressType,
+            )
+            ?: findPrivateReservedAddress(details)
     }
 
     private suspend fun findPrivateReservedAddress(details: BitkitCoreTransactionDetails): String? {
@@ -964,11 +953,11 @@ class ActivityService(
         direction: PaymentDirection,
     ): String? {
         if (direction != PaymentDirection.INBOUND) return null
-        return privateInvoiceContactResolver?.invoke(paymentHash)
+        return privatePaykitContactResolver.get().contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)
     }
 
     private suspend fun privatePaykitContactPublicKeyForReservedAddress(address: String): String? =
-        privateOnchainAddressContactResolver?.invoke(address)
+        privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(listOf(address))
 
     // MARK: - Test Data Generation (regtest only)
 

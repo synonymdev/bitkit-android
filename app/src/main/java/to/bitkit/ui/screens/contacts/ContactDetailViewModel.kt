@@ -68,7 +68,7 @@ class ContactDetailViewModel @Inject constructor(
                     it.copy(
                         profile = cached,
                         tags = cached.tags.toImmutableList(),
-                        hasPaymentEndpoint = true,
+                        showPayButton = true,
                         isLoading = false,
                     )
                 }
@@ -80,7 +80,7 @@ class ContactDetailViewModel @Inject constructor(
                         it.copy(
                             profile = profile,
                             tags = profile.tags.toImmutableList(),
-                            hasPaymentEndpoint = true,
+                            showPayButton = true,
                             isLoading = false,
                         )
                     }
@@ -190,7 +190,7 @@ data class ContactDetailUiState(
     val profile: PubkyProfile? = null,
     val tags: ImmutableList<String> = persistentListOf(),
     val isLoading: Boolean = false,
-    val hasPaymentEndpoint: Boolean = false,
+    val showPayButton: Boolean = false,
     val showAddTagSheet: Boolean = false,
 )
 

@@ -262,7 +262,7 @@ class WalletRepo @Inject constructor(
         if (address.isEmpty()) {
             newAddress()
         } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
-            newAddress()
+            replaceReusableOnchainAddress()
         } else {
             checkAddressUsage(address).onSuccess { wasUsed ->
                 if (wasUsed) {
@@ -359,11 +359,22 @@ class WalletRepo @Inject constructor(
                 return@runCatching
             }
 
+            clearReusableOnchainAddress()
             newAddress().getOrThrow()
             updateBip21Url()
         }.onFailure {
             Logger.error("Failed to refresh reserved receive address", it, context = TAG)
         }
+    }
+
+    private suspend fun replaceReusableOnchainAddress(): Result<String> {
+        clearReusableOnchainAddress()
+        return newAddress()
+    }
+
+    private suspend fun clearReusableOnchainAddress() {
+        _walletState.update { it.copy(onchainAddress = "", bip21 = "") }
+        cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
     }
 
     suspend fun refreshReceiveAddressAfterTypeChange(): Result<Unit> = withContext(bgDispatcher) {

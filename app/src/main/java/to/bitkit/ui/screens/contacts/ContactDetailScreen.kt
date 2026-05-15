@@ -110,7 +110,7 @@ private fun Content(
             currentProfile != null -> ContactBody(
                 profile = currentProfile,
                 tags = uiState.tags,
-                hasPaymentEndpoint = uiState.hasPaymentEndpoint,
+                showPayButton = uiState.showPayButton,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickPay = onClickPay,
@@ -136,7 +136,7 @@ private fun Content(
 private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
-    hasPaymentEndpoint: Boolean,
+    showPayButton: Boolean,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickPay: () -> Unit,
@@ -170,7 +170,7 @@ private fun ContactBody(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (hasPaymentEndpoint) {
+            if (showPayButton) {
                 ActionButton(
                     onClick = onClickPay,
                     iconRes = R.drawable.ic_coins,
@@ -288,6 +288,7 @@ private fun Preview() {
                     status = null,
                 ),
                 tags = persistentListOf("CEO", "Bitcoin"),
+                showPayButton = true,
             ),
             onBackClick = {},
             onClickEdit = {},

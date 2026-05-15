@@ -293,14 +293,6 @@ class AppViewModel @Inject constructor(
     }
 
     init {
-        coreService.activity.setPrivatePaykitContactResolvers(
-            invoice = { paymentHash ->
-                privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)
-            },
-            onchainAddress = { address ->
-                privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(listOf(address))
-            },
-        )
         viewModelScope.launch {
             ToastEventBus.events.collect {
                 toast(it)
@@ -489,9 +481,6 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Failed to retry private Paykit endpoint removal for '$reason'", it, context = TAG)
             }
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason)
-            .onFailure {
-                Logger.warn("Failed to refresh private Paykit endpoints for '$reason'", it, context = TAG)
-            }
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -808,8 +797,18 @@ class AppViewModel @Inject constructor(
                 }
                 return
             }
+            if (closeActiveSendForFailedPayment(paymentHash, event.reason)) return
         }
         notifyPaymentFailed(event.reason)
+    }
+
+    private fun closeActiveSendForFailedPayment(paymentHash: String, reason: PaymentFailureReason?): Boolean {
+        val activePaymentHash = _sendUiState.value.decodedInvoice?.paymentHash?.toHex()
+        if (_currentSheet.value !is Sheet.Send || activePaymentHash != paymentHash) return false
+
+        notifyPaymentFailed(reason)
+        hideSheet()
+        return true
     }
 
     private suspend fun handlePaymentReceived(event: Event.PaymentReceived) {

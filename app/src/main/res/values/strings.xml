@@ -678,6 +678,7 @@
     <string name="settings__addr__check_balances">Check Balances</string>
     <string name="settings__addr__gen_20">Generate 20 More</string>
     <string name="settings__addr__index">Index: {index}</string>
+    <string name="settings__addr__load_error">Wallet is still starting. Try again in a moment.</string>
     <string name="settings__addr__loading">Loading Addresses...</string>
     <string name="settings__addr__no_addrs">No Addresses To Display</string>
     <string name="settings__addr__no_addrs_str">No addresses found when searching for \"{searchTxt}\"</string>

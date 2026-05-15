@@ -80,6 +80,7 @@ class WalletRepoTest : BaseUnitTest() {
     fun setUp() = runBlocking {
         whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = "", onchainAddress = ADDRESS)))
+        whenever { cacheStore.update(any()) }.thenReturn(Unit)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(MutableSharedFlow())
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
@@ -327,6 +328,41 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertEquals(ADDRESS, sut.walletState.value.onchainAddress)
         verify(cacheStore).setOnchainAddress(ADDRESS)
+    }
+
+    @Test
+    fun `refreshReusableReceiveAddressIfReserved replaces unavailable cached address`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bolt11 = INVOICE)))
+        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }
+            .thenReturn(true)
+        sut = createSut()
+        sut.loadFromCache()
+
+        val result = sut.refreshReusableReceiveAddressIfReserved()
+
+        assertTrue(result.isSuccess)
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
+        verify(cacheStore).setOnchainAddress(ADDRESS_NEW)
+    }
+
+    @Test
+    fun `refreshReusableReceiveAddressIfReserved clears unavailable cached address when replacement fails`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bolt11 = INVOICE)))
+        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }
+            .thenReturn(true)
+        whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }
+            .thenReturn(Result.failure(error))
+        sut = createSut()
+        sut.loadFromCache()
+
+        val result = sut.refreshReusableReceiveAddressIfReserved()
+
+        assertTrue(result.isFailure)
+        assertEquals("", sut.walletState.value.onchainAddress)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        verify(cacheStore).update(any())
     }
 
     @Test

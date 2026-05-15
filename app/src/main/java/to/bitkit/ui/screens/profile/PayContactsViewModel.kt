@@ -23,7 +23,6 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -34,10 +33,6 @@ class PayContactsViewModel @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
-    companion object {
-        private const val TAG = "PayContactsViewModel"
-    }
-
     private val _uiState = MutableStateFlow(PayContactsUiState())
     val uiState: StateFlow<PayContactsUiState> = _uiState.asStateFlow()
 
@@ -79,7 +74,6 @@ class PayContactsViewModel @Inject constructor(
                 .onFailure {
                     val settings = settingsStore.data.first()
                     val persistedValue = resolvedSharingDefault(settings)
-                    Logger.error("Failed to sync public Paykit endpoints", it, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
@@ -99,6 +93,12 @@ class PayContactsViewModel @Inject constructor(
         publicPaykitRepo.syncPublishedEndpoints(publish = true)
             .onFailure { return Result.failure(it) }
 
+        privatePaykitRepo.setContactSharingCleanupPending(false)
+            .onFailure {
+                publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                return Result.failure(it)
+            }
+
         runCatching {
             settingsStore.update {
                 it.copy(
@@ -110,14 +110,7 @@ class PayContactsViewModel @Inject constructor(
             return Result.failure(it)
         }
 
-        privatePaykitRepo.setContactSharingCleanupPending(false)
-            .onFailure {
-                Logger.warn("Failed to clear private Paykit cleanup marker", it, context = TAG)
-            }
         privatePaykitRepo.prepareSavedContacts(contacts)
-            .onFailure {
-                Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG)
-            }
 
         return Result.success(Unit)
     }
@@ -136,21 +129,18 @@ class PayContactsViewModel @Inject constructor(
 
         var cleanupError: Throwable? = null
         publicPaykitRepo.syncPublishedEndpoints(publish = false)
-            .onFailure {
-                cleanupError = it
-                Logger.warn("Failed to remove public Paykit endpoints", it, context = TAG)
-            }
+            .onFailure { cleanupError = it }
 
-        privatePaykitRepo.disableSharingAndClearLocalState(contacts)
+        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
             .onFailure {
                 if (cleanupError == null) cleanupError = it
-                Logger.warn("Failed to remove private Paykit endpoints", it, context = TAG)
             }
 
         cleanupError?.let {
             privatePaykitRepo.setContactSharingCleanupPending(true)
-                .onFailure { error ->
-                    Logger.warn("Failed to mark private Paykit cleanup pending", error, context = TAG)
+                .onFailure { markerError ->
+                    it.addSuppressed(markerError)
+                    return Result.failure(it)
                 }
             return Result.failure(it)
         }

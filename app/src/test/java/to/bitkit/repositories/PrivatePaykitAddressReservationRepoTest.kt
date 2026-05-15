@@ -19,6 +19,7 @@ import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
@@ -152,6 +153,18 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
 
         assertEquals("address506", result)
         verify(lightningRepo).revealReceiveAddresses(505, AddressType.P2WPKH)
+    }
+
+    @Test
+    fun `isUnavailableForReusableReceive does not scan restored private receive ceilings by address`() = test {
+        reservationData.value = PrivatePaykitReservationData(
+            restoredReservedReceiveIndexCeilingsByAddressType = mapOf("nativeSegwit" to 505),
+        )
+
+        val result = sut.isUnavailableForReusableReceive(PRIVATE_ADDRESS)
+
+        assertFalse(result)
+        verify(lightningRepo, never()).addressInfosForType(any(), any(), any(), any())
     }
 
     @Test

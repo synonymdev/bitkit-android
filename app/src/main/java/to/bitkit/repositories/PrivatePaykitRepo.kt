@@ -122,6 +122,8 @@ class PrivatePaykitRepo @Inject constructor(
         runCatching {
             if (!canPublishPrivateEndpoints()) return@runCatching
             publishLocalEndpoints(knownSavedContactKeys.toList(), maxAdvanceSteps = 1, reason = reason).getOrThrow()
+        }.onFailure {
+            Logger.warn("Failed to refresh private Paykit endpoints for '$reason'", it, context = TAG)
         }
     }
 
@@ -130,10 +132,14 @@ class PrivatePaykitRepo @Inject constructor(
     ): Result<Unit> = withContext(serializedDispatcher) {
         runCatching {
             if (isContactSharingCleanupPending()) {
-                publicPaykitRepo.syncPublishedEndpoints(publish = false).getOrThrow()
-                removePublishedEndpoints().getOrThrow()
-                clearUnsavedContactState(savedPublicKeys).getOrThrow()
-                updateContactSharingCleanupPending(false)
+                if (settingsStore.data.first().sharesPublicPaykitEndpoints) {
+                    updateContactSharingCleanupPending(false)
+                } else {
+                    publicPaykitRepo.syncPublishedEndpoints(publish = false).getOrThrow()
+                    removePublishedEndpoints().getOrThrow()
+                    clearUnsavedContactState(savedPublicKeys).getOrThrow()
+                    updateContactSharingCleanupPending(false)
+                }
             }
             retryPendingDeletedContactEndpointRemoval(savedPublicKeys).getOrThrow()
         }.onFailure {
@@ -172,7 +178,7 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun disableSharingAndClearLocalState(savedPublicKeys: Collection<String>): Result<Unit> =
+    suspend fun disableSharingAndPruneUnsavedContactState(savedPublicKeys: Collection<String>): Result<Unit> =
         withContext(serializedDispatcher) {
             runCatching {
                 resetInFlightWork()
@@ -236,55 +242,6 @@ class PrivatePaykitRepo @Inject constructor(
 
                 if (privateResult is PublicPaykitPaymentResult.Opened) return@runCatching privateResult
                 publicPaykitRepo.beginPayment(normalizedKey).getOrThrow()
-            }
-        }
-
-    suspend fun resolveSavedContactPayableEndpoint(publicKey: String): Result<Boolean> =
-        withContext(serializedDispatcher) {
-            runCatching {
-                val normalizedKey = knownSavedContact(publicKey)
-                    ?: return@runCatching publicPaykitRepo.hasPayablePublicEndpoint(publicKey).getOrThrow()
-
-                val hadCachedPrivateEndpoint = hasCachedPrivateEndpoint(normalizedKey)
-                val generation = currentStateGeneration()
-                val linkId = establishedLinkId(normalizedKey, maxAdvanceSteps = 3, generation = generation).getOrNull()
-                if (linkId == null) {
-                    return@runCatching hadCachedPrivateEndpoint ||
-                        publicPaykitRepo.hasPayablePublicEndpoint(normalizedKey).getOrThrow()
-                }
-
-                if (ensureState().contacts[normalizedKey]?.lastLocalPayloadHash == null) {
-                    publishLocalEndpointsBestEffort(
-                        publicKey = normalizedKey,
-                        linkId = linkId,
-                        fetchedRemoteCount = 0,
-                        context = "resolve",
-                        generation = generation,
-                    )
-                }
-                val fetchedCount = fetchRemoteEndpoints(normalizedKey, linkId, generation).getOrElse {
-                    Logger.warn(
-                        "Failed to resolve private Paykit endpoints for '${redacted(normalizedKey)}'",
-                        it,
-                        context = TAG,
-                    )
-                    if (hadCachedPrivateEndpoint && !PrivatePaykitErrorClassifier.shouldCountAsStaleLinkFailure(it)) {
-                        return@runCatching true
-                    }
-                    return@runCatching publicPaykitRepo.hasPayablePublicEndpoint(normalizedKey).getOrThrow()
-                }
-                val publishLinkId = activeHandlesByContact[normalizedKey]?.linkId ?: linkId
-                publishLocalEndpointsBestEffort(
-                    publicKey = normalizedKey,
-                    linkId = publishLinkId,
-                    fetchedRemoteCount = fetchedCount,
-                    context = "resolve",
-                    generation = generation,
-                    respectInitialPublishDelay = false,
-                )
-
-                hasCachedPrivateEndpoint(normalizedKey) ||
-                    publicPaykitRepo.hasPayablePublicEndpoint(normalizedKey).getOrThrow()
             }
         }
 
@@ -431,7 +388,7 @@ class PrivatePaykitRepo @Inject constructor(
 
                         if (backup == null) {
                             stateStore.replaceState(PrivatePaykitState())
-                            persistState()
+                            persistState(preserveCleanupMarkers = false)
                             notifyBackupStateChanged()
                             return@runCatching
                         }
@@ -465,7 +422,7 @@ class PrivatePaykitRepo @Inject constructor(
                         stateStore.replaceState(PrivatePaykitState(contacts = contacts.toMutableMap()))
                     }
                 }
-                persistState()
+                persistState(preserveCleanupMarkers = false)
                 notifyBackupStateChanged()
             }
         }
@@ -770,6 +727,8 @@ class PrivatePaykitRepo @Inject constructor(
                 val payloadHash = PrivatePaykitPayloads.localPayloadHash(entries)
                 val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
                 if (!force && contactState.lastLocalPayloadHash == payloadHash) return@withLock
+                ensureCurrentGeneration(generation)
+                if (!canPublishPrivateEndpoints() || knownSavedContact(publicKey) == null) return@withLock
 
                 pubkyService.setPrivatePayments(linkId, entries.map { FfiPaymentEntry(it.methodId, it.endpointData) })
                 ensureCurrentGeneration(generation)
@@ -983,26 +942,52 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
         contactState.linkSnapshotHex?.let { snapshot ->
-            val restoredLinkId = runCatching {
-                validateSnapshot(snapshot, normalizedKey, pubkyService::encryptedLinkSnapshotRecipient)
-                val linkId = pubkyService.restoreEncryptedLink(secretKeyHex, snapshot)
-                ensureCurrentGeneration(generation)
-                activeHandlesByContact[normalizedKey] = ContactPaykitHandles(linkId = linkId)
-                linkId
-            }.onFailure {
-                if (it is PrivatePaykitError.PrivateUnavailable) throw it
+            val shouldRestoreSnapshot = runCatching {
+                snapshotRecipientMatches(snapshot, normalizedKey, pubkyService::encryptedLinkSnapshotRecipient)
+            }.getOrElse {
                 Logger.warn(
-                    "Failed to restore private Paykit link for '${redacted(normalizedKey)}'",
+                    "Failed to inspect private Paykit link snapshot for '${redacted(normalizedKey)}'",
                     it,
                     context = TAG,
                 )
-                contactState.linkSnapshotHex = null
-                contactState.handshakeSnapshotHex = null
-                contactState.lastLocalPayloadHash = null
-                contactState.mainRecoveryAttemptId = null
-                contactState.responderRecoveryAttemptId = null
-                persistState(markWalletBackup = true)
-            }.getOrNull()
+                clearInvalidLinkSnapshotState(contactState)
+                false
+            }
+
+            if (!shouldRestoreSnapshot) {
+                if (contactState.linkSnapshotHex != null) {
+                    Logger.warn(
+                        "Dropped private Paykit link snapshot with mismatched recipient for " +
+                            "'${redacted(normalizedKey)}'",
+                        context = TAG,
+                    )
+                    clearInvalidLinkSnapshotState(contactState)
+                }
+            }
+
+            val restoredLinkId = if (shouldRestoreSnapshot) {
+                runCatching {
+                    val linkId = pubkyService.restoreEncryptedLink(secretKeyHex, snapshot)
+                    ensureCurrentGeneration(generation)
+                    activeHandlesByContact[normalizedKey] = ContactPaykitHandles(linkId = linkId)
+                    linkId
+                }.onFailure {
+                    if (it is PrivatePaykitError.PrivateUnavailable) throw it
+                    Logger.warn(
+                        "Failed to restore private Paykit link for '${redacted(normalizedKey)}'",
+                        it,
+                        context = TAG,
+                    )
+                    contactState.linkSnapshotHex = null
+                    contactState.handshakeSnapshotHex = null
+                    contactState.lastLocalPayloadHash = null
+                    contactState.mainRecoveryAttemptId = null
+                    contactState.responderRecoveryAttemptId = null
+                    persistState(markWalletBackup = true)
+                }.getOrNull()
+            } else {
+                null
+            }
             if (restoredLinkId != null) {
                 val remoteRecoveryMarker = recoveryStore.freshRecoveryMarker(
                     from = normalizedKey,
@@ -1183,12 +1168,35 @@ class PrivatePaykitRepo @Inject constructor(
         var handshakeId = activeHandlesByContact[normalizedKey]?.handshakeId
         if (handshakeId == null) {
             contactState.handshakeSnapshotHex?.let { snapshot ->
-                runCatching {
-                    validateSnapshot(
+                val shouldRestoreSnapshot = runCatching {
+                    snapshotRecipientMatches(
                         snapshotHex = snapshot,
                         publicKey = normalizedKey,
                         recipient = pubkyService::encryptedLinkHandshakeSnapshotRecipient,
                     )
+                }.getOrElse {
+                    Logger.warn(
+                        "Failed to inspect private Paykit handshake snapshot for '${redacted(normalizedKey)}'",
+                        it,
+                        context = TAG,
+                    )
+                    clearInvalidHandshakeSnapshotState(contactState)
+                    false
+                }
+
+                if (!shouldRestoreSnapshot) {
+                    if (contactState.handshakeSnapshotHex != null) {
+                        Logger.warn(
+                            "Dropped private Paykit handshake snapshot with mismatched recipient for " +
+                                "'${redacted(normalizedKey)}'",
+                            context = TAG,
+                        )
+                        clearInvalidHandshakeSnapshotState(contactState)
+                    }
+                    return@let
+                }
+
+                runCatching {
                     handshakeId = pubkyService.restoreEncryptedLinkHandshake(secretKeyHex, snapshot)
                     ensureCurrentGeneration(generation)
                 }.onFailure {
@@ -1493,13 +1501,6 @@ class PrivatePaykitRepo @Inject constructor(
         return reusable
     }
 
-    private suspend fun hasCachedPrivateEndpoint(publicKey: String): Boolean {
-        val endpoints = ensureState().contacts[publicKey]?.remoteEndpoints.orEmpty().mapNotNull {
-            PublicPaykitRepo.parseEndpoint(it.methodId, it.endpointData)
-        }
-        return privatePayableEndpoints(endpoints, publicKey).isNotEmpty()
-    }
-
     private suspend fun shouldDiscardRemoteLightningEntry(
         entry: StoredPaymentEntry,
         paymentHashes: Set<String>,
@@ -1718,6 +1719,29 @@ class PrivatePaykitRepo @Inject constructor(
         persistState()
     }
 
+    private fun clearInvalidLinkSnapshotState(contactState: ContactState) {
+        contactState.linkSnapshotHex = null
+        contactState.handshakeSnapshotHex = null
+        contactState.remoteEndpoints = emptyList()
+        contactState.lastLocalPayloadHash = null
+        contactState.linkCompletedAt = null
+        contactState.handshakeUpdatedAt = null
+        contactState.recoveryStartedAt = null
+        contactState.mainRecoveryAttemptId = null
+        contactState.responderRecoveryAttemptId = null
+        contactState.linkFailureCount = 0
+    }
+
+    private fun clearInvalidHandshakeSnapshotState(contactState: ContactState) {
+        contactState.handshakeSnapshotHex = null
+        contactState.lastLocalPayloadHash = null
+        contactState.handshakeUpdatedAt = null
+        contactState.recoveryStartedAt = null
+        contactState.mainRecoveryAttemptId = null
+        contactState.responderRecoveryAttemptId = null
+        contactState.linkFailureCount = 0
+    }
+
     private suspend fun validatedSnapshot(
         snapshotHex: String?,
         publicKey: String,
@@ -1741,10 +1765,18 @@ class PrivatePaykitRepo @Inject constructor(
         publicKey: String,
         recipient: suspend (String) -> String,
     ) {
-        val snapshotRecipient = recipient(snapshotHex)
-        if (PubkyPublicKeyFormat.normalized(snapshotRecipient) != PubkyPublicKeyFormat.normalized(publicKey)) {
-            throw PrivatePaykitError.PrivateUnavailable
+        if (!snapshotRecipientMatches(snapshotHex, publicKey, recipient)) {
+            throw PrivatePaykitError.SnapshotRecipientMismatch
         }
+    }
+
+    private suspend fun snapshotRecipientMatches(
+        snapshotHex: String,
+        publicKey: String,
+        recipient: suspend (String) -> String,
+    ): Boolean {
+        val snapshotRecipient = recipient(snapshotHex)
+        return PubkyPublicKeyFormat.normalized(snapshotRecipient) == PubkyPublicKeyFormat.normalized(publicKey)
     }
 
     private fun rememberSavedContacts(publicKeys: Collection<String>, replacing: Boolean): List<String> {
@@ -1769,8 +1801,11 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun ensureState(): PrivatePaykitState = stateStore.ensureState()
 
-    private suspend fun persistState(markWalletBackup: Boolean = false) {
-        stateStore.persistState(markWalletBackup, ::notifyBackupStateChanged)
+    private suspend fun persistState(
+        markWalletBackup: Boolean = false,
+        preserveCleanupMarkers: Boolean = true,
+    ) {
+        stateStore.persistState(markWalletBackup, ::notifyBackupStateChanged, preserveCleanupMarkers)
     }
 
     private fun notifyBackupStateChanged() {
