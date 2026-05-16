@@ -5,10 +5,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
-import to.bitkit.test.annotations.ComposeUiAndroidTest
+import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 
-@ComposeUiAndroidTest
+@ComposeUi
 class FactsPreviewContentTest {
 
     @get:Rule

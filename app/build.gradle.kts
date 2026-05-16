@@ -51,7 +51,6 @@ val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6
 val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
 val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
-val androidTestAnnotationSuffix = "AndroidTest"
 val androidTestTaskPrefix = "connectedDevDebug"
 val androidTestTaskSuffix = "AndroidTest"
 val androidTestAnnotationNames = file("src/androidTest/java/to/bitkit/test/annotations")
@@ -59,8 +58,7 @@ val androidTestAnnotationNames = file("src/androidTest/java/to/bitkit/test/annot
     ?.mapNotNull { file ->
         file.nameWithoutExtension.takeIf {
             file.isFile &&
-                file.extension == "kt" &&
-                it.endsWith(androidTestAnnotationSuffix)
+                file.extension == "kt"
         }
     }
     ?.sorted()
@@ -68,8 +66,7 @@ val androidTestAnnotationNames = file("src/androidTest/java/to/bitkit/test/annot
 val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfterLast(":") }
 
 fun androidTestTaskName(annotationName: String): String {
-    val taskInfix = annotationName.removeSuffix(androidTestAnnotationSuffix)
-    return "$androidTestTaskPrefix$taskInfix$androidTestTaskSuffix"
+    return "$androidTestTaskPrefix$annotationName$androidTestTaskSuffix"
 }
 
 val requestedAndroidTestAnnotation = providers.gradleProperty("bitkitAndroidTestAnnotation")
@@ -78,7 +75,7 @@ val requestedAndroidTestAnnotation = providers.gradleProperty("bitkitAndroidTest
     ?.takeIf { it.isNotEmpty() }
     ?.also {
         require('.' !in it) {
-            "Use a simple Android test annotation name, e.g. 'DeviceUiIntegrationAndroidTest'."
+            "Use a simple Android test annotation name, e.g. 'ComposeUi'."
         }
         require(it in androidTestAnnotationNames) {
             "Unsupported bitkitAndroidTestAnnotation '$it'. Supported annotations: " +

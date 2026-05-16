@@ -120,8 +120,8 @@ jobs:
 
             IFS=',' read -ra requested_suites <<< "$suites"
             for suite in "${requested_suites[@]}"; do
-              if [[ "$suite" == *.* || ! "$suite" =~ ^[A-Z][A-Za-z0-9]*AndroidTest$ ]]; then
-                echo "::error::Invalid Android test annotation '$suite'. Use all or comma-separated simple annotation names such as DeviceUiIntegrationAndroidTest."
+              if [[ "$suite" == *.* || ! "$suite" =~ ^[A-Z][A-Za-z0-9]*$ ]]; then
+                echo "::error::Invalid Android test annotation '$suite'. Use all or comma-separated simple annotation names such as ComposeUi."
                 exit 1
               fi
 
