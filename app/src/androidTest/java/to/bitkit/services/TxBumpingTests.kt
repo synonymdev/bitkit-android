@@ -15,6 +15,8 @@ import org.junit.runner.RunWith
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.test.annotations.CoreServiceIntegrationTest
+import to.bitkit.test.annotations.DeviceIntegrationTest
 import javax.inject.Inject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -23,6 +25,8 @@ import kotlin.test.assertTrue
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
+@DeviceIntegrationTest
+@CoreServiceIntegrationTest
 class TxBumpingTests {
 
     @get:Rule

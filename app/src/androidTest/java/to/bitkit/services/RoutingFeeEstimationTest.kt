@@ -18,6 +18,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.test.annotations.CoreServiceIntegrationTest
+import to.bitkit.test.annotations.DeviceIntegrationTest
 import to.bitkit.utils.LdkError
 import javax.inject.Inject
 import kotlin.test.assertEquals
@@ -27,6 +29,8 @@ import kotlin.test.assertTrue
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
+@DeviceIntegrationTest
+@CoreServiceIntegrationTest
 class RoutingFeeEstimationTest {
 
     companion object {
