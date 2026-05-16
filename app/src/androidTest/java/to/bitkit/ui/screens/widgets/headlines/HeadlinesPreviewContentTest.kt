@@ -56,7 +56,7 @@ class HeadlinesPreviewContentTest {
         // Verify settings and preview section
         composeTestRule.onNodeWithTag("WidgetEdit").assertExists()
         composeTestRule.onNodeWithTag("headlines_preview_carousel").assertExists()
-        composeTestRule.onNodeWithTag("headline_card_small").assertExists()
+        composeTestRule.onNodeWithTag("headline_card_wide").assertExists()
 
         // Verify buttons
         composeTestRule.onNodeWithTag("buttons_row").assertExists()
@@ -162,7 +162,7 @@ class HeadlinesPreviewContentTest {
         composeTestRule.onNodeWithTag("divider").assertExists()
         composeTestRule.onNodeWithTag("WidgetEdit").assertExists()
         composeTestRule.onNodeWithTag("headlines_preview_carousel").assertExists()
-        composeTestRule.onNodeWithTag("headline_card_small").assertExists()
+        composeTestRule.onNodeWithTag("headline_card_wide").assertExists()
         composeTestRule.onNodeWithTag("buttons_row").assertExists()
         composeTestRule.onNodeWithTag("WidgetDelete").assertExists()
         composeTestRule.onNodeWithTag("WidgetSave").assertExists()

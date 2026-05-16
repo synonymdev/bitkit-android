@@ -1,7 +1,6 @@
 package to.bitkit.appwidget.config
 
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,10 +60,7 @@ internal fun BlocksConfigContent(
         )
     }
 
-    ScreenColumn(
-        noBackground = true,
-        modifier = Modifier.background(Colors.Gray7)
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.widgets__blocks__name),
             onBackClick = onCancel,

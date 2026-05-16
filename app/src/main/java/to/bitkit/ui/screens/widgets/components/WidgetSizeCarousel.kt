@@ -23,17 +23,23 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.Colors
 
-private const val PAGE_SMALL = 0
-private const val PAGE_WIDE = 1
-private const val PAGE_COUNT = 2
+private const val PAGE_WIDE = 0
+private const val PAGE_SMALL = 1
+
+// temporarily removed until small size widgets variants are implemented
+private const val PAGE_COUNT = 1
+// private const val PAGE_COUNT = 2
 
 @Composable
+@Suppress("UnusedParameter")
 fun WidgetSizeCarousel(
     smallContent: @Composable () -> Unit,
     wideContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
+    val pagerState = rememberPagerState(
+        pageCount = { PAGE_COUNT },
+    )
 
     Column(
         verticalArrangement = Arrangement.Center,
@@ -51,8 +57,9 @@ fun WidgetSizeCarousel(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 when (page) {
-                    PAGE_SMALL -> smallContent()
                     PAGE_WIDE -> wideContent()
+                    // temporarily removed until small size widgets variants are implemented
+                    // PAGE_SMALL -> smallContent()
                 }
             }
         }
@@ -61,10 +68,9 @@ fun WidgetSizeCarousel(
 
         Caption13Up(
             text = stringResource(
-                if (pagerState.currentPage == PAGE_SMALL) {
-                    R.string.widgets__widget__size_small
-                } else {
-                    R.string.widgets__widget__size_wide
+                when (pagerState.currentPage) {
+                    PAGE_SMALL -> R.string.widgets__widget__size_small
+                    else -> R.string.widgets__widget__size_wide
                 },
             ),
             color = Colors.White64,
@@ -76,22 +82,24 @@ fun WidgetSizeCarousel(
 
         VerticalSpacer(16.dp)
 
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("page_indicator")
-        ) {
-            repeat(PAGE_COUNT) { index ->
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .size(8.dp)
-                        .background(
-                            color = if (pagerState.currentPage == index) Colors.White else Colors.White32,
-                            shape = CircleShape,
-                        )
-                )
+        if (PAGE_COUNT > 1) {
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("page_indicator")
+            ) {
+                repeat(PAGE_COUNT) { index ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(8.dp)
+                            .background(
+                                color = if (pagerState.currentPage == index) Colors.White else Colors.White32,
+                                shape = CircleShape,
+                            )
+                    )
+                }
             }
         }
     }

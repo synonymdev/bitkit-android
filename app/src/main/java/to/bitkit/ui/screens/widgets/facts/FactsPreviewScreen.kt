@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.widgets.facts
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +31,7 @@ fun FactsPreviewScreen(
     factsViewModel: FactsViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
     val isFactsWidgetEnabled by factsViewModel.isFactsWidgetEnabled.collectAsStateWithLifecycle()
@@ -52,6 +52,7 @@ fun FactsPreviewScreen(
             factsViewModel.saveWidget()
             onClose()
         },
+        modifier = modifier
     )
 }
 
@@ -62,12 +63,10 @@ fun FactsPreviewContent(
     onClickSave: () -> Unit,
     isFactsWidgetEnabled: Boolean,
     fact: String,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
-        noBackground = true,
-        modifier = Modifier
-            .background(Colors.Gray7)
-            .testTag("facts_preview_screen")
+        modifier = modifier.testTag("facts_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__facts__name),

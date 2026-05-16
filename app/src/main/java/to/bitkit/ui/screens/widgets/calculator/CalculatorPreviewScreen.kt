@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.widgets.calculator
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,9 +31,10 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun CalculatorPreviewScreen(
-    viewModel: CalculatorViewModel = hiltViewModel(),
     onClose: () -> Unit,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: CalculatorViewModel = hiltViewModel(),
 ) {
     val isCalculatorWidgetEnabled by viewModel.isCalculatorWidgetEnabled.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -53,6 +53,7 @@ fun CalculatorPreviewScreen(
             viewModel.saveWidget()
             onClose()
         },
+        modifier = modifier
     )
 }
 
@@ -62,15 +63,13 @@ fun CalculatorPreviewContent(
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
     isCalculatorWidgetEnabled: Boolean,
+    modifier: Modifier = Modifier,
     uiState: CalculatorUiState = CalculatorUiState(),
     onBtcChange: (String) -> Unit = {},
     onFiatChange: (String) -> Unit = {},
 ) {
     ScreenColumn(
-        noBackground = true,
-        modifier = Modifier
-            .background(Colors.Gray7)
-            .testTag("calculator_preview_screen")
+        modifier = modifier.testTag("calculator_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__calculator__name),

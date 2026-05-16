@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -76,6 +77,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.PIXEL_TABLET
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -158,6 +160,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
 import to.bitkit.ui.theme.TopBarGradient
+import to.bitkit.ui.theme.TopBarHeight
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -659,8 +662,19 @@ private fun WidgetsPage(
     onMoveWidget: (Int, Int) -> Unit,
 ) {
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val widgetsScrollState = rememberScrollState()
+    val calculatorIndex = homeUiState.widgetsWithPosition.indexOfFirst { it.type == WidgetType.CALCULATOR }
+    val shouldAnchorCalculatorNumpad = isCalculatorInputActive && calculatorIndex == 0
     var pageBounds by remember { mutableStateOf<Rect?>(null) }
     var calculatorBounds by remember { mutableStateOf<Rect?>(null) }
+    val scrollModifier = if (shouldAnchorCalculatorNumpad) {
+        Modifier
+    } else {
+        Modifier.verticalScroll(
+            state = widgetsScrollState,
+            enabled = !isCalculatorInputActive,
+        )
+    }
 
     LaunchedEffect(homeUiState.widgetsWithPosition, homeUiState.isEditingWidgets) {
         val hasCalculator = homeUiState.widgetsWithPosition.any { it.type == WidgetType.CALCULATOR }
@@ -669,7 +683,7 @@ private fun WidgetsPage(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .onGloballyPositioned { pageBounds = it.boundsInRoot() }
@@ -680,14 +694,13 @@ private fun WidgetsPage(
                 onDismiss = onDismissCalculatorInput,
             )
     ) {
+        val anchoredWidgetsHeight = maxHeight - Insets.Top - TopBarHeight - 16.dp
+
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
-                .verticalScroll(
-                    state = rememberScrollState(),
-                    enabled = !isCalculatorInputActive,
-                )
+                .then(scrollModifier)
         ) {
             StatusBarSpacer()
             TopBarSpacer()
@@ -713,22 +726,32 @@ private fun WidgetsPage(
                 Widgets(
                     homeUiState = homeUiState,
                     calculatorInputDismissKey = calculatorInputDismissKey,
+                    isCalculatorInputActive = isCalculatorInputActive,
+                    shouldAnchorCalculatorNumpad = shouldAnchorCalculatorNumpad,
+                    calculatorAnchorHeight = anchoredWidgetsHeight,
                     onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
                     onCalculatorBoundsChanged = { calculatorBounds = it },
                     onRemoveSuggestion = onRemoveSuggestion,
                     onClickSuggestion = onClickSuggestion,
+                    modifier = if (shouldAnchorCalculatorNumpad) {
+                        Modifier.weight(1f)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
                 )
             }
 
-            VerticalSpacer(16.dp)
+            if (!isCalculatorInputActive) {
+                VerticalSpacer(16.dp)
 
-            TertiaryButton(
-                text = stringResource(R.string.widgets__add),
-                onClick = onClickAddWidget,
-                modifier = Modifier.testTag("WidgetsAdd")
-            )
+                TertiaryButton(
+                    text = stringResource(R.string.widgets__add),
+                    onClick = onClickAddWidget,
+                    modifier = Modifier.testTag("WidgetsAdd")
+                )
 
-            VerticalSpacer(150.dp + imeBottomPadding)
+                VerticalSpacer(150.dp + imeBottomPadding)
+            }
         }
     }
 }
@@ -836,16 +859,46 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
 private fun Widgets(
     homeUiState: HomeUiState,
     calculatorInputDismissKey: Int,
+    isCalculatorInputActive: Boolean,
+    shouldAnchorCalculatorNumpad: Boolean,
+    calculatorAnchorHeight: Dp,
     onCalculatorInputActiveChanged: (Boolean) -> Unit,
     onCalculatorBoundsChanged: (Rect) -> Unit,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    var calculatorHeight by remember { mutableStateOf(0.dp) }
+    val widgets = if (isCalculatorInputActive) {
+        val calculatorIndex = homeUiState.widgetsWithPosition.indexOfFirst { it.type == WidgetType.CALCULATOR }
+        if (calculatorIndex == -1) {
+            homeUiState.widgetsWithPosition
+        } else {
+            homeUiState.widgetsWithPosition.take(calculatorIndex + 1)
+        }
+    } else {
+        homeUiState.widgetsWithPosition
+    }
+    val targetCalculatorTopPadding = if (shouldAnchorCalculatorNumpad && calculatorHeight > 0.dp) {
+        (calculatorAnchorHeight - calculatorHeight).coerceAtLeast(0.dp)
+    } else {
+        0.dp
+    }
+    val calculatorTopPadding by animateDpAsState(
+        targetValue = targetCalculatorTopPadding,
+        label = "calculatorTopPadding",
+    )
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = if (shouldAnchorCalculatorNumpad) {
+            Arrangement.Top
+        } else {
+            Arrangement.spacedBy(16.dp)
+        }
     ) {
-        homeUiState.widgetsWithPosition.forEach { widgetsWithPosition ->
+        widgets.forEach { widgetsWithPosition ->
             when (widgetsWithPosition.type) {
                 WidgetType.BLOCK -> {
                     homeUiState.currentBlock?.run {
@@ -872,12 +925,21 @@ private fun Widgets(
                 }
 
                 WidgetType.CALCULATOR -> {
+                    if (shouldAnchorCalculatorNumpad) {
+                        VerticalSpacer(calculatorTopPadding)
+                    }
+
                     CalculatorCard(
                         dismissNumberPadKey = calculatorInputDismissKey,
                         onInputActiveChange = onCalculatorInputActiveChanged,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .onGloballyPositioned { onCalculatorBoundsChanged(it.boundsInRoot()) }
+                            .onGloballyPositioned {
+                                if (shouldAnchorCalculatorNumpad) {
+                                    calculatorHeight = with(density) { it.size.height.toDp() }
+                                }
+                                onCalculatorBoundsChanged(it.boundsInRoot())
+                            }
                     )
                 }
 

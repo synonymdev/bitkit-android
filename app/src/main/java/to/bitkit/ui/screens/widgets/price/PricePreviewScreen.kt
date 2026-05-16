@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.widgets.price
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +43,7 @@ fun PricePreviewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customPricePreferences by priceViewModel.customPreferences.collectAsStateWithLifecycle()
     val price by priceViewModel.currentPrice.collectAsStateWithLifecycle()
@@ -77,6 +77,7 @@ fun PricePreviewScreen(
             priceViewModel.savePreferences()
         },
         isLoading = isLoading,
+        modifier = modifier
     )
 }
 
@@ -90,12 +91,10 @@ fun PricePreviewContent(
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO?,
     isLoading: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
-        noBackground = true,
-        modifier = Modifier
-            .background(Colors.Gray7)
-            .testTag("price_preview_screen")
+        modifier = modifier.testTag("price_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__price__name),
