@@ -5,6 +5,12 @@ on:
     branches: [ "master" ]
 
   workflow_dispatch:
+    inputs:
+      suites:
+        description: "Android test suites: all or comma-separated annotations/suites"
+        required: false
+        default: "all"
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -81,6 +87,8 @@ jobs:
 
       - name: Run UI tests on Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_TEST_SUITES: ${{ github.event.inputs.suites || 'all' }}
         with:
           api-level: 30
           arch: x86_64
@@ -101,7 +109,41 @@ jobs:
 
             # Install and run tests
             ./gradlew installDevDebug
-            ./gradlew connectedDevDebugAndroidTest
+
+            suites="${ANDROID_TEST_SUITES:-all}"
+            suites="$(echo "$suites" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+
+            if [[ -z "$suites" || "$suites" == "all" ]]; then
+              ./gradlew connectedDevDebugAndroidTest
+              exit 0
+            fi
+
+            IFS=',' read -ra requested_suites <<< "$suites"
+            for suite in "${requested_suites[@]}"; do
+              case "$suite" in
+                compose|compose-ui|composeuitest|to.bitkit.test.annotations.composeuitest)
+                  task="connectedDevDebugComposeAndroidTest"
+                  ;;
+                device|device-integration|deviceintegrationtest|to.bitkit.test.annotations.deviceintegrationtest)
+                  task="connectedDevDebugDeviceIntegrationAndroidTest"
+                  ;;
+                core|core-service|coreserviceintegrationtest|to.bitkit.test.annotations.coreserviceintegrationtest)
+                  task="connectedDevDebugCoreServiceIntegrationAndroidTest"
+                  ;;
+                storage|device-storage|devicestorageintegrationtest|to.bitkit.test.annotations.devicestorageintegrationtest)
+                  task="connectedDevDebugDeviceStorageIntegrationAndroidTest"
+                  ;;
+                ui|device-ui|deviceuiintegrationtest|to.bitkit.test.annotations.deviceuiintegrationtest)
+                  task="connectedDevDebugDeviceUiIntegrationAndroidTest"
+                  ;;
+                *)
+                  echo "::error::Unknown Android test suite '$suite'. Use all, compose, device-integration, core-service, device-storage, or device-ui."
+                  exit 1
+                  ;;
+              esac
+
+              ./gradlew "$task"
+            done
 
       - name: Upload UI test report
         if: always()
