@@ -14,16 +14,16 @@ import org.junit.runner.RunWith
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.test.BaseAndroidTest
-import to.bitkit.test.annotations.DeviceIntegrationTest
-import to.bitkit.test.annotations.DeviceStorageIntegrationTest
+import to.bitkit.test.annotations.DeviceIntegrationAndroidTest
+import to.bitkit.test.annotations.DeviceStorageIntegrationAndroidTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
-@DeviceIntegrationTest
-@DeviceStorageIntegrationTest
+@DeviceIntegrationAndroidTest
+@DeviceStorageIntegrationAndroidTest
 class KeychainTest : BaseAndroidTest() {
 
     private val appContext by lazy { ApplicationProvider.getApplicationContext<Context>() }

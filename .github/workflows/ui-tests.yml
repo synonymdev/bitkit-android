@@ -120,29 +120,12 @@ jobs:
 
             IFS=',' read -ra requested_suites <<< "$suites"
             for suite in "${requested_suites[@]}"; do
-              case "$suite" in
-                ComposeUiTest)
-                  task="connectedDevDebugComposeAndroidTest"
-                  ;;
-                DeviceIntegrationTest)
-                  task="connectedDevDebugDeviceIntegrationAndroidTest"
-                  ;;
-                CoreServiceIntegrationTest)
-                  task="connectedDevDebugCoreServiceIntegrationAndroidTest"
-                  ;;
-                DeviceStorageIntegrationTest)
-                  task="connectedDevDebugDeviceStorageIntegrationAndroidTest"
-                  ;;
-                DeviceUiIntegrationTest)
-                  task="connectedDevDebugDeviceUiIntegrationAndroidTest"
-                  ;;
-                *)
-                  echo "::error::Unknown Android test annotation '$suite'. Use all, ComposeUiTest, DeviceIntegrationTest, CoreServiceIntegrationTest, DeviceStorageIntegrationTest, or DeviceUiIntegrationTest."
-                  exit 1
-                  ;;
-              esac
+              if [[ "$suite" == *.* || ! "$suite" =~ ^[A-Z][A-Za-z0-9]*AndroidTest$ ]]; then
+                echo "::error::Invalid Android test annotation '$suite'. Use all or comma-separated simple annotation names such as DeviceUiIntegrationAndroidTest."
+                exit 1
+              fi
 
-              ./gradlew "$task"
+              ./gradlew connectedDevDebugAndroidTest -PbitkitAndroidTestAnnotation="$suite"
             done
 
       - name: Upload UI test report

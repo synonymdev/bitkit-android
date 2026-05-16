@@ -7,12 +7,12 @@ import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.test.annotations.ComposeUiTest
+import to.bitkit.test.annotations.ComposeUiAndroidTest
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
-@ComposeUiTest
+@ComposeUiAndroidTest
 class SendAmountContentTest {
 
     @get:Rule
