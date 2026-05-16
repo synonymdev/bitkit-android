@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       suites:
-        description: "Android test suites: all or comma-separated annotations/suites"
+        description: "Android test annotations: all or comma-separated simple annotation names"
         required: false
         default: "all"
         type: string
@@ -111,7 +111,7 @@ jobs:
             ./gradlew installDevDebug
 
             suites="${ANDROID_TEST_SUITES:-all}"
-            suites="$(echo "$suites" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+            suites="$(echo "$suites" | tr -d '[:space:]')"
 
             if [[ -z "$suites" || "$suites" == "all" ]]; then
               ./gradlew connectedDevDebugAndroidTest
@@ -121,23 +121,23 @@ jobs:
             IFS=',' read -ra requested_suites <<< "$suites"
             for suite in "${requested_suites[@]}"; do
               case "$suite" in
-                compose|compose-ui|composeuitest|to.bitkit.test.annotations.composeuitest)
+                ComposeUiTest)
                   task="connectedDevDebugComposeAndroidTest"
                   ;;
-                device|device-integration|deviceintegrationtest|to.bitkit.test.annotations.deviceintegrationtest)
+                DeviceIntegrationTest)
                   task="connectedDevDebugDeviceIntegrationAndroidTest"
                   ;;
-                core|core-service|coreserviceintegrationtest|to.bitkit.test.annotations.coreserviceintegrationtest)
+                CoreServiceIntegrationTest)
                   task="connectedDevDebugCoreServiceIntegrationAndroidTest"
                   ;;
-                storage|device-storage|devicestorageintegrationtest|to.bitkit.test.annotations.devicestorageintegrationtest)
+                DeviceStorageIntegrationTest)
                   task="connectedDevDebugDeviceStorageIntegrationAndroidTest"
                   ;;
-                ui|device-ui|deviceuiintegrationtest|to.bitkit.test.annotations.deviceuiintegrationtest)
+                DeviceUiIntegrationTest)
                   task="connectedDevDebugDeviceUiIntegrationAndroidTest"
                   ;;
                 *)
-                  echo "::error::Unknown Android test suite '$suite'. Use all, compose, device-integration, core-service, device-storage, or device-ui."
+                  echo "::error::Unknown Android test annotation '$suite'. Use all, ComposeUiTest, DeviceIntegrationTest, CoreServiceIntegrationTest, DeviceStorageIntegrationTest, or DeviceUiIntegrationTest."
                   exit 1
                   ;;
               esac
