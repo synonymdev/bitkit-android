@@ -16,8 +16,8 @@ import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.test.annotations.CoreServiceIntegrationAndroidTest
-import to.bitkit.test.annotations.DeviceIntegrationAndroidTest
+import to.bitkit.test.annotations.CoreServiceIntegration
+import to.bitkit.test.annotations.DeviceIntegration
 import javax.inject.Inject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -27,8 +27,8 @@ import kotlin.test.fail
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
-@DeviceIntegrationAndroidTest
-@CoreServiceIntegrationAndroidTest
+@DeviceIntegration
+@CoreServiceIntegration
 class UtxoSelectionTests {
 
     @get:Rule

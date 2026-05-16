@@ -8,15 +8,15 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.toDerivationPath
-import to.bitkit.test.annotations.CoreServiceIntegrationAndroidTest
-import to.bitkit.test.annotations.DeviceIntegrationAndroidTest
+import to.bitkit.test.annotations.CoreServiceIntegration
+import to.bitkit.test.annotations.DeviceIntegration
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
-@DeviceIntegrationAndroidTest
-@CoreServiceIntegrationAndroidTest
+@DeviceIntegration
+@CoreServiceIntegration
 class OnchainServiceTests {
     private lateinit var onchainService: OnchainService
 
