@@ -50,32 +50,47 @@ val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
 val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
 val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
-val coreServiceIntegrationTestAnnotation = "to.bitkit.test.annotations.CoreServiceIntegrationTest"
-val composeUiTestAnnotation = "to.bitkit.test.annotations.ComposeUiTest"
-val deviceIntegrationTestAnnotation = "to.bitkit.test.annotations.DeviceIntegrationTest"
-val deviceStorageIntegrationTestAnnotation = "to.bitkit.test.annotations.DeviceStorageIntegrationTest"
-val deviceUiIntegrationTestAnnotation = "to.bitkit.test.annotations.DeviceUiIntegrationTest"
+val androidTestAnnotationPackage = "to.bitkit.test.annotations"
+val androidTestAnnotationSuffix = "AndroidTest"
+val androidTestTaskPrefix = "connectedDevDebug"
+val androidTestTaskSuffix = "AndroidTest"
+val androidTestAnnotationNames = file("src/androidTest/java/to/bitkit/test/annotations")
+    .listFiles()
+    ?.mapNotNull { file ->
+        file.nameWithoutExtension.takeIf {
+            file.isFile &&
+                file.extension == "kt" &&
+                it.endsWith(androidTestAnnotationSuffix)
+        }
+    }
+    ?.sorted()
+    .orEmpty()
 val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfterLast(":") }
-val bitkitAndroidTestSuite = providers.gradleProperty("bitkitAndroidTestSuite").orNull
-val bitkitAndroidTestAnnotation = when {
-    requestedTaskNames.any { it == "connectedDevDebugComposeAndroidTest" } -> composeUiTestAnnotation
-    requestedTaskNames.any { it == "connectedDevDebugCoreServiceIntegrationAndroidTest" } -> {
-        coreServiceIntegrationTestAnnotation
+
+fun androidTestTaskName(annotationName: String): String {
+    val taskInfix = annotationName.removeSuffix(androidTestAnnotationSuffix)
+    return "$androidTestTaskPrefix$taskInfix$androidTestTaskSuffix"
+}
+
+val requestedAndroidTestAnnotation = providers.gradleProperty("bitkitAndroidTestAnnotation")
+    .orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.also {
+        require('.' !in it) {
+            "Use a simple Android test annotation name, e.g. 'DeviceUiIntegrationAndroidTest'."
+        }
+        require(it in androidTestAnnotationNames) {
+            "Unsupported bitkitAndroidTestAnnotation '$it'. Supported annotations: " +
+                androidTestAnnotationNames.joinToString(", ")
+        }
     }
-    requestedTaskNames.any { it == "connectedDevDebugDeviceStorageIntegrationAndroidTest" } -> {
-        deviceStorageIntegrationTestAnnotation
+val bitkitAndroidTestAnnotationName = requestedAndroidTestAnnotation
+    ?: requestedTaskNames.firstNotNullOfOrNull { taskName ->
+        androidTestAnnotationNames.firstOrNull { androidTestTaskName(it) == taskName }
     }
-    requestedTaskNames.any { it == "connectedDevDebugDeviceUiIntegrationAndroidTest" } -> {
-        deviceUiIntegrationTestAnnotation
-    }
-    requestedTaskNames.any { it == "connectedDevDebugDeviceIntegrationAndroidTest" } -> deviceIntegrationTestAnnotation
-    bitkitAndroidTestSuite == "compose" -> composeUiTestAnnotation
-    bitkitAndroidTestSuite == "core-service" -> coreServiceIntegrationTestAnnotation
-    bitkitAndroidTestSuite == "device-storage" -> deviceStorageIntegrationTestAnnotation
-    bitkitAndroidTestSuite == "device-ui" -> deviceUiIntegrationTestAnnotation
-    bitkitAndroidTestSuite == "integration" -> deviceIntegrationTestAnnotation
-    bitkitAndroidTestSuite == null -> null
-    else -> error("Unsupported bitkitAndroidTestSuite '$bitkitAndroidTestSuite'")
+val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
+    "$androidTestAnnotationPackage.$it"
 }
 
 android {
@@ -397,34 +412,12 @@ tasks.withType<Test>().configureEach {
     jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
-tasks.register("connectedDevDebugComposeAndroidTest") {
-    group = "verification"
-    description = "Runs devDebug Android tests annotated as Compose UI tests."
-    dependsOn("connectedDevDebugAndroidTest")
-}
-
-tasks.register("connectedDevDebugDeviceIntegrationAndroidTest") {
-    group = "verification"
-    description = "Runs devDebug Android tests annotated as device integration tests."
-    dependsOn("connectedDevDebugAndroidTest")
-}
-
-tasks.register("connectedDevDebugCoreServiceIntegrationAndroidTest") {
-    group = "verification"
-    description = "Runs devDebug Android tests annotated as core service integration tests."
-    dependsOn("connectedDevDebugAndroidTest")
-}
-
-tasks.register("connectedDevDebugDeviceStorageIntegrationAndroidTest") {
-    group = "verification"
-    description = "Runs devDebug Android tests annotated as device storage integration tests."
-    dependsOn("connectedDevDebugAndroidTest")
-}
-
-tasks.register("connectedDevDebugDeviceUiIntegrationAndroidTest") {
-    group = "verification"
-    description = "Runs devDebug Android tests annotated as device UI integration tests."
-    dependsOn("connectedDevDebugAndroidTest")
+androidTestAnnotationNames.forEach { annotationName ->
+    tasks.register(androidTestTaskName(annotationName)) {
+        group = "verification"
+        description = "Runs devDebug Android tests annotated with '$annotationName'."
+        dependsOn("connectedDevDebugAndroidTest")
+    }
 }
 
 // endregion
