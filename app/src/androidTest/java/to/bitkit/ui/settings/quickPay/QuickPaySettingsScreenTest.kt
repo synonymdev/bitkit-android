@@ -9,9 +9,11 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.test.annotations.ComposeUiTest
 import to.bitkit.ui.theme.AppThemeSurface
 
 @HiltAndroidTest
+@ComposeUiTest
 class QuickPaySettingsScreenTest {
 
     @get:Rule

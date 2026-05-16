@@ -50,6 +50,33 @@ val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
 val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
 val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
+val coreServiceIntegrationTestAnnotation = "to.bitkit.test.annotations.CoreServiceIntegrationTest"
+val composeUiTestAnnotation = "to.bitkit.test.annotations.ComposeUiTest"
+val deviceIntegrationTestAnnotation = "to.bitkit.test.annotations.DeviceIntegrationTest"
+val deviceStorageIntegrationTestAnnotation = "to.bitkit.test.annotations.DeviceStorageIntegrationTest"
+val deviceUiIntegrationTestAnnotation = "to.bitkit.test.annotations.DeviceUiIntegrationTest"
+val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfterLast(":") }
+val bitkitAndroidTestSuite = providers.gradleProperty("bitkitAndroidTestSuite").orNull
+val bitkitAndroidTestAnnotation = when {
+    requestedTaskNames.any { it == "connectedDevDebugComposeAndroidTest" } -> composeUiTestAnnotation
+    requestedTaskNames.any { it == "connectedDevDebugCoreServiceIntegrationAndroidTest" } -> {
+        coreServiceIntegrationTestAnnotation
+    }
+    requestedTaskNames.any { it == "connectedDevDebugDeviceStorageIntegrationAndroidTest" } -> {
+        deviceStorageIntegrationTestAnnotation
+    }
+    requestedTaskNames.any { it == "connectedDevDebugDeviceUiIntegrationAndroidTest" } -> {
+        deviceUiIntegrationTestAnnotation
+    }
+    requestedTaskNames.any { it == "connectedDevDebugDeviceIntegrationAndroidTest" } -> deviceIntegrationTestAnnotation
+    bitkitAndroidTestSuite == "compose" -> composeUiTestAnnotation
+    bitkitAndroidTestSuite == "core-service" -> coreServiceIntegrationTestAnnotation
+    bitkitAndroidTestSuite == "device-storage" -> deviceStorageIntegrationTestAnnotation
+    bitkitAndroidTestSuite == "device-ui" -> deviceUiIntegrationTestAnnotation
+    bitkitAndroidTestSuite == "integration" -> deviceIntegrationTestAnnotation
+    bitkitAndroidTestSuite == null -> null
+    else -> error("Unsupported bitkitAndroidTestSuite '$bitkitAndroidTestSuite'")
+}
 
 android {
     namespace = "to.bitkit"
@@ -61,6 +88,9 @@ android {
         versionCode = 181
         versionName = "2.2.0"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
+        bitkitAndroidTestAnnotation?.let {
+            testInstrumentationRunnerArguments["annotation"] = it
+        }
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -365,6 +395,36 @@ tasks.withType<Test> {
 // Explicitly enabling dynamic agent loading silences the warning without altering behavior.
 tasks.withType<Test>().configureEach {
     jvmArgs("-XX:+EnableDynamicAgentLoading")
+}
+
+tasks.register("connectedDevDebugComposeAndroidTest") {
+    group = "verification"
+    description = "Runs devDebug Android tests annotated as Compose UI tests."
+    dependsOn("connectedDevDebugAndroidTest")
+}
+
+tasks.register("connectedDevDebugDeviceIntegrationAndroidTest") {
+    group = "verification"
+    description = "Runs devDebug Android tests annotated as device integration tests."
+    dependsOn("connectedDevDebugAndroidTest")
+}
+
+tasks.register("connectedDevDebugCoreServiceIntegrationAndroidTest") {
+    group = "verification"
+    description = "Runs devDebug Android tests annotated as core service integration tests."
+    dependsOn("connectedDevDebugAndroidTest")
+}
+
+tasks.register("connectedDevDebugDeviceStorageIntegrationAndroidTest") {
+    group = "verification"
+    description = "Runs devDebug Android tests annotated as device storage integration tests."
+    dependsOn("connectedDevDebugAndroidTest")
+}
+
+tasks.register("connectedDevDebugDeviceUiIntegrationAndroidTest") {
+    group = "verification"
+    description = "Runs devDebug Android tests annotated as device UI integration tests."
+    dependsOn("connectedDevDebugAndroidTest")
 }
 
 // endregion
