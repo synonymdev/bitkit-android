@@ -48,7 +48,6 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
-import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
@@ -596,7 +595,7 @@ class LightningService @Inject constructor(
     suspend fun receive(
         sat: ULong? = null,
         description: String,
-        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
     ): String {
         return receiveMsats(amountMsat = sat?.let { it * 1000u }, description = description, expirySecs = expirySecs)
     }
@@ -604,7 +603,7 @@ class LightningService @Inject constructor(
     suspend fun receiveMsats(
         amountMsat: ULong? = null,
         description: String,
-        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
     ): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -628,23 +627,6 @@ class LightningService @Inject constructor(
 
             return@background bolt11Invoice.toString()
         }
-    }
-
-    fun canSend(amountSats: ULong): Boolean {
-        val channels = this.channels
-        if (channels == null) {
-            Logger.warn("Channels not available", context = TAG)
-            return false
-        }
-
-        val totalNextOutboundHtlcLimitSats = channels.totalNextOutboundHtlcLimitSats()
-
-        if (totalNextOutboundHtlcLimitSats < amountSats) {
-            Logger.warn("Insufficient outbound capacity: $totalNextOutboundHtlcLimitSats < $amountSats", context = TAG)
-            return false
-        }
-
-        return true
     }
 
     suspend fun send(

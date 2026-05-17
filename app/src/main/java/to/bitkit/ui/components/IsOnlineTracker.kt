@@ -24,7 +24,7 @@ fun IsOnlineTracker(
     LaunchedEffect(connectivityState) {
         // Skip the first emission to prevent toast on startup
         if (isFirstEmission) {
-            setIsFirstEmission(true)
+            setIsFirstEmission(false)
             return@LaunchedEffect
         }
 

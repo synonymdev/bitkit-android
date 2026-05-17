@@ -127,6 +127,7 @@ private fun ContactActivityList(
         onActivityItemClick = onActivityItemClick,
         onEmptyActivityRowClick = {},
         contentPadding = PaddingValues(top = 0.dp),
+        activityTestTagPrefix = "ContactActivity",
         titleProvider = { activity ->
             name?.let {
                 val titleRes = if (activity.isSent()) {
