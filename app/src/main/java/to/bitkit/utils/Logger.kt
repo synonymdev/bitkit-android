@@ -202,6 +202,7 @@ internal class LoggerImpl(
     ) {
         val message = formatLog(LogLevel.PERF, msg, context, path, line)
         Log.v(tag, message)
+        saver.save(message)
     }
 }
 
@@ -432,7 +433,7 @@ internal inline fun <T> measured(
     block: () -> T,
 ): T {
     val timedValue = measureTimedValue(block)
-    if (Env.isDebug && timedValue.duration >= slowThreshold) {
+    if (timedValue.duration >= slowThreshold) {
         Logger.perf("Measured '$label' in '${timedValue.duration}'", context = context)
     }
     return timedValue.value
