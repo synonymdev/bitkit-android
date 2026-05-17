@@ -188,6 +188,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER manually append the `Throwable`'s message or any other props to the string passed as the 1st param of `Logger.*` calls, its internals are already enriching the final log message with the details of the `Throwable` passed via the `e` arg
 - ALWAYS wrap parameter values in log messages with single quotes, e.g. `Logger.info("Received event '$eventName'", context = TAG)`
 - ALWAYS start log messages with a verb, e.g. `Logger.info("Received payment for '$hash'", context = TAG)`
+- ALWAYS keep log names, tags, labels, and references mechanically traceable to the caller. Do not rewrite them into prose or product-facing descriptions. For `measured(...)` labels, use the concrete operation or method name from the caller, e.g. `label = "doWork"` with `context = TAG` in `WakeNodeWorker`.
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch

@@ -81,7 +81,7 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         return runCatching {
-            measured(label = "Wake node worker", context = TAG, slowThreshold = slowWakeNodeThreshold) {
+            measured(label = "doWork", context = TAG, slowThreshold = slowWakeNodeThreshold) {
                 lightningRepo.start(
                     walletIndex = 0,
                     timeout = timeout,
