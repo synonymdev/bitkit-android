@@ -66,6 +66,7 @@ import javax.inject.Singleton
 @Singleton
 class TrezorTransport @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val bridgeTransport: TrezorBridgeTransport,
 ) : TrezorTransportCallback {
 
     companion object {
@@ -219,6 +220,12 @@ class TrezorTransport @Inject constructor(
             Logger.error("BLE enumerate failed", it, context = TAG)
         }
 
+        val bridgeDevices = bridgeTransport.enumerateDevices()
+        devices.addAll(bridgeDevices)
+        if (bridgeDevices.isNotEmpty()) {
+            Logger.info("Found '${bridgeDevices.size}' Trezor Bridge device(s)", context = TAG)
+        }
+
         Logger.info("Total enumerate found '${devices.size}' Trezor device(s)", context = TAG)
         val summary = devices.map { "${it.path} (${it.transportType})" }
         TrezorDebugLog.log("ENUM", "Found ${devices.size} devices: $summary")
@@ -227,7 +234,9 @@ class TrezorTransport @Inject constructor(
 
     override fun openDevice(path: String): TrezorTransportWriteResult {
         TrezorDebugLog.log("OPEN", "openDevice: $path")
-        return if (isBleDevice(path)) {
+        return if (bridgeTransport.isBridgeDevice(path)) {
+            bridgeTransport.openDevice(path)
+        } else if (isBleDevice(path)) {
             openBleDevice(path)
         } else {
             openUsbDevice(path)
@@ -236,7 +245,9 @@ class TrezorTransport @Inject constructor(
 
     override fun closeDevice(path: String): TrezorTransportWriteResult {
         TrezorDebugLog.log("CLOSE", "closeDevice: $path")
-        return if (isBleDevice(path)) {
+        return if (bridgeTransport.isBridgeDevice(path)) {
+            bridgeTransport.closeDevice(path)
+        } else if (isBleDevice(path)) {
             closeBleDevice(path)
         } else {
             closeUsbDevice(path)
@@ -244,7 +255,9 @@ class TrezorTransport @Inject constructor(
     }
 
     override fun readChunk(path: String): TrezorTransportReadResult {
-        return if (isBleDevice(path)) {
+        return if (bridgeTransport.isBridgeDevice(path)) {
+            bridgeTransport.readChunk(path)
+        } else if (isBleDevice(path)) {
             readBleChunk(path)
         } else {
             readUsbChunk(path)
@@ -252,7 +265,9 @@ class TrezorTransport @Inject constructor(
     }
 
     override fun writeChunk(path: String, data: ByteArray): TrezorTransportWriteResult {
-        return if (isBleDevice(path)) {
+        return if (bridgeTransport.isBridgeDevice(path)) {
+            bridgeTransport.writeChunk(path, data)
+        } else if (isBleDevice(path)) {
             writeBleChunk(path, data)
         } else {
             writeUsbChunk(path, data)
@@ -260,7 +275,9 @@ class TrezorTransport @Inject constructor(
     }
 
     override fun getChunkSize(path: String): UInt {
-        return if (isBleDevice(path)) {
+        return if (bridgeTransport.isBridgeDevice(path)) {
+            USB_CHUNK_SIZE.toUInt()
+        } else if (isBleDevice(path)) {
             BLE_CHUNK_SIZE.toUInt()
         } else {
             USB_CHUNK_SIZE.toUInt()
@@ -272,6 +289,10 @@ class TrezorTransport @Inject constructor(
         messageType: UShort,
         data: ByteArray,
     ): TrezorCallMessageResult? {
+        if (bridgeTransport.isBridgeDevice(path)) {
+            return bridgeTransport.callMessage(path, messageType, data)
+        }
+
         // For BLE/THP devices, the Rust side now handles THP protocol directly.
         // This callback returns null to let Rust use its built-in THP implementation.
         Logger.debug(

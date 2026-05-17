@@ -48,6 +48,8 @@ val bcp47Locales = listOf(
 )
 val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
+val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
+val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
 
 android {
     namespace = "to.bitkit"
@@ -65,6 +67,8 @@ android {
         buildConfigField("boolean", "E2E", System.getenv("E2E")?.toBoolean()?.toString() ?: "false")
         buildConfigField("String", "E2E_BACKEND", "\"$e2eBackendEnv\"")
         buildConfigField("String", "E2E_HOMEGATE_URL", "\"$e2eHomegateUrlEnv\"")
+        buildConfigField("boolean", "TREZOR_BRIDGE", trezorBridgeEnv)
+        buildConfigField("String", "TREZOR_BRIDGE_URL", "\"$trezorBridgeUrlEnv\"")
         buildConfigField("boolean", "GEO", System.getenv("GEO")?.toBoolean()?.toString() ?: "true")
         buildConfigField("String", "LOCALES", "\"${bcp47Locales.joinToString(",")}\"")
     }
