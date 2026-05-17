@@ -226,7 +226,7 @@ class LogSaverImpl(
 
             // Apply retention in background without wiping useful startup context.
             CoroutineScope(Dispatchers.IO).launch {
-                cleanupOldLogFiles(activeLogFile = sessionFile)
+                enforceLogRetentionLimits(activeLogFile = sessionFile)
             }
         }
     }
@@ -239,16 +239,16 @@ class LogSaverImpl(
                 val sanitized = message.replace("\n", " ")
                 val bytes = "$sanitized\n".toByteArray()
                 val file = getWritableLogFile(bytes.size)
-                val shouldApplyRetention = currentLogFilePath != file.absolutePath
+                val previousLogFilePath = currentLogFilePath
                 currentLogFilePath = file.absolutePath
 
                 FileOutputStream(file, true).use { stream ->
                     stream.write(bytes)
                 }
 
-                if (shouldApplyRetention) {
+                if (previousLogFilePath != file.absolutePath) {
                     CoroutineScope(Dispatchers.IO).launch {
-                        cleanupOldLogFiles(activeLogFile = file)
+                        enforceLogRetentionLimits(activeLogFile = file)
                     }
                 }
             }.onFailure {
@@ -304,12 +304,12 @@ class LogSaverImpl(
         save(formatted)
     }
 
-    private fun cleanupOldLogFiles(
+    private fun enforceLogRetentionLimits(
         maxTotalSizeBytes: Long = MAX_LOG_RETENTION_BYTES,
         maxAgeDays: Long = MAX_LOG_RETENTION_DAYS,
         activeLogFile: File? = null,
     ) {
-        log("Applying log retention…", LogLevel.VERBOSE, Log::v)
+        log("Enforcing log retention limits…", LogLevel.VERBOSE, Log::v)
         val logDir = runCatching { Env.logDir }.getOrNull() ?: return
 
         val logFiles = logDir
@@ -346,7 +346,7 @@ class LogSaverImpl(
                 }
             }
 
-        log("Applied log retention.", LogLevel.VERBOSE, Log::v)
+        log("Enforced log retention limits.", LogLevel.VERBOSE, Log::v)
     }
 
     private fun deleteLogFile(file: File): Boolean {
