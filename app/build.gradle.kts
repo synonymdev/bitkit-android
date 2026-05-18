@@ -69,6 +69,17 @@ fun androidTestTaskName(annotationName: String): String {
     return "$androidTestTaskPrefix$annotationName$androidTestTaskSuffix"
 }
 
+val requestedAndroidTestAnnotationTaskNames = requestedTaskNames.filter { taskName ->
+    androidTestAnnotationNames.any { androidTestTaskName(it) == taskName }
+}
+require(requestedAndroidTestAnnotationTaskNames.size <= 1) {
+    "Run only one generated Android test lane per Gradle invocation. Requested lanes: " +
+        requestedAndroidTestAnnotationTaskNames.joinToString(", ")
+}
+val requestedAndroidTestAnnotationTask = requestedAndroidTestAnnotationTaskNames.singleOrNull()
+val requestedAndroidTestAnnotationTaskName = requestedAndroidTestAnnotationTask?.let { taskName ->
+    androidTestAnnotationNames.first { androidTestTaskName(it) == taskName }
+}
 val requestedAndroidTestAnnotation = providers.gradleProperty("bitkitAndroidTestAnnotation")
     .orNull
     ?.trim()
@@ -82,10 +93,15 @@ val requestedAndroidTestAnnotation = providers.gradleProperty("bitkitAndroidTest
                 androidTestAnnotationNames.joinToString(", ")
         }
     }
-val bitkitAndroidTestAnnotationName = requestedAndroidTestAnnotation
-    ?: requestedTaskNames.firstNotNullOfOrNull { taskName ->
-        androidTestAnnotationNames.firstOrNull { androidTestTaskName(it) == taskName }
+requestedAndroidTestAnnotationTaskName?.let { annotationName ->
+    requestedAndroidTestAnnotation?.let {
+        require(it == annotationName) {
+            "Do not combine bitkitAndroidTestAnnotation '$it' with generated lane '$annotationName'."
+        }
     }
+}
+val bitkitAndroidTestAnnotationName = requestedAndroidTestAnnotation
+    ?: requestedAndroidTestAnnotationTaskName
 val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
     "$androidTestAnnotationPackage.$it"
 }
