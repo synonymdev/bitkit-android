@@ -3,6 +3,7 @@ package to.bitkit.appwidget.ui.weather
 import android.content.Context
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -14,6 +15,8 @@ import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
+import to.bitkit.data.dto.WeatherDTO
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 
 class WeatherGlanceWidget : GlanceAppWidget() {
@@ -23,16 +26,20 @@ class WeatherGlanceWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val store = EntryPointAccessors
+        val accessor = EntryPointAccessors
             .fromApplication(context, AppWidgetEntryPoint::class.java)
-            .appWidgetPreferencesStore()
+        val store = accessor.appWidgetPreferencesStore()
+        val currencyRepo = accessor.currencyRepo()
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
 
         provideContent {
             val data by store.data.collectAsState(initial = AppWidgetData())
+            val currencyState by currencyRepo.currencyState.collectAsState()
             val entry = data.entries.find { it.appWidgetId == appWidgetId }
                 ?: AppWidgetEntry(appWidgetId = appWidgetId, type = AppWidgetType.WEATHER)
-            val weather = data.cachedWeather?.toWeatherModel()
+            val weather = remember(data.cachedWeather, currencyState) {
+                data.cachedWeather?.toGlanceWeather(currencyRepo)
+            }
 
             WeatherGlanceContent(
                 entry = entry,
@@ -48,4 +55,8 @@ class WeatherGlanceWidget : GlanceAppWidget() {
             .appWidgetPreferencesStore()
             .unregisterWidget(appWidgetId)
     }
+
+    private fun WeatherDTO.toGlanceWeather(currencyRepo: CurrencyRepo) = toWeatherModel(
+        currentFee = currencyRepo.formatSatsAsFiatWithSymbol(avgFeeSats, withSpace = true) ?: currentFee,
+    )
 }

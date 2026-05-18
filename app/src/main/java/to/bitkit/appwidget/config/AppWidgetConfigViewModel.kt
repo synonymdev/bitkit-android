@@ -20,6 +20,7 @@ import to.bitkit.appwidget.model.HomeHeadlinePreferences
 import to.bitkit.appwidget.model.HomePricePreferences
 import to.bitkit.appwidget.model.HomeWeatherPreferences
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.ArticleModel
@@ -29,6 +30,7 @@ import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.models.widget.toArticleModel
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import to.bitkit.utils.Logger
@@ -39,6 +41,7 @@ import javax.inject.Inject
 class AppWidgetConfigViewModel @Inject constructor(
     private val preferencesStore: AppWidgetPreferencesStore,
     private val dataRepository: AppWidgetDataRepository,
+    private val currencyRepo: CurrencyRepo,
 ) : ViewModel() {
 
     companion object {
@@ -53,7 +56,7 @@ class AppWidgetConfigViewModel @Inject constructor(
             val entry = preferencesStore.getEntry(appWidgetId)
             val data = preferencesStore.data.first()
             val previewArticle = data.cachedArticles.randomOrNull()?.toArticleModel() ?: DEFAULT_PREVIEW_ARTICLE
-            val previewWeather = data.cachedWeather?.toWeatherModel() ?: DEFAULT_PREVIEW_WEATHER
+            val previewWeather = data.cachedWeather?.toPreviewWeather() ?: DEFAULT_PREVIEW_WEATHER
 
             _uiState.update {
                 it.copy(
@@ -72,7 +75,7 @@ class AppWidgetConfigViewModel @Inject constructor(
                 dataRepository.fetchWeather()
                     .onSuccess { fetched ->
                         preferencesStore.cacheWeather(fetched)
-                        _uiState.update { it.copy(previewWeather = fetched.toWeatherModel()) }
+                        _uiState.update { it.copy(previewWeather = fetched.toPreviewWeather()) }
                     }
                     .onFailure { Logger.warn("Failed to fetch weather for config preview", it, context = TAG) }
             }
@@ -239,6 +242,10 @@ class AppWidgetConfigViewModel @Inject constructor(
             .onSuccess { preferencesStore.cacheWeather(it) }
             .onFailure { Logger.warn("Failed to fetch initial weather", it, context = TAG) }
     }
+
+    private fun WeatherDTO.toPreviewWeather() = toWeatherModel(
+        currentFee = currencyRepo.formatSatsAsFiatWithSymbol(avgFeeSats, withSpace = true) ?: currentFee,
+    )
 }
 
 private val DEFAULT_PREVIEW_ARTICLE = ArticleModel(

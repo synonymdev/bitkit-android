@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.widgets.weather
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -69,10 +68,7 @@ fun WeatherEditContent(
     modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
-        noBackground = true,
-        modifier = modifier
-            .background(Colors.Gray7)
-            .testTag("weather_edit_screen")
+        modifier = modifier.testTag("weather_edit_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__weather__name),

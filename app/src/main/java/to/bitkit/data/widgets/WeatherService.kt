@@ -140,8 +140,7 @@ class WeatherService @Inject constructor(
     }
 
     private fun formatFeeForDisplay(sats: Long): String {
-        val selectedFiatValue = currencyRepo.convertSatsToFiat(sats).getOrNull()
-        return selectedFiatValue?.formattedWithSymbol(withSpace = true).orEmpty()
+        return currencyRepo.formatSatsAsFiatWithSymbol(sats, withSpace = true).orEmpty()
     }
 }
 

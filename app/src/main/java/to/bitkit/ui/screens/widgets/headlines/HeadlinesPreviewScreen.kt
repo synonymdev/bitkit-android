@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.widgets.headlines
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +36,7 @@ fun HeadlinesPreviewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
@@ -60,6 +60,7 @@ fun HeadlinesPreviewScreen(
             headlinesViewModel.savePreferences()
             onClose()
         },
+        modifier = modifier
     )
 }
 
@@ -72,12 +73,10 @@ fun HeadlinesPreviewContent(
     isHeadlinesImplemented: Boolean,
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
-        noBackground = true,
-        modifier = Modifier
-            .background(Colors.Gray7)
-            .testTag("headlines_preview_screen")
+        modifier = modifier.testTag("headlines_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__news__name),

@@ -13,5 +13,6 @@
     android:previewLayout="@layout/appwidget_preview_headlines"
     android:description="@string/widgets__news__description"
     android:configure="to.bitkit.appwidget.config.AppWidgetConfigActivity"
+    android:widgetFeatures="reconfigurable"
     android:updatePeriodMillis="0"
     tools:targetApi="31" />
