@@ -53,6 +53,7 @@ val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
 val androidTestTaskPrefix = "connectedDevDebug"
 val androidTestTaskSuffix = "AndroidTest"
+val baseAndroidTestTaskName = "$androidTestTaskPrefix$androidTestTaskSuffix"
 val androidTestAnnotationNames = file("src/androidTest/java/to/bitkit/test/annotations")
     .listFiles()
     ?.mapNotNull { file ->
@@ -69,8 +70,34 @@ fun androidTestTaskName(annotationName: String): String {
     return "$androidTestTaskPrefix$annotationName$androidTestTaskSuffix"
 }
 
+fun isTaskNameAbbreviation(taskName: String, fullTaskName: String): Boolean {
+    if (taskName.isEmpty() || taskName == fullTaskName) return false
+    return fullTaskName.startsWith(taskName) ||
+        taskName.any { it.isUpperCase() } &&
+        taskName.isSubsequenceOf(fullTaskName)
+}
+
+fun String.isSubsequenceOf(value: String): Boolean {
+    var searchIndex = 0
+    for (char in this) {
+        searchIndex = value.indexOf(char, startIndex = searchIndex)
+        if (searchIndex == -1) return false
+        searchIndex++
+    }
+    return true
+}
+
+val androidTestTaskNames = androidTestAnnotationNames.map { androidTestTaskName(it) }
+val abbreviatedAndroidTestTaskNames = requestedTaskNames.filter { taskName ->
+    taskName != baseAndroidTestTaskName &&
+        androidTestTaskNames.any { isTaskNameAbbreviation(taskName, it) }
+}
+require(abbreviatedAndroidTestTaskNames.isEmpty()) {
+    "Use full generated Android test lane task names. Abbreviated lane tasks are unsupported: " +
+        abbreviatedAndroidTestTaskNames.joinToString(", ")
+}
 val requestedAndroidTestAnnotationTaskNames = requestedTaskNames.filter { taskName ->
-    androidTestAnnotationNames.any { androidTestTaskName(it) == taskName }
+    taskName in androidTestTaskNames
 }
 require(requestedAndroidTestAnnotationTaskNames.size <= 1) {
     "Run only one generated Android test lane per Gradle invocation. Requested lanes: " +
