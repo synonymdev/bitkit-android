@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Trezor WebUSB Firmware (Model T, Safe 3, Safe 5, Safe 7) -->
+    <usb-device vendor-id="4617" product-id="21441" />
+    <!-- Trezor WebUSB Bootloader -->
+    <usb-device vendor-id="4617" product-id="21440" />
+    <!-- Trezor Model One (SatoshiLabs legacy HID) -->
+    <usb-device vendor-id="21324" product-id="1" />
+</resources>

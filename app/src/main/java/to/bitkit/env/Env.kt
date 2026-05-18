@@ -13,6 +13,7 @@ import to.bitkit.models.NodePeer
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
 internal object Env {
@@ -198,6 +199,17 @@ internal object Env {
             Network.BITCOIN -> "https://blocktank.synonym.to/backups-ldk"
             else -> "https://bitkit.stag0.blocktank.to/backups-ldk"
         }
+
+    fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {
+        val isE2eLocal = isE2eTest && e2eBackend == "local"
+        return when (network) {
+            BitkitCoreNetwork.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
+            BitkitCoreNetwork.TESTNET, BitkitCoreNetwork.TESTNET4, BitkitCoreNetwork.SIGNET ->
+                ElectrumServers.TESTNET
+            BitkitCoreNetwork.REGTEST ->
+                if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+        }
+    }
 
     // endregion
 

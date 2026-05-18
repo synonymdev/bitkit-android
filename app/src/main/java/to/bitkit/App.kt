@@ -11,6 +11,7 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.env.Env
+import to.bitkit.services.BluetoothInit
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -31,6 +32,8 @@ internal open class App : Application(), Configuration.Provider {
         SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         Env.initAppStoragePath(filesDir.absolutePath)
+        // Initialize btleplug for Bluetooth support (required before any BLE usage)
+        BluetoothInit.ensureInitialized()
     }
 
     companion object {
