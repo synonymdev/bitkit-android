@@ -118,6 +118,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.SavingsWalletScreen
 import to.bitkit.ui.screens.wallets.SpendingWalletScreen
@@ -947,6 +948,9 @@ private fun NavGraphBuilder.settings(
     }
     composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.Trezor> {
+        TrezorScreen(navController)
     }
     composableWithDefaultTransitions<Routes.LdkDebug> {
         LdkDebugScreen(navController)
@@ -2071,4 +2075,7 @@ sealed interface Routes {
 
     @Serializable
     data object AllActivity : Routes
+
+    @Serializable
+    data object Trezor : Routes
 }
