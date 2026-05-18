@@ -14,8 +14,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 @Composable
 fun contactActivityTitle(activity: Activity, contacts: ImmutableList<PubkyProfile>): String? {
     val contactName = remember(activity, contacts) {
-        val contact = activity.contact() ?: return@remember null
-        contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, contact) }?.name
+        contactForActivity(activity, contacts)?.name
     } ?: return null
 
     val titleRes = if (activity.isSent()) {
@@ -24,4 +23,9 @@ fun contactActivityTitle(activity: Activity, contacts: ImmutableList<PubkyProfil
         R.string.contacts__activity_received_from
     }
     return stringResource(titleRes, contactName)
+}
+
+fun contactForActivity(activity: Activity, contacts: ImmutableList<PubkyProfile>): PubkyProfile? {
+    val contact = activity.contact() ?: return null
+    return contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, contact) }
 }

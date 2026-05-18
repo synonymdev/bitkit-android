@@ -30,6 +30,8 @@ import to.bitkit.ext.isBoosting
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.paymentState
 import to.bitkit.ext.txType
+import to.bitkit.models.PubkyProfile
+import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -39,6 +41,7 @@ fun ActivityIcon(
     modifier: Modifier = Modifier,
     size: Dp = 32.dp,
     isCpfpChild: Boolean = false,
+    contact: PubkyProfile? = null,
 ) {
     val isLightning = activity is Activity.Lightning
     val isBoosting = activity.isBoosting()
@@ -57,6 +60,12 @@ fun ActivityIcon(
             )
         }
 
+        contact != null -> PubkyContactAvatar(
+            profile = contact,
+            size = size,
+            testTag = "ActivityContactAvatar",
+            modifier = modifier
+        )
         isLightning -> ActivityIconLightning(status, size, arrowIcon, modifier)
         else -> ActivityIconOnchain(activity, arrowIcon, size, modifier)
     }

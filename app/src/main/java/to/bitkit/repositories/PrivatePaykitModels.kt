@@ -10,6 +10,7 @@ import to.bitkit.utils.AppError
 sealed class PrivatePaykitError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     data object PrivateUnavailable : PrivatePaykitError("Private Paykit is not available")
     data object PayloadTooLarge : PrivatePaykitError("Private Paykit payload is too large")
+    data object RouteHintsUnavailable : PrivatePaykitError("Reachable private Lightning endpoint is not available yet")
     data object SnapshotRecipientMismatch : PrivatePaykitError("Private Paykit snapshot recipient mismatch")
     data object StaleLinkState : PrivatePaykitError("Private Paykit link state changed")
     class StatePersistenceFailed(cause: Throwable) : PrivatePaykitError("Failed to persist private Paykit state", cause)

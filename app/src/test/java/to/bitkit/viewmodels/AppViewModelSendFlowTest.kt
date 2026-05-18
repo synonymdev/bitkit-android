@@ -143,7 +143,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
-        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -503,6 +503,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `manual send path clears stale contact context`() = test {
+        setActiveContactPaymentContext("pubkycontact")
+
+        sut.setSendEvent(SendEvent.EnterManually)
+        advanceUntilIdle()
+
+        assertNull(activeContactPaymentContext())
+    }
+
+    @Test
+    fun `address continue clears stale contact context before decoding`() = test {
+        val bolt11 = "lnbcrt1manual"
+        setActiveContactPaymentContext("pubkycontact")
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+
+        sut.setSendEvent(SendEvent.AddressContinue(bolt11))
+        advanceUntilIdle()
+
+        assertNull(activeContactPaymentContext())
+        assertNull(sut.sendUiState.value.contactPaymentProfile)
+    }
+
+    @Test
     fun `private onchain contact payment discards remote address after send`() = test {
         val address = "bcrt1qprivatecontact"
         val contactKey = "pubkycontact"
@@ -768,13 +791,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         advanceUntilIdle()
 
-        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
         verify(privatePaykitRepo, never()).pruneUnsavedContactState(any<Collection<String>>())
 
         pubkyContactsLoadVersion.value = 1L
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).prepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo).prepareSavedContacts(any<Collection<String>>(), any())
         verify(privatePaykitRepo).pruneUnsavedContactState(any<Collection<String>>())
     }
 
@@ -799,7 +822,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
-        verify(privatePaykitRepo).prepareSavedContacts(emptySet<String>())
+        verify(privatePaykitRepo).prepareSavedContacts(emptySet<String>(), false)
         verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
     }
 
@@ -835,7 +858,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private suspend fun enablePublicPaykitSharing() {
         settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)
         walletState.value = WalletState(onchainAddress = "bc1qtest")
-        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any()) }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any()) }.thenReturn(Result.success(Unit))
     }
 
     @Suppress("UNCHECKED_CAST")

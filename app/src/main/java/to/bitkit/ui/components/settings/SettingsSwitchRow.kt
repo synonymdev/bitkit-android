@@ -34,6 +34,7 @@ fun SettingsSwitchRow(
     isChecked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     subtitle: String? = null,
     iconRes: Int? = null,
     iconTint: Color = Color.Unspecified,
@@ -43,6 +44,7 @@ fun SettingsSwitchRow(
         title = title,
         isChecked = isChecked,
         onClick = onClick,
+        enabled = enabled,
         subtitle = subtitle,
         colors = colors,
         icon = if (iconRes != null) {
@@ -69,6 +71,7 @@ fun SettingsSwitchRow(
     icon: @Composable () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     subtitle: String? = null,
     colors: SwitchColors = AppSwitchDefaults.colors
 ) {
@@ -76,6 +79,7 @@ fun SettingsSwitchRow(
         title = title,
         isChecked = isChecked,
         onClick = onClick,
+        enabled = enabled,
         subtitle = subtitle,
         colors = colors,
         icon = {
@@ -92,6 +96,7 @@ private fun SettingsSwitchRowCore(
     isChecked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     subtitle: String? = null,
     icon: (@Composable () -> Unit)? = null,
     colors: SwitchColors = AppSwitchDefaults.colors
@@ -103,7 +108,7 @@ private fun SettingsSwitchRowCore(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
-                .clickableAlpha { onClick() }
+                .clickableAlpha(enabled = enabled) { onClick() }
         ) {
             if (icon != null) {
                 icon()
@@ -124,6 +129,7 @@ private fun SettingsSwitchRowCore(
             Switch(
                 checked = isChecked,
                 onCheckedChange = null, // handled by parent
+                enabled = enabled,
                 colors = colors,
             )
         }
