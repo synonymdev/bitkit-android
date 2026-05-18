@@ -381,10 +381,16 @@ class TrezorViewModel @Inject constructor(
                     }
                     ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = "Transaction broadcast")
                 }
-                .onFailure {
-                    TrezorDebugLog.log("BROADCAST", "FAILED: ${it.message}")
-                    _uiState.update { it.copy(send = it.send.copy(isBroadcasting = false)) }
-                    ToastEventBus.send(it)
+                .onFailure { error ->
+                    TrezorDebugLog.log("BROADCAST", "FAILED: ${error.message}")
+                    if (_uiState.value.send.step != signedStep) return@onFailure
+
+                    _uiState.update {
+                        if (it.send.step != signedStep) return@update it
+
+                        it.copy(send = it.send.copy(isBroadcasting = false))
+                    }
+                    ToastEventBus.send(error)
                 }
         }
     }

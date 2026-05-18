@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import com.synonym.bitkitcore.TrezorSignedTx
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -268,6 +269,46 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `broadcastSignedTx failure should not clear newer broadcast`() = test {
+        loadSignedTx()
+        val firstBroadcastResult = CompletableDeferred<Result<String>>()
+        val secondBroadcastResult = CompletableDeferred<Result<String>>()
+        val broadcastResults = ArrayDeque(
+            listOf(firstBroadcastResult, secondBroadcastResult)
+        )
+        whenever(trezorRepo.broadcastRawTx(any(), any()))
+            .doSuspendableAnswer { broadcastResults.removeFirst().await() }
+
+        sut.broadcastSignedTx()
+        assertTrue(sut.uiState.value.isBroadcasting)
+
+        val secondSignedTx = TrezorSignedTx(
+            signatures = listOf("30440220new"),
+            serializedTx = "0200000001new",
+            txid = "new-broadcast-txid",
+        )
+        sut.resetSendFlow()
+        loadSignedTx(secondSignedTx)
+        sut.broadcastSignedTx()
+        assertTrue(sut.uiState.value.isBroadcasting)
+
+        firstBroadcastResult.complete(Result.failure(RuntimeException("first failed")))
+        advanceUntilIdle()
+
+        val staleFailureState = sut.uiState.value
+        assertEquals(secondSignedTx, staleFailureState.signedTxResult)
+        assertTrue(staleFailureState.isBroadcasting)
+        assertNull(staleFailureState.broadcastTxid)
+
+        secondBroadcastResult.complete(Result.success("second-broadcast-txid"))
+        advanceUntilIdle()
+
+        val finalState = sut.uiState.value
+        assertFalse(finalState.isBroadcasting)
+        assertEquals("second-broadcast-txid", finalState.broadcastTxid)
+    }
+
+    @Test
     fun `composeTx should not call repo when destination address is blank`() = test {
         loadAccountInfo()
         sut.setSendAmount("1000")
@@ -346,12 +387,14 @@ class TrezorViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
     }
 
-    private suspend fun TestScope.loadSignedTx() {
+    private suspend fun TestScope.loadSignedTx(
+        signedTx: TrezorSignedTx = TrezorPreviewData.sampleSignedTx,
+    ) {
         loadAccountInfo()
         whenever(trezorRepo.composeTransaction(any(), any(), any(), any(), anyOrNull(), any()))
             .thenReturn(Result.success(listOf(TrezorPreviewData.sampleComposeResult)))
         whenever(trezorRepo.signTxFromPsbt(any(), anyOrNull()))
-            .thenReturn(Result.success(TrezorPreviewData.sampleSignedTx))
+            .thenReturn(Result.success(signedTx))
 
         sut.setSendAddress("bc1qtest123")
         sut.setSendAmount("1000")
