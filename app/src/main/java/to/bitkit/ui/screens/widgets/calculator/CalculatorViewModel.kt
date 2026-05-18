@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.appwidget.CalculatorAppWidgetUpdater
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.CalculatorValues
@@ -33,7 +32,6 @@ internal const val CALCULATOR_FIAT_DECIMAL_PLACES = 2
 class CalculatorViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo,
     private val currencyRepo: CurrencyRepo,
-    private val appWidgetUpdater: CalculatorAppWidgetUpdater,
 ) : ViewModel() {
 
     companion object {
@@ -226,7 +224,6 @@ class CalculatorViewModel @Inject constructor(
         }
         viewModelScope.launch {
             widgetsRepo.updateCalculatorValues(calculatorValues)
-            appWidgetUpdater.update()
         }
     }
 

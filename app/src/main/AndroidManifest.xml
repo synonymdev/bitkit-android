@@ -283,19 +283,6 @@
                 android:resource="@xml/appwidget_info_weather" />
         </receiver>
 
-        <!-- Calculator Widget -->
-        <receiver
-            android:name=".appwidget.ui.calculator.CalculatorGlanceReceiver"
-            android:exported="true"
-            android:label="@string/widgets__calculator__name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/appwidget_info_calculator" />
-        </receiver>
-
     </application>
 
 </manifest>

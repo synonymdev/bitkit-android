@@ -16,7 +16,6 @@ enum class AppWidgetType {
     BLOCKS,
     FACTS,
     WEATHER,
-    CALCULATOR,
 }
 
 @Stable

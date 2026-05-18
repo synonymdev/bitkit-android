@@ -169,7 +169,6 @@ class AppWidgetConfigViewModel @Inject constructor(
                 AppWidgetType.BLOCKS -> it.copy(blocksPreferences = BlocksPreferences())
                 AppWidgetType.FACTS -> it
                 AppWidgetType.WEATHER -> it.copy(weatherPreferences = WeatherPreferences())
-                AppWidgetType.CALCULATOR -> it
             }
         }
     }
@@ -185,7 +184,6 @@ class AppWidgetConfigViewModel @Inject constructor(
                 AppWidgetType.BLOCKS -> saveBlocks(state)
                 AppWidgetType.FACTS -> Unit
                 AppWidgetType.WEATHER -> saveWeather(state)
-                AppWidgetType.CALCULATOR -> Unit
             }
 
             onComplete()

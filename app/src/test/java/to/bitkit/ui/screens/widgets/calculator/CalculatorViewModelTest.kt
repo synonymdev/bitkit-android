@@ -9,7 +9,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import to.bitkit.appwidget.CalculatorAppWidgetUpdater
 import to.bitkit.data.WidgetsData
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
@@ -27,7 +26,6 @@ class CalculatorViewModelTest : BaseUnitTest() {
 
     private val widgetsRepo: WidgetsRepo = mock()
     private val currencyRepo: CurrencyRepo = mock()
-    private val appWidgetUpdater: CalculatorAppWidgetUpdater = mock()
     private val widgetsData = MutableStateFlow(WidgetsData())
     private val currencyState = MutableStateFlow(CurrencyState())
     private var lastConvertedSats = 0L
@@ -61,7 +59,6 @@ class CalculatorViewModelTest : BaseUnitTest() {
             )
         }
         whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull())).thenAnswer { 12_345uL }
-        whenever { appWidgetUpdater.update() }.thenReturn(Unit)
         whenever { widgetsRepo.updateCalculatorValues(any()) }.thenAnswer {
             val calculatorValues = it.getArgument<CalculatorValues>(0)
             widgetsData.value = widgetsData.value.copy(calculatorValues = calculatorValues)
@@ -313,7 +310,6 @@ class CalculatorViewModelTest : BaseUnitTest() {
     private fun createSut() = CalculatorViewModel(
         widgetsRepo = widgetsRepo,
         currencyRepo = currencyRepo,
-        appWidgetUpdater = appWidgetUpdater,
     )
 
     private fun currentFiatValue() = when (currencyState.value.selectedCurrency) {
