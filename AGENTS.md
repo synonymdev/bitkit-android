@@ -161,9 +161,9 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 ### Rules
 
 - USE coding rules from `.cursor/default.rules.mdc`
-- ALWAYS run `./gradlew compileDevDebugKotlin` after code changes to verify code compiles
-- ALWAYS run `./gradlew testDevDebugUnitTest` after code changes to verify tests succeed and fix accordingly
-- ALWAYS run `./gradlew detekt` after code changes to check for new lint issues and fix accordingly
+- For multi-step changes, stacked PR surgery, and review follow-up with several small edits, batch validation instead of running the full build/check suite after every edit. Run the relevant Gradle checks once the coherent change set is ready, before committing, updating a PR, or pushing.
+- Still run `./gradlew compileDevDebugKotlin`, `./gradlew testDevDebugUnitTest`, and `./gradlew detekt` before the final PR update/push for code changes, and fix failures before pushing.
+- Use narrower checks earlier only when they answer an immediate risk, e.g. a single unit test after touching focused business logic or a Kotlin compile after a risky refactor.
 - ALWAYS ask clarifying questions to ensure an optimal plan when encountering functional or technical uncertainties in requests
 - ALWAYS when fixing lint or test failures prefer to do the minimal amount of changes to fix the issues
 - USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
