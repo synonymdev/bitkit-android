@@ -44,7 +44,7 @@ class LogsRepo @Inject constructor(
     suspend fun postQuestion(email: String, message: String): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
             val logsBase64 = zipLogs(maxEncodedBytes = MAX_SUPPORT_UPLOAD_BASE64_BYTES).getOrDefault("")
-            val logsFileName = createLogsArchiveFileName()
+            val logsFileName = createLogsArchiveFileName(SUPPORT_LOGS_ARCHIVE_PREFIX)
 
             chatwootHttpClient.postQuestion(
                 message = ChatwootMessage(
@@ -262,8 +262,8 @@ class LogsRepo @Inject constructor(
         return appJson.encodeToString(snapshot)
     }
 
-    private fun createLogsArchiveFileName(): String {
-        return "bitkit_logs_${currentLogTimestamp()}.zip"
+    private fun createLogsArchiveFileName(prefix: String = LOGS_ARCHIVE_PREFIX): String {
+        return "${prefix}_${currentLogTimestamp()}.zip"
     }
 
     private fun currentLogTimestamp(): String {
@@ -272,7 +272,9 @@ class LogsRepo @Inject constructor(
 
     private companion object {
         const val TAG = "SupportRepo"
+        const val LOGS_ARCHIVE_PREFIX = "bitkit_logs"
         const val MAX_SUPPORT_UPLOAD_BASE64_BYTES = 900 * 1024
+        const val SUPPORT_LOGS_ARCHIVE_PREFIX = "bitkit_support_logs"
         const val SUPPORT_SNAPSHOT_FILE_NAME = "support_snapshot.json"
         val LOG_FILE_NAME_REGEX = Regex(
             "^([A-Za-z]+)_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})(?:\\.part_(\\d{3}))?\\.log$"
