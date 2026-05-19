@@ -203,9 +203,44 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `closeAndClear preserves existing profile recovery marker after state was cleared`() = test {
+        cacheData.value = PrivatePaykitCacheData(profileRecoveryPending = true)
+
+        sut.closeAndClear(markProfileRecoveryPending = true).getOrThrow()
+
+        assertTrue(cacheData.value.profileRecoveryPending)
+    }
+
+    @Test
+    fun `closeAndClear does not mark profile recovery for contacts remembered without private state`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+
+        sut.closeAndClear(markProfileRecoveryPending = true).getOrThrow()
+
+        assertFalse(cacheData.value.profileRecoveryPending)
+    }
+
+    @Test
     fun `prepareSavedContacts starts profile recovery for saved contacts`() = test {
         startForegroundWithSharingEnabled()
-        cacheData.value = PrivatePaykitCacheData(profileRecoveryPending = true)
+        cacheData.value = PrivatePaykitCacheData(
+            profileRecoveryPending = true,
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(
+                    remoteEndpoints = listOf(
+                        PrivatePaykitStoredPaymentEntryData(
+                            methodId = MethodId.P2wpkh.rawValue,
+                            endpointData = PublicPaykitRepo.serializePayload("bcrt1qstale"),
+                        ),
+                    ),
+                    lastLocalPayloadHash = LOCAL_PAYLOAD_HASH,
+                    linkCompletedAt = NOW_SECONDS - 60,
+                    handshakeUpdatedAt = NOW_SECONDS - 120,
+                ),
+            ),
+        )
+        whenever(keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name))
+            .thenReturn(secretStateJson(linkSnapshotHex = LINK_SNAPSHOT, handshakeSnapshotHex = HANDSHAKE_SNAPSHOT))
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session")
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
@@ -223,6 +258,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertNull(snapshot.linkSnapshotHex)
         assertEquals(UPDATED_HANDSHAKE_SNAPSHOT, snapshot.handshakeSnapshotHex)
         assertEquals(emptyMap(), snapshot.remoteEndpoints)
+        assertNull(snapshot.linkCompletedAt)
+        assertEquals(NOW_SECONDS, snapshot.handshakeUpdatedAt)
     }
 
     @Test
@@ -241,6 +278,45 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(cacheData.value.profileRecoveryPending)
         verify(pubkyService, never()).initiateEncryptedLink(any(), any())
+    }
+
+    @Test
+    fun `refreshSavedContactEndpoints retries profile recovery purge before publishing`() = test {
+        startForegroundWithSharingEnabled()
+        cacheData.value = PrivatePaykitCacheData(profileRecoveryPending = true)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session")
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(pubkyService.sessionDelete("session", "/pub/paykit/v0/private"))
+            .thenAnswer { throw PrivatePaykitTestError("delete failed") }
+        whenever(pubkyService.sessionList("session", "/pub/paykit/v0/private/"))
+            .thenAnswer { throw PrivatePaykitTestError("list failed") }
+
+        sut.refreshSavedContactEndpoints(listOf(CONTACT_KEY)).getOrThrow()
+
+        assertTrue(cacheData.value.profileRecoveryPending)
+        verify(pubkyService, never()).initiateEncryptedLink(any(), any())
+        verify(pubkyService, never()).setPrivatePayments(any(), any())
+    }
+
+    @Test
+    fun `refreshKnownSavedContactEndpoints retries profile recovery purge before publishing`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        startForegroundWithSharingEnabled()
+        cacheData.value = PrivatePaykitCacheData(profileRecoveryPending = true)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session")
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(pubkyService.sessionDelete("session", "/pub/paykit/v0/private"))
+            .thenAnswer { throw PrivatePaykitTestError("delete failed") }
+        whenever(pubkyService.sessionList("session", "/pub/paykit/v0/private/"))
+            .thenAnswer { throw PrivatePaykitTestError("list failed") }
+
+        sut.refreshKnownSavedContactEndpoints("test refresh").getOrThrow()
+
+        assertTrue(cacheData.value.profileRecoveryPending)
+        verify(pubkyService, never()).initiateEncryptedLink(any(), any())
+        verify(pubkyService, never()).setPrivatePayments(any(), any())
     }
 
     @Test

@@ -176,6 +176,10 @@ class PrivatePaykitRepo @Inject constructor(
             runCatching {
                 val keys = rememberSavedContacts(publicKeys, replacing = true)
                 if (!canPublishPrivateEndpoints()) return@runCatching
+                if (isProfileRecoveryPending() && keys.isNotEmpty()) {
+                    recoverSavedContactsAfterProfileRecreation(keys, requireImmediatePublication = false).getOrThrow()
+                    return@runCatching
+                }
                 publishLocalEndpoints(keys, maxAdvanceSteps = 1, reason = "refresh").getOrThrow()
             }
         }
@@ -186,6 +190,13 @@ class PrivatePaykitRepo @Inject constructor(
     ): Result<Unit> = withContext(serializedDispatcher) {
         runCatching {
             if (!canPublishPrivateEndpoints()) return@runCatching
+            if (isProfileRecoveryPending() && knownSavedContactKeys.isNotEmpty()) {
+                recoverSavedContactsAfterProfileRecreation(
+                    publicKeys = knownSavedContactKeys.toList(),
+                    requireImmediatePublication = false,
+                ).getOrThrow()
+                return@runCatching
+            }
             publishLocalEndpoints(
                 publicKeys = knownSavedContactKeys.toList(),
                 maxAdvanceSteps = 1,
@@ -283,7 +294,8 @@ class PrivatePaykitRepo @Inject constructor(
             publicationMutex.withLock {
                 linkEstablishmentMutex.withLock {
                     val hadPrivateContactState =
-                        ensureState().contacts.isNotEmpty() || knownSavedContactKeys.isNotEmpty()
+                        ensureState().contacts.isNotEmpty()
+                    val wasProfileRecoveryPending = isProfileRecoveryPending()
                     resetInFlightWork()
                     closeActiveHandles()
                     activeHandlesByContact.clear()
@@ -291,7 +303,7 @@ class PrivatePaykitRepo @Inject constructor(
                     stateStore.replaceState(PrivatePaykitState())
                     keychain.delete(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name)
                     cacheStore.reset()
-                    if (markProfileRecoveryPending && hadPrivateContactState) {
+                    if (markProfileRecoveryPending && (hadPrivateContactState || wasProfileRecoveryPending)) {
                         updateProfileRecoveryPending(true)
                     }
                     addressReservationRepo.clearContactAssignments(excludingPublicKeys = emptySet())
