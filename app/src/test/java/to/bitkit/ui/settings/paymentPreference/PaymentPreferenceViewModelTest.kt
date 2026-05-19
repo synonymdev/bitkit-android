@@ -51,6 +51,7 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(pubkyRepo.contacts).thenReturn(contactsFlow)
         whenever(pubkyRepo.isAuthenticated).thenReturn(isAuthenticatedFlow)
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(true)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -93,6 +94,32 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.hasPubkyProfile)
         verify(settingsStore, never()).update(any())
         verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+    }
+
+    @Test
+    fun `setPrivateContactsEnabled does not enable without local secret key`() = test {
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.setPrivateContactsEnabled(true)
+        advanceUntilIdle()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(sut.uiState.value.canUsePrivateContacts)
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+    }
+
+    @Test
+    fun `init clears hidden private sharing when local secret key is unavailable`() = test {
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(sut.uiState.value.privateContactsEnabled)
+        assertFalse(sut.uiState.value.canUsePrivateContacts)
     }
 
     @Test

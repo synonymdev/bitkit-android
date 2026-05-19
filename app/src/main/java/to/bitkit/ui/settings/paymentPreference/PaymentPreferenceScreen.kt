@@ -97,13 +97,15 @@ private fun PaymentPreferenceContent(
                     padding = PaddingValues(top = 16.dp),
                 )
 
-                SettingsSwitchRow(
-                    title = stringResource(R.string.settings__payment_pref_private_contacts),
-                    isChecked = uiState.privateContactsEnabled,
-                    onClick = onTogglePrivateContacts,
-                    enabled = !uiState.isUpdatingPrivateContacts,
-                    modifier = Modifier.testTag("PaymentPreferencePrivateContacts")
-                )
+                if (uiState.canUsePrivateContacts) {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings__payment_pref_private_contacts),
+                        isChecked = uiState.privateContactsEnabled,
+                        onClick = onTogglePrivateContacts,
+                        enabled = !uiState.isUpdatingPrivateContacts,
+                        modifier = Modifier.testTag("PaymentPreferencePrivateContacts")
+                    )
+                }
                 SettingsSwitchRow(
                     title = stringResource(R.string.settings__payment_pref_public_contacts),
                     isChecked = uiState.publicContactsEnabled,
@@ -136,6 +138,7 @@ private fun Preview() {
                 privateContactsEnabled = true,
                 publicContactsEnabled = true,
                 hasPubkyProfile = true,
+                canUsePrivateContacts = true,
             ),
         )
     }

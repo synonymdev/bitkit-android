@@ -278,6 +278,7 @@ class PubkyRepo @Inject constructor(
 
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
                 keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+                settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
                 notifyBackupStateChanged()
 
                 pk
@@ -887,9 +888,8 @@ class PubkyRepo @Inject constructor(
     // region Auth approval
 
     suspend fun hasSecretKey(): Boolean = runCatching {
-        withContext(ioDispatcher) {
-            !keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).isNullOrEmpty()
-        }
+        val publicKey = _publicKey.value ?: return@runCatching false
+        managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
 
     suspend fun approveAuth(authUrl: String): Result<Unit> = runCatching {

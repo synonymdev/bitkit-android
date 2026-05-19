@@ -259,6 +259,9 @@ class PrivatePaykitRepo @Inject constructor(
             runCatching {
                 val normalizedKey = knownSavedContact(publicKey)
                     ?: return@runCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
+                if (!hasLocalSecretKeyForCurrentProfile()) {
+                    return@runCatching publicPaykitRepo.beginPayment(normalizedKey).getOrThrow()
+                }
 
                 val privateResult = runCatching { beginPrivatePayment(normalizedKey).getOrThrow() }
                     .onFailure {
@@ -1630,10 +1633,19 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun canPublishPrivateEndpoints(): Boolean {
         val settings = settingsStore.data.first()
         return settings.sharesPrivatePaykitEndpoints &&
+            hasLocalSecretKeyForCurrentProfile() &&
             App.currentActivity?.value != null &&
             walletRepo.walletExists() &&
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
     }
+
+    private suspend fun hasLocalSecretKeyForCurrentProfile(): Boolean = runCatching {
+        val ownPublicKey = pubkyService.currentPublicKey() ?: return@runCatching false
+        val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+            ?: return@runCatching false
+        val derivedPublicKey = pubkyService.publicKeyFromSecret(secretKeyHex)
+        PubkyPublicKeyFormat.matches(derivedPublicKey, ownPublicKey)
+    }.getOrDefault(false)
 
     private suspend fun isContactSharingCleanupPending(): Boolean =
         cacheStore.data.first().cleanupPending

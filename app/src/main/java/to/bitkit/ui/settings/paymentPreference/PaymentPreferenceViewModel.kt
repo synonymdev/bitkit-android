@@ -39,13 +39,18 @@ class PaymentPreferenceViewModel @Inject constructor(
             combine(settingsStore.data, pubkyRepo.isAuthenticated) { settings, isAuthenticated ->
                 settings to isAuthenticated
             }.collect { (settings, isAuthenticated) ->
+                val canUsePrivateContacts = isAuthenticated && pubkyRepo.hasSecretKey()
+                if (!canUsePrivateContacts && settings.sharesPrivatePaykitEndpoints) {
+                    settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+                }
                 _uiState.update {
                     it.copy(
                         lightningEnabled = settings.publicPaykitLightningEnabled,
                         onchainEnabled = settings.publicPaykitOnchainEnabled,
-                        privateContactsEnabled = settings.sharesPrivatePaykitEndpoints,
+                        privateContactsEnabled = settings.sharesPrivatePaykitEndpoints && canUsePrivateContacts,
                         publicContactsEnabled = settings.sharesPublicPaykitEndpoints,
                         hasPubkyProfile = isAuthenticated,
+                        canUsePrivateContacts = canUsePrivateContacts,
                     )
                 }
             }
@@ -63,6 +68,10 @@ class PaymentPreferenceViewModel @Inject constructor(
     fun setPrivateContactsEnabled(isEnabled: Boolean) {
         if (_uiState.value.isUpdatingPrivateContacts) return
         if (isEnabled && !_uiState.value.hasPubkyProfile) {
+            viewModelScope.launch { showSyncError(PublicPaykitError.SessionNotActive) }
+            return
+        }
+        if (isEnabled && !_uiState.value.canUsePrivateContacts) {
             viewModelScope.launch { showSyncError(PublicPaykitError.SessionNotActive) }
             return
         }
@@ -173,7 +182,14 @@ class PaymentPreferenceViewModel @Inject constructor(
             ).getOrThrow()
         }
         if (settings.sharesPrivatePaykitEndpoints) {
-            privatePaykitRepo.prepareSavedContacts(contactPublicKeys(), requireImmediatePublication = true).getOrThrow()
+            if (pubkyRepo.hasSecretKey()) {
+                privatePaykitRepo.prepareSavedContacts(
+                    publicKeys = contactPublicKeys(),
+                    requireImmediatePublication = true,
+                ).getOrThrow()
+            } else {
+                settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+            }
         }
     }
 
@@ -206,6 +222,7 @@ data class PaymentPreferenceUiState(
     val privateContactsEnabled: Boolean = false,
     val publicContactsEnabled: Boolean = false,
     val hasPubkyProfile: Boolean = false,
+    val canUsePrivateContacts: Boolean = false,
     val isUpdatingPaymentOptions: Boolean = false,
     val isUpdatingPrivateContacts: Boolean = false,
     val isUpdatingPublicContacts: Boolean = false,

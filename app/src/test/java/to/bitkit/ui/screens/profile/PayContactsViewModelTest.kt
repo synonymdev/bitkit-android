@@ -48,6 +48,7 @@ class PayContactsViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(pubkyRepo.contacts).thenReturn(contactsFlow)
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(true)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -76,10 +77,33 @@ class PayContactsViewModelTest : BaseUnitTest() {
 
         assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
         verify(privatePaykitRepo).setContactSharingCleanupPending(false)
         verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), false)
         verify(privatePaykitRepo, never()).disableSharingAndPruneUnsavedContactState(any<Collection<String>>())
+    }
+
+    @Test
+    fun `continueToProfile enables only public sharing without local secret key`() = test {
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.setPaymentSharingEnabled(true)
+            sut.continueToProfile()
+            advanceUntilIdle()
+
+            assertEquals(PayContactsEffect.Continue, awaitItem())
+        }
+
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
+        verify(privatePaykitRepo, never()).setContactSharingCleanupPending(false)
+        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
     }
 
     @Test
