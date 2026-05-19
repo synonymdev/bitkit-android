@@ -68,6 +68,7 @@ internal data class ContactState(
     var mainRecoveryAttemptId: String? = null,
     var responderRecoveryAttemptId: String? = null,
     var lastCompletedRecoveryAttemptId: String? = null,
+    var awaitingRecoveredRemoteEndpoints: Boolean = false,
     var linkFailureCount: Int = 0,
 ) {
     constructor(cache: PrivatePaykitContactCacheData) : this(
@@ -81,6 +82,7 @@ internal data class ContactState(
         mainRecoveryAttemptId = cache.mainRecoveryAttemptId,
         responderRecoveryAttemptId = cache.responderRecoveryAttemptId,
         lastCompletedRecoveryAttemptId = cache.lastCompletedRecoveryAttemptId,
+        awaitingRecoveredRemoteEndpoints = cache.awaitingRecoveredRemoteEndpoints,
         linkFailureCount = cache.linkFailureCount,
     )
 
@@ -106,6 +108,7 @@ internal data class ContactState(
             mainRecoveryAttemptId != null ||
             responderRecoveryAttemptId != null ||
             lastCompletedRecoveryAttemptId != null ||
+            awaitingRecoveredRemoteEndpoints ||
             linkFailureCount != 0
 
     fun cacheState() = PrivatePaykitContactCacheData(
@@ -119,6 +122,7 @@ internal data class ContactState(
         mainRecoveryAttemptId = mainRecoveryAttemptId,
         responderRecoveryAttemptId = responderRecoveryAttemptId,
         lastCompletedRecoveryAttemptId = lastCompletedRecoveryAttemptId,
+        awaitingRecoveredRemoteEndpoints = awaitingRecoveredRemoteEndpoints,
         linkFailureCount = linkFailureCount,
     )
 }

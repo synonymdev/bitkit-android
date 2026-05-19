@@ -78,6 +78,7 @@ data class PrivatePaykitContactCacheData(
     val mainRecoveryAttemptId: String? = null,
     val responderRecoveryAttemptId: String? = null,
     val lastCompletedRecoveryAttemptId: String? = null,
+    val awaitingRecoveredRemoteEndpoints: Boolean = false,
     val linkFailureCount: Int = 0,
 )
 

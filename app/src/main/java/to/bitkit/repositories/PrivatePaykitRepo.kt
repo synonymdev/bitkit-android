@@ -332,11 +332,6 @@ class PrivatePaykitRepo @Inject constructor(
                 val privateResult = privateAttempt.result
                     .onFailure {
                         if (it is CancellationException) throw it
-                        Logger.warn(
-                            "Falling back to public Paykit for '${redacted(normalizedKey)}'",
-                            it,
-                            context = TAG,
-                        )
                     }
                     .getOrNull()
 
@@ -345,7 +340,23 @@ class PrivatePaykitRepo @Inject constructor(
                     privateAttempt.shouldDeferPublicFallback ||
                     shouldDeferPublicFallbackForPrivateRecovery(normalizedKey)
                 ) {
+                    privateAttempt.result.exceptionOrNull()?.let {
+                        Logger.warn(
+                            "Deferring public Paykit fallback for '${redacted(normalizedKey)}' " +
+                                "while private payment recovery completes",
+                            it,
+                            context = TAG,
+                        )
+                    }
+                    clearAwaitingRecoveredRemoteEndpoints(normalizedKey)
                     return@runCatching privateResult ?: PublicPaykitPaymentResult.NoEndpoint
+                }
+                privateAttempt.result.exceptionOrNull()?.let {
+                    Logger.warn(
+                        "Falling back to public Paykit for '${redacted(normalizedKey)}'",
+                        it,
+                        context = TAG,
+                    )
                 }
                 publicPaykitRepo.beginPayment(normalizedKey).getOrThrow()
             }
@@ -477,6 +488,7 @@ class PrivatePaykitRepo @Inject constructor(
                         recoveryStartedAt = contactState.recoveryStartedAt,
                         mainRecoveryAttemptId = contactState.mainRecoveryAttemptId,
                         responderRecoveryAttemptId = contactState.responderRecoveryAttemptId,
+                        awaitingRecoveredRemoteEndpoints = contactState.awaitingRecoveredRemoteEndpoints,
                     )
                 }.toMap().takeIf { it.isNotEmpty() }
             }
@@ -522,6 +534,7 @@ class PrivatePaykitRepo @Inject constructor(
                                 recoveryStartedAt = contactBackup.recoveryStartedAt,
                                 mainRecoveryAttemptId = contactBackup.mainRecoveryAttemptId,
                                 responderRecoveryAttemptId = contactBackup.responderRecoveryAttemptId,
+                                awaitingRecoveredRemoteEndpoints = contactBackup.awaitingRecoveredRemoteEndpoints,
                             )
                         }.toMap()
 
@@ -614,7 +627,9 @@ class PrivatePaykitRepo @Inject constructor(
         if (result.getOrNull() is PublicPaykitPaymentResult.Opened) return false
         result.exceptionOrNull()?.let {
             if (it is CancellationException) throw it
-            if (it is PrivatePaykitError.PrivateUnavailable) return true
+            if (it is PrivatePaykitError.PrivateUnavailable) {
+                return shouldDeferPublicFallback || shouldDeferPublicFallbackForPrivateRecovery(publicKey)
+            }
         }
         return shouldDeferPublicFallback || shouldDeferPublicFallbackForPrivateRecovery(publicKey)
     }
@@ -624,7 +639,16 @@ class PrivatePaykitRepo @Inject constructor(
         return contactState.recoveryStartedAt != null ||
             contactState.mainRecoveryAttemptId != null ||
             contactState.responderRecoveryAttemptId != null ||
-            (contactState.handshakeSnapshotHex != null && contactState.linkCompletedAt == null)
+            (contactState.handshakeSnapshotHex != null && contactState.linkCompletedAt == null) ||
+            contactState.awaitingRecoveredRemoteEndpoints
+    }
+
+    private suspend fun clearAwaitingRecoveredRemoteEndpoints(publicKey: String) {
+        val contactState = ensureState().contacts[publicKey] ?: return
+        if (!contactState.awaitingRecoveredRemoteEndpoints) return
+
+        contactState.awaitingRecoveredRemoteEndpoints = false
+        persistState()
     }
 
     private suspend fun cachedPrivatePaymentResult(publicKey: String): PublicPaykitPaymentResult {
@@ -1069,8 +1093,9 @@ class PrivatePaykitRepo @Inject constructor(
                 ensureCurrentGeneration(generation)
                 if (remoteEntries.isEmpty()) return@runCatching 0
 
-                ensureState().contacts.getOrPut(publicKey) { ContactState() }.remoteEndpoints =
-                    remoteEntries.map { StoredPaymentEntry(it.methodId, it.endpointData) }
+                val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
+                contactState.remoteEndpoints = remoteEntries.map { StoredPaymentEntry(it.methodId, it.endpointData) }
+                contactState.awaitingRecoveredRemoteEndpoints = false
                 persistState(markWalletBackup = true)
                 remoteEntries.count()
             }
@@ -1275,6 +1300,7 @@ class PrivatePaykitRepo @Inject constructor(
                 contactState.recoveryStartedAt = remoteRecoveryMarker.createdAt
                 contactState.lastLocalPayloadHash = null
                 contactState.remoteEndpoints = emptyList()
+                contactState.awaitingRecoveredRemoteEndpoints = false
                 persistState(markWalletBackup = true)
             }
             recoveryStore.publishRecoveryMarker(
@@ -1302,6 +1328,7 @@ class PrivatePaykitRepo @Inject constructor(
             contactState.recoveryStartedAt = createdAt
             contactState.lastLocalPayloadHash = null
             contactState.remoteEndpoints = emptyList()
+            contactState.awaitingRecoveredRemoteEndpoints = false
             persistState(markWalletBackup = true)
             recoveryStore.publishRecoveryMarker(
                 from = ownPublicKey,
@@ -1669,6 +1696,7 @@ class PrivatePaykitRepo @Inject constructor(
             contactState.responderRecoveryAttemptId = null
             if (completedAttemptId != null) {
                 contactState.lastCompletedRecoveryAttemptId = completedAttemptId
+                contactState.awaitingRecoveredRemoteEndpoints = true
             }
             if (linkWasReplaced || contactState.linkCompletedAt == null) {
                 contactState.linkCompletedAt = clock.now().epochSeconds
@@ -1868,6 +1896,7 @@ class PrivatePaykitRepo @Inject constructor(
             recoveryStartedAt = startedAt
             mainRecoveryAttemptId = null
             responderRecoveryAttemptId = null
+            awaitingRecoveredRemoteEndpoints = false
         }
         persistState(markWalletBackup = true)
         return true
@@ -1958,6 +1987,7 @@ class PrivatePaykitRepo @Inject constructor(
         contactState.recoveryStartedAt = clock.now().epochSeconds
         contactState.mainRecoveryAttemptId = null
         contactState.responderRecoveryAttemptId = null
+        contactState.awaitingRecoveredRemoteEndpoints = false
         persistState(markWalletBackup = true)
     }
 
@@ -1978,6 +2008,7 @@ class PrivatePaykitRepo @Inject constructor(
         contactState.recoveryStartedAt = null
         contactState.mainRecoveryAttemptId = null
         contactState.responderRecoveryAttemptId = null
+        contactState.awaitingRecoveredRemoteEndpoints = false
         contactState.linkFailureCount = 0
     }
 
