@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -74,6 +75,7 @@ class PubkyRepo @Inject constructor(
     private val imageLoader: ImageLoader,
     private val pubkyStore: PubkyStore,
     private val settingsStore: SettingsStore,
+    private val privatePaykitCacheStore: PrivatePaykitCacheStore,
     private val httpClient: HttpClient,
 ) {
     companion object {
@@ -279,6 +281,7 @@ class PubkyRepo @Inject constructor(
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
                 keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
                 settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+                privatePaykitCacheStore.update { it.copy(profileRecoveryPending = false) }
                 notifyBackupStateChanged()
 
                 pk

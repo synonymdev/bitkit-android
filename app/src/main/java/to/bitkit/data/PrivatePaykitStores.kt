@@ -63,6 +63,7 @@ data class PrivatePaykitCacheData(
     val contacts: Map<String, PrivatePaykitContactCacheData> = emptyMap(),
     val cleanupPending: Boolean = false,
     val deletedContactCleanupPendingPublicKeys: Set<String> = emptySet(),
+    val profileRecoveryPending: Boolean = false,
 )
 
 @Serializable

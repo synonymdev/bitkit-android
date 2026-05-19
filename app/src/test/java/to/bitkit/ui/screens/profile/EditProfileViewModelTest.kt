@@ -135,7 +135,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
         whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear(any()) }.thenReturn(Result.success(Unit))
 
         return EditProfileViewModel(
             context = context,

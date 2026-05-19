@@ -78,7 +78,7 @@ class ProfileViewModel @Inject constructor(
             _isSigningOut.update { true }
             _showSignOutDialog.update { false }
             privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
-            privatePaykitRepo.closeAndClear()
+            privatePaykitRepo.closeAndClear(markProfileRecoveryPending = true)
             pubkyRepo.signOut()
                 .onSuccess {
                     _effects.emit(ProfileEffect.SignedOut)

@@ -44,12 +44,14 @@ internal data class PrivatePaykitState(
     fun cacheState(
         cleanupPending: Boolean,
         deletedContactCleanupPendingPublicKeys: Set<String>,
+        profileRecoveryPending: Boolean,
     ) = PrivatePaykitCacheData(
         contacts = contacts.mapNotNull { (publicKey, contactState) ->
             (publicKey to contactState.cacheState()).takeIf { contactState.hasCacheState }
         }.toMap(),
         cleanupPending = cleanupPending,
         deletedContactCleanupPendingPublicKeys = deletedContactCleanupPendingPublicKeys,
+        profileRecoveryPending = profileRecoveryPending,
     )
 }
 
