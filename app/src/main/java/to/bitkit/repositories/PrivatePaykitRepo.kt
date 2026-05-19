@@ -66,7 +66,6 @@ class PrivatePaykitRepo @Inject constructor(
         private const val RECOVERY_MARKER_STAGE_INIT = "init"
         private const val RECOVERY_MARKER_STAGE_RESPONSE = "response"
         private const val RECOVERY_MARKER_STAGE_FINAL = "final"
-        private const val COMPLETED_LINK_RECOVERY_MARKER_GRACE_SECONDS = 5 * 60L
         private const val FRESH_LINK_INITIAL_PUBLISH_DELAY_SECONDS = 8L
         private const val PENDING_PUBLICATION_RETRY_ATTEMPTS = 60
         private val privateInvoiceExpiry = 24.hours
@@ -1840,7 +1839,7 @@ class PrivatePaykitRepo @Inject constructor(
     private fun shouldReplaceUsableLink(marker: RecoveryMarker, publicKey: String): Boolean {
         if (isCompletedRecoveryMarker(marker, publicKey)) return false
         val linkCompletedAt = stateStore.currentState()?.contacts?.get(publicKey)?.linkCompletedAt ?: return true
-        return marker.createdAt > linkCompletedAt + COMPLETED_LINK_RECOVERY_MARKER_GRACE_SECONDS
+        return marker.createdAt > linkCompletedAt
     }
 
     private suspend fun settledPrivateInvoicePaymentHashes(): List<String> {

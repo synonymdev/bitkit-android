@@ -38,10 +38,12 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrivatePaykitContactLinkBackupV1
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -260,6 +262,51 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(emptyMap(), snapshot.remoteEndpoints)
         assertNull(snapshot.linkCompletedAt)
         assertEquals(NOW_SECONDS, snapshot.handshakeUpdatedAt)
+    }
+
+    @Test
+    fun `prepareSavedContacts accepts newer recovery marker after recent link completion`() = test {
+        val remoteAttemptId = "remote-attempt"
+        startForegroundWithSharingEnabled()
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(linkCompletedAt = NOW_SECONDS - 1),
+            ),
+        )
+        whenever(keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name))
+            .thenReturn(secretStateJson())
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("session")
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
+        whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
+        val remoteMarkerPath = recoveryMarkerPath(CONTACT_KEY, OWN_KEY)
+        val remoteMarkerJson = recoveryMarkerJson(
+            writerPublicKey = CONTACT_KEY,
+            readerPublicKey = OWN_KEY,
+            stage = "init",
+            attemptId = remoteAttemptId,
+            createdAt = NOW_SECONDS,
+        )
+        whenever(pubkyService.fetchFileString(any())).thenAnswer {
+            val uri = it.getArgument<String>(0)
+            if (uri.contains(remoteMarkerPath)) remoteMarkerJson else throw PrivatePaykitTestError("not found")
+        }
+        whenever(pubkyService.acceptEncryptedLink(SECRET_KEY_HEX, CONTACT_KEY)).thenReturn(HANDSHAKE_ID)
+        whenever(pubkyService.advanceHandshake(HANDSHAKE_ID))
+            .thenAnswer { throw PrivatePaykitTestError("transition_transport failed isHandshake") }
+        whenever(pubkyService.serializeEncryptedLinkHandshake(HANDSHAKE_ID)).thenReturn(UPDATED_HANDSHAKE_SNAPSHOT)
+
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+
+        verify(pubkyService).closeEncryptedLink(LINK_ID)
+        verify(pubkyService).acceptEncryptedLink(SECRET_KEY_HEX, CONTACT_KEY)
+        verify(pubkyService, never()).initiateEncryptedLink(SECRET_KEY_HEX, CONTACT_KEY)
+        val snapshot = sut.backupSnapshot().getOrThrow()?.get(CONTACT_KEY)
+        assertNotNull(snapshot)
+        assertEquals(remoteAttemptId, snapshot.responderRecoveryAttemptId)
+        assertNull(snapshot.linkSnapshotHex)
+        assertEquals(UPDATED_HANDSHAKE_SNAPSHOT, snapshot.handshakeSnapshotHex)
     }
 
     @Test
@@ -998,6 +1045,27 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.advanceHandshake(HANDSHAKE_ID))
             .thenAnswer { throw PrivatePaykitTestError("transition_transport failed isHandshake") }
         whenever(pubkyService.serializeEncryptedLinkHandshake(HANDSHAKE_ID)).thenReturn(UPDATED_HANDSHAKE_SNAPSHOT)
+    }
+
+    private fun recoveryMarkerJson(
+        writerPublicKey: String,
+        readerPublicKey: String,
+        stage: String,
+        attemptId: String,
+        createdAt: Long,
+    ): String {
+        val path = recoveryMarkerPath(writerPublicKey, readerPublicKey)
+        return """{"version":1,"path":"$path","stage":"$stage","attemptId":"$attemptId","createdAt":$createdAt}"""
+    }
+
+    private fun recoveryMarkerPath(writerPublicKey: String, readerPublicKey: String): String {
+        val writer = checkNotNull(PubkyPublicKeyFormat.normalized(writerPublicKey))
+        val reader = checkNotNull(PubkyPublicKeyFormat.normalized(readerPublicKey))
+        val material = "bitkit-private-paykit-recovery-v1|$writer|$reader"
+        val markerId = MessageDigest.getInstance("SHA-256")
+            .digest(material.encodeToByteArray())
+            .joinToString(separator = "") { "%02x".format(it) }
+        return "/pub/paykit/v0/private-recovery/$markerId.json"
     }
 
     private fun startForegroundWithSharingEnabled() {
