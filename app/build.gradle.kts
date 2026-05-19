@@ -88,8 +88,12 @@ fun String.isSubsequenceOf(value: String): Boolean {
 }
 
 val androidTestTaskNames = androidTestAnnotationNames.map { androidTestTaskName(it) }
+val requestedBaseAndroidTestTaskNames = requestedTaskNames.filter { taskName ->
+    taskName == baseAndroidTestTaskName ||
+        isTaskNameAbbreviation(taskName, baseAndroidTestTaskName)
+}
 val abbreviatedAndroidTestTaskNames = requestedTaskNames.filter { taskName ->
-    taskName != baseAndroidTestTaskName &&
+    taskName !in requestedBaseAndroidTestTaskNames &&
         taskName !in androidTestTaskNames &&
         androidTestTaskNames.any { isTaskNameAbbreviation(taskName, it) }
 }
@@ -100,7 +104,7 @@ require(abbreviatedAndroidTestTaskNames.isEmpty()) {
 val requestedAndroidTestAnnotationTaskNames = requestedTaskNames.filter { taskName ->
     taskName in androidTestTaskNames
 }
-require(baseAndroidTestTaskName !in requestedTaskNames || requestedAndroidTestAnnotationTaskNames.isEmpty()) {
+require(requestedBaseAndroidTestTaskNames.isEmpty() || requestedAndroidTestAnnotationTaskNames.isEmpty()) {
     "Do not combine '$baseAndroidTestTaskName' with generated Android test lane tasks. Requested lanes: " +
         requestedAndroidTestAnnotationTaskNames.joinToString(", ")
 }
