@@ -52,6 +52,7 @@ import to.bitkit.test.annotations.DeviceIntegration
 import to.bitkit.test.annotations.DeviceUiIntegration
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.viewmodels.CurrencyViewModel
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Named
@@ -86,7 +87,8 @@ class CalculatorCardIntegrationTest {
     lateinit var cacheStore: CacheStore
 
     private lateinit var viewModelStore: ViewModelStore
-    private lateinit var viewModel: CalculatorViewModel
+    private lateinit var calculatorViewModel: CalculatorViewModel
+    private lateinit var currencyViewModel: CurrencyViewModel
     private lateinit var previousWidgetsData: WidgetsData
     private lateinit var previousSettingsData: SettingsData
     private lateinit var previousCacheData: AppCacheData
@@ -132,7 +134,8 @@ class CalculatorCardIntegrationTest {
             }
         }
 
-        viewModel = createViewModel()
+        calculatorViewModel = createCalculatorViewModel()
+        currencyViewModel = createCurrencyViewModel()
         clearCalculatorValues()
     }
 
@@ -194,7 +197,7 @@ class CalculatorCardIntegrationTest {
         )
     }
 
-    private fun createViewModel(): CalculatorViewModel {
+    private fun createCalculatorViewModel(): CalculatorViewModel {
         viewModelStore = ViewModelStore()
         return ViewModelProvider(
             viewModelStore,
@@ -203,18 +206,31 @@ class CalculatorCardIntegrationTest {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return CalculatorViewModel(
                         widgetsRepo = widgetsRepo,
-                        currencyRepo = currencyRepo,
                     ) as T
                 }
             },
         )[CalculatorViewModel::class.java]
     }
 
+    private fun createCurrencyViewModel(): CurrencyViewModel = ViewModelProvider(
+        viewModelStore,
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return CurrencyViewModel(
+                    currencyRepo = currencyRepo,
+                ) as T
+            }
+        },
+    )[CurrencyViewModel::class.java]
+
     private fun setCalculatorCard() {
         composeTestRule.setContent {
             AppThemeSurface {
                 CalculatorCard(
-                    calculatorViewModel = viewModel,
+                    currencyViewModel = currencyViewModel,
+                    calculatorViewModel = calculatorViewModel,
+                    showWidgetTitle = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -223,14 +239,16 @@ class CalculatorCardIntegrationTest {
     }
 
     private fun clearCalculatorValues() {
-        viewModel.onBtcInputChanged("")
+        calculatorViewModel.updateCalculatorValues(
+            fiatValue = "",
+            btcValue = "",
+        )
         composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
             val calculatorValues = widgetsRepo.widgetsDataFlow.value.calculatorValues
-            viewModel.uiState.value.btcValue.isEmpty() &&
-                viewModel.uiState.value.fiatValue.isEmpty() &&
+            calculatorViewModel.calculatorValues.value.btcValue.isEmpty() &&
+                calculatorViewModel.calculatorValues.value.fiatValue.isEmpty() &&
                 calculatorValues.btcValue.isEmpty() &&
-                calculatorValues.fiatValue.isEmpty() &&
-                calculatorValues.satsValue == 0L
+                calculatorValues.fiatValue.isEmpty()
         }
     }
 
@@ -257,14 +275,14 @@ class CalculatorCardIntegrationTest {
     ) {
         runCatching {
             composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
-                viewModel.uiState.value.btcValue == btcValue &&
-                    viewModel.uiState.value.fiatValue == fiatValue
+                calculatorViewModel.calculatorValues.value.btcValue == btcValue &&
+                    calculatorViewModel.calculatorValues.value.fiatValue == fiatValue
             }
         }.onFailure {
             throw AssertionError(
                 buildString {
-                    append("Expected uiState btcValue='$btcValue', fiatValue='$fiatValue', ")
-                    append("but was '${viewModel.uiState.value}'. Persisted values were ")
+                    append("Expected calculatorValues btcValue='$btcValue', fiatValue='$fiatValue', ")
+                    append("but was '${calculatorViewModel.calculatorValues.value}'. Persisted values were ")
                     append("'${widgetsRepo.widgetsDataFlow.value.calculatorValues}'. Semantics tree:\n")
                     append(composeTestRule.onRoot(useUnmergedTree = true).printToString())
                 },
@@ -275,8 +293,6 @@ class CalculatorCardIntegrationTest {
         val expectedValues = CalculatorValues(
             btcValue = btcValue,
             fiatValue = fiatValue,
-            satsValue = btcValue.toLong(),
-            displayUnit = BitcoinDisplayUnit.MODERN,
         )
         runCatching {
             composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
@@ -314,8 +330,6 @@ class CalculatorCardIntegrationTest {
             CalculatorValues(
                 btcValue = btcValue,
                 fiatValue = fiatValue,
-                satsValue = btcValue.toLong(),
-                displayUnit = BitcoinDisplayUnit.MODERN,
             ),
             widgetsRepo.widgetsDataFlow.value.calculatorValues,
         )
