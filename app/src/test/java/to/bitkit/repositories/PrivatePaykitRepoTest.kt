@@ -903,6 +903,37 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `beginSavedContactPayment defers public fallback while private recovery is pending`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(
+                    lastLocalPayloadHash = LOCAL_PAYLOAD_HASH,
+                    linkCompletedAt = NOW_SECONDS - 60,
+                    recoveryStartedAt = NOW_SECONDS,
+                ),
+            ),
+        )
+        whenever(keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name))
+            .thenReturn(secretStateJson())
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(pubkyService.fetchFileString(any())).thenAnswer { throw PrivatePaykitTestError("not found") }
+        whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
+        whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
+        whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
+        whenever(publicPaykitRepo.beginPayment(CONTACT_KEY))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("bitcoin:public")))
+        rememberSavedContact()
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.NoEndpoint, result)
+        verify(publicPaykitRepo, never()).beginPayment(any())
+    }
+
+    @Test
     fun `discardRemoteOnchainEndpoints removes attempted private address from cache`() = test {
         restoreContactBackup()
 

@@ -42,6 +42,11 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
+private data class PrivatePaymentAttempt(
+    val result: Result<PublicPaykitPaymentResult>,
+    val shouldDeferPublicFallback: Boolean,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @Singleton
 @Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
@@ -68,9 +73,11 @@ class PrivatePaykitRepo @Inject constructor(
         private const val RECOVERY_MARKER_STAGE_FINAL = "final"
         private const val FRESH_LINK_INITIAL_PUBLISH_DELAY_SECONDS = 8L
         private const val PENDING_PUBLICATION_RETRY_ATTEMPTS = 60
+        private const val PRIVATE_PAYMENT_RECOVERY_RETRY_ATTEMPTS = 12
         private val privateInvoiceExpiry = 24.hours
         private val invoiceRefreshBuffer = 30.minutes
         private val pendingPublicationRetryDelay = 5.seconds
+        private val privatePaymentRecoveryRetryDelay = 2.seconds
 
         fun shouldInitiate(ownPublicKey: String, remotePublicKey: String): Boolean {
             val own = PubkyPublicKeyFormat.normalized(ownPublicKey) ?: ownPublicKey
@@ -321,7 +328,8 @@ class PrivatePaykitRepo @Inject constructor(
                     return@runCatching publicPaykitRepo.beginPayment(normalizedKey).getOrThrow()
                 }
 
-                val privateResult = runCatching { beginPrivatePayment(normalizedKey).getOrThrow() }
+                val privateAttempt = beginPrivatePaymentWithRecoveryRetry(normalizedKey)
+                val privateResult = privateAttempt.result
                     .onFailure {
                         if (it is CancellationException) throw it
                         Logger.warn(
@@ -333,6 +341,12 @@ class PrivatePaykitRepo @Inject constructor(
                     .getOrNull()
 
                 if (privateResult is PublicPaykitPaymentResult.Opened) return@runCatching privateResult
+                if (
+                    privateAttempt.shouldDeferPublicFallback ||
+                    shouldDeferPublicFallbackForPrivateRecovery(normalizedKey)
+                ) {
+                    return@runCatching privateResult ?: PublicPaykitPaymentResult.NoEndpoint
+                }
                 publicPaykitRepo.beginPayment(normalizedKey).getOrThrow()
             }
         }
@@ -574,6 +588,44 @@ class PrivatePaykitRepo @Inject constructor(
                 cachedResult
             }
         }
+
+    private suspend fun beginPrivatePaymentWithRecoveryRetry(publicKey: String): PrivatePaymentAttempt {
+        var shouldDeferPublicFallback = shouldDeferPublicFallbackForPrivateRecovery(publicKey)
+        var result = runCatching { beginPrivatePayment(publicKey).getOrThrow() }
+        repeat(PRIVATE_PAYMENT_RECOVERY_RETRY_ATTEMPTS) {
+            shouldDeferPublicFallback = shouldDeferPublicFallback ||
+                shouldDeferPublicFallbackForPrivateRecovery(publicKey)
+            if (!shouldRetryPrivatePaymentBeforePublicFallback(publicKey, result, shouldDeferPublicFallback)) {
+                return PrivatePaymentAttempt(result, shouldDeferPublicFallback)
+            }
+            delay(privatePaymentRecoveryRetryDelay)
+            result = runCatching { beginPrivatePayment(publicKey).getOrThrow() }
+        }
+        shouldDeferPublicFallback = shouldDeferPublicFallback ||
+            shouldDeferPublicFallbackForPrivateRecovery(publicKey)
+        return PrivatePaymentAttempt(result, shouldDeferPublicFallback)
+    }
+
+    private suspend fun shouldRetryPrivatePaymentBeforePublicFallback(
+        publicKey: String,
+        result: Result<PublicPaykitPaymentResult>,
+        shouldDeferPublicFallback: Boolean,
+    ): Boolean {
+        if (result.getOrNull() is PublicPaykitPaymentResult.Opened) return false
+        result.exceptionOrNull()?.let {
+            if (it is CancellationException) throw it
+            if (it is PrivatePaykitError.PrivateUnavailable) return true
+        }
+        return shouldDeferPublicFallback || shouldDeferPublicFallbackForPrivateRecovery(publicKey)
+    }
+
+    private suspend fun shouldDeferPublicFallbackForPrivateRecovery(publicKey: String): Boolean {
+        val contactState = ensureState().contacts[publicKey] ?: return false
+        return contactState.recoveryStartedAt != null ||
+            contactState.mainRecoveryAttemptId != null ||
+            contactState.responderRecoveryAttemptId != null ||
+            (contactState.handshakeSnapshotHex != null && contactState.linkCompletedAt == null)
+    }
 
     private suspend fun cachedPrivatePaymentResult(publicKey: String): PublicPaykitPaymentResult {
         val cachedEntries = ensureState().contacts[publicKey]?.remoteEndpoints.orEmpty()
