@@ -309,6 +309,13 @@ private fun ColumnScope.Numpad(
                     decimalSeparator = calculatorDecimalSeparator(),
                     errorKey = state.errorKey,
                     includeNavigationBarsPadding = true,
+                    onDeleteLongPress = {
+                        state.clearError()
+                        when (input) {
+                            MoneyType.BITCOIN -> onBtcChange("")
+                            MoneyType.FIAT -> onFiatChange("")
+                        }
+                    },
                     modifier = Modifier
                         .testTag("CalculatorNumberPad")
                 )

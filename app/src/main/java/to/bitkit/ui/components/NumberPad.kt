@@ -75,6 +75,7 @@ fun NumberPad(
     decimalSeparator: String = KEY_DECIMAL,
     errorKey: String? = null,
     includeNavigationBarsPadding: Boolean = false,
+    onDeleteLongPress: (() -> Unit)? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -152,6 +153,7 @@ fun NumberPad(
             item {
                 NumberPadDeleteButton(
                     onPress = { onPress(KEY_DELETE) },
+                    onLongPress = onDeleteLongPress,
                     height = buttonHeight,
                     modifier = Modifier.testTag("NRemove"),
                 )
@@ -182,6 +184,7 @@ fun NumberPad(
         decimalSeparator = decimalSeparator,
         errorKey = uiState.errorKey,
         includeNavigationBarsPadding = includeNavigationBarsPadding,
+        onDeleteLongPress = viewModel::clearInput,
     )
 }
 
@@ -242,13 +245,15 @@ internal fun NumberPadDeleteButton(
     onPress: () -> Unit,
     height: Dp,
     modifier: Modifier = Modifier,
+    onLongPress: (() -> Unit)? = null,
 ) {
     NumberPadKeyIcon(
         icon = R.drawable.ic_backspace,
         contentDescription = stringResource(R.string.common__delete),
         onClick = onPress,
+        onLongClick = onLongPress,
         height = height,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -259,11 +264,13 @@ fun NumberPadKeyIcon(
     onClick: () -> Unit,
     height: Dp,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     NumberPadKey(
         onClick = onClick,
+        onLongClick = onLongClick,
         height = height,
-        modifier = modifier,
+        modifier = modifier
     ) {
         Icon(
             painter = painterResource(icon),
@@ -278,6 +285,7 @@ fun NumberPadKey(
     height: Dp,
     modifier: Modifier = Modifier,
     haptic: HapticFeedbackType = pressHaptic,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable (BoxScope.() -> Unit),
 ) {
     val haptics = LocalHapticFeedback.current
@@ -287,10 +295,20 @@ fun NumberPadKey(
         modifier = modifier
             .height(height)
             .fillMaxWidth()
-            .clickableAlpha(ALPHA_PRESSED, debounce = Duration.ZERO) {
-                haptics.performHapticFeedback(haptic)
-                onClick()
-            },
+            .clickableAlpha(
+                pressedAlpha = ALPHA_PRESSED,
+                debounce = Duration.ZERO,
+                onLongClick = onLongClick?.let {
+                    {
+                        haptics.performHapticFeedback(haptic)
+                        it()
+                    }
+                },
+                onClick = {
+                    haptics.performHapticFeedback(haptic)
+                    onClick()
+                },
+            ),
     )
 }
 
