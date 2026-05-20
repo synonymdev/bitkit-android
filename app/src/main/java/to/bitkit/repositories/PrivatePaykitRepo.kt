@@ -348,7 +348,6 @@ class PrivatePaykitRepo @Inject constructor(
                             context = TAG,
                         )
                     }
-                    clearAwaitingRecoveredRemoteEndpoints(normalizedKey)
                     return@runCatching privateResult ?: PublicPaykitPaymentResult.NoEndpoint
                 }
                 privateAttempt.result.exceptionOrNull()?.let {
@@ -595,7 +594,10 @@ class PrivatePaykitRepo @Inject constructor(
                 }
 
                 val cachedResult = cachedPrivatePaymentResult(publicKey)
-                if (cachedResult is PublicPaykitPaymentResult.Opened) return@runCatching cachedResult
+                if (cachedResult is PublicPaykitPaymentResult.Opened) {
+                    clearAwaitingRecoveredRemoteEndpoints(publicKey)
+                    return@runCatching cachedResult
+                }
                 staleFetchError?.let { throw it }
 
                 cachedResult
@@ -648,7 +650,7 @@ class PrivatePaykitRepo @Inject constructor(
         if (!contactState.awaitingRecoveredRemoteEndpoints) return
 
         contactState.awaitingRecoveredRemoteEndpoints = false
-        persistState()
+        persistState(markWalletBackup = true)
     }
 
     private suspend fun cachedPrivatePaymentResult(publicKey: String): PublicPaykitPaymentResult {
@@ -1095,7 +1097,6 @@ class PrivatePaykitRepo @Inject constructor(
 
                 val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
                 contactState.remoteEndpoints = remoteEntries.map { StoredPaymentEntry(it.methodId, it.endpointData) }
-                contactState.awaitingRecoveredRemoteEndpoints = false
                 persistState(markWalletBackup = true)
                 remoteEntries.count()
             }
