@@ -67,13 +67,11 @@ internal fun formatBitcoinValue(
     return when (displayUnit) {
         BitcoinDisplayUnit.MODERN -> formatGroupedInteger(
             value = btcValue.filter { it.isDigit() },
-            groupingSeparator = SATS_GROUPING_SEPARATOR,
         )
 
         BitcoinDisplayUnit.CLASSIC -> formatGroupedDecimal(
             value = sanitizeDecimalInput(btcValue, locale),
             groupingSeparator = SATS_GROUPING_SEPARATOR,
-            decimalSeparator = DECIMAL_SEPARATOR,
         )
     }
 }
@@ -94,7 +92,6 @@ internal fun formatFiatValue(
     return formatGroupedDecimal(
         value = normalizedFiatValue,
         groupingSeparator = FIAT_GROUPING_SEPARATOR,
-        decimalSeparator = DECIMAL_SEPARATOR,
     )
 }
 
@@ -216,20 +213,18 @@ private fun shouldTreatCommaAsGrouping(
 
 private fun formatGroupedInteger(
     value: String,
-    groupingSeparator: Char,
 ): String {
     if (value.isEmpty()) return ""
     val normalized = value.trimStart('0').ifEmpty { "0" }
-    return normalized.reversed().chunked(GROUP_SIZE).joinToString(groupingSeparator.toString()).reversed()
+    return normalized.reversed().chunked(GROUP_SIZE).joinToString(SATS_GROUPING_SEPARATOR.toString()).reversed()
 }
 
 private fun formatGroupedDecimal(
     value: String,
     groupingSeparator: Char,
-    decimalSeparator: Char,
 ): String {
     if (value.isEmpty()) return ""
-    if (value == ".") return decimalSeparator.toString()
+    if (value == ".") return DECIMAL_SEPARATOR.toString()
 
     val decimalIndex = value.indexOf('.')
     if (decimalIndex == -1) {
@@ -244,7 +239,7 @@ private fun formatGroupedDecimal(
     return formatGroupedIntegerPreservingZeros(
         value = integerPart,
         groupingSeparator = groupingSeparator,
-    ) + decimalSeparator + decimalPart
+    ) + DECIMAL_SEPARATOR + decimalPart
 }
 
 private fun appendDecimalSeparator(

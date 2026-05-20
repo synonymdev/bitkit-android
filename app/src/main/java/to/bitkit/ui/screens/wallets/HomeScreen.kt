@@ -697,7 +697,9 @@ private fun WidgetsPage(
             firstCalculatorTopPaddingTarget = 0.dp
             return@LaunchedEffect
         }
-        withFrameNanos { }
+        withFrameNanos {
+            // Wait for the focused calculator and number pad bounds to settle before measuring.
+        }
 
         val page = latestPageBounds ?: return@LaunchedEffect
         val numberPad = latestNumberPadBounds ?: return@LaunchedEffect
@@ -923,8 +925,8 @@ private fun Widgets(
     }
 
     Column(
-        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxWidth()
     ) {
         widgets.forEach { widgetsWithPosition ->
             when (widgetsWithPosition.type) {
