@@ -829,11 +829,13 @@ private fun Modifier.dismissCalculatorInputOnOutsideTap(
             if ((pointer.position - down.position).getDistance() > viewConfiguration.touchSlop) {
                 isTap = false
             }
-            isPointerUp = pointer.changedToUpIgnoreConsumed()
-        }
-
-        if (isTap && !calculator.contains(tapPositionInRoot)) {
-            onDismiss()
+            if (pointer.changedToUpIgnoreConsumed()) {
+                isPointerUp = true
+                if (isTap && !calculator.contains(tapPositionInRoot)) {
+                    pointer.consume()
+                    onDismiss()
+                }
+            }
         }
     }
 }
