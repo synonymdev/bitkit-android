@@ -1009,6 +1009,5 @@
     <string name="widgets__widget__edit_default">Predeterminat</string>
     <string name="widgets__widget__edit_description">Si us plau, selecciona quins camps vols mostrar al giny {name}.</string>
     <string name="widgets__widget__nav_title">Giny</string>
-    <string name="widgets__widget__source">Origen</string>
     <string name="widgets__widgets">Ginys</string>
 </resources>

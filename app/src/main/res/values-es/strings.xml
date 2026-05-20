@@ -976,7 +976,6 @@
     <string name="widgets__widget__nav_title">Widget</string>
     <string name="widgets__widget__edit_custom">Personalizar</string>
     <string name="widgets__widget__edit_description">Por favor, seleccione cuales campos quiere mostrar en el widget {name}.</string>
-    <string name="widgets__widget__source">Fuente</string>
     <string name="widgets__add">Añadir Widget</string>
     <string name="widgets__delete__title">¿Borrar Widget?</string>
     <string name="widgets__delete__description">¿Está seguro de querer borrar ‘{name}‘ de sus widgets?</string>

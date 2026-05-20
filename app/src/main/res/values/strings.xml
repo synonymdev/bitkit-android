@@ -1149,7 +1149,8 @@
     <string name="wallet__transfer_to_spending">Transfer To Spending</string>
     <string name="wallet__withdraw_error">Your withdrawal was unsuccessful. Please scan the QR code again or contact support.</string>
     <string name="widgets__add">Add Widget</string>
-    <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks.</string>
+    <string name="widgets__blocks__data_header">Data (max 4)</string>
+    <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks. Powered by mempool.space.</string>
     <string name="widgets__blocks__field__block">Block</string>
     <string name="widgets__blocks__field__date">Date</string>
     <string name="widgets__blocks__field__fees">Fees</string>
@@ -1201,6 +1202,5 @@
     <string name="widgets__widget__settings">Widget Settings</string>
     <string name="widgets__widget__size_small">Small</string>
     <string name="widgets__widget__size_wide">Wide</string>
-    <string name="widgets__widget__source">Source</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>

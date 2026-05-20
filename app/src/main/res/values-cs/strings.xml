@@ -1009,6 +1009,5 @@
     <string name="widgets__widget__edit_default">Výchozí</string>
     <string name="widgets__widget__edit_description">Vyberte, která pole chcete zobrazit ve widgetu {name}.</string>
     <string name="widgets__widget__nav_title">Widget</string>
-    <string name="widgets__widget__source">Zdroj</string>
     <string name="widgets__widgets">Widgety</string>
 </resources>

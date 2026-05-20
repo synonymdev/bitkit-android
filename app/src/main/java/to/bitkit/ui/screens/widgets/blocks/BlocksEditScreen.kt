@@ -23,6 +23,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.BlocksWidgetField
+import to.bitkit.models.widget.enabledFields
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
@@ -50,7 +52,6 @@ fun BlocksEditScreen(
         date = "",
         transactionCount = "",
         size = "",
-        source = "",
         fees = "",
     )
 
@@ -58,13 +59,7 @@ fun BlocksEditScreen(
         onBack = onBack,
         blocksPreferences = customPreference,
         block = currentBlock ?: blockPlaceholder,
-        onClickShowBlock = { blocksViewModel.toggleShowBlock() },
-        onClickShowTime = { blocksViewModel.toggleShowTime() },
-        onClickShowDate = { blocksViewModel.toggleShowDate() },
-        onClickShowTransactions = { blocksViewModel.toggleShowTransactions() },
-        onClickShowSize = { blocksViewModel.toggleShowSize() },
-        onClickShowFees = { blocksViewModel.toggleShowFees() },
-        onClickShowSource = { blocksViewModel.toggleShowSource() },
+        onToggleField = { blocksViewModel.toggleField(it) },
         onClickReset = { blocksViewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
         modifier = modifier
@@ -74,13 +69,7 @@ fun BlocksEditScreen(
 @Composable
 private fun Content(
     onBack: () -> Unit,
-    onClickShowBlock: () -> Unit,
-    onClickShowTime: () -> Unit,
-    onClickShowDate: () -> Unit,
-    onClickShowTransactions: () -> Unit,
-    onClickShowSize: () -> Unit,
-    onClickShowFees: () -> Unit,
-    onClickShowSource: () -> Unit,
+    onToggleField: (BlocksWidgetField) -> Unit,
     onClickReset: () -> Unit,
     onClickPreview: () -> Unit,
     blocksPreferences: BlocksPreferences,
@@ -103,75 +92,23 @@ private fun Content(
             VerticalSpacer(16.dp)
 
             Caption13Up(
-                text = stringResource(R.string.widgets__widget__data),
+                text = stringResource(R.string.widgets__blocks__data_header),
                 color = Colors.White64,
                 modifier = Modifier
                     .padding(bottom = 16.dp)
                     .testTag("data_section_header")
             )
 
-            BlockEditOptionRow(
-                leadingIcon = R.drawable.ic_cube,
-                label = stringResource(R.string.widgets__blocks__field__block),
-                value = block.height,
-                isEnabled = blocksPreferences.showBlock,
-                onClick = onClickShowBlock,
-                testTagPrefix = "block",
-            )
-
-            BlockEditOptionRow(
-                leadingIcon = R.drawable.ic_clock,
-                label = stringResource(R.string.widgets__blocks__field__time),
-                value = block.time,
-                isEnabled = blocksPreferences.showTime,
-                onClick = onClickShowTime,
-                testTagPrefix = "time",
-            )
-
-            BlockEditOptionRow(
-                leadingIcon = R.drawable.ic_calendar,
-                label = stringResource(R.string.widgets__blocks__field__date),
-                value = block.date,
-                isEnabled = blocksPreferences.showDate,
-                onClick = onClickShowDate,
-                testTagPrefix = "date",
-            )
-
-            BlockEditOptionRow(
-                leadingIcon = R.drawable.ic_transfer,
-                label = stringResource(R.string.widgets__blocks__field__transactions),
-                value = block.transactionCount,
-                isEnabled = blocksPreferences.showTransactions,
-                onClick = onClickShowTransactions,
-                testTagPrefix = "transactions",
-            )
-
-            BlockEditOptionRow(
-                leadingIcon = R.drawable.ic_file_text,
-                label = stringResource(R.string.widgets__blocks__field__size),
-                value = block.size,
-                isEnabled = blocksPreferences.showSize,
-                onClick = onClickShowSize,
-                testTagPrefix = "size",
-            )
-
-            BlockEditOptionRow(
-                leadingIcon = R.drawable.ic_coins,
-                label = stringResource(R.string.widgets__blocks__field__fees),
-                value = block.fees,
-                isEnabled = blocksPreferences.showFees,
-                onClick = onClickShowFees,
-                testTagPrefix = "fees",
-            )
-
-            BlockEditOptionRow(
-                leadingIcon = R.drawable.ic_globe,
-                label = stringResource(R.string.widgets__widget__source),
-                value = block.source,
-                isEnabled = blocksPreferences.showSource,
-                onClick = onClickShowSource,
-                testTagPrefix = "source",
-            )
+            BlocksWidgetField.entries.forEach { field ->
+                BlockEditOptionRow(
+                    leadingIcon = field.icon,
+                    label = stringResource(field.labelRes),
+                    value = field.value(block),
+                    isEnabled = field.isEnabled(blocksPreferences),
+                    onClick = { onToggleField(field) },
+                    testTagPrefix = field.testTag,
+                )
+            }
 
             FillHeight()
 
@@ -194,9 +131,7 @@ private fun Content(
 
                 PrimaryButton(
                     text = stringResource(R.string.common__preview),
-                    enabled = blocksPreferences.run {
-                        showBlock || showTime || showDate || showTransactions || showSize || showFees || showSource
-                    },
+                    enabled = blocksPreferences.enabledFields().isNotEmpty(),
                     fullWidth = false,
                     onClick = onClickPreview,
                     modifier = Modifier
@@ -277,13 +212,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             onBack = {},
-            onClickShowBlock = {},
-            onClickShowTime = {},
-            onClickShowDate = {},
-            onClickShowTransactions = {},
-            onClickShowSize = {},
-            onClickShowFees = {},
-            onClickShowSource = {},
+            onToggleField = {},
             onClickReset = {},
             onClickPreview = {},
             blocksPreferences = BlocksPreferences(),
@@ -293,7 +222,6 @@ private fun Preview() {
                 date = "01/2/2022",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                source = "mempool.io",
                 fees = "25 059 357",
             ),
         )
@@ -306,13 +234,7 @@ private fun PreviewWithSomeOptionsEnabled() {
     AppThemeSurface {
         Content(
             onBack = {},
-            onClickShowBlock = {},
-            onClickShowTime = {},
-            onClickShowDate = {},
-            onClickShowTransactions = {},
-            onClickShowSize = {},
-            onClickShowFees = {},
-            onClickShowSource = {},
+            onToggleField = {},
             onClickReset = {},
             onClickPreview = {},
             blocksPreferences = BlocksPreferences(
@@ -322,7 +244,6 @@ private fun PreviewWithSomeOptionsEnabled() {
                 showTransactions = true,
                 showSize = false,
                 showFees = false,
-                showSource = true,
             ),
             block = BlockModel(
                 height = "",
@@ -330,7 +251,6 @@ private fun PreviewWithSomeOptionsEnabled() {
                 date = "",
                 transactionCount = "",
                 size = "",
-                source = "",
                 fees = "",
             ),
         )
@@ -343,13 +263,7 @@ private fun PreviewWithAllDisabled() {
     AppThemeSurface {
         Content(
             onBack = {},
-            onClickShowBlock = {},
-            onClickShowTime = {},
-            onClickShowDate = {},
-            onClickShowTransactions = {},
-            onClickShowSize = {},
-            onClickShowFees = {},
-            onClickShowSource = {},
+            onToggleField = {},
             onClickReset = {},
             onClickPreview = {},
             blocksPreferences = BlocksPreferences(
@@ -359,7 +273,6 @@ private fun PreviewWithAllDisabled() {
                 showTransactions = false,
                 showSize = false,
                 showFees = false,
-                showSource = false,
             ),
             block = BlockModel(
                 height = "",
@@ -367,7 +280,6 @@ private fun PreviewWithAllDisabled() {
                 date = "",
                 transactionCount = "",
                 size = "",
-                source = "",
                 fees = "",
             ),
         )

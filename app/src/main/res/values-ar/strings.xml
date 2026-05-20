@@ -1009,6 +1009,5 @@
     <string name="widgets__widget__edit_default">افتراضي</string>
     <string name="widgets__widget__edit_description">يرجى اختيار الحقول التي تريد عرضها في أداة {name}.</string>
     <string name="widgets__widget__nav_title">الأداة</string>
-    <string name="widgets__widget__source">المصدر</string>
     <string name="widgets__widgets">الأدوات</string>
 </resources>

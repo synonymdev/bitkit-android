@@ -1009,6 +1009,5 @@
     <string name="widgets__widget__edit_default">Padrão</string>
     <string name="widgets__widget__edit_description">Por favor, selecione quais campos você deseja exibir no widget {name}.</string>
     <string name="widgets__widget__nav_title">Widget</string>
-    <string name="widgets__widget__source">Fonte</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>

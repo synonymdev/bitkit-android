@@ -933,22 +933,10 @@ private fun Widgets(
         widgets.forEach { widgetsWithPosition ->
             when (widgetsWithPosition.type) {
                 WidgetType.BLOCK -> {
-                    homeUiState.currentBlock?.run {
+                    homeUiState.currentBlock?.let { block ->
                         BlockCard(
-                            showBlock = homeUiState.blocksPreferences.showBlock,
-                            showTime = homeUiState.blocksPreferences.showTime,
-                            showDate = homeUiState.blocksPreferences.showDate,
-                            showTransactions = homeUiState.blocksPreferences.showTransactions,
-                            showSize = homeUiState.blocksPreferences.showSize,
-                            showFees = homeUiState.blocksPreferences.showFees,
-                            showSource = homeUiState.blocksPreferences.showSource,
-                            time = time,
-                            date = date,
-                            transactions = transactionCount,
-                            size = size,
-                            fees = fees,
-                            source = source,
-                            block = height,
+                            preferences = homeUiState.blocksPreferences,
+                            block = block,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("BlocksWidget")
@@ -1175,7 +1163,6 @@ private val previewBlock = BlockModel(
     date = "01/2/2022",
     transactionCount = "2,175",
     size = "1,606kB",
-    source = "mempool.io",
     fees = "25 059 357",
 )
 

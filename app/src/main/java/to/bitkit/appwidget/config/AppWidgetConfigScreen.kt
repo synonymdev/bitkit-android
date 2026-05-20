@@ -34,13 +34,7 @@ fun AppWidgetConfigScreen(
 
         AppWidgetType.BLOCKS -> BlocksConfigContent(
             state = state,
-            onToggleBlock = { viewModel.toggleBlockShowBlock() },
-            onToggleTime = { viewModel.toggleBlockShowTime() },
-            onToggleDate = { viewModel.toggleBlockShowDate() },
-            onToggleTransactions = { viewModel.toggleBlockShowTransactions() },
-            onToggleSize = { viewModel.toggleBlockShowSize() },
-            onToggleFees = { viewModel.toggleBlockShowFees() },
-            onToggleSource = { viewModel.toggleBlockShowSource() },
+            onToggleField = { viewModel.toggleBlockField(it) },
             onReset = { viewModel.resetPreferences() },
             onSave = { viewModel.saveAndFinish(onConfirm) },
             onCancel = onCancel,

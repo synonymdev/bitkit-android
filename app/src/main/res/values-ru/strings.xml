@@ -1037,6 +1037,5 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="widgets__widget__edit_default">По умолчанию</string>
     <string name="widgets__widget__edit_description">Пожалуйста, выберите, какие поля вы хотите отображать в виджете {name}.</string>
     <string name="widgets__widget__nav_title">Виджет</string>
-    <string name="widgets__widget__source">Источник</string>
     <string name="widgets__widgets">Виджеты</string>
 </resources>

@@ -978,7 +978,6 @@
     <string name="widgets__widget__edit_default">Standard</string>
     <string name="widgets__widget__edit_custom">Benutzerdefiniert</string>
     <string name="widgets__widget__edit_description">Bitte wähle die Felder aus, die du im {name} Widget anzeigen möchtest.</string>
-    <string name="widgets__widget__source">Quelle</string>
     <string name="widgets__add">Widget hinzufügen</string>
     <string name="widgets__delete__title">Widget löschen?</string>
     <string name="widgets__delete__description">Bist du sicher, dass du \'{name}\' aus deinen Widgets löschen möchtest?</string>

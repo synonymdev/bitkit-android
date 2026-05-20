@@ -978,7 +978,6 @@
     <string name="widgets__widget__edit_default">Défaut</string>
     <string name="widgets__widget__edit_custom">Personnalisé</string>
     <string name="widgets__widget__edit_description">Veuillez sélectionner les champs que vous souhaitez afficher dans le widget {name}.</string>
-    <string name="widgets__widget__source">Source</string>
     <string name="widgets__add">Ajouter un widget</string>
     <string name="widgets__delete__title">Supprimer le widget ?</string>
     <string name="widgets__delete__description">Êtes-vous sûr de vouloir supprimer \'{name}\' de vos widgets ?</string>

@@ -1009,6 +1009,5 @@
     <string name="widgets__widget__edit_default">Standaard</string>
     <string name="widgets__widget__edit_description">Selecteer welke velden je wilt weergeven in de {name}-widget.</string>
     <string name="widgets__widget__nav_title">Widget</string>
-    <string name="widgets__widget__source">Bron</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>

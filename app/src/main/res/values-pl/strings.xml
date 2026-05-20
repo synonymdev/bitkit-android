@@ -978,7 +978,6 @@
     <string name="widgets__widget__edit_default">Domyślne</string>
     <string name="widgets__widget__edit_custom">Własna</string>
     <string name="widgets__widget__edit_description">Wybierz pola, które chcesz wyświetlić w widgecie {name}.</string>
-    <string name="widgets__widget__source">Źródło</string>
     <string name="widgets__add">Dodaj widget</string>
     <string name="widgets__delete__title">Usunąć widget?</string>
     <string name="widgets__delete__description">Na pewno usunąć widget ‘{name}‘ z twoich widgetów?</string>
