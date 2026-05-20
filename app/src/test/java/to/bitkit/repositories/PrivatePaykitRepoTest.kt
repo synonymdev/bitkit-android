@@ -1157,6 +1157,39 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `beginSavedContactPayment falls back to public for pending non recovery handshake`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(
+                    lastLocalPayloadHash = LOCAL_PAYLOAD_HASH,
+                ),
+            ),
+        )
+        whenever(keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name))
+            .thenReturn(secretStateJson(linkSnapshotHex = null, handshakeSnapshotHex = HANDSHAKE_SNAPSHOT))
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(pubkyService.encryptedLinkHandshakeSnapshotRecipient(HANDSHAKE_SNAPSHOT)).thenReturn(CONTACT_KEY)
+        whenever(
+            pubkyService.restoreEncryptedLinkHandshake(
+                SECRET_KEY_HEX,
+                HANDSHAKE_SNAPSHOT,
+            ),
+        ).thenReturn(HANDSHAKE_ID)
+        whenever(pubkyService.advanceHandshake(HANDSHAKE_ID))
+            .thenAnswer { throw PrivatePaykitTestError("transition_transport failed isHandshake") }
+        whenever(pubkyService.serializeEncryptedLinkHandshake(HANDSHAKE_ID)).thenReturn(UPDATED_HANDSHAKE_SNAPSHOT)
+        whenever(publicPaykitRepo.beginPayment(CONTACT_KEY))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("bitcoin:public")))
+        rememberSavedContact()
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:public"), result)
+        verify(publicPaykitRepo).beginPayment(CONTACT_KEY)
+    }
+
+    @Test
     fun `discardRemoteOnchainEndpoints removes attempted private address from cache`() = test {
         restoreContactBackup()
 

@@ -641,7 +641,6 @@ class PrivatePaykitRepo @Inject constructor(
         return contactState.recoveryStartedAt != null ||
             contactState.mainRecoveryAttemptId != null ||
             contactState.responderRecoveryAttemptId != null ||
-            (contactState.handshakeSnapshotHex != null && contactState.linkCompletedAt == null) ||
             contactState.awaitingRecoveredRemoteEndpoints
     }
 
