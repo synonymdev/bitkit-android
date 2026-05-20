@@ -2683,8 +2683,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun handleLaunchIntent(intent: Intent) = handleDeeplinkIntent(intent)
-
     fun clearPendingPubkyImport() {
         viewModelScope.launch {
             pubkyRepo.clearPendingImport()

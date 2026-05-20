@@ -91,7 +91,7 @@ class MainActivity : FragmentActivity() {
         val consumedLaunchIntent = savedInstanceState?.getString(KEY_CONSUMED_LAUNCH_INTENT)
         val currentLaunchIntent = intent.launchKey()
         if (currentLaunchIntent == null || currentLaunchIntent != consumedLaunchIntent) {
-            appViewModel.handleLaunchIntent(intent)
+            appViewModel.handleDeeplinkIntent(intent)
         }
 
         installSplashScreen()
@@ -207,7 +207,7 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        appViewModel.handleLaunchIntent(intent)
+        appViewModel.handleDeeplinkIntent(intent)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
