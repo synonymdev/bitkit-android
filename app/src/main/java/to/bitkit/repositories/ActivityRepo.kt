@@ -392,9 +392,39 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    suspend fun clearContact(
+        forPaymentId: String,
+        syncLdkPayments: Boolean = true,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            if (syncLdkPayments) {
+                lightningRepo.getPayments().onSuccess {
+                    syncLdkNodePayments(it).getOrThrow()
+                }.getOrThrow()
+            }
+
+            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments)
+            if (activity == null) {
+                Logger.warn(
+                    "Skipped clearing contact for payment '$forPaymentId' because activity was not found",
+                    context = TAG,
+                )
+                return@runCatching
+            }
+            if (activity.contact() == null) return@runCatching
+
+            val updatedAt = nowTimestamp().epochSecond.toULong()
+            val updatedActivity = activity.withContact(null, updatedAt)
+            updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            updateReplacementContactIfNeeded(updatedActivity, null, updatedAt)
+        }.onFailure {
+            Logger.error("Failed to clear contact for payment '$forPaymentId'", it, context = TAG)
+        }
+    }
+
     private suspend fun updateReplacementContactIfNeeded(
         activity: Activity,
-        normalizedKey: String,
+        normalizedKey: String?,
         updatedAt: ULong,
     ) {
         if (activity !is Activity.Onchain || activity.v1.doesExist || activity.v1.txType != PaymentType.SENT) return
@@ -422,7 +452,7 @@ class ActivityRepo @Inject constructor(
         coreService.activity.getActivity(forPaymentId)
             ?: getOnchainActivityByTxId(forPaymentId)?.let { Activity.Onchain(it) }
 
-    private fun Activity.withContact(normalizedKey: String, updatedAt: ULong): Activity = when (this) {
+    private fun Activity.withContact(normalizedKey: String?, updatedAt: ULong): Activity = when (this) {
         is Activity.Lightning -> Activity.Lightning(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
         is Activity.Onchain -> Activity.Onchain(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
     }

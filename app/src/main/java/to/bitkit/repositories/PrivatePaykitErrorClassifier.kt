@@ -52,7 +52,7 @@ internal object PrivatePaykitErrorClassifier {
 
     private fun isNoiseStateFailure(reason: String): Boolean {
         val lowercasedReason = reason.lowercase()
-        return listOf("decrypt", "decryption", "cipher", "noise state", "counter", "invalid tag", "bad mac")
+        return listOf("decrypt", "decryption", "cipher", "invalid tag", "bad mac")
             .any { it in lowercasedReason }
     }
 

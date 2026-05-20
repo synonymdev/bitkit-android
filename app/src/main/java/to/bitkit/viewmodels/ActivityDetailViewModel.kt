@@ -163,6 +163,20 @@ class ActivityDetailViewModel @Inject constructor(
         }
     }
 
+    fun detachContact() {
+        val id = activity?.rawId() ?: return
+        viewModelScope.launch(bgDispatcher) {
+            activityRepo.clearContact(
+                forPaymentId = id,
+                syncLdkPayments = false,
+            ).onSuccess {
+                reloadActivity(id)
+            }.onFailure {
+                Logger.error("Failed to detach contact for activity '$id'", it, context = TAG)
+            }
+        }
+    }
+
     fun fetchTransactionDetails(txid: String) {
         viewModelScope.launch(bgDispatcher) {
             activityRepo.getTransactionDetails(txid)

@@ -97,6 +97,14 @@ internal class PrivatePaykitRecoveryStore(
             return true
         }
 
+        return purgePrivatePaymentStorage(reason)
+    }
+
+    suspend fun purgePrivatePaymentOutboxForProfileRecovery(reason: String): Boolean =
+        purgePrivatePaymentStorage(reason)
+
+    @Suppress("ReturnCount")
+    private suspend fun purgePrivatePaymentStorage(reason: String): Boolean {
         val sessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) ?: return false
         if (sessionSecret.isBlank()) return false
         val rootPath = PRIVATE_STORAGE_ROOT_PATH.removeSuffix("/")

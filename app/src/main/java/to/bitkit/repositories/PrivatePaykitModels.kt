@@ -10,6 +10,7 @@ import to.bitkit.utils.AppError
 sealed class PrivatePaykitError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     data object PrivateUnavailable : PrivatePaykitError("Private Paykit is not available")
     data object PayloadTooLarge : PrivatePaykitError("Private Paykit payload is too large")
+    data object RouteHintsUnavailable : PrivatePaykitError("Reachable private Lightning endpoint is not available yet")
     data object SnapshotRecipientMismatch : PrivatePaykitError("Private Paykit snapshot recipient mismatch")
     data object StaleLinkState : PrivatePaykitError("Private Paykit link state changed")
     class StatePersistenceFailed(cause: Throwable) : PrivatePaykitError("Failed to persist private Paykit state", cause)
@@ -43,12 +44,14 @@ internal data class PrivatePaykitState(
     fun cacheState(
         cleanupPending: Boolean,
         deletedContactCleanupPendingPublicKeys: Set<String>,
+        profileRecoveryPending: Boolean,
     ) = PrivatePaykitCacheData(
         contacts = contacts.mapNotNull { (publicKey, contactState) ->
             (publicKey to contactState.cacheState()).takeIf { contactState.hasCacheState }
         }.toMap(),
         cleanupPending = cleanupPending,
         deletedContactCleanupPendingPublicKeys = deletedContactCleanupPendingPublicKeys,
+        profileRecoveryPending = profileRecoveryPending,
     )
 }
 
@@ -65,6 +68,7 @@ internal data class ContactState(
     var mainRecoveryAttemptId: String? = null,
     var responderRecoveryAttemptId: String? = null,
     var lastCompletedRecoveryAttemptId: String? = null,
+    var awaitingRecoveredRemoteEndpoints: Boolean = false,
     var linkFailureCount: Int = 0,
 ) {
     constructor(cache: PrivatePaykitContactCacheData) : this(
@@ -78,6 +82,7 @@ internal data class ContactState(
         mainRecoveryAttemptId = cache.mainRecoveryAttemptId,
         responderRecoveryAttemptId = cache.responderRecoveryAttemptId,
         lastCompletedRecoveryAttemptId = cache.lastCompletedRecoveryAttemptId,
+        awaitingRecoveredRemoteEndpoints = cache.awaitingRecoveredRemoteEndpoints,
         linkFailureCount = cache.linkFailureCount,
     )
 
@@ -103,6 +108,7 @@ internal data class ContactState(
             mainRecoveryAttemptId != null ||
             responderRecoveryAttemptId != null ||
             lastCompletedRecoveryAttemptId != null ||
+            awaitingRecoveredRemoteEndpoints ||
             linkFailureCount != 0
 
     fun cacheState() = PrivatePaykitContactCacheData(
@@ -116,6 +122,7 @@ internal data class ContactState(
         mainRecoveryAttemptId = mainRecoveryAttemptId,
         responderRecoveryAttemptId = responderRecoveryAttemptId,
         lastCompletedRecoveryAttemptId = lastCompletedRecoveryAttemptId,
+        awaitingRecoveredRemoteEndpoints = awaitingRecoveredRemoteEndpoints,
         linkFailureCount = linkFailureCount,
     )
 }

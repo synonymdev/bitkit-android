@@ -1055,7 +1055,7 @@ class AppViewModel @Inject constructor(
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                     SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                     SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
-                    SendEvent.Contacts -> setSendEffect(SendEffect.NavigateToComingSoon)
+                    SendEvent.Contacts -> setSendEffect(SendEffect.NavigateToContacts)
                 }
             }
         }
@@ -1064,6 +1064,7 @@ class AppViewModel @Inject constructor(
     private val isMainScanner get() = currentSheet.value !is Sheet.Send
 
     private fun onEnterManuallyClick() {
+        clearActiveContactPaymentContext()
         resetAddressInput()
         setSendEffect(SendEffect.NavigateToAddress)
     }
@@ -1302,6 +1303,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onAddressContinue(data: String) {
+        clearActiveContactPaymentContext()
         launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data, routePubkyKeys = true)
     }
 
@@ -1500,6 +1502,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onPasteClick() {
+        clearActiveContactPaymentContext()
         val data = context.getClipboardText()?.trim()
         if (data.isNullOrBlank()) {
             toast(
@@ -1513,6 +1516,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onScanClick() {
+        clearActiveContactPaymentContext()
         setSendEffect(SendEffect.NavigateToScan)
     }
 
@@ -1550,8 +1554,9 @@ class AppViewModel @Inject constructor(
         result: String,
         routePubkyKeys: Boolean,
     ) = withContext(bgDispatcher) {
+        val contactPaymentProfile = activeContactPaymentProfile()
         // always reset state on new scan
-        resetSendState()
+        resetSendState(contactPaymentProfile = contactPaymentProfile)
         resetQuickPay()
 
         val fromMainScanner = isMainScanner
@@ -1651,6 +1656,13 @@ class AppViewModel @Inject constructor(
 
     private fun activeContactPaymentPublicKey() = synchronized(contactPaymentContextLock) {
         activeContactPaymentContext?.publicKey
+    }
+
+    private fun activeContactPaymentProfile(): PubkyProfile? {
+        val publicKey = activeContactPaymentPublicKey() ?: return null
+        return pubkyRepo.contacts.value.firstOrNull {
+            PubkyPublicKeyFormat.matches(it.publicKey, publicKey)
+        } ?: PubkyProfile.placeholder(publicKey)
     }
 
     @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
@@ -2233,7 +2245,7 @@ class AppViewModel @Inject constructor(
                         setSendEffect(SendEffect.NavigateToPending(it.paymentHash, displayAmountSats.toLong()))
                         return@onFailure
                     }
-                    if (contactPublicKey != null && PrivatePaykitRepo.isDuplicatePaymentError(it)) {
+                    if (contactPublicKey != null) {
                         discardContactLightningEndpoint(contactPublicKey, paymentHash)
                     }
                     // Delete pre-activity metadata on failure
@@ -2532,7 +2544,7 @@ class AppViewModel @Inject constructor(
         ).getOrDefault(0u).toLong()
     }
 
-    suspend fun resetSendState() {
+    suspend fun resetSendState(contactPaymentProfile: PubkyProfile? = null) {
         addressValidationJob?.cancel()
         val speed = settingsStore.data.first().defaultTransactionSpeed
         val rates = let {
@@ -2545,6 +2557,7 @@ class AppViewModel @Inject constructor(
             SendUiState(
                 speed = speed,
                 feeRates = rates,
+                contactPaymentProfile = contactPaymentProfile,
             )
         }
     }
@@ -3026,6 +3039,7 @@ data class SendUiState(
     val fees: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val estimatedRoutingFee: ULong = 0uL,
     val lastLightningFee: Long = 0L,
+    val contactPaymentProfile: PubkyProfile? = null,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
@@ -3057,6 +3071,7 @@ sealed class SendEffect {
     data object NavigateToQuickPay : SendEffect()
     data object NavigateToFee : SendEffect()
     data object NavigateToFeeCustom : SendEffect()
+    data object NavigateToContacts : SendEffect()
     data object NavigateToComingSoon : SendEffect()
     data object PaymentSuccess : SendEffect()
     data class NavigateToPending(val paymentHash: String, val amount: Long) : SendEffect()

@@ -228,7 +228,7 @@ class EditProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
             privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
-            privatePaykitRepo.closeAndClear()
+            privatePaykitRepo.closeAndClear(markProfileRecoveryPending = true)
             pubkyRepo.signOut()
                 .onSuccess {
                     _uiState.update { it.copy(isSaving = false) }
@@ -255,7 +255,7 @@ class EditProfileViewModel @Inject constructor(
             )
         }
         privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
-        privatePaykitRepo.closeAndClear()
+        privatePaykitRepo.closeAndClear(markProfileRecoveryPending = true)
         pubkyRepo.deleteProfileWithSessionRetry()
             .onSuccess {
                 _uiState.update { it.copy(isSaving = false) }

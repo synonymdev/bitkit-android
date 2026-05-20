@@ -66,6 +66,7 @@ internal class PrivatePaykitStateStore(
                     } else {
                         emptySet()
                     },
+                    profileRecoveryPending = if (preserveCleanupMarkers) stored.profileRecoveryPending else false,
                 )
             }
             if (markWalletBackup) notifyBackupStateChanged()

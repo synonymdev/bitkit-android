@@ -21,6 +21,7 @@ import com.synonym.bitkitcore.pubkySignUp
 import com.synonym.bitkitcore.startPubkyAuth
 import com.synonym.paykit.FfiHandshakeProgress
 import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.FfiPrivatePaymentsPayload
 import com.synonym.paykit.PaykitAndroid
 import com.synonym.paykit.paykitAcceptEncryptedLink
 import com.synonym.paykit.paykitAdvanceHandshake
@@ -30,6 +31,7 @@ import com.synonym.paykit.paykitEncryptedLinkHandshakeSnapshotRecipient
 import com.synonym.paykit.paykitEncryptedLinkSnapshotRecipient
 import com.synonym.paykit.paykitExportSession
 import com.synonym.paykit.paykitForceSignOut
+import com.synonym.paykit.paykitGeneratePaymentReference
 import com.synonym.paykit.paykitGetCurrentPublicKey
 import com.synonym.paykit.paykitGetPaymentEndpoint
 import com.synonym.paykit.paykitGetPaymentList
@@ -193,10 +195,14 @@ class PubkyService @Inject constructor(
     suspend fun setPrivatePayments(linkId: String, entries: List<FfiPaymentEntry>) =
         ServiceQueue.CORE.background {
             isSetup.await()
-            paykitSetPrivatePayments(linkId, entries)
+            val payload = FfiPrivatePaymentsPayload(
+                reference = paykitGeneratePaymentReference(),
+                entries = entries,
+            )
+            paykitSetPrivatePayments(linkId, payload)
         }
 
-    suspend fun getPrivatePayments(linkId: String): List<FfiPaymentEntry> = ServiceQueue.CORE.background {
+    suspend fun getPrivatePayments(linkId: String): FfiPrivatePaymentsPayload? = ServiceQueue.CORE.background {
         isSetup.await()
         paykitGetPrivatePayments(linkId)
     }

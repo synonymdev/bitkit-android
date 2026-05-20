@@ -34,6 +34,7 @@ data class PrivatePaykitContactLinkBackupV1(
     val recoveryStartedAt: Long? = null,
     val mainRecoveryAttemptId: String? = null,
     val responderRecoveryAttemptId: String? = null,
+    val awaitingRecoveredRemoteEndpoints: Boolean = false,
 )
 
 @Serializable

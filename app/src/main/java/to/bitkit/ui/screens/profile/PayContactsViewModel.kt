@@ -42,9 +42,10 @@ class PayContactsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val settings = settingsStore.data.first()
+            val hasLocalSecretKey = pubkyRepo.hasSecretKey()
             _uiState.update {
                 it.copy(
-                    isPaymentSharingEnabled = resolvedSharingDefault(settings),
+                    isPaymentSharingEnabled = resolvedSharingDefault(settings, hasLocalSecretKey),
                 )
             }
         }
@@ -73,7 +74,7 @@ class PayContactsViewModel @Inject constructor(
                 }
                 .onFailure {
                     val settings = settingsStore.data.first()
-                    val persistedValue = resolvedSharingDefault(settings)
+                    val persistedValue = resolvedSharingDefault(settings, pubkyRepo.hasSecretKey())
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
@@ -93,55 +94,78 @@ class PayContactsViewModel @Inject constructor(
         publicPaykitRepo.syncPublishedEndpoints(publish = true)
             .onFailure { return Result.failure(it) }
 
-        privatePaykitRepo.setContactSharingCleanupPending(false)
-            .onFailure {
-                publicPaykitRepo.syncPublishedEndpoints(publish = false)
-                return Result.failure(it)
-            }
+        val canUsePrivateContactPayments = pubkyRepo.hasSecretKey()
+        if (canUsePrivateContactPayments) {
+            privatePaykitRepo.setContactSharingCleanupPending(false)
+                .onFailure {
+                    publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                    return Result.failure(it)
+                }
+        }
 
         runCatching {
             settingsStore.update {
                 it.copy(
                     hasConfirmedPublicPaykitEndpoints = true,
                     sharesPublicPaykitEndpoints = true,
+                    sharesPrivatePaykitEndpoints = canUsePrivateContactPayments,
                 )
             }
         }.onFailure {
             return Result.failure(it)
         }
 
-        privatePaykitRepo.prepareSavedContacts(contacts)
+        if (canUsePrivateContactPayments) {
+            privatePaykitRepo.prepareSavedContacts(contacts)
+        }
 
         return Result.success(Unit)
     }
 
     private suspend fun disableContactPayments(contacts: List<String>): Result<Unit> {
+        val previous = settingsStore.data.first()
         runCatching {
             settingsStore.update {
                 it.copy(
                     hasConfirmedPublicPaykitEndpoints = true,
                     sharesPublicPaykitEndpoints = false,
+                    sharesPrivatePaykitEndpoints = false,
                 )
             }
         }.onFailure {
             return Result.failure(it)
         }
 
-        var cleanupError: Throwable? = null
+        var publicCleanupError: Throwable? = null
+        var privateCleanupError: Throwable? = null
         publicPaykitRepo.syncPublishedEndpoints(publish = false)
-            .onFailure { cleanupError = it }
+            .onFailure { publicCleanupError = it }
 
         privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
-            .onFailure {
-                if (cleanupError == null) cleanupError = it
-            }
+            .onFailure { privateCleanupError = it }
 
-        cleanupError?.let {
-            privatePaykitRepo.setContactSharingCleanupPending(true)
-                .onFailure { markerError ->
-                    it.addSuppressed(markerError)
-                    return Result.failure(it)
+        publicCleanupError?.let { error ->
+            runCatching {
+                settingsStore.update { settings ->
+                    settings.copy(sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints)
                 }
+            }.onFailure { rollbackError ->
+                error.addSuppressed(rollbackError)
+            }
+        }
+
+        val cleanupError = publicCleanupError ?: privateCleanupError
+        publicCleanupError?.let { publicError ->
+            privateCleanupError?.let { privateError -> publicError.addSuppressed(privateError) }
+        }
+        cleanupError?.let {
+            if (privateCleanupError != null) {
+                privatePaykitRepo.setContactSharingCleanupPending(true)
+                    .onFailure { markerError ->
+                        it.addSuppressed(markerError)
+                        return Result.failure(it)
+                    }
+            }
             return Result.failure(it)
         }
 
@@ -159,8 +183,10 @@ class PayContactsViewModel @Inject constructor(
         else -> context.getString(R.string.common__error_body)
     }
 
-    private fun resolvedSharingDefault(settings: SettingsData): Boolean =
-        settings.sharesPublicPaykitEndpoints || !settings.hasConfirmedPublicPaykitEndpoints
+    private fun resolvedSharingDefault(settings: SettingsData, hasLocalSecretKey: Boolean): Boolean =
+        settings.sharesPublicPaykitEndpoints ||
+            (settings.sharesPrivatePaykitEndpoints && hasLocalSecretKey) ||
+            !settings.hasConfirmedPublicPaykitEndpoints
 }
 
 @Immutable

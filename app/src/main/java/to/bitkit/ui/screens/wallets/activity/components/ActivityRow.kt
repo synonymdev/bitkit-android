@@ -38,6 +38,7 @@ import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.PubkyProfile
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
@@ -67,6 +68,7 @@ fun ActivityRow(
     onClick: (String) -> Unit,
     testTag: String,
     title: String? = null,
+    contact: PubkyProfile? = null,
 ) {
     val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(null)
@@ -92,6 +94,9 @@ fun ActivityRow(
     val resolvedTitle = title.takeIf {
         shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
     }
+    val resolvedContact = contact.takeIf {
+        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+    }
 
     LaunchedEffect(item) {
         isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
@@ -110,7 +115,7 @@ fun ActivityRow(
             .padding(16.dp)
             .testTag(testTag)
     ) {
-        ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild)
+        ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild, contact = resolvedContact)
         HorizontalSpacer(16.dp)
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp),

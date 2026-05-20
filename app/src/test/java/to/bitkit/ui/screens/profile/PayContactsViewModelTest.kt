@@ -48,6 +48,7 @@ class PayContactsViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(pubkyRepo.contacts).thenReturn(contactsFlow)
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(true)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -55,7 +56,7 @@ class PayContactsViewModelTest : BaseUnitTest() {
         }
         whenever { publicPaykitRepo.syncPublishedEndpoints(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.setContactSharingCleanupPending(any()) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
@@ -76,10 +77,33 @@ class PayContactsViewModelTest : BaseUnitTest() {
 
         assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
         verify(privatePaykitRepo).setContactSharingCleanupPending(false)
-        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY))
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), false)
         verify(privatePaykitRepo, never()).disableSharingAndPruneUnsavedContactState(any<Collection<String>>())
+    }
+
+    @Test
+    fun `continueToProfile enables only public sharing without local secret key`() = test {
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.setPaymentSharingEnabled(true)
+            sut.continueToProfile()
+            advanceUntilIdle()
+
+            assertEquals(PayContactsEffect.Continue, awaitItem())
+        }
+
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
+        verify(privatePaykitRepo, never()).setContactSharingCleanupPending(false)
+        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
     }
 
     @Test
@@ -102,12 +126,12 @@ class PayContactsViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isLoading)
         verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
         verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
-        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
     }
 
     @Test
     fun `continueToProfile proceeds when private contact preparation fails`() = test {
-        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.failure(PayContactsTestAppError("private setup failed")))
         val sut = createSut()
         advanceUntilIdle()
@@ -123,7 +147,7 @@ class PayContactsViewModelTest : BaseUnitTest() {
         assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
         verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
-        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY))
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), false)
     }
 
     @Test
@@ -175,6 +199,36 @@ class PayContactsViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isLoading)
         assertFalse(sut.uiState.value.isPaymentSharingEnabled)
         verify(privatePaykitRepo).setContactSharingCleanupPending(true)
+    }
+
+    @Test
+    fun `continueToProfile restores public sharing when public cleanup fails`() = test {
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
+        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }
+            .thenReturn(Result.failure(PayContactsTestAppError("public cleanup failed")))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.setPaymentSharingEnabled(false)
+            sut.continueToProfile()
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(sut.uiState.value.isLoading)
+        assertTrue(sut.uiState.value.isPaymentSharingEnabled)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+        verify(privatePaykitRepo, never()).setContactSharingCleanupPending(true)
     }
 
     private fun createSut() = PayContactsViewModel(

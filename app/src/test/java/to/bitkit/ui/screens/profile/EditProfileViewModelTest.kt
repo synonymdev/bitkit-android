@@ -7,6 +7,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
+import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -56,6 +57,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         verify(pubkyRepo).deleteProfileWithSessionRetry()
+        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
     }
 
     @Test
@@ -73,6 +75,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         verify(pubkyRepo).deleteProfileWithSessionRetry()
+        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
     }
 
     @Test
@@ -102,6 +105,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         sut.deleteProfile()
         advanceUntilIdle()
+        clearInvocations(privatePaykitRepo)
 
         sut.effects.test {
             sut.disconnectProfile()
@@ -111,6 +115,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         verify(pubkyRepo).signOut()
+        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
     }
 
     @Test
@@ -135,7 +140,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
         whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear(any()) }.thenReturn(Result.success(Unit))
 
         return EditProfileViewModel(
             context = context,
