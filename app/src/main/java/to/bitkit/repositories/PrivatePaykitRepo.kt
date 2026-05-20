@@ -1087,13 +1087,14 @@ class PrivatePaykitRepo @Inject constructor(
         withContext(serializedDispatcher) {
             runCatching {
                 ensureCurrentGeneration(generation)
-                val remoteEntries = pubkyService.getPrivatePayments(linkId)
+                val remotePayload = pubkyService.getPrivatePayments(linkId)
                 ensureCurrentGeneration(generation)
                 recordLinkSuccess(publicKey)
                 persistLinkSnapshot(linkId, publicKey, linkWasReplaced = false, generation = generation).getOrThrow()
                 ensureCurrentGeneration(generation)
-                if (remoteEntries.isEmpty()) return@runCatching 0
+                if (remotePayload == null) return@runCatching 0
 
+                val remoteEntries = remotePayload.entries
                 val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
                 contactState.remoteEndpoints = remoteEntries.map { StoredPaymentEntry(it.methodId, it.endpointData) }
                 persistState(markWalletBackup = true)

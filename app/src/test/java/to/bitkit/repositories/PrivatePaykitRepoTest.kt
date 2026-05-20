@@ -5,12 +5,15 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.FfiPrivatePaymentsPayload
 import com.synonym.paykit.PaykitFfiException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -69,7 +72,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         private const val LOCAL_PAYLOAD_HASH = "local-payload-hash"
         private const val PRIVATE_BOLT11 = "lnbcrt1private"
         private const val PRIVATE_PAYMENT_HASH = "010203"
-        private const val PAYLOAD_LIMIT_BOLT11_LENGTH = 902
+        private const val PAYLOAD_LIMIT_BOLT11_LENGTH = 775
         private const val NOW_SECONDS = 1_700_000_000L
         private const val TOMBSTONE_PAYLOAD = """{"value":""}"""
     }
@@ -499,7 +502,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
         whenever(pubkyService.fetchFileString(any())).thenAnswer { throw PrivatePaykitTestError("not found") }
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)).thenReturn(
             Result.success("bcrt1qprivate"),
@@ -531,7 +534,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)).thenReturn(
             Result.success("bcrt1qprivate"),
@@ -641,7 +644,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)).thenReturn(
             Result.success("bcrt1qprivate"),
@@ -675,7 +678,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(lightningRepo.canReceive()).thenReturn(false)
 
         val error = sut.prepareSavedContacts(
@@ -756,7 +759,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)).thenReturn(
             Result.success("bcrt1qprivate"),
@@ -769,7 +772,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `prepareSavedContacts measures private endpoint map with compact payload json`() = test {
+    fun `prepareSavedContacts measures private endpoint envelope with compact payload json`() = test {
         val bolt11 = "l".repeat(PAYLOAD_LIMIT_BOLT11_LENGTH)
         startForegroundWithSharingEnabled()
         cacheData.value = PrivatePaykitCacheData(
@@ -785,7 +788,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)).thenReturn(
             Result.success("bcrt1qprivate"),
@@ -805,6 +808,52 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                     it.methodId == MethodId.Bolt11.rawValue &&
                         it.endpointData == PublicPaykitRepo.serializePayload(bolt11)
                 }
+            },
+        )
+    }
+
+    @Test
+    fun `prepareSavedContacts drops lightning when raw endpoint map fits but envelope is too large`() = test {
+        val bolt11 = "l".repeat(850)
+        val address = "bcrt1qprivate"
+        val entriesOnlyPayload = mapOf(
+            MethodId.Bolt11.rawValue to PublicPaykitRepo.serializePayload(bolt11),
+            MethodId.P2wpkh.rawValue to PublicPaykitRepo.serializePayload(address),
+        )
+        assertTrue(Json.encodeToString(entriesOnlyPayload).encodeToByteArray().size <= 1_000)
+        startForegroundWithSharingEnabled()
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(
+                    linkCompletedAt = NOW_SECONDS,
+                ),
+            ),
+        )
+        whenever(keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name))
+            .thenReturn(secretStateJson())
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
+        whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
+        whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
+        whenever(addressReservationRepo.currentOrRotatedAddress(CONTACT_KEY)).thenReturn(Result.success(address))
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(bolt11))
+        whenever(coreService.decode(bolt11)).thenReturn(
+            Scanner.Lightning(lightningInvoice(bolt11, byteArrayOf(1, 2, 3))),
+        )
+
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+
+        verify(pubkyService).setPrivatePayments(
+            eq(LINK_ID),
+            argThat<List<FfiPaymentEntry>> {
+                none { it.methodId == MethodId.Bolt11.rawValue } &&
+                    any {
+                        it.methodId == MethodId.P2wpkh.rawValue &&
+                            it.endpointData == PublicPaykitRepo.serializePayload(address)
+                    }
             },
         )
     }
@@ -876,7 +925,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
         whenever(publicPaykitRepo.beginPayment(CONTACT_KEY))
@@ -922,7 +971,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.fetchFileString(any())).thenAnswer { throw PrivatePaykitTestError("not found") }
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
         whenever(publicPaykitRepo.beginPayment(CONTACT_KEY))
@@ -953,7 +1002,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
         whenever(publicPaykitRepo.beginPayment(CONTACT_KEY))
@@ -993,9 +1042,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
         whenever(pubkyService.getPrivatePayments(LINK_ID))
             .thenReturn(
-                listOf(
-                    FfiPaymentEntry(MethodId.Bolt11.rawValue, TOMBSTONE_PAYLOAD),
-                    FfiPaymentEntry(MethodId.P2wpkh.rawValue, TOMBSTONE_PAYLOAD),
+                privatePaymentsPayload(
+                    listOf(
+                        FfiPaymentEntry(MethodId.Bolt11.rawValue, TOMBSTONE_PAYLOAD),
+                        FfiPaymentEntry(MethodId.P2wpkh.rawValue, TOMBSTONE_PAYLOAD),
+                    ),
                 ),
             )
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
@@ -1030,12 +1081,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
         whenever(pubkyService.getPrivatePayments(LINK_ID))
-            .thenReturn(emptyList())
+            .thenReturn(null)
             .thenReturn(
-                listOf(
-                    FfiPaymentEntry(
-                        MethodId.Bolt11.rawValue,
-                        PublicPaykitRepo.serializePayload(PRIVATE_BOLT11),
+                privatePaymentsPayload(
+                    listOf(
+                        FfiPaymentEntry(
+                            MethodId.Bolt11.rawValue,
+                            PublicPaykitRepo.serializePayload(PRIVATE_BOLT11),
+                        ),
                     ),
                 ),
             )
@@ -1080,7 +1133,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
         whenever(coreService.decode(PRIVATE_BOLT11)).thenReturn(
@@ -1116,7 +1169,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
         whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
         whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(emptyList())
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(null)
         whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
         whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
         whenever(publicPaykitRepo.beginPayment(CONTACT_KEY))
@@ -1222,10 +1275,12 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.getPrivatePayments(LINK_ID))
             .thenAnswer { throw PaykitFfiException.InvalidData("bad mac while decrypting payload") }
         whenever(pubkyService.getPrivatePayments(retryLinkId)).thenReturn(
-            listOf(
-                FfiPaymentEntry(
-                    methodId = MethodId.P2wpkh.rawValue,
-                    endpointData = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
+            privatePaymentsPayload(
+                listOf(
+                    FfiPaymentEntry(
+                        methodId = MethodId.P2wpkh.rawValue,
+                        endpointData = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
+                    ),
                 ),
             ),
         )
@@ -1393,6 +1448,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         description = "",
         networkType = NetworkType.REGTEST,
         payeeNodeId = null,
+    )
+
+    private fun privatePaymentsPayload(entries: List<FfiPaymentEntry>) = FfiPrivatePaymentsPayload(
+        reference = "550e8400-e29b-41d4-a716-446655440000",
+        entries = entries,
     )
 
     private fun secretStateJson(
