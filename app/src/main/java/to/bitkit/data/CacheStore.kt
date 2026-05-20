@@ -129,6 +129,8 @@ data class AppCacheData(
     val deletedActivities: List<String> = listOf(),
     val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
     val backgroundReceive: NewTransactionSheetDetails? = null,
+    val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
+    val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
 ) {
     fun resetBip21() = copy(bip21 = "", bolt11 = "", onchainAddress = "")
 }

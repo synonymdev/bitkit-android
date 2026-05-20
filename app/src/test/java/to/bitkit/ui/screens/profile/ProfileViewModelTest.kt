@@ -1,0 +1,56 @@
+package to.bitkit.ui.screens.profile
+
+import android.content.Context
+import app.cash.turbine.test
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceUntilIdle
+import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyRepo
+import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertEquals
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ProfileViewModelTest : BaseUnitTest() {
+    private val context: Context = mock()
+    private val pubkyRepo: PubkyRepo = mock()
+    private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `signOut marks profile recovery before signing out`() = test {
+        whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
+
+            assertEquals(ProfileEffect.SignedOut, awaitItem())
+        }
+        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
+        verify(pubkyRepo).signOut()
+    }
+
+    private fun createSut(): ProfileViewModel {
+        whenever(context.getString(any<Int>())).thenReturn("")
+        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
+        whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
+        whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))
+        whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
+        whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear(any()) }.thenReturn(Result.success(Unit))
+
+        return ProfileViewModel(
+            context = context,
+            pubkyRepo = pubkyRepo,
+            privatePaykitRepo = privatePaykitRepo,
+        )
+    }
+}

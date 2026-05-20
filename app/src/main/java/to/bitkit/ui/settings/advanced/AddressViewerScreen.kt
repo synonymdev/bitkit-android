@@ -3,6 +3,7 @@ package to.bitkit.ui.settings.advanced
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -124,42 +125,12 @@ private fun AddressViewerContent(
                 .fillMaxSize()
         ) {
             VerticalSpacer(16.dp)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.Top,
+            AddressPreview(
+                selectedAddress = uiState.selectedAddress,
+                onCopy = onCopy,
+                onClickOpenBlockExplorer = onClickOpenBlockExplorer,
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                QrCodeImage(
-                    content = uiState.selectedAddress?.address.orEmpty(),
-                    size = 120.dp,
-                    modifier = Modifier
-                        .size(120.dp)
-                        .clickableAlpha { onCopy(uiState.selectedAddress?.address.orEmpty()) }
-                )
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    BodyS(
-                        text = stringResource(R.string.settings__addr__index)
-                            .replace("{index}", (uiState.selectedAddress?.index ?: 0).toString()),
-                        color = Colors.White80
-                    )
-                    BodyS(
-                        text = stringResource(R.string.settings__addr__path)
-                            .replace("{path}", uiState.selectedAddress?.path.orEmpty()),
-                        color = Colors.White80,
-                        modifier = Modifier.testTag("Path")
-                    )
-                    BodyS(
-                        text = stringResource(R.string.wallet__activity_explorer),
-                        color = Colors.White80,
-                        modifier = Modifier.clickableAlpha {
-                            onClickOpenBlockExplorer(uiState.selectedAddress?.address.orEmpty())
-                        }
-                    )
-                }
-            }
+            )
             VerticalSpacer(16.dp)
 
             SearchInput(
@@ -223,7 +194,11 @@ private fun AddressViewerContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                if (uiState.addresses.isEmpty()) {
+                if (uiState.loadError && uiState.addresses.isEmpty()) {
+                    item {
+                        ListMessage(stringResource(R.string.settings__addr__load_error))
+                    }
+                } else if (uiState.addresses.isEmpty()) {
                     item {
                         ListMessage(stringResource(R.string.settings__addr__loading))
                     }
@@ -233,6 +208,10 @@ private fun AddressViewerContent(
                             text = stringResource(R.string.settings__addr__no_addrs_str)
                                 .replace("{searchTxt}", uiState.searchText)
                         )
+                    }
+                } else if (uiState.loadError) {
+                    item {
+                        ListMessage(stringResource(R.string.settings__addr__load_error))
                     }
                 }
                 items(filteredAddresses) { address ->
@@ -270,6 +249,58 @@ private fun AddressViewerContent(
                 )
             }
             VerticalSpacer(16.dp)
+        }
+    }
+}
+
+@Composable
+private fun AddressPreview(
+    selectedAddress: AddressModel?,
+    modifier: Modifier = Modifier,
+    onCopy: (String) -> Unit,
+    onClickOpenBlockExplorer: (String) -> Unit,
+) {
+    val selectedAddressText = selectedAddress?.address.orEmpty()
+    val hasSelectedAddress = selectedAddressText.isNotBlank()
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.Top,
+        modifier = modifier
+    ) {
+        Box(modifier = Modifier.size(120.dp)) {
+            if (hasSelectedAddress) {
+                QrCodeImage(
+                    content = selectedAddressText,
+                    size = 120.dp,
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clickableAlpha { onCopy(selectedAddressText) }
+                )
+            }
+        }
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            BodyS(
+                text = stringResource(R.string.settings__addr__index)
+                    .replace("{index}", (selectedAddress?.index ?: 0).toString()),
+                color = Colors.White80
+            )
+            BodyS(
+                text = stringResource(R.string.settings__addr__path)
+                    .replace("{path}", selectedAddress?.path.orEmpty()),
+                color = Colors.White80,
+                modifier = Modifier.testTag("Path")
+            )
+            BodyS(
+                text = stringResource(R.string.wallet__activity_explorer),
+                color = if (hasSelectedAddress) Colors.White80 else Colors.White32,
+                modifier = Modifier.clickableAlpha(enabled = hasSelectedAddress) {
+                    onClickOpenBlockExplorer(selectedAddressText)
+                }
+            )
         }
     }
 }

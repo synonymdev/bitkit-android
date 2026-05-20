@@ -51,7 +51,6 @@ import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -148,8 +147,9 @@ fun SendAmountContent(
             else -> R.string.wallet__send_amount
         }
 
-        SheetTopBar(
+        SendContactTopBar(
             titleText = stringResource(titleRes),
+            contact = uiState.contactPaymentProfile,
             onBack = onBack,
         )
 

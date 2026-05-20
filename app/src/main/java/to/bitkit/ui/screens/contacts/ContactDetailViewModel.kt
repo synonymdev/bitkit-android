@@ -23,9 +23,9 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
-import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -34,7 +34,7 @@ import javax.inject.Inject
 class ContactDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
-    private val publicPaykitRepo: PublicPaykitRepo,
+    private val privatePaykitRepo: PrivatePaykitRepo,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -64,12 +64,11 @@ class ContactDetailViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             val cached = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
             if (cached != null) {
-                val hasEndpoint = loadPaymentEndpoint()
                 _uiState.update {
                     it.copy(
                         profile = cached,
                         tags = cached.tags.toImmutableList(),
-                        hasPublicPaymentEndpoint = hasEndpoint,
+                        showPayButton = true,
                         isLoading = false,
                     )
                 }
@@ -77,12 +76,11 @@ class ContactDetailViewModel @Inject constructor(
             }
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile ->
-                    val hasEndpoint = loadPaymentEndpoint()
                     _uiState.update {
                         it.copy(
                             profile = profile,
                             tags = profile.tags.toImmutableList(),
-                            hasPublicPaymentEndpoint = hasEndpoint,
+                            showPayButton = true,
                             isLoading = false,
                         )
                     }
@@ -98,17 +96,9 @@ class ContactDetailViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadPaymentEndpoint(): Boolean {
-        return publicPaykitRepo.hasPayablePublicEndpoint(publicKey)
-            .onFailure {
-                Logger.warn("Failed to load public Paykit endpoint for '$redactedPublicKey'", it, context = TAG)
-            }
-            .getOrDefault(false)
-    }
-
     fun payContact() {
         viewModelScope.launch {
-            publicPaykitRepo.beginPayment(publicKey)
+            privatePaykitRepo.beginSavedContactPayment(publicKey)
                 .onSuccess { result ->
                     when (result) {
                         is PublicPaykitPaymentResult.Opened ->
@@ -120,7 +110,7 @@ class ContactDetailViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
-                    Logger.warn("Failed to begin public Paykit payment for '$redactedPublicKey'", it, context = TAG)
+                    Logger.warn("Failed to begin Paykit payment for '$redactedPublicKey'", it, context = TAG)
                     showPayError(R.string.slashtags__error_pay_not_opened_msg)
                 }
         }
@@ -200,7 +190,7 @@ data class ContactDetailUiState(
     val profile: PubkyProfile? = null,
     val tags: ImmutableList<String> = persistentListOf(),
     val isLoading: Boolean = false,
-    val hasPublicPaymentEndpoint: Boolean = false,
+    val showPayButton: Boolean = false,
     val showAddTagSheet: Boolean = false,
 )
 

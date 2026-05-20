@@ -678,6 +678,7 @@
     <string name="settings__addr__check_balances">Check Balances</string>
     <string name="settings__addr__gen_20">Generate 20 More</string>
     <string name="settings__addr__index">Index: {index}</string>
+    <string name="settings__addr__load_error">Wallet is still starting. Try again in a moment.</string>
     <string name="settings__addr__loading">Loading Addresses...</string>
     <string name="settings__addr__no_addrs">No Addresses To Display</string>
     <string name="settings__addr__no_addrs_str">No addresses found when searching for \"{searchTxt}\"</string>
@@ -820,6 +821,16 @@
     <string name="settings__general_title">General</string>
     <string name="settings__language_system_default">System Settings</string>
     <string name="settings__language_title">Language</string>
+    <string name="settings__payment_pref_contacts">Payments from contacts</string>
+    <string name="settings__payment_pref_contacts_footer">*Public payments with contacts requires payment data to be shared publicly.</string>
+    <string name="settings__payment_pref_header">Choose how you prefer to receive money when users send funds to your profile key.</string>
+    <string name="settings__payment_pref_keep_one">Keep at least one payment method enabled.</string>
+    <string name="settings__payment_pref_lightning">Lightning (Bitkit)</string>
+    <string name="settings__payment_pref_onchain">On-chain (Bitkit)</string>
+    <string name="settings__payment_pref_options">Payment options</string>
+    <string name="settings__payment_pref_private_contacts">Private payments with contacts</string>
+    <string name="settings__payment_pref_public_contacts">Public payments with contacts*</string>
+    <string name="settings__payment_pref_title">Payment Preference</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay makes checking out faster by automatically paying QR codes when scanned.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Frictionless&lt;/accent&gt;\npayments</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -940,6 +951,8 @@
     <string name="wallet__activity_address">Address</string>
     <string name="wallet__activity_all">All Activity</string>
     <string name="wallet__activity_assign">Assign</string>
+    <string name="wallet__activity_assign_contact_empty">No contacts to assign.</string>
+    <string name="wallet__activity_assign_contact_title">Assign Contact</string>
     <string name="wallet__activity_bitcoin_received">Received Bitcoin</string>
     <string name="wallet__activity_bitcoin_sent">Sent Bitcoin</string>
     <string name="wallet__activity_boost">Boost</string>
@@ -952,7 +965,9 @@
     <string name="wallet__activity_confirmed">Confirmed</string>
     <string name="wallet__activity_confirming">Confirming</string>
     <string name="wallet__activity_confirms_in">Confirms in {feeRateDescription}</string>
+    <string name="wallet__activity_contact">Contact</string>
     <string name="wallet__activity_date">Date</string>
+    <string name="wallet__activity_detach">Detach</string>
     <string name="wallet__activity_error_load_failed">Failed to load activity</string>
     <string name="wallet__activity_error_not_found">Activity not found</string>
     <string name="wallet__activity_explore">Explore</string>
@@ -1089,6 +1104,8 @@
     <string name="wallet__send_clipboard_empty_text">Please copy an address or an invoice.</string>
     <string name="wallet__send_clipboard_empty_title">Clipboard Empty</string>
     <string name="wallet__send_confirming_in">Confirming in</string>
+    <string name="wallet__send_contact_empty">You don\'t have any contacts yet.</string>
+    <string name="wallet__send_contact_title">Select Contact</string>
     <string name="wallet__send_details">Details</string>
     <string name="wallet__send_dialog1">It appears you are sending over $100. Do you want to continue?</string>
     <string name="wallet__send_dialog2">It appears you are sending over 50% of your total balance. Do you want to continue?</string>

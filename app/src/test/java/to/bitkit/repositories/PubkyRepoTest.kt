@@ -19,6 +19,8 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
+import to.bitkit.data.PrivatePaykitCacheData
+import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
@@ -57,16 +59,25 @@ class PubkyRepoTest : BaseUnitTest() {
     private val imageLoader = mock<ImageLoader>()
     private val pubkyStore = mock<PubkyStore>()
     private val settingsStore = mock<SettingsStore>()
+    private val privatePaykitCacheStore = mock<PrivatePaykitCacheStore>()
     private val settingsFlow = MutableStateFlow(SettingsData())
+    private val privatePaykitCacheFlow = MutableStateFlow(PrivatePaykitCacheData())
 
     @Before
     fun setUp() = runBlocking {
         settingsFlow.value = SettingsData()
+        privatePaykitCacheFlow.value = PrivatePaykitCacheData()
         whenever(pubkyStore.data).thenReturn(flowOf(PubkyStoreData()))
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
+            Unit
+        }
+        whenever(privatePaykitCacheStore.data).thenReturn(privatePaykitCacheFlow)
+        whenever { privatePaykitCacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(PrivatePaykitCacheData) -> PrivatePaykitCacheData>(0)
+            privatePaykitCacheFlow.value = transform(privatePaykitCacheFlow.value)
             Unit
         }
         sut = createSut()
@@ -79,6 +90,7 @@ class PubkyRepoTest : BaseUnitTest() {
         imageLoader = imageLoader,
         pubkyStore = pubkyStore,
         settingsStore = settingsStore,
+        privatePaykitCacheStore = privatePaykitCacheStore,
         httpClient = mock(),
     )
 
@@ -152,6 +164,26 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `completeAuthentication should clear profile recovery marker`() = test {
+        val testSecret = "session_secret"
+        val testPk = VALID_SELF_KEY.removePrefix("pubky")
+        privatePaykitCacheFlow.value = PrivatePaykitCacheData(profileRecoveryPending = true)
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenReturn(testSecret)
+        whenever(pubkyService.importSession(testSecret)).thenReturn(testPk)
+        val ffiProfile = createFfiProfile(name = "User")
+        whenever(pubkyService.getProfile(VALID_SELF_KEY)).thenReturn(ffiProfile)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(testSecret)
+        whenever(pubkyService.sessionList(testSecret, Env.contactsBasePath)).thenReturn(emptyList())
+
+        sut.startAuthentication()
+        val result = sut.completeAuthentication()
+
+        assertTrue(result.isSuccess)
+        assertFalse(privatePaykitCacheFlow.value.profileRecoveryPending)
     }
 
     @Test

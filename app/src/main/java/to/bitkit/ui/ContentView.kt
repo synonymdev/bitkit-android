@@ -122,6 +122,7 @@ import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.SavingsWalletScreen
 import to.bitkit.ui.screens.wallets.SpendingWalletScreen
+import to.bitkit.ui.screens.wallets.activity.ActivityAssignContactScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
@@ -175,6 +176,7 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
+import to.bitkit.ui.settings.paymentPreference.PaymentPreferenceScreen
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
@@ -257,6 +259,7 @@ fun ContentView(
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
                     appViewModel.refreshPublicPaykitEndpoints()
+                    appViewModel.refreshPrivatePaykitEndpoints()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
@@ -1204,6 +1207,11 @@ private fun NavGraphBuilder.generalSettingsSubScreens(navController: NavHostCont
             onBack = { navController.popBackStack() },
         )
     }
+    composableWithDefaultTransitions<Routes.PaymentPreferenceSettings> {
+        PaymentPreferenceScreen(
+            onBack = { navController.popBackStack() },
+        )
+    }
 
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
         BackgroundPaymentsIntroScreen(
@@ -1357,11 +1365,19 @@ private fun NavGraphBuilder.activityItem(
             listViewModel = activityListViewModel,
             route = it.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
+            onAssignContactClick = { id -> navController.navigateTo(Routes.ActivityAssignContact(id)) },
             onChannelClick = { channelId ->
                 navController.navigateTo(Routes.ChannelDetail(channelId))
             },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ActivityAssignContact> {
+        val route = it.toRoute<Routes.ActivityAssignContact>()
+        ActivityAssignContactScreen(
+            activityId = route.id,
+            onBackClick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.ActivityExplore> {
@@ -1732,6 +1748,8 @@ fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogD
 
 fun NavController.navigateToTransactionSpeedSettings() = navigateTo(Routes.TransactionSpeedSettings)
 
+fun NavController.navigateToPaymentPreferenceSettings() = navigateTo(Routes.PaymentPreferenceSettings)
+
 fun NavController.navigateToCustomFeeSettings() = navigateTo(Routes.CustomFeeSettings)
 
 fun NavController.navigateToWidgetsSettings() = navigateTo(Routes.WidgetsSettings)
@@ -1764,6 +1782,9 @@ sealed interface Routes {
 
     @Serializable
     data object TransactionSpeedSettings : Routes
+
+    @Serializable
+    data object PaymentPreferenceSettings : Routes
 
     @Serializable
     data object WidgetsSettings : Routes
@@ -1922,6 +1943,9 @@ sealed interface Routes {
 
     @Serializable
     data class ActivityDetail(val id: String) : Routes
+
+    @Serializable
+    data class ActivityAssignContact(val id: String) : Routes
 
     @Serializable
     data class ActivityExplore(val id: String) : Routes

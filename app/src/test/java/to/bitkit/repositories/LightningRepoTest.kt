@@ -262,7 +262,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `getPayments should succeed when node is running`() = test {
         startNodeForTesting()
         val testPayments = listOf(mock<PaymentDetails>())
-        whenever(lightningService.payments).thenReturn(testPayments)
+        whenever(lightningService.listPayments()).thenReturn(testPayments)
 
         val result = sut.getPayments()
         assertTrue(result.isSuccess)

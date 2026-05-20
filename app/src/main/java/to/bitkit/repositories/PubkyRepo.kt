@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -74,6 +75,7 @@ class PubkyRepo @Inject constructor(
     private val imageLoader: ImageLoader,
     private val pubkyStore: PubkyStore,
     private val settingsStore: SettingsStore,
+    private val privatePaykitCacheStore: PrivatePaykitCacheStore,
     private val httpClient: HttpClient,
 ) {
     companion object {
@@ -107,6 +109,9 @@ class PubkyRepo @Inject constructor(
 
     private val _contacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     val contacts: StateFlow<List<PubkyProfile>> = _contacts.asStateFlow()
+
+    private val _contactsLoadVersion = MutableStateFlow(0L)
+    val contactsLoadVersion: StateFlow<Long> = _contactsLoadVersion.asStateFlow()
 
     private val _isLoadingContacts = MutableStateFlow(false)
     val isLoadingContacts: StateFlow<Boolean> = _isLoadingContacts.asStateFlow()
@@ -275,6 +280,8 @@ class PubkyRepo @Inject constructor(
 
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
                 keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+                settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+                privatePaykitCacheStore.update { it.copy(profileRecoveryPending = false) }
                 notifyBackupStateChanged()
 
                 pk
@@ -623,6 +630,7 @@ class PubkyRepo @Inject constructor(
             }
         }
         _contacts.update { emptyList() }
+        markContactsLoaded()
         Logger.info("Deleted all contacts", context = TAG)
     }
 
@@ -718,6 +726,7 @@ class PubkyRepo @Inject constructor(
                     return@onSuccess
                 }
                 _contacts.update { loadedContacts }
+                markContactsLoaded()
             }.onFailure {
                 Logger.error("Failed to load contacts", it, context = TAG)
             }
@@ -760,6 +769,7 @@ class PubkyRepo @Inject constructor(
                 (current.filter { it.publicKey != prefixedKey } + profile)
                     .sortedBy { it.name.lowercase() }
             }
+            markContactsLoaded()
             Logger.info("Added contact '$prefixedKey'", context = TAG)
         }
     }
@@ -793,6 +803,7 @@ class PubkyRepo @Inject constructor(
                 current.map { if (it.publicKey == prefixedKey) updatedProfile else it }
                     .sortedBy { it.name.lowercase() }
             }
+            markContactsLoaded()
             Logger.info("Updated contact '$prefixedKey'", context = TAG)
         }
     }
@@ -805,6 +816,7 @@ class PubkyRepo @Inject constructor(
             val prefixedKey = publicKey.ensurePubkyPrefix()
             pubkyService.sessionDelete(session, "${Env.contactsBasePath}$prefixedKey")
             _contacts.update { current -> current.filter { it.publicKey != prefixedKey } }
+            markContactsLoaded()
             Logger.info("Removed contact '$prefixedKey'", context = TAG)
         }
     }
@@ -835,6 +847,7 @@ class PubkyRepo @Inject constructor(
                 (current + imported.filter { it.publicKey !in existing })
                     .sortedBy { it.name.lowercase() }
             }
+            markContactsLoaded()
             Logger.info("Imported '${imported.size}' contacts", context = TAG)
         }
     }
@@ -878,9 +891,8 @@ class PubkyRepo @Inject constructor(
     // region Auth approval
 
     suspend fun hasSecretKey(): Boolean = runCatching {
-        withContext(ioDispatcher) {
-            !keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).isNullOrEmpty()
-        }
+        val publicKey = _publicKey.value ?: return@runCatching false
+        managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
 
     suspend fun approveAuth(authUrl: String): Result<Unit> = runCatching {
@@ -1052,9 +1064,14 @@ class PubkyRepo @Inject constructor(
         _publicKey.update { null }
         _profile.update { null }
         _contacts.update { emptyList() }
+        _contactsLoadVersion.update { 0L }
         clearPendingImport()
         _sessionRestorationFailed.update { false }
         _authState.update { PubkyAuthState.Idle }
+    }
+
+    private fun markContactsLoaded() {
+        _contactsLoadVersion.update { it + 1 }
     }
 
     private suspend fun clearLocalState() = withContext(ioDispatcher) {
