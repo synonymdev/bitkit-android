@@ -64,7 +64,7 @@ import to.bitkit.viewmodels.WalletViewModel
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private companion object {
-        const val KEY_CONSUMED_DEEPLINK_URI = "consumed_deeplink_uri"
+        const val KEY_CONSUMED_LAUNCH_INTENT = "consumed_launch_intent"
     }
 
     private val appViewModel by viewModels<AppViewModel>()
@@ -76,7 +76,7 @@ class MainActivity : FragmentActivity() {
     private val settingsViewModel by viewModels<SettingsViewModel>()
     private val backupsViewModel by viewModels<BackupsViewModel>()
 
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -88,9 +88,9 @@ class MainActivity : FragmentActivity() {
             importance = NotificationManager.IMPORTANCE_LOW
         )
 
-        val consumedUri = savedInstanceState?.getString(KEY_CONSUMED_DEEPLINK_URI)
-        val currentUri = intent?.data?.toString()
-        if (currentUri == null || currentUri != consumedUri) {
+        val consumedLaunchIntent = savedInstanceState?.getString(KEY_CONSUMED_LAUNCH_INTENT)
+        val currentLaunchIntent = intent.launchKey()
+        if (currentLaunchIntent == null || currentLaunchIntent != consumedLaunchIntent) {
             appViewModel.handleDeeplinkIntent(intent)
         }
 
@@ -212,7 +212,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        intent?.data?.toString()?.let { outState.putString(KEY_CONSUMED_DEEPLINK_URI, it) }
+        intent.launchKey()?.let { outState.putString(KEY_CONSUMED_LAUNCH_INTENT, it) }
     }
 
     override fun onDestroy() {
@@ -234,6 +234,14 @@ class MainActivity : FragmentActivity() {
         }.onFailure { error ->
             Logger.error("Failed to start LightningNodeService", error, context = "MainActivity")
         }
+    }
+}
+
+private fun Intent?.launchKey(): String? {
+    this ?: return null
+    return when (action) {
+        Intent.ACTION_VIEW -> data?.toString()
+        else -> null
     }
 }
 
