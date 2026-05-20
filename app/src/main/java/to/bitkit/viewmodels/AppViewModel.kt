@@ -146,6 +146,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
+import to.bitkit.utils.PaykitFeatureFlags
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -260,6 +261,9 @@ class AppViewModel @Inject constructor(
     private var isCompletingMigration = false
     private var addressValidationJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
+    private val isPaykitEnabled = settingsStore.data
+        .map { PaykitFeatureFlags.isUiEnabled(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setShowForgotPin(value: Boolean) {
         _showForgotPinSheet.value = value
@@ -437,8 +441,8 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
-        val shouldPublish = settingsStore.data.first().sharesPublicPaykitEndpoints
-        if (!shouldPublish) return
+        val settings = settingsStore.data.first()
+        if (!PaykitFeatureFlags.isUiEnabled(settings) || !settings.sharesPublicPaykitEndpoints) return
 
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
@@ -453,18 +457,24 @@ class AppViewModel @Inject constructor(
                 pubkyRepo.publicKey,
                 pubkyRepo.contacts,
                 pubkyRepo.contactsLoadVersion,
-            ) { publicKey, contacts, contactsLoadVersion ->
-                Triple(publicKey, contacts.map { it.publicKey }.toSet(), contactsLoadVersion > 0L)
+                settingsStore.data.map { PaykitFeatureFlags.isUiEnabled(it) },
+            ) { publicKey, contacts, contactsLoadVersion, isPaykitEnabled ->
+                PaykitContactSyncState(
+                    publicKey = publicKey,
+                    contactKeys = contacts.map { it.publicKey }.toSet(),
+                    contactsLoaded = contactsLoadVersion > 0L,
+                    isPaykitEnabled = isPaykitEnabled,
+                )
             }
                 .distinctUntilChanged()
-                .collect { (publicKey, contactKeys, contactsLoaded) ->
-                    if (publicKey == null) {
+                .collect { state ->
+                    if (!state.isPaykitEnabled || state.publicKey == null) {
                         lastPrivatePaykitContactKeys = emptySet()
                         return@collect
                     }
-                    if (!contactsLoaded) return@collect
+                    if (!state.contactsLoaded) return@collect
 
-                    val removedKeys = lastPrivatePaykitContactKeys - contactKeys
+                    val removedKeys = lastPrivatePaykitContactKeys - state.contactKeys
                     removedKeys.forEach {
                         privatePaykitRepo.removeSavedContact(it)
                             .onFailure { error ->
@@ -476,15 +486,15 @@ class AppViewModel @Inject constructor(
                             }
                     }
 
-                    privatePaykitRepo.prepareSavedContacts(contactKeys)
+                    privatePaykitRepo.prepareSavedContacts(state.contactKeys)
                         .onFailure {
                             Logger.warn("Failed to prepare private Paykit contacts", it, context = TAG)
                         }
-                    privatePaykitRepo.pruneUnsavedContactState(contactKeys)
+                    privatePaykitRepo.pruneUnsavedContactState(state.contactKeys)
                         .onFailure {
                             Logger.warn("Failed to prune private Paykit contact state", it, context = TAG)
                         }
-                    lastPrivatePaykitContactKeys = contactKeys
+                    lastPrivatePaykitContactKeys = state.contactKeys
                 }
         }
     }
@@ -493,16 +503,38 @@ class AppViewModel @Inject constructor(
         reason: String,
         forceRefreshLightning: Boolean = false,
     ) {
+        val contactKeys = pubkyRepo.contacts.value.map { it.publicKey }
+        retryPendingPaykitEndpointRemoval(contactKeys, reason)
+
+        if (!PaykitFeatureFlags.isUiEnabled(settingsStore.data.first())) return
+
         privatePaykitRepo.reconcileReservedReceiveIndexes()
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
             }
-        val contactKeys = pubkyRepo.contacts.value.map { it.publicKey }
+        privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
+    }
+
+    private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
+        val settings = settingsStore.data.first()
+        if (settings.publicPaykitCleanupPending) {
+            if (settings.sharesPublicPaykitEndpoints) {
+                settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+            } else {
+                publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                    .onSuccess {
+                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                    }
+                    .onFailure {
+                        Logger.warn("Failed to retry public Paykit endpoint removal for '$reason'", it, context = TAG)
+                    }
+            }
+        }
+
         privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)
             .onFailure {
                 Logger.warn("Failed to retry private Paykit endpoint removal for '$reason'", it, context = TAG)
             }
-        privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -1055,7 +1087,9 @@ class AppViewModel @Inject constructor(
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                     SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                     SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
-                    SendEvent.Contacts -> setSendEffect(SendEffect.NavigateToContacts)
+                    SendEvent.Contacts -> setSendEffect(
+                        if (isPaykitEnabled.value) SendEffect.NavigateToContacts else SendEffect.NavigateToComingSoon
+                    )
                 }
             }
         }
@@ -1097,7 +1131,9 @@ class AppViewModel @Inject constructor(
         if (valueWithoutSpaces.isEmpty()) return
 
         if (PubkyPublicKeyFormat.normalized(valueWithoutSpaces) != null) {
-            _sendUiState.update { it.copy(isAddressInputValid = true) }
+            if (isPaykitEnabled.value) {
+                _sendUiState.update { it.copy(isAddressInputValid = true) }
+            }
             return
         }
 
@@ -1577,15 +1613,25 @@ class AppViewModel @Inject constructor(
 
         if (input.startsWith("$PUBKYAUTH_SCHEME://")) {
             clearActiveContactPaymentContext()
-            handlePubkyAuth(input)
+            if (isPaykitEnabled.value) {
+                handlePubkyAuth(input)
+            } else {
+                hideSheet()
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan__error__generic),
+                )
+            }
             return@withContext
         }
 
-        if (routePubkyKeys) {
+        if (routePubkyKeys && isPaykitEnabled.value) {
             val route = resolvePastedPubkyRoute(
                 input = input,
                 ownPublicKey = pubkyRepo.publicKey.value,
                 contacts = pubkyRepo.contacts.value,
+                isPaykitEnabled = isPaykitEnabled.value,
             )
 
             if (route != null) {
@@ -2905,11 +2951,13 @@ class AppViewModel @Inject constructor(
         }
 
         PubkyRingAuthCallback.parse(uri)?.let {
+            if (!PaykitFeatureFlags.isUiEnabled(settingsStore.data.first())) return@launch
             handlePubkyRingAuthCallback(it)
             return@launch
         }
 
         if (uri.scheme == PUBKYAUTH_SCHEME) {
+            if (!PaykitFeatureFlags.isUiEnabled(settingsStore.data.first())) return@launch
             handlePubkyAuth(uri.toString())
             return@launch
         }
@@ -3059,6 +3107,13 @@ enum class SendMethod { ONCHAIN, LIGHTNING }
 
 data class ContactPaymentContext(val publicKey: String)
 
+private data class PaykitContactSyncState(
+    val publicKey: String?,
+    val contactKeys: Set<String>,
+    val contactsLoaded: Boolean,
+    val isPaykitEnabled: Boolean,
+)
+
 sealed class SendEffect {
     data class PopBack(val route: SendRoute) : SendEffect()
     data object NavigateToAddress : SendEffect()
@@ -3138,7 +3193,10 @@ internal fun resolvePastedPubkyRoute(
     input: String,
     ownPublicKey: String?,
     contacts: List<PubkyProfile>,
+    isPaykitEnabled: Boolean = true,
 ): Routes? {
+    if (!isPaykitEnabled) return null
+
     val normalizedKey = PubkyPublicKeyFormat.normalized(input) ?: return null
 
     if (PubkyPublicKeyFormat.matches(normalizedKey, ownPublicKey)) {

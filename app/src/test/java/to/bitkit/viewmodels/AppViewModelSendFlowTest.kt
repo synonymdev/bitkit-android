@@ -1,6 +1,8 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import android.content.Intent
+import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
@@ -14,6 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -22,6 +25,8 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
@@ -70,6 +75,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 @Suppress("LargeClass")
 class AppViewModelSendFlowTest : BaseUnitTest() {
 
@@ -128,7 +135,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(walletRepo.walletExists()).thenReturn(true)
-        whenever(settingsStore.data).thenReturn(settingsData)
+        stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
@@ -174,6 +181,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
         whenever(lightningRepo.canSend(any())).thenReturn(true)
+    }
+
+    private fun stubSettingsStore() {
+        whenever(settingsStore.data).thenReturn(settingsData)
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsData.value = transform(settingsData.value)
+            Unit
+        }
     }
 
     private fun createViewModel() = AppViewModel(
@@ -265,6 +281,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `manual address continue routes pubky to add contact`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+
         sut.mainScreenEffect.test {
             sut.setSendEvent(SendEvent.AddressContinue(testPublicKey))
 
@@ -274,6 +293,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `manual address input accepts pubky without decode error`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+
         sut.setSendEvent(SendEvent.AddressChange(testPublicKey))
         advanceUntilIdle()
 
@@ -283,7 +305,74 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `manual address input rejects pubky when Paykit UI is disabled`() = test {
+        sut.setSendEvent(SendEvent.AddressChange(testPublicKey))
+        advanceUntilIdle()
+
+        assertEquals(testPublicKey, sut.sendUiState.value.addressInput)
+        assertFalse(sut.sendUiState.value.isAddressInputValid)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `contact button routes to coming soon when Paykit UI is disabled`() = test {
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.Contacts)
+
+            assertEquals(SendEffect.NavigateToComingSoon, awaitItem())
+        }
+    }
+
+    @Test
+    fun `contact button routes to contact select when Paykit UI is enabled`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.Contacts)
+
+            assertEquals(SendEffect.NavigateToContacts, awaitItem())
+        }
+    }
+
+    @Test
+    fun `pubky auth deeplink is ignored when Paykit UI is disabled`() = test {
+        val intent = Intent(Intent.ACTION_VIEW, "pubkyauth://auth?caps=/pub/paykit/v0/:rw".toUri())
+
+        sut.handleDeeplinkIntent(intent)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `pubky ring callback deeplink is ignored when Paykit UI is disabled`() = test {
+        val intent = Intent(Intent.ACTION_VIEW, "bitkit://pubky-auth/success".toUri())
+
+        sut.handleDeeplinkIntent(intent)
+        advanceUntilIdle()
+
+        verify(pubkyRepo, never()).handleAuthCallback(any())
+    }
+
+    @Test
+    fun `pubky auth deeplink shows approval sheet when Paykit UI is enabled`() = test {
+        enablePaykitUi()
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+    }
+
+    @Test
     fun `pubky routing dismisses send sheet before navigation`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+
         sut.showSheet(Sheet.Send())
         advanceUntilIdle()
 
@@ -786,6 +875,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `private Paykit waits for contacts load before pruning`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
         clearInvocations(privatePaykitRepo)
 
         pubkyPublicKey.value = testPublicKey
@@ -803,6 +894,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `private Paykit removes stale contact without duplicate load version cleanup`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+
         val contact = PubkyProfile(
             publicKey = "pubkycytinw71a3ge1esmzj5e53hsr3jtj6t4pogpgr6k75w9mzmyokzo",
             name = "Bob",
@@ -824,6 +918,36 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).removeSavedContact(contact.publicKey)
         verify(privatePaykitRepo).prepareSavedContacts(emptySet<String>(), false)
         verify(privatePaykitRepo).pruneUnsavedContactState(emptySet<String>())
+    }
+
+    @Test
+    fun `private Paykit refresh retries public cleanup while UI is disabled`() = test {
+        settingsData.value = SettingsData(publicPaykitCleanupPending = true)
+        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
+
+        sut.refreshPrivatePaykitEndpoints()
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
+        verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
+        verify(privatePaykitRepo, never()).reconcileReservedReceiveIndexes()
+    }
+
+    @Test
+    fun `private Paykit refresh clears stale public cleanup when public sharing is enabled`() = test {
+        settingsData.value = SettingsData(
+            isPaykitEnabled = true,
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitCleanupPending = true,
+        )
+
+        sut.refreshPrivatePaykitEndpoints()
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
+        verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
     }
 
     private suspend fun TestScope.confirmCurrentPayment() {
@@ -856,9 +980,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     )
 
     private suspend fun enablePublicPaykitSharing() {
-        settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)
-        walletState.value = WalletState(onchainAddress = "bc1qtest")
         whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any()) }.thenReturn(Result.success(Unit))
+        walletState.value = WalletState(onchainAddress = "bc1qtest")
+        settingsData.value = SettingsData(isPaykitEnabled = true, sharesPublicPaykitEndpoints = true)
+    }
+
+    private fun enablePaykitUi() {
+        settingsData.value = settingsData.value.copy(isPaykitEnabled = true)
     }
 
     @Suppress("UNCHECKED_CAST")

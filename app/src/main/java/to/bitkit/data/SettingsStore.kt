@@ -16,6 +16,7 @@ import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.utils.Logger
+import to.bitkit.utils.PaykitFeatureFlags
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,7 +39,12 @@ class SettingsStore @Inject constructor(
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
         runCatching {
-            val data = payload.settings.resetPin()
+            val restored = payload.settings.resetPin()
+            val data = if (PaykitFeatureFlags.isUiEnabled(restored) || !restored.hasPaykitState()) {
+                restored
+            } else {
+                restored.paykitDisabled(markPublicCleanupPending = restored.hasPublicPaykitPublicationState())
+            }
             store.updateData { data }
 
             val monitored = data.addressTypesToMonitor
@@ -100,9 +106,11 @@ data class SettingsData(
     val hasSeenShopIntro: Boolean = false,
     val hasSeenProfileIntro: Boolean = false,
     val hasSeenContactsIntro: Boolean = false,
+    val isPaykitEnabled: Boolean = false,
     val hasConfirmedPublicPaykitEndpoints: Boolean = false,
     val sharesPublicPaykitEndpoints: Boolean = false,
     val sharesPrivatePaykitEndpoints: Boolean = false,
+    val publicPaykitCleanupPending: Boolean = false,
     val publicPaykitLightningEnabled: Boolean = true,
     val publicPaykitOnchainEnabled: Boolean = true,
     val publicPaykitBolt11: String = "",
@@ -147,4 +155,28 @@ fun SettingsData.resetPin() = this.copy(
     isPinEnabled = false,
     isPinForPaymentsEnabled = false,
     isBiometricEnabled = false,
+)
+
+fun SettingsData.hasPublicPaykitPublicationState(): Boolean =
+    hasConfirmedPublicPaykitEndpoints ||
+        sharesPublicPaykitEndpoints ||
+        publicPaykitCleanupPending ||
+        publicPaykitBolt11.isNotBlank() ||
+        publicPaykitBolt11PaymentHash.isNotBlank() ||
+        publicPaykitBolt11ExpiresAtMillis > 0L
+
+fun SettingsData.hasPaykitState(): Boolean =
+    isPaykitEnabled ||
+        hasPublicPaykitPublicationState() ||
+        sharesPrivatePaykitEndpoints
+
+fun SettingsData.paykitDisabled(markPublicCleanupPending: Boolean = false) = copy(
+    isPaykitEnabled = false,
+    hasConfirmedPublicPaykitEndpoints = false,
+    sharesPublicPaykitEndpoints = false,
+    sharesPrivatePaykitEndpoints = false,
+    publicPaykitCleanupPending = publicPaykitCleanupPending || markPublicCleanupPending,
+    publicPaykitBolt11 = "",
+    publicPaykitBolt11PaymentHash = "",
+    publicPaykitBolt11ExpiresAtMillis = 0,
 )

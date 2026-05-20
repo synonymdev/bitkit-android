@@ -91,6 +91,7 @@ fun SettingsScreen(
     val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
     val isPubkyAuthenticated by settings.isPubkyAuthenticated.collectAsStateWithLifecycle()
+    val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val languageUiState by languageViewModel.uiState.collectAsStateWithLifecycle()
 
     // Security tab state
@@ -126,6 +127,7 @@ fun SettingsScreen(
             isQuickPayEnabled = isQuickPayEnabled,
             notificationsGranted = notificationsGranted,
             isPubkyAuthenticated = isPubkyAuthenticated,
+            isPaykitEnabled = isPaykitEnabled,
         ),
         securityState = SecurityTabState(
             isPinEnabled = isPinEnabled,
@@ -325,7 +327,7 @@ private fun GeneralTabContent(
             onClick = { onEvent(SettingsEvent.TransactionSpeedClick) },
             modifier = Modifier.testTag("TransactionSpeedSettings")
         )
-        if (state.isPubkyAuthenticated) {
+        if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
             SettingsButtonRow(
                 title = stringResource(R.string.settings__payment_pref_title),
                 icon = { SettingsIcon(R.drawable.ic_coins) },
@@ -674,6 +676,7 @@ data class GeneralTabState(
     val isQuickPayEnabled: Boolean = false,
     val notificationsGranted: Boolean = false,
     val isPubkyAuthenticated: Boolean = false,
+    val isPaykitEnabled: Boolean = false,
 )
 
 @Immutable

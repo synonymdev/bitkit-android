@@ -1,0 +1,167 @@
+package to.bitkit.viewmodels
+
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceUntilIdle
+import org.junit.Before
+import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
+import to.bitkit.data.WidgetsStore
+import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class SettingsViewModelTest : BaseUnitTest() {
+    private lateinit var sut: SettingsViewModel
+
+    private val settingsStore = mock<SettingsStore>()
+    private val pubkyRepo = mock<PubkyRepo>()
+    private val publicPaykitRepo = mock<PublicPaykitRepo>()
+    private val privatePaykitRepo = mock<PrivatePaykitRepo>()
+    private val widgetsStore = mock<WidgetsStore>()
+    private val widgetsRepo = mock<WidgetsRepo>()
+
+    private val settingsData = MutableStateFlow(SettingsData())
+    private val contacts = MutableStateFlow(
+        listOf(
+            PubkyProfile(
+                publicKey = "pubkycytinw71a3ge1esmzj5e53hsr3jtj6t4pogpgr6k75w9mzmyokzo",
+                name = "Alice",
+                bio = "",
+                imageUrl = null,
+                links = emptyList(),
+                status = null,
+            )
+        )
+    )
+
+    @Before
+    fun setUp() {
+        whenever(settingsStore.data).thenReturn(settingsData)
+        whenever { settingsStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
+            settingsData.value = transform(settingsData.value)
+            Unit
+        }
+        whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.contacts).thenReturn(contacts)
+        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
+            .thenReturn(Result.success(Unit))
+
+        sut = createViewModel()
+    }
+
+    @Test
+    fun `disabling Paykit clears settings and removes published endpoints`() = test {
+        settingsData.value = SettingsData(
+            isPaykitEnabled = true,
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitBolt11 = "lnbc1old",
+            publicPaykitBolt11PaymentHash = "hash",
+            publicPaykitBolt11ExpiresAtMillis = 123L,
+        )
+
+        sut.setIsPaykitEnabled(false)
+        advanceUntilIdle()
+
+        val settings = settingsData.value
+        assertFalse(settings.isPaykitEnabled)
+        assertFalse(settings.hasConfirmedPublicPaykitEndpoints)
+        assertFalse(settings.sharesPublicPaykitEndpoints)
+        assertFalse(settings.sharesPrivatePaykitEndpoints)
+        assertFalse(settings.publicPaykitCleanupPending)
+        assertEquals("", settings.publicPaykitBolt11)
+        assertEquals("", settings.publicPaykitBolt11PaymentHash)
+        assertEquals(0L, settings.publicPaykitBolt11ExpiresAtMillis)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
+    }
+
+    @Test
+    fun `disabling Paykit keeps public cleanup pending when public removal fails`() = test {
+        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }
+            .thenReturn(Result.failure(SettingsViewModelTestError("cleanup failed")))
+        settingsData.value = SettingsData(
+            isPaykitEnabled = true,
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+        )
+
+        sut.setIsPaykitEnabled(false)
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
+    }
+
+    @Test
+    fun `disabling Paykit with private-only state does not create public cleanup pending`() = test {
+        clearInvocations(publicPaykitRepo)
+        settingsData.value = SettingsData(
+            isPaykitEnabled = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
+
+        sut.setIsPaykitEnabled(false)
+        advanceUntilIdle()
+
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
+    }
+
+    @Test
+    fun `init disables stale Paykit publication state when local flag is off`() = test {
+        settingsData.value = SettingsData(
+            isPaykitEnabled = false,
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitBolt11 = "lnbc1old",
+            publicPaykitBolt11PaymentHash = "hash",
+            publicPaykitBolt11ExpiresAtMillis = 123L,
+        )
+
+        createViewModel()
+        advanceUntilIdle()
+
+        val settings = settingsData.value
+        assertFalse(settings.isPaykitEnabled)
+        assertFalse(settings.hasConfirmedPublicPaykitEndpoints)
+        assertFalse(settings.sharesPublicPaykitEndpoints)
+        assertFalse(settings.sharesPrivatePaykitEndpoints)
+        assertFalse(settings.publicPaykitCleanupPending)
+        assertEquals("", settings.publicPaykitBolt11)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
+    }
+
+    private fun createViewModel() = SettingsViewModel(
+        settingsStore = settingsStore,
+        pubkyRepo = pubkyRepo,
+        publicPaykitRepo = publicPaykitRepo,
+        privatePaykitRepo = privatePaykitRepo,
+        widgetsStore = widgetsStore,
+        widgetsRepo = widgetsRepo,
+    )
+
+    private class SettingsViewModelTestError(message: String) : AppError(message)
+}

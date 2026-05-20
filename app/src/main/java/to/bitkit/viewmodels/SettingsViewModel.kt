@@ -8,14 +8,22 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.hasPaykitState
+import to.bitkit.data.hasPublicPaykitPublicationState
+import to.bitkit.data.paykitDisabled
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.utils.Logger
+import to.bitkit.utils.PaykitFeatureFlags
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
@@ -23,9 +31,24 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val pubkyRepo: PubkyRepo,
+    private val publicPaykitRepo: PublicPaykitRepo,
+    private val privatePaykitRepo: PrivatePaykitRepo,
     private val widgetsStore: WidgetsStore,
     private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
+    private companion object {
+        const val TAG = "SettingsViewModel"
+    }
+
+    init {
+        viewModelScope.launch {
+            val settings = settingsStore.data.first()
+            if (!PaykitFeatureFlags.isUiEnabled(settings) && settings.hasPaykitState()) {
+                updatePaykitEnabled(false)
+            }
+        }
+    }
+
     fun reset() = viewModelScope.launch { settingsStore.reset() }
 
     val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
@@ -156,6 +179,54 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsStore.update { it.copy(isDevModeEnabled = value) }
         }
+    }
+
+    val isPaykitEnabled = settingsStore.data.map { PaykitFeatureFlags.isUiEnabled(it) }
+        .asStateFlow(initialValue = false)
+
+    val isPaykitStateLoaded = settingsStore.data.map { true }
+        .asStateFlow(initialValue = false)
+
+    fun setIsPaykitEnabled(value: Boolean) {
+        viewModelScope.launch {
+            updatePaykitEnabled(value)
+        }
+    }
+
+    private suspend fun updatePaykitEnabled(value: Boolean) {
+        val shouldEnable = value && PaykitFeatureFlags.isUiAvailable
+        val hadPublicPaykitState = settingsStore.data.first().hasPublicPaykitPublicationState()
+        settingsStore.update {
+            if (shouldEnable) {
+                it.copy(isPaykitEnabled = true)
+            } else {
+                it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
+            }
+        }
+
+        if (!shouldEnable) {
+            removePaykitEndpoints(hadPublicPaykitState)
+        }
+    }
+
+    private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean) {
+        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+
+        if (hadPublicPaykitState) {
+            publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                .onSuccess {
+                    settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                }
+                .onFailure {
+                    settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
+                    Logger.warn("Failed to remove public Paykit endpoints after disabling Paykit UI", it, context = TAG)
+                }
+        }
+
+        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+            .onFailure {
+                Logger.warn("Failed to remove private Paykit endpoints after disabling Paykit UI", it, context = TAG)
+            }
     }
 
     val isPinEnabled = settingsStore.data.map { it.isPinEnabled }

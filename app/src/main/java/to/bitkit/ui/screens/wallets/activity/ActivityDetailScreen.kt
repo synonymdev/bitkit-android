@@ -181,6 +181,7 @@ fun ActivityDetailScreen(
                 val app = appViewModel ?: return@Box
                 val settings = settingsViewModel ?: return@Box
                 val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
+                val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
                 val copyToastTitle = stringResource(R.string.common__copied)
 
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
@@ -212,7 +213,7 @@ fun ActivityDetailScreen(
                 }
 
                 val context = LocalContext.current
-                val assignedContact = assignedContactProfile(item, contacts)
+                val assignedContact = if (isPaykitEnabled) assignedContactProfile(item, contacts) else null
                 val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
                     mutableStateOf(null)
                 }
@@ -245,6 +246,7 @@ fun ActivityDetailScreen(
                         onChannelClick = onChannelClick,
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
+                        showContactActions = isPaykitEnabled,
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
                             app.toast(
@@ -326,6 +328,7 @@ private fun ActivityDetailContent(
     onChannelClick: ((String) -> Unit)?,
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
+    showContactActions: Boolean = true,
     boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
     hideBalance: Boolean = false,
@@ -542,7 +545,7 @@ private fun ActivityDetailContent(
         }
 
         ContactTagsSection(
-            contact = assignedContact,
+            contact = assignedContact.takeIf { showContactActions },
             tags = tags,
             onRemoveTag = onRemoveTag,
         )
@@ -596,29 +599,31 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                PrimaryButton(
-                    text = stringResource(
-                        if (assignedContact != null) {
-                            R.string.wallet__activity_detach
-                        } else {
-                            R.string.wallet__activity_assign
-                        }
-                    ),
-                    size = ButtonSize.Small,
-                    onClick = if (assignedContact != null) onDetachClick else onAssignClick,
-                    enabled = !isSelfSend,
-                    icon = {
-                        Icon(
-                            painter = painterResource(
-                                if (assignedContact != null) R.drawable.ic_user_minus else R.drawable.ic_user_plus
-                            ),
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+                if (showContactActions) {
+                    PrimaryButton(
+                        text = stringResource(
+                            if (assignedContact != null) {
+                                R.string.wallet__activity_detach
+                            } else {
+                                R.string.wallet__activity_assign
+                            }
+                        ),
+                        size = ButtonSize.Small,
+                        onClick = if (assignedContact != null) onDetachClick else onAssignClick,
+                        enabled = !isSelfSend,
+                        icon = {
+                            Icon(
+                                painter = painterResource(
+                                    if (assignedContact != null) R.drawable.ic_user_minus else R.drawable.ic_user_plus
+                                ),
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_tag),
                     size = ButtonSize.Small,

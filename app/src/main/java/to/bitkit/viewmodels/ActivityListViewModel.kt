@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
@@ -33,6 +34,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
+import to.bitkit.utils.PaykitFeatureFlags
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
@@ -41,6 +43,7 @@ class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
     pubkyRepo: PubkyRepo,
+    settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
@@ -55,7 +58,12 @@ class ActivityListViewModel @Inject constructor(
     val latestActivities = _latestActivities.asStateFlow()
 
     val contacts: StateFlow<ImmutableList<PubkyProfile>> =
-        pubkyRepo.contacts.map { it.toImmutableList() }.stateInScope(persistentListOf())
+        combine(
+            pubkyRepo.contacts,
+            settingsStore.data.map { PaykitFeatureFlags.isUiEnabled(it) },
+        ) { contacts, isPaykitEnabled ->
+            if (isPaykitEnabled) contacts.toImmutableList() else persistentListOf<PubkyProfile>()
+        }.stateInScope(persistentListOf())
 
     val availableTags: StateFlow<ImmutableList<String>> =
         activityRepo.state.map { it.tags }.stateInScope(persistentListOf())

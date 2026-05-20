@@ -497,6 +497,13 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut should continue when endpoint cleanup fails`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitBolt11 = "lnbc1old",
+            publicPaykitBolt11PaymentHash = "010203",
+            publicPaykitBolt11ExpiresAtMillis = 123L,
+        )
         whenever(pubkyService.getPaymentList(VALID_SELF_KEY)).thenAnswer { throw TestAppError("Cleanup failed") }
 
         val result = sut.signOut()
@@ -504,6 +511,12 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertNull(sut.publicKey.value)
         assertFalse(sut.isAuthenticated.value)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11)
+        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
         verifyBlocking(pubkyService) { signOut() }
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }

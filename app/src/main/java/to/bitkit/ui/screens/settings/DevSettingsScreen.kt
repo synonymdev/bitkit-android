@@ -4,12 +4,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
@@ -20,6 +28,7 @@ import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
@@ -27,6 +36,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.shareZipFile
+import to.bitkit.utils.PaykitFeatureFlags
 import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable
@@ -38,6 +48,8 @@ fun DevSettingsScreen(
     val activity = activityListViewModel ?: return
     val settings = settingsViewModel ?: return
     val context = LocalContext.current
+    val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    var showPaykitWarning by remember { mutableStateOf(false) }
 
     ScreenColumn {
         AppTopBar(
@@ -55,6 +67,22 @@ fun DevSettingsScreen(
             SettingsButtonRow("LDK") { navController.navigateTo(Routes.LdkDebug) }
             SettingsButtonRow("VSS") { navController.navigateTo(Routes.VssDebug) }
             SettingsButtonRow("Probing Tool") { navController.navigateTo(Routes.ProbingTool) }
+
+            if (PaykitFeatureFlags.isUiAvailable) {
+                SectionHeader("PAYKIT")
+                SettingsSwitchRow(
+                    title = "Enable Paykit UI",
+                    isChecked = isPaykitEnabled,
+                    onClick = {
+                        if (isPaykitEnabled) {
+                            settings.setIsPaykitEnabled(false)
+                            app.toast(type = Toast.ToastType.SUCCESS, title = "Paykit UI disabled")
+                        } else {
+                            showPaykitWarning = true
+                        }
+                    },
+                )
+            }
 
             SectionHeader("HARDWARE WALLET")
             SettingsButtonRow("Trezor") { navController.navigateTo(Routes.Trezor) }
@@ -183,5 +211,34 @@ fun DevSettingsScreen(
                 }
             )
         }
+    }
+
+    if (showPaykitWarning && PaykitFeatureFlags.isUiAvailable) {
+        AlertDialog(
+            onDismissRequest = { showPaykitWarning = false },
+            title = { Text("Enable Paykit UI?") },
+            text = {
+                Text(
+                    "Paykit features are still experimental and may not work reliably until supporting homeserver " +
+                        "changes are deployed."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settings.setIsPaykitEnabled(true)
+                        showPaykitWarning = false
+                        app.toast(type = Toast.ToastType.SUCCESS, title = "Paykit UI enabled")
+                    },
+                ) {
+                    Text("Enable")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPaykitWarning = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }

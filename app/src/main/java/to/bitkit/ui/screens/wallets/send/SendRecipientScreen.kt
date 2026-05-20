@@ -266,6 +266,7 @@ fun SendRecipientScreen(
         onClickManual = { onEvent(SendEvent.EnterManually) },
         cameraPermissionGranted = cameraPermissionState.status.isGranted,
         onRequestPermission = { context.startActivityAppSettings() },
+        showContactOption = true,
         modifier = modifier,
     )
 }
@@ -281,6 +282,7 @@ private fun SendRecipientContent(
     cameraPermissionGranted: Boolean,
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier,
+    showContactOption: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -317,13 +319,15 @@ private fun SendRecipientContent(
                 }
             }
 
-            RectangleButton(
-                label = stringResource(R.string.wallet__recipient_contact),
-                icon = R.drawable.ic_users,
-                iconTint = Colors.Brand,
-                modifier = Modifier.testTag("RecipientContact")
-            ) {
-                onClickContact()
+            if (showContactOption) {
+                RectangleButton(
+                    label = stringResource(R.string.wallet__recipient_contact),
+                    icon = R.drawable.ic_users,
+                    iconTint = Colors.Brand,
+                    modifier = Modifier.testTag("RecipientContact")
+                ) {
+                    onClickContact()
+                }
             }
 
             RectangleButton(
