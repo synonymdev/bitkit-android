@@ -1,6 +1,5 @@
 package to.bitkit.appwidget.config
 
-import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.Bundle
@@ -20,6 +19,7 @@ import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.appwidget.ui.weather.WeatherGlanceReceiver
 import to.bitkit.appwidget.ui.weather.WeatherGlanceWidget
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.enableAppEdgeToEdge
 import to.bitkit.utils.Logger
 
 @AndroidEntryPoint
@@ -34,6 +34,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableAppEdgeToEdge()
 
         val appWidgetId = intent?.extras?.getInt(
             AppWidgetManager.EXTRA_APPWIDGET_ID,
@@ -58,7 +59,9 @@ class AppWidgetConfigActivity : ComponentActivity() {
                     onConfirm = {
                         when (viewModel.uiState.value.type) {
                             AppWidgetType.PRICE -> PriceGlanceWidget().updateAll(this@AppWidgetConfigActivity)
-                            AppWidgetType.HEADLINES -> HeadlinesGlanceWidget().updateAll(this@AppWidgetConfigActivity)
+                            AppWidgetType.HEADLINES -> HeadlinesGlanceWidget().updateAll(
+                                this@AppWidgetConfigActivity,
+                            )
                             AppWidgetType.BLOCKS -> BlocksGlanceWidget().updateAll(this@AppWidgetConfigActivity)
                             AppWidgetType.FACTS -> Unit
                             AppWidgetType.WEATHER -> WeatherGlanceWidget().updateAll(this@AppWidgetConfigActivity)
@@ -68,7 +71,7 @@ class AppWidgetConfigActivity : ComponentActivity() {
                             AppWidgetManager.EXTRA_APPWIDGET_ID,
                             appWidgetId,
                         )
-                        setResult(Activity.RESULT_OK, result)
+                        setResult(RESULT_OK, result)
                         finish()
                     },
                     onCancel = { finish() },

@@ -1,6 +1,5 @@
 package to.bitkit.appwidget.config
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,10 +43,7 @@ internal fun PriceConfigContent(
     val prefs = state.pricePreferences
     val selectedPair = prefs.enabledPairs.firstOrNull() ?: TradingPair.BTC_USD
 
-    ScreenColumn(
-        noBackground = true,
-        modifier = Modifier.background(Colors.Gray7)
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.widgets__price__name),
             onBackClick = onCancel,

@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.widgets.blocks
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +36,7 @@ fun BlocksPreviewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customBlocksPreferences by blocksViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentBlock by blocksViewModel.currentBlock.collectAsStateWithLifecycle()
@@ -60,6 +60,7 @@ fun BlocksPreviewScreen(
             blocksViewModel.savePreferences()
             onClose()
         },
+        modifier = modifier
     )
 }
 
@@ -72,12 +73,10 @@ private fun Content(
     isBlocksWidgetEnabled: Boolean,
     blocksPreferences: BlocksPreferences,
     block: BlockModel?,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
-        noBackground = true,
-        modifier = Modifier
-            .background(Colors.Gray7)
-            .testTag("blocks_preview_screen")
+        modifier = modifier.testTag("blocks_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__blocks__name),

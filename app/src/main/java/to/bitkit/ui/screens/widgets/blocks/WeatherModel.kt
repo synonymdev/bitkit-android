@@ -21,7 +21,10 @@ data class WeatherModel(
     val icon: String,
 )
 
-fun WeatherDTO.toWeatherModel(locale: Locale = Locale.getDefault()): WeatherModel {
+fun WeatherDTO.toWeatherModel(
+    currentFee: String = this.currentFee,
+    locale: Locale = Locale.getDefault(),
+): WeatherModel {
     val title = when (condition) {
         FeeCondition.GOOD -> R.string.widgets__weather__condition__good__title
         FeeCondition.AVERAGE -> R.string.widgets__weather__condition__average__title

@@ -1,6 +1,5 @@
 package to.bitkit.appwidget.config
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,10 +42,7 @@ internal fun HeadlinesConfigContent(
     val prefs = state.headlinePreferences
     val previewArticle = state.previewArticle
 
-    ScreenColumn(
-        noBackground = true,
-        modifier = Modifier.background(Colors.Gray7)
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.widgets__news__name),
             onBackClick = onCancel,

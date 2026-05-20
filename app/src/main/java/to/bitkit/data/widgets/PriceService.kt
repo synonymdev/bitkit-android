@@ -22,7 +22,6 @@ import to.bitkit.models.WidgetType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.text.NumberFormat
-import java.util.Currency
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -147,24 +146,15 @@ class PriceService @Inject constructor(
         )
     }
 
-    private fun formatPrice(pair: TradingPair, price: Double): String {
+    private fun formatPrice(
+        pair: TradingPair,
+        price: Double,
+        locale: Locale = Locale.getDefault(),
+    ): String {
         return runCatching {
-            val currency = Currency.getInstance(pair.quote)
-            val numberFormat = NumberFormat.getCurrencyInstance(Locale.US).apply {
-                this.currency = currency
-                maximumFractionDigits = when {
-                    price >= 1000 -> 0
-                    price >= 1 -> 2
-                    else -> 6
-                }
-            }
-
-            // Format and remove currency symbol, keeping only the number with formatting
-            val formatted = numberFormat.format(price)
-            val currencySymbol = currency.symbol
-            formatted.replace(currencySymbol, "").trim()
+            formatPriceValue(price = price, locale = locale)
         }.onFailure {
-            Logger.warn("Error formatting price for ${pair.displayName}", e = it, context = TAG)
+            Logger.warn("Failed to format price for '${pair.displayName}'", it, context = TAG)
         }.getOrDefault(String.format(Locale.US, "%.2f", price))
     }
 
@@ -179,4 +169,26 @@ class PriceService @Inject constructor(
 sealed class PriceError(message: String) : AppError(message) {
     class InvalidResponse(override val message: String) : PriceError(message)
     class NetworkError(override val message: String) : PriceError(message)
+}
+
+private const val GROUPED_PRICE_THRESHOLD = 1_000.0
+private const val STANDARD_PRICE_THRESHOLD = 1.0
+private const val GROUPED_PRICE_DECIMALS = 0
+private const val STANDARD_PRICE_DECIMALS = 2
+private const val SMALL_PRICE_DECIMALS = 6
+private const val MIN_PRICE_DECIMALS = 0
+
+internal fun formatPriceValue(
+    price: Double,
+    locale: Locale = Locale.getDefault(),
+): String {
+    return NumberFormat.getNumberInstance(locale).apply {
+        maximumFractionDigits = when {
+            price >= GROUPED_PRICE_THRESHOLD -> GROUPED_PRICE_DECIMALS
+            price >= STANDARD_PRICE_THRESHOLD -> STANDARD_PRICE_DECIMALS
+            else -> SMALL_PRICE_DECIMALS
+        }
+        minimumFractionDigits = MIN_PRICE_DECIMALS
+        isGroupingUsed = true
+    }.format(price)
 }

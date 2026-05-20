@@ -13,5 +13,6 @@
     android:previewLayout="@layout/appwidget_preview_blocks"
     android:description="@string/widgets__blocks__description"
     android:configure="to.bitkit.appwidget.config.AppWidgetConfigActivity"
+    android:widgetFeatures="reconfigurable"
     android:updatePeriodMillis="0"
     tools:targetApi="31" />

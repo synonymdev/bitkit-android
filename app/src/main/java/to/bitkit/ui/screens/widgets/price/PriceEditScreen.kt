@@ -48,6 +48,7 @@ fun PriceEditScreen(
     viewModel: PriceViewModel,
     onBack: () -> Unit,
     navigatePreview: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customPreferences by viewModel.customPreferences.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -60,6 +61,7 @@ fun PriceEditScreen(
         onSelectTradingPair = { viewModel.selectTradingPair(pair = it) },
         onSelectPeriod = { viewModel.setPeriod(period = it) },
         isLoading = isLoading,
+        modifier = modifier
     )
 }
 
@@ -72,14 +74,12 @@ fun PriceEditContent(
     onClickPreview: () -> Unit,
     preferences: PricePreferences,
     isLoading: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val selectedPair = preferences.enabledPairs.firstOrNull() ?: TradingPair.BTC_USD
 
     ScreenColumn(
-        noBackground = true,
-        modifier = Modifier
-            .background(Colors.Gray7)
-            .testTag("price_edit_screen")
+        modifier = modifier.testTag("price_edit_screen")
     ) {
         Box(
             modifier = Modifier

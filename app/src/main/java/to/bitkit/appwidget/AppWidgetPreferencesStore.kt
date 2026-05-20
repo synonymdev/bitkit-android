@@ -19,6 +19,7 @@ import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.AppWidgetDataSerializer
+import to.bitkit.repositories.CurrencyRepo
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,6 +33,7 @@ private val Context.appWidgetDataStore: DataStore<AppWidgetData> by dataStore(
 interface AppWidgetEntryPoint {
     fun appWidgetPreferencesStore(): AppWidgetPreferencesStore
     fun appWidgetDataRepository(): AppWidgetDataRepository
+    fun currencyRepo(): CurrencyRepo
 }
 
 @Singleton

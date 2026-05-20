@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
@@ -21,7 +23,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class WeatherViewModel @Inject constructor(
-    private val widgetsRepo: WidgetsRepo
+    private val widgetsRepo: WidgetsRepo,
+    private val currencyRepo: CurrencyRepo,
 ) : ViewModel() {
 
     // MARK: - Public StateFlows
@@ -51,8 +54,14 @@ class WeatherViewModel @Inject constructor(
             initialValue = true
         )
 
-    val currentWeather: StateFlow<WeatherModel?> = widgetsRepo.weatherFlow.map { weather ->
-        weather?.toWeatherModel()
+    val currentWeather: StateFlow<WeatherModel?> = combine(
+        widgetsRepo.weatherFlow,
+        currencyRepo.currencyState,
+    ) { weather, _ ->
+        weather?.toWeatherModel(
+            currentFee = currencyRepo.formatSatsAsFiatWithSymbol(weather.avgFeeSats, withSpace = true)
+                ?: weather.currentFee,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),

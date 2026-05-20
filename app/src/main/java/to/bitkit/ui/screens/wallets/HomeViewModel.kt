@@ -31,6 +31,7 @@ import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
@@ -45,6 +46,7 @@ class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val walletRepo: WalletRepo,
     private val widgetsRepo: WidgetsRepo,
+    private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: TransferRepo,
     private val pubkyRepo: PubkyRepo,
@@ -76,9 +78,10 @@ class HomeViewModel @Inject constructor(
             combine(
                 settingsStore.data,
                 widgetsRepo.widgetsDataFlow,
+                currencyRepo.currencyState,
                 _currentArticle,
                 _currentFact,
-            ) { settings, widgetsData, currentArticle, currentFact ->
+            ) { settings, widgetsData, _, currentArticle, currentFact ->
                 _uiState.update {
                     it.copy(
                         showWidgets = settings.showWidgets,
@@ -97,7 +100,13 @@ class HomeViewModel @Inject constructor(
                         currentArticle = currentArticle,
                         currentFact = currentFact,
                         currentBlock = widgetsData.block?.toBlockModel(),
-                        currentWeather = widgetsData.weather?.toWeatherModel(),
+                        currentWeather = widgetsData.weather?.let { weather ->
+                            val currentFee = currencyRepo.formatSatsAsFiatWithSymbol(
+                                sats = weather.avgFeeSats,
+                                withSpace = true,
+                            ) ?: weather.currentFee
+                            weather.toWeatherModel(currentFee = currentFee)
+                        },
                         currentPrice = widgetsData.price,
                         showWidgetsOnboardingHint = settings.showWidgets &&
                             !settings.widgetsOnboardingHintDismissed,

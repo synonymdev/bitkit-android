@@ -1,6 +1,5 @@
 package to.bitkit.appwidget.config
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,15 +36,11 @@ internal fun WeatherConfigContent(
     onReset: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val prefs = state.weatherPreferences
     val weather = state.previewWeather
 
-    ScreenColumn(
-        noBackground = true,
-        modifier = modifier.background(Colors.Gray7)
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.widgets__weather__name),
             onBackClick = onCancel,
