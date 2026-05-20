@@ -11,9 +11,11 @@ import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
+import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
 
+@ComposeUi
 class WeatherEditScreenTest {
 
     @get:Rule

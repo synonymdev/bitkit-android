@@ -7,8 +7,10 @@ import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 
+@ComposeUi
 class HeadlinesPreviewContentTest {
 
     @get:Rule

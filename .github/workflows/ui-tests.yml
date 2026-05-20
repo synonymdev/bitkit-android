@@ -5,6 +5,12 @@ on:
     branches: [ "master" ]
 
   workflow_dispatch:
+    inputs:
+      suites:
+        description: "Android test annotations: all or comma-separated simple annotation names"
+        required: false
+        default: "all"
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -81,6 +87,8 @@ jobs:
 
       - name: Run UI tests on Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_TEST_SUITES: ${{ github.event.inputs.suites || 'all' }}
         with:
           api-level: 30
           arch: x86_64
@@ -88,20 +96,7 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            # Wait for emulator to be fully ready
-            adb wait-for-device
-            echo "Waiting for boot to complete..."
-            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
-            sleep 10
-
-            # Verify emulator ABI matches app
-            echo "Emulator ABI:"
-            adb shell getprop ro.product.cpu.abi
-
-            # Install and run tests
-            ./gradlew installDevDebug
-            ./gradlew connectedDevDebugAndroidTest
+          script: bash .github/scripts/run-ui-tests.sh
 
       - name: Upload UI test report
         if: always()
