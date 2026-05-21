@@ -14,12 +14,13 @@ import kotlinx.coroutines.launch
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.BlocksWidgetField
 import to.bitkit.models.widget.toBlockModel
+import to.bitkit.models.widget.toggleField
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
 @HiltViewModel
-@Suppress("TooManyFunctions")
 class BlocksViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo
 ) : ViewModel() {
@@ -70,45 +71,9 @@ class BlocksViewModel @Inject constructor(
 
     // MARK: - Public Methods
 
-    fun toggleShowBlock() {
+    fun toggleField(field: BlocksWidgetField) {
         _customPreferences.update { preferences ->
-            preferences.copy(showBlock = !preferences.showBlock)
-        }
-    }
-
-    fun toggleShowTime() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showTime = !preferences.showTime)
-        }
-    }
-
-    fun toggleShowDate() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showDate = !preferences.showDate)
-        }
-    }
-
-    fun toggleShowTransactions() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showTransactions = !preferences.showTransactions)
-        }
-    }
-
-    fun toggleShowSize() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showSize = !preferences.showSize)
-        }
-    }
-
-    fun toggleShowFees() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showFees = !preferences.showFees)
-        }
-    }
-
-    fun toggleShowSource() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showSource = !preferences.showSource)
+            preferences.toggleField(field)
         }
     }
 

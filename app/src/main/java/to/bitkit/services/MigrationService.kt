@@ -58,6 +58,7 @@ import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.limitedToMax
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherDataOption
@@ -1190,7 +1191,6 @@ class MigrationService @Inject constructor(
                 val showTransactions = blocksJson["transactionCount"]?.jsonPrimitive?.content
                     ?.toBooleanStrictOrNull() ?: false
                 val showSize = blocksJson["size"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-                val showSource = blocksJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateBlocksPreferences(
                     BlocksPreferences(
@@ -1199,8 +1199,7 @@ class MigrationService @Inject constructor(
                         showDate = showDate,
                         showTransactions = showTransactions,
                         showSize = showSize,
-                        showSource = showSource
-                    )
+                    ).limitedToMax()
                 )
             }.onFailure {
                 Logger.error("Failed to migrate blocks preferences: $it", it, context = TAG)
@@ -2102,7 +2101,6 @@ class MigrationService @Inject constructor(
                 put("date", getBool(prefs, "date", "showDate", defaultValue = true))
                 put("transactionCount", getBool(prefs, "transactionCount", "showTransactions", defaultValue = false))
                 put("size", getBool(prefs, "size", "showSize", defaultValue = false))
-                put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["blocks"] = blocksOptions.toString().encodeToByteArray()
         }

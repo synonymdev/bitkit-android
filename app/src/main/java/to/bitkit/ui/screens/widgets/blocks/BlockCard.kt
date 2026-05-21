@@ -21,7 +21,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import to.bitkit.R
+import to.bitkit.models.widget.BlockModel
+import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.MAX_BLOCKS_FIELDS
+import to.bitkit.models.widget.enabledFields
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
@@ -29,25 +32,16 @@ import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun BlockCard(
     modifier: Modifier = Modifier,
-    showBlock: Boolean,
-    showTime: Boolean,
-    showDate: Boolean,
-    showTransactions: Boolean,
-    showSize: Boolean,
-    showFees: Boolean,
-    showSource: Boolean,
-    block: String,
-    time: String,
-    date: String,
-    transactions: String,
-    size: String,
-    fees: String,
-    source: String,
+    preferences: BlocksPreferences,
+    block: BlockModel,
 ) {
+    val fields = preferences.enabledFields()
+        .filter { it.value(block).isNotEmpty() }
+        .take(MAX_BLOCKS_FIELDS)
+
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
@@ -59,95 +53,27 @@ fun BlockCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            if (showBlock && block.isNotEmpty()) {
+            fields.forEach { field ->
                 WidgetDataRow(
-                    icon = R.drawable.ic_cube,
-                    label = stringResource(R.string.widgets__blocks__field__block),
-                    value = block,
-                    testTagPrefix = "block",
-                )
-            }
-            if (showTime && time.isNotEmpty()) {
-                WidgetDataRow(
-                    icon = R.drawable.ic_clock,
-                    label = stringResource(R.string.widgets__blocks__field__time),
-                    value = time,
-                    testTagPrefix = "time",
-                )
-            }
-            if (showDate && date.isNotEmpty()) {
-                WidgetDataRow(
-                    icon = R.drawable.ic_calendar,
-                    label = stringResource(R.string.widgets__blocks__field__date),
-                    value = date,
-                    testTagPrefix = "date",
-                )
-            }
-            if (showTransactions && transactions.isNotEmpty()) {
-                WidgetDataRow(
-                    icon = R.drawable.ic_transfer,
-                    label = stringResource(R.string.widgets__blocks__field__transactions),
-                    value = transactions,
-                    testTagPrefix = "transactions",
-                )
-            }
-            if (showSize && size.isNotEmpty()) {
-                WidgetDataRow(
-                    icon = R.drawable.ic_file_text,
-                    label = stringResource(R.string.widgets__blocks__field__size),
-                    value = size,
-                    testTagPrefix = "size",
-                )
-            }
-            if (showFees && fees.isNotEmpty()) {
-                WidgetDataRow(
-                    icon = R.drawable.ic_coins,
-                    label = stringResource(R.string.widgets__blocks__field__fees),
-                    value = fees,
-                    testTagPrefix = "fees",
-                )
-            }
-            if (showSource && source.isNotEmpty()) {
-                WidgetDataRow(
-                    icon = R.drawable.ic_globe,
-                    label = stringResource(R.string.widgets__widget__source),
-                    value = source,
-                    testTagPrefix = "source",
+                    icon = field.icon,
+                    label = stringResource(field.labelRes),
+                    value = field.value(block),
+                    testTagPrefix = field.testTag,
                 )
             }
         }
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun BlockCardSmall(
     modifier: Modifier = Modifier,
-    showBlock: Boolean,
-    showTime: Boolean,
-    showDate: Boolean,
-    showTransactions: Boolean,
-    showSize: Boolean,
-    showFees: Boolean,
-    showSource: Boolean,
-    block: String,
-    time: String,
-    date: String,
-    transactions: String,
-    size: String,
-    fees: String,
-    source: String,
+    preferences: BlocksPreferences,
+    block: BlockModel,
 ) {
-    val rows = listOfNotNull(
-        SmallRowData(R.drawable.ic_cube, block, "block").takeIf { showBlock && block.isNotEmpty() },
-        SmallRowData(R.drawable.ic_clock, time, "time").takeIf { showTime && time.isNotEmpty() },
-        SmallRowData(R.drawable.ic_calendar, date, "date").takeIf { showDate && date.isNotEmpty() },
-        SmallRowData(R.drawable.ic_transfer, transactions, "transactions")
-            .takeIf { showTransactions && transactions.isNotEmpty() },
-        SmallRowData(R.drawable.ic_file_text, size, "size").takeIf { showSize && size.isNotEmpty() },
-        SmallRowData(R.drawable.ic_coins, fees, "fees").takeIf { showFees && fees.isNotEmpty() },
-        SmallRowData(R.drawable.ic_globe, source, "source").takeIf { showSource && source.isNotEmpty() },
-    ).take(MAX_SMALL_ROWS)
+    val fields = preferences.enabledFields()
+        .filter { it.value(block).isNotEmpty() }
+        .take(MAX_BLOCKS_FIELDS)
 
     Box(
         modifier = modifier
@@ -161,24 +87,16 @@ fun BlockCardSmall(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            rows.forEach { row ->
+            fields.forEach { field ->
                 SmallDataRow(
-                    icon = row.icon,
-                    value = row.value,
-                    testTagPrefix = row.testTagPrefix,
+                    icon = field.icon,
+                    value = field.value(block),
+                    testTagPrefix = field.testTag,
                 )
             }
         }
     }
 }
-
-private const val MAX_SMALL_ROWS = 4
-
-private data class SmallRowData(
-    @DrawableRes val icon: Int,
-    val value: String,
-    val testTagPrefix: String,
-)
 
 @Composable
 private fun WidgetDataRow(
@@ -259,20 +177,20 @@ private fun PreviewLargeAll() {
                 .padding(16.dp)
         ) {
             BlockCard(
-                showBlock = true,
-                showTime = true,
-                showDate = true,
-                showTransactions = true,
-                showSize = true,
-                showFees = true,
-                showSource = true,
-                block = "761,405",
-                time = "01:31:42 UTC",
-                date = "11/2/2022",
-                transactions = "2,175",
-                size = "1,606Kb",
-                fees = "25 059 357",
-                source = "mempool.io",
+                preferences = BlocksPreferences(
+                    showBlock = true,
+                    showTime = true,
+                    showDate = true,
+                    showTransactions = true,
+                ),
+                block = BlockModel(
+                    height = "761,405",
+                    time = "01:31:42 UTC",
+                    date = "11/2/2022",
+                    transactionCount = "2,175",
+                    size = "1,606Kb",
+                    fees = "25 059 357",
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -281,7 +199,7 @@ private fun PreviewLargeAll() {
 
 @Preview(showBackground = true)
 @Composable
-private fun PreviewLargeDefault() {
+private fun PreviewLargeSizeAndFees() {
     AppThemeSurface {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -290,20 +208,22 @@ private fun PreviewLargeDefault() {
                 .padding(16.dp)
         ) {
             BlockCard(
-                showBlock = true,
-                showTime = true,
-                showDate = true,
-                showTransactions = true,
-                showSize = false,
-                showFees = false,
-                showSource = false,
-                block = "761,405",
-                time = "01:31:42 UTC",
-                date = "11/2/2022",
-                transactions = "2,175",
-                size = "",
-                fees = "",
-                source = "",
+                preferences = BlocksPreferences(
+                    showBlock = true,
+                    showTime = true,
+                    showDate = false,
+                    showTransactions = false,
+                    showSize = true,
+                    showFees = true,
+                ),
+                block = BlockModel(
+                    height = "761,405",
+                    time = "01:31:42 UTC",
+                    date = "11/2/2022",
+                    transactionCount = "2,175",
+                    size = "1,606Kb",
+                    fees = "25 059 357",
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -321,20 +241,15 @@ private fun PreviewSmall() {
                 .padding(16.dp)
         ) {
             BlockCardSmall(
-                showBlock = true,
-                showTime = true,
-                showDate = true,
-                showTransactions = true,
-                showSize = false,
-                showFees = false,
-                showSource = false,
-                block = "761,405",
-                time = "01:31:42 UTC",
-                date = "11/2/2022",
-                transactions = "2,175",
-                size = "",
-                fees = "",
-                source = "",
+                preferences = BlocksPreferences(),
+                block = BlockModel(
+                    height = "761,405",
+                    time = "01:31:42 UTC",
+                    date = "11/2/2022",
+                    transactionCount = "2,175",
+                    size = "",
+                    fees = "",
+                ),
             )
         }
     }

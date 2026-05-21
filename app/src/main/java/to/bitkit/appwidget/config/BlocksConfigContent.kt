@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.BlocksWidgetField
+import to.bitkit.models.widget.enabledFields
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
@@ -32,17 +34,10 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
 
-@Suppress("LongParameterList")
 @Composable
 internal fun BlocksConfigContent(
     state: AppWidgetConfigUiState,
-    onToggleBlock: () -> Unit,
-    onToggleTime: () -> Unit,
-    onToggleDate: () -> Unit,
-    onToggleTransactions: () -> Unit,
-    onToggleSize: () -> Unit,
-    onToggleFees: () -> Unit,
-    onToggleSource: () -> Unit,
+    onToggleField: (BlocksWidgetField) -> Unit,
     onReset: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -55,7 +50,6 @@ internal fun BlocksConfigContent(
             date = "11/2/2022",
             transactionCount = "2,175",
             size = "1,606 Kb",
-            source = "mempool.io",
             fees = "25 059 357",
         )
     }
@@ -75,60 +69,20 @@ internal fun BlocksConfigContent(
             VerticalSpacer(16.dp)
 
             Caption13Up(
-                text = stringResource(R.string.widgets__widget__data),
+                text = stringResource(R.string.widgets__blocks__data_header),
                 color = Colors.White64,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            BlockToggleRow(
-                icon = R.drawable.ic_cube,
-                label = stringResource(R.string.widgets__blocks__field__block),
-                value = previewBlock.height,
-                isEnabled = prefs.showBlock,
-                onToggle = onToggleBlock,
-            )
-            BlockToggleRow(
-                icon = R.drawable.ic_clock,
-                label = stringResource(R.string.widgets__blocks__field__time),
-                value = previewBlock.time,
-                isEnabled = prefs.showTime,
-                onToggle = onToggleTime,
-            )
-            BlockToggleRow(
-                icon = R.drawable.ic_calendar,
-                label = stringResource(R.string.widgets__blocks__field__date),
-                value = previewBlock.date,
-                isEnabled = prefs.showDate,
-                onToggle = onToggleDate,
-            )
-            BlockToggleRow(
-                icon = R.drawable.ic_transfer,
-                label = stringResource(R.string.widgets__blocks__field__transactions),
-                value = previewBlock.transactionCount,
-                isEnabled = prefs.showTransactions,
-                onToggle = onToggleTransactions,
-            )
-            BlockToggleRow(
-                icon = R.drawable.ic_file_text,
-                label = stringResource(R.string.widgets__blocks__field__size),
-                value = previewBlock.size,
-                isEnabled = prefs.showSize,
-                onToggle = onToggleSize,
-            )
-            BlockToggleRow(
-                icon = R.drawable.ic_coins,
-                label = stringResource(R.string.widgets__blocks__field__fees),
-                value = previewBlock.fees,
-                isEnabled = prefs.showFees,
-                onToggle = onToggleFees,
-            )
-            BlockToggleRow(
-                icon = R.drawable.ic_globe,
-                label = stringResource(R.string.widgets__widget__source),
-                value = previewBlock.source,
-                isEnabled = prefs.showSource,
-                onToggle = onToggleSource,
-            )
+            BlocksWidgetField.entries.forEach { field ->
+                BlockToggleRow(
+                    icon = field.icon,
+                    label = stringResource(field.labelRes),
+                    value = field.value(previewBlock),
+                    isEnabled = field.isEnabled(prefs),
+                    onToggle = { onToggleField(field) },
+                )
+            }
         }
 
         Row(
@@ -147,9 +101,7 @@ internal fun BlocksConfigContent(
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 isLoading = state.isSaving,
-                enabled = !state.isSaving && prefs.run {
-                    showBlock || showTime || showDate || showTransactions || showSize || showFees || showSource
-                },
+                enabled = !state.isSaving && prefs.enabledFields().isNotEmpty(),
                 fullWidth = false,
                 onClick = onSave,
                 modifier = Modifier.weight(1f)

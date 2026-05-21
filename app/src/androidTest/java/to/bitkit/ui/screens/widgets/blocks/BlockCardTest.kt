@@ -5,6 +5,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.models.widget.BlockModel
+import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 
@@ -20,27 +22,23 @@ class BlockCardTest {
     private val testTransactions = "2,175"
     private val testSize = "1,606Kb"
     private val testFees = "25 059 357"
-    private val testSource = "mempool.io"
+
+    private val fullBlock = BlockModel(
+        height = testBlock,
+        time = testTime,
+        date = testDate,
+        transactionCount = testTransactions,
+        size = testSize,
+        fees = testFees,
+    )
 
     @Test
-    fun testBlockCardWithAllElements() {
+    fun testBlockCardWithDefaultFields() {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showFees = true,
-                    showSource = true,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    fees = testFees,
-                    source = testSource,
+                    preferences = BlocksPreferences(),
+                    block = fullBlock,
                 )
             }
         }
@@ -49,45 +47,42 @@ class BlockCardTest {
         composeTestRule.onNodeWithTag("time_row", useUnmergedTree = true).assertExists()
         composeTestRule.onNodeWithTag("date_row", useUnmergedTree = true).assertExists()
         composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("source_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertDoesNotExist()
 
         composeTestRule.onNodeWithTag("block_text", useUnmergedTree = true).assertTextEquals(testBlock)
         composeTestRule.onNodeWithTag("time_text", useUnmergedTree = true).assertTextEquals(testTime)
         composeTestRule.onNodeWithTag("date_text", useUnmergedTree = true).assertTextEquals(testDate)
         composeTestRule.onNodeWithTag("transactions_text", useUnmergedTree = true).assertTextEquals(testTransactions)
-        composeTestRule.onNodeWithTag("size_text", useUnmergedTree = true).assertTextEquals(testSize)
-        composeTestRule.onNodeWithTag("fees_text", useUnmergedTree = true).assertTextEquals(testFees)
-        composeTestRule.onNodeWithTag("source_text", useUnmergedTree = true).assertTextEquals(testSource)
     }
 
     @Test
-    fun testBlockCardWithoutSource() {
+    fun testBlockCardWithSizeAndFees() {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showFees = true,
-                    showSource = false,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    fees = testFees,
-                    source = testSource,
+                    preferences = BlocksPreferences(
+                        showBlock = true,
+                        showTime = true,
+                        showDate = false,
+                        showTransactions = false,
+                        showSize = true,
+                        showFees = true,
+                    ),
+                    block = fullBlock,
                 )
             }
         }
 
         composeTestRule.onNodeWithTag("block_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("source_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("source_text", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("time_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("date_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag("size_text", useUnmergedTree = true).assertTextEquals(testSize)
+        composeTestRule.onNodeWithTag("fees_text", useUnmergedTree = true).assertTextEquals(testFees)
     }
 
     @Test
@@ -95,20 +90,15 @@ class BlockCardTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showFees = false,
-                    showSource = true,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    fees = testFees,
-                    source = testSource,
+                    preferences = BlocksPreferences(
+                        showBlock = true,
+                        showTime = true,
+                        showDate = true,
+                        showTransactions = false,
+                        showSize = false,
+                        showFees = false,
+                    ),
+                    block = fullBlock,
                 )
             }
         }
@@ -123,20 +113,22 @@ class BlockCardTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showBlock = true,
-                    showTime = false,
-                    showDate = false,
-                    showTransactions = false,
-                    showSize = false,
-                    showFees = false,
-                    showSource = false,
-                    block = testBlock,
-                    time = "",
-                    date = "",
-                    transactions = "",
-                    size = "",
-                    fees = "",
-                    source = "",
+                    preferences = BlocksPreferences(
+                        showBlock = true,
+                        showTime = false,
+                        showDate = false,
+                        showTransactions = false,
+                        showSize = false,
+                        showFees = false,
+                    ),
+                    block = BlockModel(
+                        height = testBlock,
+                        time = "",
+                        date = "",
+                        transactionCount = "",
+                        size = "",
+                        fees = "",
+                    ),
                 )
             }
         }
@@ -147,7 +139,6 @@ class BlockCardTest {
         composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertDoesNotExist()
         composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertDoesNotExist()
         composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("source_row", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
@@ -155,20 +146,15 @@ class BlockCardTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showFees = true,
-                    showSource = true,
-                    block = "",
-                    time = "",
-                    date = "",
-                    transactions = "",
-                    size = "",
-                    fees = "",
-                    source = "",
+                    preferences = BlocksPreferences(),
+                    block = BlockModel(
+                        height = "",
+                        time = "",
+                        date = "",
+                        transactionCount = "",
+                        size = "",
+                        fees = "",
+                    ),
                 )
             }
         }
@@ -179,28 +165,15 @@ class BlockCardTest {
         composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertDoesNotExist()
         composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertDoesNotExist()
         composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("source_row", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
-    fun testBlockCardSmallWithAllElements() {
+    fun testBlockCardSmallWithDefaultFields() {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCardSmall(
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showFees = true,
-                    showSource = true,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    fees = testFees,
-                    source = testSource,
+                    preferences = BlocksPreferences(),
+                    block = fullBlock,
                 )
             }
         }

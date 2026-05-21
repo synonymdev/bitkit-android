@@ -12,5 +12,4 @@ data class BlocksPreferences(
     val showTransactions: Boolean = true,
     val showSize: Boolean = false,
     val showFees: Boolean = false,
-    val showSource: Boolean = false,
 )

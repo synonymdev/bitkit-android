@@ -18,6 +18,16 @@ fun Subtitle(
 }
 
 @Composable
+fun BodyM(
+    text: String,
+    modifier: GlanceModifier = GlanceModifier,
+    color: ColorProvider? = null,
+    maxLines: Int = Int.MAX_VALUE,
+) {
+    Text(text = text, style = GlanceTextStyles.bodyM.withColor(color), maxLines = maxLines, modifier = modifier)
+}
+
+@Composable
 fun BodyMSB(
     text: String,
     modifier: GlanceModifier = GlanceModifier,
