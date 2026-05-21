@@ -76,11 +76,16 @@ fun DevSettingsScreen(
                     onClick = {
                         if (isPaykitEnabled) {
                             settings.setIsPaykitEnabled(false)
-                            app.toast(type = Toast.ToastType.SUCCESS, title = "Paykit UI disabled")
+                            app.toast(
+                                type = Toast.ToastType.SUCCESS,
+                                title = "Paykit UI disabled",
+                                testTag = "PaykitUiDisabledToast",
+                            )
                         } else {
                             showPaykitWarning = true
                         }
                     },
+                    switchTestTag = "PaykitUiToggle",
                 )
             }
 
@@ -228,7 +233,11 @@ fun DevSettingsScreen(
                     onClick = {
                         settings.setIsPaykitEnabled(true)
                         showPaykitWarning = false
-                        app.toast(type = Toast.ToastType.SUCCESS, title = "Paykit UI enabled")
+                        app.toast(
+                            type = Toast.ToastType.SUCCESS,
+                            title = "Paykit UI enabled",
+                            testTag = "PaykitUiEnabledToast",
+                        )
                     },
                 ) {
                     Text("Enable")
