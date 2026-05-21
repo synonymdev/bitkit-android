@@ -17,7 +17,9 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
+import to.bitkit.repositories.ConnectedTrezorDevice
 import to.bitkit.repositories.KnownDevice
+import to.bitkit.repositories.KnownDeviceTransportType
 import to.bitkit.repositories.TrezorState
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
@@ -55,7 +57,7 @@ internal object TrezorPreviewData {
         id = "usb-1",
         name = "Trezor Safe 5",
         path = "/dev/usb/001",
-        transportType = "usb",
+        transportType = KnownDeviceTransportType.USB,
         label = "My Savings",
         model = "Safe 5",
         lastConnectedAt = 1_700_000_000_000L,
@@ -65,7 +67,7 @@ internal object TrezorPreviewData {
         id = "ble-1",
         name = "Trezor Safe 7",
         path = "AA:BB:CC:DD:EE:FF",
-        transportType = "bluetooth",
+        transportType = KnownDeviceTransportType.BLUETOOTH,
         label = "Daily Wallet",
         model = "Safe 7",
         lastConnectedAt = 1_700_000_000_000L,
@@ -182,49 +184,59 @@ internal object TrezorPreviewData {
 
     val connectedState = TrezorState(
         isInitialized = true,
-        connectedDevice = sampleFeatures,
-        connectedDeviceId = "trezor-abc123",
+        connected = ConnectedTrezorDevice(
+            id = "trezor-abc123",
+            features = sampleFeatures,
+        ),
     )
 
     val connectedStateWithResults = TrezorState(
         isInitialized = true,
-        connectedDevice = sampleFeatures,
-        connectedDeviceId = "trezor-abc123",
+        connected = ConnectedTrezorDevice(
+            id = "trezor-abc123",
+            features = sampleFeatures,
+        ),
         lastAddress = sampleAddressResponse,
         lastPublicKey = samplePublicKeyResponse,
     )
 
     val uiStateWithSignature = TrezorUiState(
-        selectedNetwork = BitkitCoreNetwork.REGTEST,
-        lastSignature = "H3bK9x...signature...base64==",
-        lastSigningAddress = SAMPLE_ADDRESS,
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        message = TrezorMessageState(
+            lastSignature = "H3bK9x...signature...base64==",
+            lastSigningAddress = SAMPLE_ADDRESS,
+        ),
     )
 
     val uiStateWithAccountInfo = TrezorUiState(
-        selectedNetwork = BitkitCoreNetwork.REGTEST,
-        lookupInput = SAMPLE_XPUB,
-        accountInfoResult = sampleAccountInfoResult,
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        lookup = TrezorLookupState(
+            input = SAMPLE_XPUB,
+            accountInfoResult = sampleAccountInfoResult,
+        ),
     )
 
     val uiStateWithAddressInfo = TrezorUiState(
-        selectedNetwork = BitkitCoreNetwork.REGTEST,
-        lookupInput = SAMPLE_ADDRESS,
-        addressInfoResult = sampleAddressInfoResult,
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        lookup = TrezorLookupState(
+            input = SAMPLE_ADDRESS,
+            addressInfoResult = sampleAddressInfoResult,
+        ),
     )
 
     val uiStateReview = TrezorUiState(
-        selectedNetwork = BitkitCoreNetwork.REGTEST,
-        sendStep = SendStep.REVIEW,
-        sendAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-        sendAmountSats = "45000",
-        sendFeeRate = "5",
-        composeResult = sampleComposeResult,
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        send = TrezorSendState(
+            address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+            amountSats = "45000",
+            feeRate = "5",
+            step = SendStep.Review(sampleComposeResult),
+        ),
     )
 
     val uiStateSigned = TrezorUiState(
-        selectedNetwork = BitkitCoreNetwork.REGTEST,
-        sendStep = SendStep.SIGNED,
-        signedTxResult = sampleSignedTx,
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        send = TrezorSendState(step = SendStep.Signed(sampleSignedTx)),
     )
 
     val sampleWalletBalance = WalletBalance(
@@ -284,15 +296,20 @@ internal object TrezorPreviewData {
     )
 
     val uiStateWithTxHistory = TrezorUiState(
-        selectedNetwork = BitkitCoreNetwork.REGTEST,
-        txHistoryInput = SAMPLE_XPUB,
-        txHistoryResult = sampleTransactionHistoryResult,
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        txHistory = TrezorTxHistoryState(
+            input = SAMPLE_XPUB,
+            result = sampleTransactionHistoryResult,
+        ),
     )
 
     val uiStateBroadcast = TrezorUiState(
-        selectedNetwork = BitkitCoreNetwork.REGTEST,
-        sendStep = SendStep.SIGNED,
-        signedTxResult = sampleSignedTx,
-        broadcastTxid = "c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5",
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        send = TrezorSendState(
+            step = SendStep.Signed(
+                signedTx = sampleSignedTx,
+                broadcastTxid = "c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5e6f7a8b9c4d5",
+            ),
+        ),
     )
 }

@@ -1,11 +1,16 @@
 package to.bitkit.ui.screens.trezor
 
+import com.synonym.bitkitcore.TrezorSignedTx
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -137,7 +142,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         assertFalse(state.isSigning)
         assertNull(state.composeResult)
         assertNull(state.signedTxResult)
-        assertEquals(SendStep.FORM, state.sendStep)
+        assertEquals(SendStep.Form, state.sendStep)
         assertFalse(state.isBroadcasting)
         assertNull(state.broadcastTxid)
     }
@@ -244,6 +249,99 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `broadcastSignedTx should not restore signed step after reset`() = test {
+        loadSignedTx()
+        val broadcastResult = CompletableDeferred<Result<String>>()
+        whenever(trezorRepo.broadcastRawTx(any(), any()))
+            .doSuspendableAnswer { broadcastResult.await() }
+
+        sut.broadcastSignedTx()
+        assertTrue(sut.uiState.value.isBroadcasting)
+
+        sut.resetSendFlow()
+        broadcastResult.complete(Result.success("broadcast-txid"))
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertEquals(SendStep.Form, state.sendStep)
+        assertFalse(state.isBroadcasting)
+        assertNull(state.broadcastTxid)
+    }
+
+    @Test
+    fun `broadcastSignedTx failure should not clear newer broadcast`() = test {
+        loadSignedTx()
+        val firstBroadcastResult = CompletableDeferred<Result<String>>()
+        val secondBroadcastResult = CompletableDeferred<Result<String>>()
+        val broadcastResults = ArrayDeque(
+            listOf(firstBroadcastResult, secondBroadcastResult)
+        )
+        whenever(trezorRepo.broadcastRawTx(any(), any()))
+            .doSuspendableAnswer { broadcastResults.removeFirst().await() }
+
+        sut.broadcastSignedTx()
+        assertTrue(sut.uiState.value.isBroadcasting)
+
+        val secondSignedTx = TrezorSignedTx(
+            signatures = listOf("30440220new"),
+            serializedTx = "0200000001new",
+            txid = "new-broadcast-txid",
+        )
+        sut.resetSendFlow()
+        loadSignedTx(secondSignedTx)
+        sut.broadcastSignedTx()
+        assertTrue(sut.uiState.value.isBroadcasting)
+
+        firstBroadcastResult.complete(Result.failure(RuntimeException("first failed")))
+        advanceUntilIdle()
+
+        val staleFailureState = sut.uiState.value
+        assertEquals(secondSignedTx, staleFailureState.signedTxResult)
+        assertTrue(staleFailureState.isBroadcasting)
+        assertNull(staleFailureState.broadcastTxid)
+
+        secondBroadcastResult.complete(Result.success("second-broadcast-txid"))
+        advanceUntilIdle()
+
+        val finalState = sut.uiState.value
+        assertFalse(finalState.isBroadcasting)
+        assertEquals("second-broadcast-txid", finalState.broadcastTxid)
+    }
+
+    @Test
+    fun `composeTx should not call repo when destination address is blank`() = test {
+        loadAccountInfo()
+        sut.setSendAmount("1000")
+        sut.setSendFeeRate("2")
+
+        sut.composeTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).composeTransaction(any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `composeTx should not call repo when fee rate is invalid`() = test {
+        loadAccountInfo()
+        sut.setSendAddress("bc1qtest123")
+        sut.setSendAmount("1000")
+        sut.setSendFeeRate("0")
+
+        sut.composeTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).composeTransaction(any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `signComposedTx should not call repo when no compose result exists`() = test {
+        sut.signComposedTx()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
     fun `clearError should call trezorRepo clearError`() {
         sut.clearError()
 
@@ -279,4 +377,30 @@ class TrezorViewModelTest : BaseUnitTest() {
         bgDispatcher = testDispatcher,
         trezorRepo = trezorRepo,
     )
+
+    private suspend fun TestScope.loadAccountInfo() {
+        whenever(trezorRepo.getAccountInfo(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(TrezorPreviewData.sampleAccountInfoResult))
+
+        sut.setLookupInput("xpub6test123")
+        sut.lookupBalanceInfo()
+        advanceUntilIdle()
+    }
+
+    private suspend fun TestScope.loadSignedTx(
+        signedTx: TrezorSignedTx = TrezorPreviewData.sampleSignedTx,
+    ) {
+        loadAccountInfo()
+        whenever(trezorRepo.composeTransaction(any(), any(), any(), any(), anyOrNull(), any()))
+            .thenReturn(Result.success(listOf(TrezorPreviewData.sampleComposeResult)))
+        whenever(trezorRepo.signTxFromPsbt(any(), anyOrNull()))
+            .thenReturn(Result.success(signedTx))
+
+        sut.setSendAddress("bc1qtest123")
+        sut.setSendAmount("1000")
+        sut.composeTx()
+        advanceUntilIdle()
+        sut.signComposedTx()
+        advanceUntilIdle()
+    }
 }

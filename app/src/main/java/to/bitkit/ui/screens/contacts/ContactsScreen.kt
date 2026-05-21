@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.contacts
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,7 +19,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,7 +37,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.PubkyImage
+import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
@@ -212,7 +209,7 @@ private fun ContactRow(
             .clickableAlpha(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        ContactAvatar(profile = profile)
+        PubkyContactAvatar(profile = profile)
 
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -229,26 +226,6 @@ private fun ContactRow(
                 color = Colors.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ContactAvatar(profile: PubkyProfile) {
-    if (profile.imageUrl != null) {
-        PubkyImage(uri = profile.imageUrl, size = 48.dp)
-    } else {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(Colors.White10)
-        ) {
-            BodySSB(
-                text = profile.name.firstOrNull()?.uppercase().orEmpty(),
-                color = Colors.White,
             )
         }
     }

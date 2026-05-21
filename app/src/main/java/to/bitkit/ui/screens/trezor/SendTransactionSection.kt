@@ -68,8 +68,8 @@ internal fun SendTransactionSection(
         )
         VerticalSpacer(8.dp)
 
-        when (uiState.sendStep) {
-            SendStep.FORM -> ComposeForm(
+        when (val step = uiState.sendStep) {
+            SendStep.Form -> ComposeForm(
                 uiState = uiState,
                 onAddressChange = onAddressChange,
                 onAmountChange = onAmountChange,
@@ -78,24 +78,20 @@ internal fun SendTransactionSection(
                 onCoinSelectionChange = onCoinSelectionChange,
                 onCompose = onCompose,
             )
-            SendStep.REVIEW -> uiState.composeResult?.let { result ->
-                ReviewSection(
-                    result = result,
-                    isDeviceConnected = isDeviceConnected,
-                    isSigning = uiState.isSigning,
-                    onSign = onSign,
-                    onBack = onBack,
-                )
-            }
-            SendStep.SIGNED -> uiState.signedTxResult?.let { signedTx ->
-                SignedResultSection(
-                    signedTx = signedTx,
-                    isBroadcasting = uiState.isBroadcasting,
-                    broadcastTxid = uiState.broadcastTxid,
-                    onBroadcast = onBroadcast,
-                    onReset = onReset,
-                )
-            }
+            is SendStep.Review -> ReviewSection(
+                result = step.composeResult,
+                isDeviceConnected = isDeviceConnected,
+                isSigning = uiState.isSigning,
+                onSign = onSign,
+                onBack = onBack,
+            )
+            is SendStep.Signed -> SignedResultSection(
+                signedTx = step.signedTx,
+                isBroadcasting = uiState.isBroadcasting,
+                broadcastTxid = step.broadcastTxid,
+                onBroadcast = onBroadcast,
+                onReset = onReset,
+            )
         }
     }
 }
@@ -405,9 +401,11 @@ private fun PreviewSendFormFilled() {
     AppThemeSurface {
         SendTransactionSection(
             uiState = TrezorUiState(
-                sendAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-                sendAmountSats = "45000",
-                sendFeeRate = "5",
+                send = TrezorSendState(
+                    address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+                    amountSats = "45000",
+                    feeRate = "5",
+                ),
             ),
             isDeviceConnected = true,
             onAddressChange = {},

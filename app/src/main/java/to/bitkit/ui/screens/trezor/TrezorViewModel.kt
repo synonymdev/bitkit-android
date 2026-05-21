@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -64,6 +65,7 @@ class TrezorViewModel @Inject constructor(
                     val label = it.label ?: it.model ?: "Trezor"
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Reconnected to $label")
                 }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
@@ -126,7 +128,7 @@ class TrezorViewModel @Inject constructor(
 
     fun getAddress(showOnTrezor: Boolean = false) {
         viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(isGettingAddress = true) }
+            _uiState.update { it.copy(network = it.network.copy(isGettingAddress = true)) }
             val state = _uiState.value
             trezorRepo.getAddress(
                 path = state.derivationPath,
@@ -135,11 +137,11 @@ class TrezorViewModel @Inject constructor(
                 coin = state.selectedNetwork.toTrezorCoinType(),
             )
                 .onSuccess {
-                    _uiState.update { it.copy(isGettingAddress = false) }
+                    _uiState.update { it.copy(network = it.network.copy(isGettingAddress = false)) }
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Address generated")
                 }
                 .onFailure {
-                    _uiState.update { it.copy(isGettingAddress = false) }
+                    _uiState.update { it.copy(network = it.network.copy(isGettingAddress = false)) }
                     ToastEventBus.send(it)
                 }
         }
@@ -147,36 +149,36 @@ class TrezorViewModel @Inject constructor(
 
     fun getPublicKey(showOnTrezor: Boolean = false) {
         viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(isGettingPublicKey = true) }
+            _uiState.update { it.copy(network = it.network.copy(isGettingPublicKey = true)) }
             val state = _uiState.value
-            val accountPath = state.derivationPath.split("/").take(4).joinToString("/")
             trezorRepo.getPublicKey(
-                path = accountPath,
+                path = accountPath(state.derivationPath),
                 showOnTrezor = showOnTrezor,
                 coin = state.selectedNetwork.toTrezorCoinType(),
             )
                 .onSuccess {
-                    _uiState.update { it.copy(isGettingPublicKey = false) }
+                    _uiState.update { it.copy(network = it.network.copy(isGettingPublicKey = false)) }
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Public key retrieved")
                 }
                 .onFailure {
-                    _uiState.update { it.copy(isGettingPublicKey = false) }
+                    _uiState.update { it.copy(network = it.network.copy(isGettingPublicKey = false)) }
                     ToastEventBus.send(it)
                 }
         }
     }
 
     fun setDerivationPath(path: String) {
-        _uiState.update { it.copy(derivationPath = path) }
+        _uiState.update { it.copy(network = it.network.copy(derivationPath = path)) }
     }
 
     fun setSelectedNetwork(network: BitkitCoreNetwork) {
-        val coinType = if (network == BitkitCoreNetwork.BITCOIN) "0" else "1"
         _uiState.update {
             it.copy(
-                selectedNetwork = network,
-                addressIndex = 0,
-                derivationPath = "m/84'/$coinType'/0'/0/0",
+                network = it.network.copy(
+                    selectedNetwork = network,
+                    addressIndex = 0,
+                    derivationPath = derivationPath(network = network, index = 0),
+                )
             )
         }
     }
@@ -184,10 +186,11 @@ class TrezorViewModel @Inject constructor(
     fun incrementAddressIndex() {
         _uiState.update { state ->
             val newIndex = state.addressIndex + 1
-            val coinType = if (state.selectedNetwork == BitkitCoreNetwork.BITCOIN) "0" else "1"
             state.copy(
-                addressIndex = newIndex,
-                derivationPath = "m/84'/$coinType'/0'/0/$newIndex",
+                network = state.network.copy(
+                    addressIndex = newIndex,
+                    derivationPath = derivationPath(network = state.selectedNetwork, index = newIndex),
+                )
             )
         }
     }
@@ -203,11 +206,11 @@ class TrezorViewModel @Inject constructor(
     }
 
     fun setMessageToSign(message: String) {
-        _uiState.update { it.copy(messageToSign = message) }
+        _uiState.update { it.copy(message = it.message.copy(messageToSign = message)) }
     }
 
     fun setLookupInput(input: String) {
-        _uiState.update { it.copy(lookupInput = input) }
+        _uiState.update { it.copy(lookup = it.lookup.copy(input = input)) }
     }
 
     fun lookupBalanceInfo() {
@@ -219,21 +222,12 @@ class TrezorViewModel @Inject constructor(
             }
             _uiState.update {
                 it.copy(
-                    isLookingUp = true,
-                    accountInfoResult = null,
-                    addressInfoResult = null,
-                    sendAddress = "",
-                    sendAmountSats = "",
-                    sendFeeRate = "2",
-                    isSendMax = false,
-                    isComposing = false,
-                    isSigning = false,
-                    composeResult = null,
-                    signedTxResult = null,
-                    sendStep = SendStep.FORM,
-                    coinSelection = CoinSelection.BRANCH_AND_BOUND,
-                    isBroadcasting = false,
-                    broadcastTxid = null,
+                    lookup = it.lookup.copy(
+                        isLookingUp = true,
+                        accountInfoResult = null,
+                        addressInfoResult = null,
+                    ),
+                    send = TrezorSendState(),
                 )
             }
 
@@ -241,21 +235,35 @@ class TrezorViewModel @Inject constructor(
             if (isExtendedKey(input)) {
                 trezorRepo.getAccountInfo(extendedKey = input, network = network)
                     .onSuccess { result ->
-                        _uiState.update { it.copy(isLookingUp = false, accountInfoResult = result) }
+                        _uiState.update {
+                            it.copy(
+                                lookup = it.lookup.copy(
+                                    isLookingUp = false,
+                                    accountInfoResult = result,
+                                )
+                            )
+                        }
                         ToastEventBus.send(type = Toast.ToastType.INFO, title = "Account info retrieved")
                     }
                     .onFailure {
-                        _uiState.update { it.copy(isLookingUp = false) }
+                        _uiState.update { it.copy(lookup = it.lookup.copy(isLookingUp = false)) }
                         ToastEventBus.send(it)
                     }
             } else {
                 trezorRepo.getAddressInfo(address = input, network = network)
                     .onSuccess { result ->
-                        _uiState.update { it.copy(isLookingUp = false, addressInfoResult = result) }
+                        _uiState.update {
+                            it.copy(
+                                lookup = it.lookup.copy(
+                                    isLookingUp = false,
+                                    addressInfoResult = result,
+                                )
+                            )
+                        }
                         ToastEventBus.send(type = Toast.ToastType.INFO, title = "Address info retrieved")
                     }
                     .onFailure {
-                        _uiState.update { it.copy(isLookingUp = false) }
+                        _uiState.update { it.copy(lookup = it.lookup.copy(isLookingUp = false)) }
                         ToastEventBus.send(it)
                     }
             }
@@ -275,7 +283,7 @@ class TrezorViewModel @Inject constructor(
                 return@launch
             }
 
-            _uiState.update { it.copy(isSigningMessage = true) }
+            _uiState.update { it.copy(message = it.message.copy(isSigningMessage = true)) }
             val state = _uiState.value
             trezorRepo.signMessage(
                 path = state.derivationPath,
@@ -285,15 +293,17 @@ class TrezorViewModel @Inject constructor(
                 .onSuccess { response ->
                     _uiState.update {
                         it.copy(
-                            lastSignature = response.signature,
-                            lastSigningAddress = response.address,
-                            isSigningMessage = false
+                            message = it.message.copy(
+                                lastSignature = response.signature,
+                                lastSigningAddress = response.address,
+                                isSigningMessage = false,
+                            )
                         )
                     }
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Message signed!")
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(isSigningMessage = false) }
+                    _uiState.update { it.copy(message = it.message.copy(isSigningMessage = false)) }
                     ToastEventBus.send(e)
                 }
         }
@@ -310,7 +320,7 @@ class TrezorViewModel @Inject constructor(
                 return@launch
             }
 
-            _uiState.update { it.copy(isVerifyingMessage = true) }
+            _uiState.update { it.copy(message = it.message.copy(isVerifyingMessage = true)) }
             trezorRepo.verifyMessage(
                 address = address,
                 signature = signature,
@@ -318,82 +328,85 @@ class TrezorViewModel @Inject constructor(
                 coin = _uiState.value.selectedNetwork.toTrezorCoinType(),
             )
                 .onSuccess { isValid ->
-                    _uiState.update { it.copy(isVerifyingMessage = false) }
+                    _uiState.update { it.copy(message = it.message.copy(isVerifyingMessage = false)) }
                     val msg = if (isValid) "Signature is valid!" else "Signature is invalid"
                     val type = if (isValid) Toast.ToastType.SUCCESS else Toast.ToastType.ERROR
                     ToastEventBus.send(type = type, title = msg)
                 }
                 .onFailure {
-                    _uiState.update { it.copy(isVerifyingMessage = false) }
+                    _uiState.update { it.copy(message = it.message.copy(isVerifyingMessage = false)) }
                     ToastEventBus.send(it)
                 }
         }
     }
 
     fun setSendAddress(address: String) {
-        _uiState.update { it.copy(sendAddress = address) }
+        _uiState.update { it.copy(send = it.send.copy(address = address)) }
     }
 
     fun setSendAmount(amount: String) {
-        _uiState.update { it.copy(sendAmountSats = amount) }
+        _uiState.update { it.copy(send = it.send.copy(amountSats = amount)) }
     }
 
     fun setSendFeeRate(feeRate: String) {
-        _uiState.update { it.copy(sendFeeRate = feeRate) }
+        _uiState.update { it.copy(send = it.send.copy(feeRate = feeRate)) }
     }
 
     fun toggleSendMax() {
-        _uiState.update { it.copy(isSendMax = !it.isSendMax) }
+        _uiState.update { it.copy(send = it.send.copy(isMax = !it.isSendMax)) }
     }
 
     fun setCoinSelection(selection: CoinSelection) {
-        _uiState.update { it.copy(coinSelection = selection) }
+        _uiState.update { it.copy(send = it.send.copy(coinSelection = selection)) }
     }
 
     fun broadcastSignedTx() {
         viewModelScope.launch(bgDispatcher) {
             val state = _uiState.value
-            val rawTx = state.signedTxResult?.serializedTx ?: return@launch
-            _uiState.update { it.copy(isBroadcasting = true) }
+            val signedStep = state.sendStep as? SendStep.Signed ?: return@launch
+            val rawTx = signedStep.signedTx.serializedTx
+            _uiState.update { it.copy(send = it.send.copy(isBroadcasting = true)) }
             trezorRepo.broadcastRawTx(serializedTx = rawTx, network = state.selectedNetwork)
                 .onSuccess { txid ->
                     TrezorDebugLog.log("BROADCAST", "SUCCESS txid=$txid")
-                    _uiState.update { it.copy(isBroadcasting = false, broadcastTxid = txid) }
+                    _uiState.update {
+                        if (it.send.step != signedStep) return@update it
+
+                        it.copy(
+                            send = it.send.copy(
+                                isBroadcasting = false,
+                                step = signedStep.copy(broadcastTxid = txid),
+                            )
+                        )
+                    }
                     ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = "Transaction broadcast")
                 }
-                .onFailure {
-                    TrezorDebugLog.log("BROADCAST", "FAILED: ${it.message}")
-                    _uiState.update { it.copy(isBroadcasting = false) }
-                    ToastEventBus.send(it)
+                .onFailure { error ->
+                    TrezorDebugLog.log("BROADCAST", "FAILED: ${error.message}")
+                    if (_uiState.value.send.step != signedStep) return@onFailure
+
+                    _uiState.update {
+                        if (it.send.step != signedStep) return@update it
+
+                        it.copy(send = it.send.copy(isBroadcasting = false))
+                    }
+                    ToastEventBus.send(error)
                 }
         }
     }
 
     fun resetSendFlow() {
-        _uiState.update {
-            it.copy(
-                sendAddress = "",
-                sendAmountSats = "",
-                sendFeeRate = "2",
-                isSendMax = false,
-                isComposing = false,
-                isSigning = false,
-                composeResult = null,
-                signedTxResult = null,
-                sendStep = SendStep.FORM,
-                coinSelection = CoinSelection.BRANCH_AND_BOUND,
-                isBroadcasting = false,
-                broadcastTxid = null,
-            )
-        }
+        _uiState.update { it.copy(send = TrezorSendState()) }
     }
 
     fun backToComposeForm() {
         _uiState.update {
             it.copy(
-                sendStep = SendStep.FORM,
-                composeResult = null,
-                signedTxResult = null,
+                send = it.send.copy(
+                    step = SendStep.Form,
+                    isSigning = false,
+                    isBroadcasting = false,
+                )
             )
         }
     }
@@ -404,9 +417,8 @@ class TrezorViewModel @Inject constructor(
             val accountInfo = state.accountInfoResult ?: return@launch
             if (!validateComposeInputs(state)) return@launch
 
-            _uiState.update { it.copy(isComposing = true) }
-
             val feeRate = state.sendFeeRate.toFloatOrNull() ?: return@launch
+            _uiState.update { it.copy(send = it.send.copy(isComposing = true)) }
             TrezorDebugLog.log("COMPOSE", "=== composeTx START ===")
             TrezorDebugLog.log("COMPOSE", "address=${state.sendAddress}")
             TrezorDebugLog.log("COMPOSE", "amount=${state.sendAmountSats}, sendMax=${state.isSendMax}")
@@ -419,7 +431,7 @@ class TrezorViewModel @Inject constructor(
             } else {
                 val amountSats = state.sendAmountSats.toULongOrNull()
                 if (amountSats == null) {
-                    _uiState.update { it.copy(isComposing = false) }
+                    _uiState.update { it.copy(send = it.send.copy(isComposing = false)) }
                     ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter a valid amount")
                     return@launch
                 }
@@ -437,7 +449,7 @@ class TrezorViewModel @Inject constructor(
                 .onSuccess { handleComposeResults(it) }
                 .onFailure {
                     TrezorDebugLog.log("COMPOSE", "FAILED: ${it.message}")
-                    _uiState.update { it.copy(isComposing = false) }
+                    _uiState.update { it.copy(send = it.send.copy(isComposing = false)) }
                     ToastEventBus.send(it)
                 }
         }
@@ -480,16 +492,21 @@ class TrezorViewModel @Inject constructor(
         if (successResult != null) {
             TrezorDebugLog.log("COMPOSE", "=== composeTx SUCCESS ===")
             _uiState.update {
-                it.copy(isComposing = false, composeResult = successResult, sendStep = SendStep.REVIEW)
+                it.copy(
+                    send = it.send.copy(
+                        isComposing = false,
+                        step = SendStep.Review(successResult),
+                    )
+                )
             }
             ToastEventBus.send(type = Toast.ToastType.INFO, title = "Transaction composed")
         } else if (errorResult != null) {
             TrezorDebugLog.log("COMPOSE", "=== composeTx FAILED (compose error) ===")
-            _uiState.update { it.copy(isComposing = false) }
+            _uiState.update { it.copy(send = it.send.copy(isComposing = false)) }
             ToastEventBus.send(type = Toast.ToastType.ERROR, title = errorResult.error)
         } else {
             TrezorDebugLog.log("COMPOSE", "=== composeTx FAILED (no valid result) ===")
-            _uiState.update { it.copy(isComposing = false) }
+            _uiState.update { it.copy(send = it.send.copy(isComposing = false)) }
             ToastEventBus.send(type = Toast.ToastType.ERROR, title = "No valid composition returned")
         }
     }
@@ -497,13 +514,13 @@ class TrezorViewModel @Inject constructor(
     fun signComposedTx() {
         viewModelScope.launch(bgDispatcher) {
             val state = _uiState.value
-            val result = state.composeResult ?: return@launch
+            val result = (state.sendStep as? SendStep.Review)?.composeResult ?: return@launch
 
             TrezorDebugLog.log("SIGN", "=== signComposedTx START ===")
             TrezorDebugLog.log("SIGN", "network=${state.selectedNetwork}")
             TrezorDebugLog.log("SIGN", "psbt length=${result.psbt.length}")
 
-            _uiState.update { it.copy(isSigning = true) }
+            _uiState.update { it.copy(send = it.send.copy(isSigning = true)) }
 
             trezorRepo.signTxFromPsbt(
                 psbtBase64 = result.psbt,
@@ -517,7 +534,12 @@ class TrezorViewModel @Inject constructor(
                             "txid=${signedTx.txid}, rawTxLen=${signedTx.serializedTx.length}"
                     )
                     _uiState.update {
-                        it.copy(isSigning = false, signedTxResult = signedTx, sendStep = SendStep.SIGNED)
+                        it.copy(
+                            send = it.send.copy(
+                                isSigning = false,
+                                step = SendStep.Signed(signedTx = signedTx),
+                            )
+                        )
                     }
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,
@@ -526,14 +548,14 @@ class TrezorViewModel @Inject constructor(
                 }
                 .onFailure {
                     TrezorDebugLog.log("SIGN", "signTxFromPsbt FAILED: ${it.message}")
-                    _uiState.update { s -> s.copy(isSigning = false) }
+                    _uiState.update { it.copy(send = it.send.copy(isSigning = false)) }
                     ToastEventBus.send(it)
                 }
         }
     }
 
     fun setTxHistoryInput(input: String) {
-        _uiState.update { it.copy(txHistoryInput = input) }
+        _uiState.update { it.copy(txHistory = it.txHistory.copy(input = input)) }
     }
 
     fun lookupTransactionHistory() {
@@ -543,19 +565,23 @@ class TrezorViewModel @Inject constructor(
                 ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter an xpub")
                 return@launch
             }
-            _uiState.update { it.copy(isLoadingTxHistory = true, txHistoryResult = null) }
+            _uiState.update {
+                it.copy(txHistory = it.txHistory.copy(isLoading = true, result = null))
+            }
 
             val network = _uiState.value.selectedNetwork
             trezorRepo.getTransactionHistory(extendedKey = input, network = network)
                 .onSuccess { result ->
-                    _uiState.update { it.copy(isLoadingTxHistory = false, txHistoryResult = result) }
+                    _uiState.update {
+                        it.copy(txHistory = it.txHistory.copy(isLoading = false, result = result))
+                    }
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
                         title = "Found ${result.txCount} transaction${if (result.txCount != 1u) "s" else ""}"
                     )
                 }
                 .onFailure {
-                    _uiState.update { it.copy(isLoadingTxHistory = false) }
+                    _uiState.update { it.copy(txHistory = it.txHistory.copy(isLoading = false)) }
                     ToastEventBus.send(it)
                 }
         }
@@ -595,36 +621,168 @@ class TrezorViewModel @Inject constructor(
 
 @Stable
 data class TrezorUiState(
+    val network: TrezorNetworkState = TrezorNetworkState(),
+    val message: TrezorMessageState = TrezorMessageState(),
+    val lookup: TrezorLookupState = TrezorLookupState(),
+    val send: TrezorSendState = TrezorSendState(),
+    val txHistory: TrezorTxHistoryState = TrezorTxHistoryState(),
+) {
+    val selectedNetwork: BitkitCoreNetwork
+        get() = network.selectedNetwork
+
+    val addressIndex: Int
+        get() = network.addressIndex
+
+    val derivationPath: String
+        get() = network.derivationPath
+
+    val messageToSign: String
+        get() = message.messageToSign
+
+    val lastSignature: String?
+        get() = message.lastSignature
+
+    val lastSigningAddress: String?
+        get() = message.lastSigningAddress
+
+    val isSigningMessage: Boolean
+        get() = message.isSigningMessage
+
+    val isGettingAddress: Boolean
+        get() = network.isGettingAddress
+
+    val isGettingPublicKey: Boolean
+        get() = network.isGettingPublicKey
+
+    val isVerifyingMessage: Boolean
+        get() = message.isVerifyingMessage
+
+    val lookupInput: String
+        get() = lookup.input
+
+    val isLookingUp: Boolean
+        get() = lookup.isLookingUp
+
+    val accountInfoResult: AccountInfoResult?
+        get() = lookup.accountInfoResult
+
+    val addressInfoResult: SingleAddressInfoResult?
+        get() = lookup.addressInfoResult
+
+    val sendAddress: String
+        get() = send.address
+
+    val sendAmountSats: String
+        get() = send.amountSats
+
+    val sendFeeRate: String
+        get() = send.feeRate
+
+    val isSendMax: Boolean
+        get() = send.isMax
+
+    val isComposing: Boolean
+        get() = send.isComposing
+
+    val isSigning: Boolean
+        get() = send.isSigning
+
+    val sendStep: SendStep
+        get() = send.step
+
+    val composeResult: ComposeResult.Success?
+        get() = (send.step as? SendStep.Review)?.composeResult
+
+    val signedTxResult: TrezorSignedTx?
+        get() = (send.step as? SendStep.Signed)?.signedTx
+
+    val coinSelection: CoinSelection
+        get() = send.coinSelection
+
+    val isBroadcasting: Boolean
+        get() = send.isBroadcasting
+
+    val broadcastTxid: String?
+        get() = (send.step as? SendStep.Signed)?.broadcastTxid
+
+    val txHistoryInput: String
+        get() = txHistory.input
+
+    val isLoadingTxHistory: Boolean
+        get() = txHistory.isLoading
+
+    val txHistoryResult: TransactionHistoryResult?
+        get() = txHistory.result
+}
+
+@Stable
+data class TrezorNetworkState(
     val selectedNetwork: BitkitCoreNetwork = Env.network.toCoreNetwork(),
     val addressIndex: Int = 0,
-    val derivationPath: String =
-        "m/84'/${if (Env.network.toCoreNetwork() == BitkitCoreNetwork.BITCOIN) "0" else "1"}'/0'/0/0",
+    val derivationPath: String = derivationPath(
+        network = selectedNetwork,
+        index = addressIndex,
+    ),
+    val isGettingAddress: Boolean = false,
+    val isGettingPublicKey: Boolean = false,
+)
+
+@Immutable
+data class TrezorMessageState(
     val messageToSign: String = "Hello, Trezor!",
     val lastSignature: String? = null,
     val lastSigningAddress: String? = null,
     val isSigningMessage: Boolean = false,
-    val isGettingAddress: Boolean = false,
-    val isGettingPublicKey: Boolean = false,
     val isVerifyingMessage: Boolean = false,
-    val lookupInput: String = "",
+)
+
+@Stable
+data class TrezorLookupState(
+    val input: String = "",
     val isLookingUp: Boolean = false,
     val accountInfoResult: AccountInfoResult? = null,
     val addressInfoResult: SingleAddressInfoResult? = null,
-    val sendAddress: String = "",
-    val sendAmountSats: String = "",
-    val sendFeeRate: String = "2",
-    val isSendMax: Boolean = false,
-    val isComposing: Boolean = false,
-    val isSigning: Boolean = false,
-    val composeResult: ComposeResult.Success? = null,
-    val signedTxResult: TrezorSignedTx? = null,
-    val sendStep: SendStep = SendStep.FORM,
-    val coinSelection: CoinSelection = CoinSelection.BRANCH_AND_BOUND,
-    val isBroadcasting: Boolean = false,
-    val broadcastTxid: String? = null,
-    val txHistoryInput: String = "",
-    val isLoadingTxHistory: Boolean = false,
-    val txHistoryResult: TransactionHistoryResult? = null,
 )
 
-enum class SendStep { FORM, REVIEW, SIGNED }
+@Stable
+data class TrezorSendState(
+    val address: String = "",
+    val amountSats: String = "",
+    val feeRate: String = "2",
+    val isMax: Boolean = false,
+    val isComposing: Boolean = false,
+    val isSigning: Boolean = false,
+    val step: SendStep = SendStep.Form,
+    val coinSelection: CoinSelection = CoinSelection.BRANCH_AND_BOUND,
+    val isBroadcasting: Boolean = false,
+)
+
+@Stable
+data class TrezorTxHistoryState(
+    val input: String = "",
+    val isLoading: Boolean = false,
+    val result: TransactionHistoryResult? = null,
+)
+
+sealed interface SendStep {
+    data object Form : SendStep
+
+    data class Review(val composeResult: ComposeResult.Success) : SendStep
+
+    data class Signed(
+        val signedTx: TrezorSignedTx,
+        val broadcastTxid: String? = null,
+    ) : SendStep
+}
+
+private fun derivationPath(network: BitkitCoreNetwork, index: Int): String {
+    return "m/84'/${coinTypeFor(network)}'/0'/0/$index"
+}
+
+private fun accountPath(derivationPath: String): String {
+    return derivationPath.split("/").take(4).joinToString("/")
+}
+
+private fun coinTypeFor(network: BitkitCoreNetwork): String {
+    return if (network == BitkitCoreNetwork.BITCOIN) "0" else "1"
+}

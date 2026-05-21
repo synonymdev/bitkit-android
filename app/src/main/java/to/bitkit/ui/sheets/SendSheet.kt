@@ -38,6 +38,8 @@ import to.bitkit.ui.screens.wallets.send.SendAddressScreen
 import to.bitkit.ui.screens.wallets.send.SendAmountScreen
 import to.bitkit.ui.screens.wallets.send.SendCoinSelectionScreen
 import to.bitkit.ui.screens.wallets.send.SendConfirmScreen
+import to.bitkit.ui.screens.wallets.send.SendContactSelectScreen
+import to.bitkit.ui.screens.wallets.send.SendContactSelectViewModel
 import to.bitkit.ui.screens.wallets.send.SendErrorScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeCustomScreen
 import to.bitkit.ui.screens.wallets.send.SendFeeRateScreen
@@ -121,6 +123,7 @@ fun SendSheet(
                         is SendEffect.NavigateToFee -> navController.navigateTo(SendRoute.FeeRate)
                         is SendEffect.NavigateToFeeCustom -> navController.navigateTo(SendRoute.FeeCustom)
                         is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
+                        is SendEffect.NavigateToContacts -> navController.navigateTo(SendRoute.ContactSelect)
                         is SendEffect.NavigateToPending -> navController.navigateTo(
                             SendRoute.Pending(it.paymentHash, it.amount)
                         ) { popUpTo(startDestination) { inclusive = true } }
@@ -145,6 +148,18 @@ fun SendSheet(
                         onEvent = { appViewModel.setSendEvent(it) },
                     )
                 }
+                composableWithDefaultTransitions<SendRoute.ContactSelect> {
+                    SendContactSelectScreen(
+                        viewModel = hiltViewModel<SendContactSelectViewModel>(),
+                        onBack = {
+                            appViewModel.clearActiveContactPaymentContext()
+                            navController.popBackStack()
+                        },
+                        onOpenPayment = { paymentRequest, publicKey ->
+                            appViewModel.openContactPayment(paymentRequest, publicKey)
+                        },
+                    )
+                }
                 composableWithDefaultTransitions<SendRoute.Amount> {
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
@@ -165,7 +180,7 @@ fun SendSheet(
                         onBack = { navController.popBackStack() },
                         onScanSuccess = {
                             navController.popBackStack()
-                            appViewModel.onScanResult(data = it)
+                            appViewModel.onScanResult(data = it, routePubkyKeys = true)
                         },
                     )
                 }
@@ -390,6 +405,9 @@ sealed interface SendRoute {
 
     @Serializable
     data object Address : SendRoute
+
+    @Serializable
+    data object ContactSelect : SendRoute
 
     @Serializable
     data object Amount : SendRoute

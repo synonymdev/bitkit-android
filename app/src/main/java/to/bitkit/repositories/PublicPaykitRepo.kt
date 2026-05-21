@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.annotation.VisibleForTesting
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.validateBitcoinAddress
 import kotlinx.coroutines.CoroutineDispatcher
@@ -11,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -35,6 +37,7 @@ import to.bitkit.di.json as appJson
 sealed class PublicPaykitError(message: String) : AppError(message) {
     data object InvalidPayload : PublicPaykitError("Invalid Paykit payment endpoint payload")
     data object NoSupportedEndpoint : PublicPaykitError("No supported public payment endpoint is available")
+    data object RouteHintsUnavailable : PublicPaykitError("Reachable Lightning payment endpoint is not available yet")
     data object SessionNotActive : PublicPaykitError("No active Paykit session")
     data object WalletNotReady : PublicPaykitError("Wallet is not ready to publish Paykit endpoints")
 }
@@ -79,6 +82,15 @@ class PublicPaykitRepo @Inject constructor(
         private val publicBolt11Expiry = 24.hours
         private val publicBolt11RefreshWindow = 30.minutes
 
+        @VisibleForTesting
+        internal var lightningRouteHintsValidator: ((String) -> Boolean)? = null
+
+        fun isLightningPaymentOptionEnabled(settings: SettingsData): Boolean =
+            settings.publicPaykitLightningEnabled
+
+        fun isOnchainPaymentOptionEnabled(settings: SettingsData): Boolean =
+            settings.publicPaykitOnchainEnabled
+
         fun parseEndpoint(methodId: String, endpointData: String): Endpoint? {
             if (!methodIdPattern.matches(methodId)) return null
 
@@ -103,6 +115,12 @@ class PublicPaykitRepo @Inject constructor(
             if (trimmedValue.isEmpty()) throw PublicPaykitError.InvalidPayload
             return payloadJson.encodeToString(PaymentEndpointPayload(value = trimmedValue))
         }
+
+        fun hasLightningRouteHints(bolt11: String): Boolean =
+            lightningRouteHintsValidator?.invoke(bolt11)
+                ?: runCatching {
+                    Bolt11Invoice.fromStr(bolt11).routeHints().any { it.isNotEmpty() }
+                }.getOrDefault(false)
 
         fun paymentRequest(endpoints: List<Endpoint>): String {
             val sortedEndpoints = endpoints.sortedBy { payablePreferenceOrder.indexOf(it.methodId) }
@@ -153,6 +171,10 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
+    suspend fun payableEndpoints(endpoints: List<Endpoint>): List<Endpoint> = withContext(ioDispatcher) {
+        endpoints.filter { isPayable(it) }
+    }
+
     suspend fun syncPublishedEndpoints(publish: Boolean): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (!publish) {
@@ -165,9 +187,16 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun syncCurrentPublishedEndpoints(): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun syncCurrentPublishedEndpoints(
+        forceRefreshLightning: Boolean = false,
+        requireEndpoint: Boolean = false,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
-            val desired = buildWalletEndpoints(refresh = false)
+            val desired = buildWalletEndpoints(
+                refresh = false,
+                forceRefreshLightning = forceRefreshLightning,
+                requireEndpoint = requireEndpoint,
+            )
             applyPublishedEndpoints(desired)
         }
     }
@@ -235,7 +264,15 @@ class PublicPaykitRepo @Inject constructor(
         return currentPublicKey
     }
 
-    private suspend fun buildWalletEndpoints(refresh: Boolean): List<Endpoint> {
+    private suspend fun buildWalletEndpoints(
+        refresh: Boolean,
+        forceRefreshLightning: Boolean = false,
+        requireEndpoint: Boolean = true,
+    ): List<Endpoint> {
+        val settings = settingsStore.data.first()
+        val includeLightning = isLightningPaymentOptionEnabled(settings)
+        val includeOnchain = isOnchainPaymentOptionEnabled(settings)
+
         if (refresh) {
             lightningRepo.executeWhenNodeRunning(
                 operationName = "sync public Paykit endpoints",
@@ -243,13 +280,20 @@ class PublicPaykitRepo @Inject constructor(
                 Result.success(Unit)
             }.getOrThrow()
         }
+        if (includeOnchain) {
+            walletRepo.refreshReusableReceiveAddressIfReserved().getOrThrow()
+        }
 
         val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
-        buildPublicBolt11Endpoint()?.let { endpoints += it }
+        if (includeLightning) {
+            buildPublicBolt11Endpoint(forceRefreshLightning)?.let { endpoints += it }
+        } else {
+            clearPublicBolt11Metadata()
+        }
 
         val onchainAddress = state.onchainAddress
-        if (onchainAddress.isNotBlank()) {
+        if (includeOnchain && onchainAddress.isNotBlank()) {
             val methodId = onchainMethodId(onchainAddress)
             endpoints += Endpoint(
                 methodId = methodId,
@@ -258,12 +302,12 @@ class PublicPaykitRepo @Inject constructor(
             )
         }
 
-        if (endpoints.isEmpty()) throw PublicPaykitError.NoSupportedEndpoint
+        if (endpoints.isEmpty() && requireEndpoint) throw PublicPaykitError.NoSupportedEndpoint
 
         return endpoints
     }
 
-    private suspend fun buildPublicBolt11Endpoint(): Endpoint? {
+    private suspend fun buildPublicBolt11Endpoint(forceRefreshLightning: Boolean = false): Endpoint? {
         if (!lightningRepo.canReceive()) {
             clearPublicBolt11Metadata()
             return null
@@ -271,12 +315,19 @@ class PublicPaykitRepo @Inject constructor(
 
         val settings = settingsStore.data.first()
         val cachedBolt11 = settings.publicPaykitBolt11
-        if (cachedBolt11.isNotBlank() && !settings.shouldRefreshPublicBolt11(clock.now().toEpochMilliseconds())) {
-            return Endpoint(
-                methodId = MethodId.Bolt11,
-                value = cachedBolt11,
-                rawPayload = serializePayload(cachedBolt11),
-            )
+        val shouldReuseCachedBolt11 = !forceRefreshLightning &&
+            cachedBolt11.isNotBlank() &&
+            !settings.shouldRefreshPublicBolt11(clock.now().toEpochMilliseconds())
+        if (shouldReuseCachedBolt11) {
+            if (!hasLightningRouteHints(cachedBolt11)) {
+                clearPublicBolt11Metadata()
+            } else {
+                return Endpoint(
+                    methodId = MethodId.Bolt11,
+                    value = cachedBolt11,
+                    rawPayload = serializePayload(cachedBolt11),
+                )
+            }
         }
 
         val bolt11 = lightningRepo.createInvoice(
@@ -286,6 +337,10 @@ class PublicPaykitRepo @Inject constructor(
         ).getOrThrow()
         val invoice = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
             ?: throw PublicPaykitError.InvalidPayload
+        if (!hasLightningRouteHints(bolt11)) {
+            clearPublicBolt11Metadata()
+            return null
+        }
         val expiresAtMillis = clock.now().plus(publicBolt11Expiry).toEpochMilliseconds()
 
         settingsStore.update {

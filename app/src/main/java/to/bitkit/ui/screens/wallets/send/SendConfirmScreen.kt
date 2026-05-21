@@ -63,6 +63,7 @@ import to.bitkit.R
 import to.bitkit.ext.commentAllowed
 import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
+import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
@@ -73,6 +74,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.SyncNodeView
@@ -81,7 +83,6 @@ import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppAlertDialog
-import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -208,11 +209,12 @@ private fun Content(
         ) {
             val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
 
-            SheetTopBar(
+            SendContactTopBar(
                 titleText = when {
                     isLnurlPay -> stringResource(R.string.wallet__lnurl_p_title)
                     else -> stringResource(R.string.wallet__send_review)
                 },
+                contact = uiState.contactPaymentProfile,
                 onBack = onBack.takeIf { canGoBack },
             )
 
@@ -506,16 +508,20 @@ private fun OnChainDetails(
                 caption = stringResource(R.string.wallet__send_to),
                 modifier = Modifier.weight(1f)
             ) {
-                BodySSB(
-                    text = uiState.address,
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                    modifier = Modifier
-                        .height(28.dp)
-                        .wrapContentHeight(Alignment.CenterVertically)
-                        .clickableAlpha { onEvent(SendEvent.NavToAddress) }
-                        .testTag("ReviewUri")
-                )
+                if (uiState.contactPaymentProfile != null) {
+                    ContactRecipient(profile = uiState.contactPaymentProfile)
+                } else {
+                    BodySSB(
+                        text = uiState.address,
+                        maxLines = 1,
+                        overflow = TextOverflow.MiddleEllipsis,
+                        modifier = Modifier
+                            .height(28.dp)
+                            .wrapContentHeight(Alignment.CenterVertically)
+                            .clickableAlpha { onEvent(SendEvent.NavToAddress) }
+                            .testTag("ReviewUri")
+                    )
+                }
             }
         }
 
@@ -626,16 +632,20 @@ private fun LightningDetails(
                 caption = stringResource(R.string.wallet__send_to),
                 modifier = Modifier.weight(1f)
             ) {
-                BodySSB(
-                    text = destination,
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                    modifier = Modifier
-                        .height(28.dp)
-                        .wrapContentHeight(Alignment.CenterVertically)
-                        .clickableAlpha { onEvent(SendEvent.NavToAddress) }
-                        .testTag("ReviewUri")
-                )
+                if (uiState.contactPaymentProfile != null) {
+                    ContactRecipient(profile = uiState.contactPaymentProfile)
+                } else {
+                    BodySSB(
+                        text = destination,
+                        maxLines = 1,
+                        overflow = TextOverflow.MiddleEllipsis,
+                        modifier = Modifier
+                            .height(28.dp)
+                            .wrapContentHeight(Alignment.CenterVertically)
+                            .clickableAlpha { onEvent(SendEvent.NavToAddress) }
+                            .testTag("ReviewUri")
+                    )
+                }
             }
         }
 
@@ -730,6 +740,27 @@ private fun LightningDetails(
                 onClickAddTag = onClickAddTag,
             )
         }
+    }
+}
+
+@Composable
+private fun ContactRecipient(
+    profile: PubkyProfile,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+            .padding(vertical = 2.dp)
+            .testTag("ReviewContactRecipient")
+    ) {
+        PubkyContactAvatar(profile = profile, size = 24.dp)
+        BodySSB(
+            text = profile.name,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

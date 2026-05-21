@@ -159,10 +159,8 @@ class TrezorTransport @Inject constructor(
         bluetoothManager.adapter
     }
 
-    // USB connections
     private val usbConnections = ConcurrentHashMap<String, UsbOpenDevice>()
 
-    // BLE connections
     private val bleConnections = ConcurrentHashMap<String, BleConnection>()
     private val discoveredBleDevices = ConcurrentHashMap<String, BluetoothDevice>()
 
@@ -185,12 +183,9 @@ class TrezorTransport @Inject constructor(
         @Volatile var writeStatus: Int = BluetoothGatt.GATT_SUCCESS,
     )
 
-    // ==================== TrezorTransportCallback Implementation ====================
-
     override fun enumerateDevices(): List<NativeDeviceInfo> {
         val devices = mutableListOf<NativeDeviceInfo>()
 
-        // Enumerate USB devices
         runCatching {
             usbManager.deviceList.values
                 .filter { isTrezorDevice(it) }
@@ -210,7 +205,6 @@ class TrezorTransport @Inject constructor(
             Logger.error("USB enumerate failed", it, context = TAG)
         }
 
-        // Enumerate Bluetooth devices
         runCatching {
             enumerateBleDevices()
         }.onSuccess {
@@ -293,58 +287,65 @@ class TrezorTransport @Inject constructor(
             return bridgeTransport.callMessage(path, messageType, data)
         }
 
-        // For BLE/THP devices, the Rust side now handles THP protocol directly.
-        // This callback returns null to let Rust use its built-in THP implementation.
         Logger.debug(
-            "callMessage called for '$path', type='$messageType' - returning null (Rust handles THP)",
+            "Delegating callMessage for '$path', type='$messageType' to core THP handling",
             context = TAG,
         )
         return null
     }
 
     override fun getPairingCode(): String {
-        // This is called by Rust during BLE THP pairing when the device
-        // displays a 6-digit code that must be entered.
-        //
-        // We use a blocking approach with a latch. The UI observes needsPairingCode
-        // and shows a dialog. When the user enters the code, submitPairingCode()
-        // is called which releases the latch.
         TrezorDebugLog.log("PAIR", ">>> PAIRING CODE REQUESTED - Device requires re-pairing! <<<")
-        Logger.info(">>> PAIRING CODE REQUESTED <<<", context = TAG)
-        Logger.info("Look at your Trezor screen for a 6-digit code", context = TAG)
+        Logger.info("Requested pairing code from user", context = TAG)
+        Logger.info("Asked user to read the 6-digit code from Trezor screen", context = TAG)
 
         val latch = CountDownLatch(1)
 
         synchronized(pairingCodeLock) {
-            submittedPairingCode = ""
+            pairingCodeResult = null
             pairingCodeRequest = PairingCodeRequest(isRequested = true, latch = latch)
             _needsPairingCode.update { true }
         }
 
-        try {
-            // Wait for user to enter the code (with timeout)
+        val result = try {
             val received = latch.await(PAIRING_CODE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-
-            if (!received) {
-                Logger.warn("Pairing code entry timed out", context = TAG)
-                _needsPairingCode.update { false }
-                return ""
+            synchronized(pairingCodeLock) {
+                val result = if (received) {
+                    pairingCodeResult ?: PairingCodeResult.Cancelled
+                } else {
+                    PairingCodeResult.TimedOut
+                }
+                clearPairingCodeRequest()
+                result
             }
-
-            val code = submittedPairingCode
-            Logger.info("Pairing code received (len='${code.length}')", context = TAG)
-            return code
         } catch (e: InterruptedException) {
-            Logger.error("Pairing code wait interrupted", e, context = TAG)
-            _needsPairingCode.update { false }
-            return ""
+            Thread.currentThread().interrupt()
+            synchronized(pairingCodeLock) {
+                clearPairingCodeRequest()
+            }
+            PairingCodeResult.Interrupted(e)
+        }
+
+        return when (result) {
+            is PairingCodeResult.Submitted -> {
+                Logger.info("Received pairing code (len='${result.code.length}')", context = TAG)
+                result.code
+            }
+            PairingCodeResult.Cancelled -> {
+                Logger.info("Cancelled pairing code entry", context = TAG)
+                ""
+            }
+            PairingCodeResult.TimedOut -> {
+                Logger.warn("Timed out waiting for pairing code entry", context = TAG)
+                ""
+            }
+            is PairingCodeResult.Interrupted -> {
+                Logger.error("Interrupted pairing code wait", result.error, context = TAG)
+                ""
+            }
         }
     }
 
-    /**
-     * Pairing code request state for UI observation.
-     * When getPairingCode() is called by Rust, we set this to true and wait.
-     */
     data class PairingCodeRequest(
         val isRequested: Boolean = false,
         val latch: CountDownLatch? = null,
@@ -354,9 +355,25 @@ class TrezorTransport @Inject constructor(
     private var pairingCodeRequest: PairingCodeRequest = PairingCodeRequest()
 
     @Volatile
-    private var submittedPairingCode: String = ""
+    private var pairingCodeResult: PairingCodeResult? = null
 
     private val pairingCodeLock = Object()
+
+    private sealed interface PairingCodeResult {
+        data class Submitted(val code: String) : PairingCodeResult
+
+        data object Cancelled : PairingCodeResult
+
+        data object TimedOut : PairingCodeResult
+
+        data class Interrupted(val error: InterruptedException) : PairingCodeResult
+    }
+
+    private fun clearPairingCodeRequest() {
+        pairingCodeRequest = PairingCodeRequest()
+        pairingCodeResult = null
+        _needsPairingCode.update { false }
+    }
 
     /**
      * Flow to observe when a pairing code is needed.
@@ -371,18 +388,20 @@ class TrezorTransport @Inject constructor(
      */
     fun submitPairingCode(code: String) {
         synchronized(pairingCodeLock) {
-            Logger.info("Pairing code submitted (len='${code.length}')", context = TAG)
-            submittedPairingCode = code
+            Logger.info("Submitted pairing code (len='${code.length}')", context = TAG)
+            pairingCodeResult = PairingCodeResult.Submitted(code)
             _needsPairingCode.update { false }
             pairingCodeRequest.latch?.countDown()
         }
     }
 
-    /**
-     * Cancel pairing code entry (submit empty string).
-     */
     fun cancelPairingCode() {
-        submitPairingCode("")
+        synchronized(pairingCodeLock) {
+            Logger.info("Cancelled pairing code entry", context = TAG)
+            pairingCodeResult = PairingCodeResult.Cancelled
+            _needsPairingCode.update { false }
+            pairingCodeRequest.latch?.countDown()
+        }
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -396,8 +415,12 @@ class TrezorTransport @Inject constructor(
 
             if (credentialJson.isEmpty()) {
                 val existed = file.exists()
-                file.delete()
+                val deleted = !existed || file.delete()
                 TrezorDebugLog.log("SAVE", "CLEARED credential (file existed=$existed)")
+                if (!deleted) {
+                    Logger.warn("Clear THP credential file failed for '${file.absolutePath}'", context = TAG)
+                    return false
+                }
                 Logger.info(
                     "Cleared THP credential for device: '$deviceId' (path='${file.absolutePath}')",
                     context = TAG,
@@ -407,7 +430,6 @@ class TrezorTransport @Inject constructor(
 
             file.writeText(credentialJson)
 
-            // Immediately verify the file was written
             val verifyExists = file.exists()
             val verifySize = if (verifyExists) file.length() else 0
             TrezorDebugLog.log(
@@ -416,6 +438,7 @@ class TrezorTransport @Inject constructor(
             )
             if (!verifyExists || verifySize == 0L) {
                 TrezorDebugLog.log("SAVE", "WARNING: File verification FAILED after write!")
+                return false
             }
 
             Logger.info(
@@ -444,7 +467,6 @@ class TrezorTransport @Inject constructor(
             TrezorDebugLog.log("LOAD", "loadThpCredential for: $deviceId")
             TrezorDebugLog.log("LOAD", "File: ${file.absolutePath}, exists=$exists, size=$size")
 
-            // List all files in credential directory for debugging
             val allFiles = credentialDir.listFiles()?.map { "${it.name} (${it.length()}b)" } ?: emptyList()
             TrezorDebugLog.log("LOAD", "All credential files: $allFiles")
 
@@ -491,8 +513,6 @@ class TrezorTransport @Inject constructor(
         return File(credentialDir, "$sanitizedId.json")
     }
 
-    // ==================== USB Methods ====================
-
     /**
      * Request USB permission for a device and block until the user responds.
      * Returns true if permission was granted, false otherwise.
@@ -532,7 +552,6 @@ class TrezorTransport @Inject constructor(
             Logger.info("Requesting USB permission for '${device.deviceName}'", context = TAG)
             usbManager.requestPermission(device, permissionIntent)
 
-            // Block until user responds (up to 60 seconds)
             val responded = latch.await(USB_PERMISSION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             if (!responded) {
                 Logger.warn("USB permission request timed out", context = TAG)
@@ -572,7 +591,6 @@ class TrezorTransport @Inject constructor(
     @Suppress("TooGenericExceptionCaught", "ReturnCount")
     private fun openUsbDevice(path: String): TrezorTransportWriteResult {
         return try {
-            // Close existing connection if any
             closeUsbDevice(path)
 
             val device = usbManager.deviceList[path]
@@ -721,8 +739,6 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    // ==================== Bluetooth Methods ====================
-
     @SuppressLint("MissingPermission")
     private fun enumerateBleDevices(): List<NativeDeviceInfo> {
         if (bluetoothAdapter?.isEnabled != true) {
@@ -732,7 +748,6 @@ class TrezorTransport @Inject constructor(
 
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return emptyList()
 
-        // Start fresh scan
         discoveredBleDevices.clear()
 
         val scanFilter = ScanFilter.Builder()
@@ -746,7 +761,6 @@ class TrezorTransport @Inject constructor(
         scanner.startScan(listOf(scanFilter), scanSettings, bleScanCallback)
         Logger.debug("BLE scan started", context = TAG)
 
-        // Wait for scan results
         Thread.sleep(SCAN_DURATION_MS)
 
         scanner.stopScan(bleScanCallback)
@@ -823,10 +837,8 @@ class TrezorTransport @Inject constructor(
         val device = discoveredBleDevices[address]
             ?: return TrezorTransportWriteResult(success = false, error = "Device not found: $path")
 
-        // Close existing connection
         closeBleDevice(path)
 
-        // Check if device needs bonding
         val bondError = waitForBonding(device, address)
         if (bondError != null) return bondError
 
@@ -853,10 +865,8 @@ class TrezorTransport @Inject constructor(
             return TrezorTransportWriteResult(success = false, error = "Failed to connect")
         }
 
-        // Request high-priority BLE connection for faster, more reliable handshake
         gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
 
-        // Drain any stale notifications from a previous connection attempt
         val staleCount = updatedConnection.readQueue.size
         if (staleCount > 0) {
             updatedConnection.readQueue.clear()
@@ -877,13 +887,14 @@ class TrezorTransport @Inject constructor(
             ?: return TrezorTransportWriteResult(success = true, error = "")
 
         userInitiatedCloseSet.add(path)
-        try {
+        return try {
             val disconnectLatch = CountDownLatch(1)
             bleConnections[path] = connection.copy(disconnectLatch = disconnectLatch)
 
             connection.gatt.disconnect()
 
             val disconnected = disconnectLatch.await(DISCONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val timeoutError = if (disconnected) null else "BLE disconnect timed out; forced close"
             if (!disconnected) {
                 Logger.warn("BLE disconnect timeout, forcing close: '$path'", context = TAG)
             }
@@ -891,14 +902,14 @@ class TrezorTransport @Inject constructor(
             bleConnections.remove(path)
             connection.gatt.close()
             Thread.sleep(100)
+            Logger.info("BLE device closed: '$path'", context = TAG)
+            TrezorTransportWriteResult(success = timeoutError == null, error = timeoutError.orEmpty())
         } catch (e: Exception) {
             Logger.error("BLE close failed", e, context = TAG)
+            TrezorTransportWriteResult(success = false, error = e.message ?: "BLE close failed")
         } finally {
             userInitiatedCloseSet.remove(path)
         }
-
-        Logger.info("BLE device closed: '$path'", context = TAG)
-        return TrezorTransportWriteResult(success = true, error = "")
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -948,7 +959,6 @@ class TrezorTransport @Inject constructor(
         }
 
         return try {
-            // Retry logic for transient GATT busy states
             var lastError = "Write initiation failed"
             for (attempt in 1..BLE_WRITE_RETRY_COUNT) {
                 val writeLatch = CountDownLatch(1)
@@ -961,7 +971,6 @@ class TrezorTransport @Inject constructor(
                 val success = connection.gatt.writeCharacteristic(writeChar)
 
                 if (!success) {
-                    // Get more diagnostic info
                     val connState = connection.isConnected
                     val charPropsHex = Integer.toHexString(writeChar.properties)
                     Logger.warn(
@@ -1003,7 +1012,6 @@ class TrezorTransport @Inject constructor(
                     return TrezorTransportWriteResult(success = false, error = lastError)
                 }
 
-                // Success!
                 Logger.debug("BLE wrote '${data.size}' bytes to '$path' (attempt '$attempt')", context = TAG)
 
                 // Small delay between writes to avoid overwhelming the GATT
@@ -1024,6 +1032,17 @@ class TrezorTransport @Inject constructor(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             val path = "ble:${gatt.device.address}"
             val connection = bleConnections[path]
+
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Logger.warn("BLE connection state changed with status '$status' for '$path'", context = TAG)
+                connection?.isConnected = false
+                connection?.connectionLatch?.countDown()
+                connection?.disconnectLatch?.countDown()
+                if (!userInitiatedCloseSet.remove(path)) {
+                    _externalDisconnect.tryEmit(path)
+                }
+                return
+            }
 
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
@@ -1089,7 +1108,6 @@ class TrezorTransport @Inject constructor(
 
             gatt.setCharacteristicNotification(notifyChar, true)
 
-            // Also subscribe to PUSH characteristic
             val pushChar = service.getCharacteristic(PUSH_CHAR_UUID)
             if (pushChar != null) {
                 gatt.setCharacteristicNotification(pushChar, true)
@@ -1218,8 +1236,6 @@ class TrezorTransport @Inject constructor(
         }
         return result
     }
-
-    // ==================== Utility Methods ====================
 
     private fun isBleDevice(path: String): Boolean = path.startsWith("ble:")
 

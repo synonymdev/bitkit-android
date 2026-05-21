@@ -5,9 +5,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
@@ -17,6 +17,7 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.services.CurrencyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -183,13 +184,16 @@ class CurrencyRepoTest : BaseUnitTest() {
     fun `should detect stale data based on lastUpdatedAt`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = testRates)))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "USD")))
+        whenever(cacheStore.update(any())).thenReturn(Unit)
+        whenever(currencyService.fetchLatestRates())
+            .thenReturn(testRates)
+            .thenAnswer { throw CurrencyRepoTestError("API error") }
 
         sut = createSut()
-        whenever(clock.now()).thenReturn(Clock.System.now().minus(10.minutes))
+        val now = Clock.System.now()
+        whenever(clock.now()).thenReturn(now.minus(11.minutes), now)
         sut.triggerRefresh()
 
-        wheneverBlocking { currencyService.fetchLatestRates() }.thenThrow(RuntimeException("API error"))
-        whenever(clock.now()).thenReturn(Clock.System.now())
         sut.triggerRefresh()
 
         sut.currencyState.test(timeout = 2000.milliseconds) {
@@ -199,3 +203,5 @@ class CurrencyRepoTest : BaseUnitTest() {
         }
     }
 }
+
+private class CurrencyRepoTestError(message: String) : AppError(message)

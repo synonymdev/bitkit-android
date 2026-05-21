@@ -46,6 +46,7 @@ import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToLanguageSettings
 import to.bitkit.ui.navigateToLocalCurrencySettings
+import to.bitkit.ui.navigateToPaymentPreferenceSettings
 import to.bitkit.ui.navigateToPinManagement
 import to.bitkit.ui.navigateToQuickPaySettings
 import to.bitkit.ui.navigateToTagsSettings
@@ -89,6 +90,7 @@ fun SettingsScreen(
     val quickPayIntroSeen by settings.quickPayIntroSeen.collectAsStateWithLifecycle()
     val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
+    val isPubkyAuthenticated by settings.isPubkyAuthenticated.collectAsStateWithLifecycle()
     val languageUiState by languageViewModel.uiState.collectAsStateWithLifecycle()
 
     // Security tab state
@@ -123,6 +125,7 @@ fun SettingsScreen(
             tagCount = lastUsedTags.size,
             isQuickPayEnabled = isQuickPayEnabled,
             notificationsGranted = notificationsGranted,
+            isPubkyAuthenticated = isPubkyAuthenticated,
         ),
         securityState = SecurityTabState(
             isPinEnabled = isPinEnabled,
@@ -150,6 +153,7 @@ fun SettingsScreen(
                 SettingsEvent.WidgetsClick -> navController.navigateToWidgetsSettings()
                 SettingsEvent.TagsClick -> navController.navigateToTagsSettings()
                 SettingsEvent.TransactionSpeedClick -> navController.navigateToTransactionSpeedSettings()
+                SettingsEvent.PaymentPreferenceClick -> navController.navigateToPaymentPreferenceSettings()
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
                 SettingsEvent.BgPaymentsClick -> {
                     if (bgPaymentsIntroSeen || notificationsGranted) {
@@ -321,6 +325,14 @@ private fun GeneralTabContent(
             onClick = { onEvent(SettingsEvent.TransactionSpeedClick) },
             modifier = Modifier.testTag("TransactionSpeedSettings")
         )
+        if (state.isPubkyAuthenticated) {
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__payment_pref_title),
+                icon = { SettingsIcon(R.drawable.ic_coins) },
+                onClick = { onEvent(SettingsEvent.PaymentPreferenceClick) },
+                modifier = Modifier.testTag("PaymentPreferenceSettings")
+            )
+        }
         SettingsButtonRow(
             title = stringResource(R.string.settings__quickpay__nav_title),
             icon = { SettingsIcon(R.drawable.ic_caret_double_right) },
@@ -618,6 +630,7 @@ sealed interface SettingsEvent {
     data object WidgetsClick : SettingsEvent
     data object TagsClick : SettingsEvent
     data object TransactionSpeedClick : SettingsEvent
+    data object PaymentPreferenceClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
 
@@ -660,6 +673,7 @@ data class GeneralTabState(
     val tagCount: Int = 0,
     val isQuickPayEnabled: Boolean = false,
     val notificationsGranted: Boolean = false,
+    val isPubkyAuthenticated: Boolean = false,
 )
 
 @Immutable

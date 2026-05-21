@@ -174,6 +174,7 @@ class Keychain @Inject constructor(
         PIN,
         PIN_ATTEMPTS_REMAINING,
         PAYKIT_SESSION,
+        PRIVATE_PAYKIT_SECRET_STATE,
         PUBKY_SECRET_KEY,
     }
 }
