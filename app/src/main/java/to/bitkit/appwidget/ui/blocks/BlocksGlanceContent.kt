@@ -19,7 +19,6 @@ import androidx.glance.layout.Row
 import androidx.glance.layout.WidthModifier
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.unit.Dimension
 import kotlinx.collections.immutable.ImmutableList
@@ -91,12 +90,11 @@ fun BlocksGlanceContent(
 private fun WideContent(fields: ImmutableList<BlocksWidgetField>, block: BlockModel, context: Context) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
         fields.forEachIndexed { index, field ->
-            if (index > 0) VerticalSpacer(8.dp)
+            if (index > 0) VerticalSpacer(12.dp)
             WideRow(
                 label = context.getString(field.labelRes),
                 value = field.value(block),
                 icon = field.icon,
-                modifier = GlanceModifier.padding(vertical = 6.dp)
             )
         }
     }
