@@ -46,6 +46,7 @@ import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.repositories.AmountInputHandler
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.test.annotations.CalculatorWidget
 import to.bitkit.test.annotations.DeviceIntegration
 import to.bitkit.test.annotations.DeviceUiIntegration
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
@@ -59,6 +60,7 @@ import kotlin.test.assertEquals
 @HiltAndroidTest
 @UninstallModules(RepoModule::class)
 @RunWith(AndroidJUnit4::class)
+@CalculatorWidget
 @DeviceIntegration
 @DeviceUiIntegration
 class CalculatorCardIntegrationTest {
