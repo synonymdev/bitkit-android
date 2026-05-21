@@ -38,7 +38,9 @@ fun BlockCard(
     preferences: BlocksPreferences,
     block: BlockModel,
 ) {
-    val fields = preferences.enabledFields().filter { it.value(block).isNotEmpty() }
+    val fields = preferences.enabledFields()
+        .filter { it.value(block).isNotEmpty() }
+        .take(MAX_BLOCKS_FIELDS)
 
     Box(
         modifier = modifier

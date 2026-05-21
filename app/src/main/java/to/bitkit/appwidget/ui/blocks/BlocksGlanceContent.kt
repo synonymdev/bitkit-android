@@ -71,7 +71,9 @@ fun BlocksGlanceContent(
             return@GlanceWidgetScaffold
         }
 
-        val fields = entry.blocksPreferences.enabledFields().filter { it.value(block).isNotEmpty() }
+        val fields = entry.blocksPreferences.enabledFields()
+            .filter { it.value(block).isNotEmpty() }
+            .take(MAX_BLOCKS_FIELDS)
         if (fields.isEmpty()) {
             CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold
@@ -80,7 +82,7 @@ fun BlocksGlanceContent(
         if (LocalSize.current.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH) {
             WideContent(fields = fields.toImmutableList(), block = block, context = context)
         } else {
-            CompactContent(fields = fields.take(MAX_BLOCKS_FIELDS).toImmutableList(), block = block)
+            CompactContent(fields = fields.toImmutableList(), block = block)
         }
     }
 }
