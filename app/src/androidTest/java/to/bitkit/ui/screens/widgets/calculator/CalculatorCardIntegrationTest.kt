@@ -97,6 +97,7 @@ class CalculatorCardIntegrationTest {
         previousLocale = Locale.getDefault()
         Locale.setDefault(Locale.US)
         hiltRule.inject()
+        viewModelStore = ViewModelStore()
 
         runBlocking {
             previousWidgetsData = widgetsStore.data.first()
@@ -193,7 +194,6 @@ class CalculatorCardIntegrationTest {
     }
 
     private fun createCalculatorViewModel(): CalculatorViewModel {
-        viewModelStore = ViewModelStore()
         return ViewModelProvider(
             viewModelStore,
             object : ViewModelProvider.Factory {
