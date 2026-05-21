@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
@@ -28,6 +29,7 @@ import com.synonym.bitkitcore.addTags
 import com.synonym.bitkitcore.createCjitEntry
 import com.synonym.bitkitcore.createOrder
 import com.synonym.bitkitcore.deleteActivityById
+import com.synonym.bitkitcore.deriveOnchainDescriptor
 import com.synonym.bitkitcore.estimateOrderFeeFull
 import com.synonym.bitkitcore.getActivities
 import com.synonym.bitkitcore.getActivityById
@@ -1822,6 +1824,24 @@ class OnchainService {
                 derivationPathStr = derivationPathStr,
                 network = network?.toCoreNetwork(),
                 bip39Passphrase = bip39Passphrase,
+            )
+        }
+    }
+
+    suspend fun deriveOnchainDescriptor(
+        mnemonicPhrase: String,
+        network: Network,
+        bip39Passphrase: String?,
+        accountType: AccountType,
+        accountIndex: UInt,
+    ): String {
+        return ServiceQueue.CORE.background {
+            deriveOnchainDescriptor(
+                mnemonicPhrase = mnemonicPhrase,
+                network = network.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+                accountType = accountType,
+                accountIndex = accountIndex,
             )
         }
     }

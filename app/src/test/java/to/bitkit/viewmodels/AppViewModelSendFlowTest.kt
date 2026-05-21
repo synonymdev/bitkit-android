@@ -1,7 +1,10 @@
 package to.bitkit.viewmodels
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.LightningInvoice
@@ -20,6 +23,7 @@ import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -35,6 +39,8 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.SamRockPaymentMethod
+import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
@@ -53,6 +59,7 @@ import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -105,8 +112,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
+    private val samRockRepo = mock<SamRockRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
+    private val clipboardManager = mock<ClipboardManager>()
+    private val toastManager = mock<ToastQueueManager>()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val settingsData = MutableStateFlow(SettingsData())
@@ -128,6 +138,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun stubRepositories() {
         whenever(context.getString(any())).thenReturn("")
+        whenever(context.getSystemService(Context.CLIPBOARD_SERVICE)).thenReturn(clipboardManager)
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
@@ -182,6 +193,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
             .thenReturn(Result.success(2u))
         whenever(lightningRepo.canSend(any())).thenReturn(true)
+        whenever(toastManager.currentToast).thenReturn(MutableStateFlow(null))
     }
 
     private fun stubSettingsStore() {
@@ -197,7 +209,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun createViewModel() = AppViewModel(
         connectivityRepo = connectivityRepo,
         healthRepo = healthRepo,
-        toastManagerProvider = { mock<ToastQueueManager>() },
+        toastManagerProvider = { toastManager },
         timedSheetManagerProvider = { timedSheetManager },
         context = context,
         bgDispatcher = testDispatcher,
@@ -219,6 +231,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         coreService = coreService,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
+        samRockRepo = samRockRepo,
         appUpdateSheet = mock(),
         backupSheet = mock(),
         notificationsSheet = mock(),
@@ -243,6 +256,236 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.sendUiState.value.canSwitchWallet)
+    }
+
+    @Test
+    fun `scan SamRock setup opens BTCPay connection sheet without core decode`() = test {
+        sut.onScanResult(
+            "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+        )
+        advanceUntilIdle()
+
+        val sheet = sut.currentSheet.value
+        assertTrue(sheet is Sheet.BTCPayConnection)
+        assertEquals("secret", sheet.setup.otp)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `scan lightning-only SamRock setup shows unsupported toast without sheet`() = test {
+        sut.onScanResult(
+            "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-ln&otp=secret"
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("BTCPayUnsupportedToast", it.testTag)
+            }
+        )
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `SamRock deeplink opens BTCPay connection sheet without core decode`() = test {
+        sut.handleDeeplinkIntent(samRockIntent(SAMROCK_SETUP_URL))
+        advanceUntilIdle()
+
+        val sheet = sut.currentSheet.value
+        assertTrue(sheet is Sheet.BTCPayConnection)
+        assertEquals("secret", sheet.setup.otp)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `SamRock deeplink containing recovery mode text opens BTCPay sheet`() = test {
+        sut.handleDeeplinkIntent(
+            samRockIntent("https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=recovery-mode")
+        )
+        advanceUntilIdle()
+
+        val sheet = sut.currentSheet.value
+        assertTrue(sheet is Sheet.BTCPayConnection)
+        assertEquals("recovery-mode", sheet.setup.otp)
+        verify(lightningRepo, never()).setRecoveryMode(true)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `public http SamRock deeplink shows setup error without core decode`() = test {
+        sut.handleDeeplinkIntent(
+            samRockIntent("http://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret")
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("BTCPayInvalidSetupToast", it.testTag)
+            }
+        )
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `unsupported SamRock deeplink shows unsupported toast without sheet`() = test {
+        sut.handleDeeplinkIntent(
+            samRockIntent("https://btcpay.example.com/plugins/store/samrock/protocol?setup=btcln&otp=secret")
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("BTCPayUnsupportedToast", it.testTag)
+            }
+        )
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `SamRock deeplink is ignored when wallet does not exist`() = test {
+        whenever(walletRepo.walletExists()).thenReturn(false)
+
+        sut.handleDeeplinkIntent(samRockIntent(SAMROCK_SETUP_URL))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(any())
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `recovery mode deeplink enables recovery mode`() = test {
+        sut.handleDeeplinkIntent(recoveryModeIntent())
+        advanceUntilIdle()
+
+        verify(lightningRepo).setRecoveryMode(true)
+    }
+
+    @Test
+    fun `connectBTCPay hides sheet and shows success toast`() = test {
+        val setup = samRockSetupRequest()
+        whenever(samRockRepo.registerBitcoinOnchain(setup)).thenReturn(Result.success(Unit))
+        sut.showSheet(Sheet.BTCPayConnection(setup))
+        advanceUntilIdle()
+
+        val result = sut.connectBTCPay(setup)
+        advanceUntilIdle()
+
+        assertTrue(result.isSuccess)
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("BTCPayConnectedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `connectBTCPay failure keeps sheet and shows error toast`() = test {
+        val setup = samRockSetupRequest()
+        whenever(samRockRepo.registerBitcoinOnchain(setup)).thenReturn(Result.failure(AppError("failed")))
+        sut.showSheet(Sheet.BTCPayConnection(setup))
+        advanceUntilIdle()
+
+        val result = sut.connectBTCPay(setup)
+        advanceUntilIdle()
+
+        assertTrue(result.isFailure)
+        assertTrue(sut.currentSheet.value is Sheet.BTCPayConnection)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("BTCPayConnectionErrorToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `canDecodeClipboard accepts SamRock setup without core decode`() = test {
+        val setupUrl = "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+        clearInvocations(coreService)
+
+        assertTrue(sut.canDecodeClipboard(setupUrl))
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `canDecodeClipboard accepts invalid SamRock setup without core decode`() = test {
+        val setupUrl = "http://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+        clearInvocations(coreService)
+
+        assertTrue(sut.canDecodeClipboard(setupUrl))
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `paste SamRock setup opens BTCPay connection sheet without core decode`() = test {
+        val clipData = mock<ClipData>()
+        val item = mock<ClipData.Item>()
+        whenever(item.text).thenReturn(SAMROCK_SETUP_URL)
+        whenever(clipData.getItemAt(0)).thenReturn(item)
+        whenever(clipboardManager.primaryClip).thenReturn(clipData)
+        clearInvocations(coreService)
+
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+
+        val sheet = sut.currentSheet.value
+        assertTrue(sheet is Sheet.BTCPayConnection)
+        assertEquals("secret", sheet.setup.otp)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `paste empty clipboard shows warning without core decode`() = test {
+        whenever(clipboardManager.primaryClip).thenReturn(null)
+        clearInvocations(coreService)
+
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(any())
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `scanner sheet SamRock result opens BTCPay connection sheet without core decode`() = test {
+        clearInvocations(coreService)
+
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        assertTrue(sut.currentSheet.value is Sheet.QrScanner)
+
+        sut.onScannerSheetResult(SAMROCK_SETUP_URL)
+        advanceUntilIdle()
+
+        val sheet = sut.currentSheet.value
+        assertTrue(sheet is Sheet.BTCPayConnection)
+        assertEquals("secret", sheet.setup.otp)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `scanner sheet handler is bypassed for SamRock result`() = test {
+        var handled = false
+        clearInvocations(coreService)
+
+        sut.showScannerSheet {
+            handled = true
+        }
+        advanceUntilIdle()
+        assertTrue(sut.currentSheet.value is Sheet.QrScanner)
+
+        sut.onScannerSheetResult(SAMROCK_SETUP_URL)
+        advanceUntilIdle()
+
+        val sheet = sut.currentSheet.value
+        assertTrue(sheet is Sheet.BTCPayConnection)
+        assertFalse(handled)
+        verify(coreService, never()).decode(any())
     }
 
     @Test
@@ -992,6 +1235,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isPaykitEnabled.value = true
     }
 
+    private fun samRockSetupRequest() = SamRockSetupRequest(
+        postUrl = "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret",
+        storeId = "store",
+        otp = "secret",
+        requestedMethods = setOf(SamRockPaymentMethod.BTC_ONCHAIN),
+        hasUnknownMethods = false,
+        hostDisplayName = "btcpay.example.com",
+        logDescription = "https://btcpay.example.com/plugins/store/samrock/protocol",
+    )
+
+    private fun samRockIntent(url: String): Intent {
+        val uri = mock<Uri> {
+            on { toString() }.thenReturn(url)
+            on { scheme }.thenReturn("https")
+            on { host }.thenReturn("btcpay.example.com")
+            on { path }.thenReturn("/plugins/store/samrock/protocol")
+        }
+        return mock {
+            on { action }.thenReturn(Intent.ACTION_VIEW)
+            on { data }.thenReturn(uri)
+        }
+    }
+
+    private fun recoveryModeIntent(): Intent {
+        val uri = mock<Uri> {
+            on { toString() }.thenReturn("bitkit://recovery-mode")
+            on { scheme }.thenReturn("bitkit")
+            on { host }.thenReturn("recovery-mode")
+            on { pathSegments }.thenReturn(emptyList())
+        }
+        return mock {
+            on { action }.thenReturn(Intent.ACTION_VIEW)
+            on { data }.thenReturn(uri)
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun setPendingContactPaymentContext(paymentHash: String, publicKey: String) {
         val field = AppViewModel::class.java.getDeclaredField("pendingContactPaymentContexts")
@@ -1051,3 +1330,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         method.invoke(sut)
     }
 }
+
+private const val SAMROCK_SETUP_URL =
+    "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"

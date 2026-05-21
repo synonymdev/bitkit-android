@@ -186,6 +186,7 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
@@ -442,6 +443,7 @@ fun ContentView(
                             onDismiss = { appViewModel.hideSheet() },
                         )
 
+                        is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         Sheet.QrScanner -> QrScanningSheet(appViewModel)
                         is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(

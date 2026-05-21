@@ -127,6 +127,23 @@
                 <data android:scheme="pubkyauth" />
             </intent-filter>
 
+            <!-- BTCPay wallet connection links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="*"
+                    android:pathPattern="/plugins/.*/samrock/protocol" />
+                <data
+                    android:scheme="http"
+                    android:host="*"
+                    android:pathPattern="/plugins/.*/samrock/protocol" />
+            </intent-filter>
+
             <!-- NFC -->
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />

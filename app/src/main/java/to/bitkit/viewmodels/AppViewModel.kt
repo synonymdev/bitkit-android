@@ -105,12 +105,14 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkyRingAuthCallback
 import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
+import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
+import to.bitkit.models.sanitizedDeeplinkLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
@@ -130,6 +132,7 @@ import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -193,6 +196,7 @@ class AppViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
@@ -321,6 +325,7 @@ class AppViewModel @Inject constructor(
                     val currentSheet = _currentSheet.value
                     val isHighPrioritySheetShowing = currentSheet is Sheet.Gift ||
                         currentSheet is Sheet.Send ||
+                        currentSheet is Sheet.BTCPayConnection ||
                         currentSheet is Sheet.LnurlAuth ||
                         currentSheet is Sheet.Pin ||
                         currentSheet is Sheet.PubkyAuth
@@ -1318,7 +1323,12 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
     ) {
         val normalized = data.removeLightningSchemes()
-        val scanId = if (data.length > 24) "${data.take(11)}…${data.takeLast(11)}" else data
+        val scanLogInput = SamRockSetupRequest.sanitizedDescription(normalized) ?: data
+        val scanId = if (scanLogInput.length > 24) {
+            "${scanLogInput.take(11)}…${scanLogInput.takeLast(11)}"
+        } else {
+            scanLogInput
+        }
 
         if (normalized == activeScanInput && activeScanJob?.isActive == true) {
             Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
@@ -1611,6 +1621,16 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
+        SamRockSetupRequest.parse(input)?.let {
+            handleSamRockSetup(it)
+            return@withContext
+        }
+
+        if (SamRockSetupRequest.isProtocolUrl(input)) {
+            handleInvalidSamRockSetup(input)
+            return@withContext
+        }
+
         if (input.startsWith("$PUBKYAUTH_SCHEME://")) {
             clearActiveContactPaymentContext()
             if (isPaykitEnabled.value) {
@@ -1642,8 +1662,9 @@ class AppViewModel @Inject constructor(
             }
         }
 
+        val safeLogInput = SamRockSetupRequest.sanitizedDescription(input) ?: input
         val scan = runCatching { coreService.decode(input) }
-            .onFailure { Logger.error("Failed to decode scan data: '$input'", it, context = TAG) }
+            .onFailure { Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG) }
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
@@ -1677,6 +1698,38 @@ class AppViewModel @Inject constructor(
             )
             clearActiveContactPaymentContext()
         }
+    }
+
+    private suspend fun handleSamRockSetup(setup: SamRockSetupRequest) {
+        clearActiveContactPaymentContext()
+
+        if (!setup.requestsBitcoinOnchain) {
+            hideSheet()
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.btcpay__unsupported_title),
+                description = context.getString(R.string.btcpay__unsupported_text),
+                testTag = "BTCPayUnsupportedToast",
+            )
+            return
+        }
+
+        showSheet(Sheet.BTCPayConnection(setup))
+    }
+
+    private suspend fun handleInvalidSamRockSetup(input: String) {
+        clearActiveContactPaymentContext()
+        hideSheet()
+        val descriptionRes = when {
+            SamRockSetupRequest.isPublicHttpProtocolUrl(input) -> R.string.btcpay__unsupported_http_text
+            else -> R.string.btcpay__invalid_link_text
+        }
+        toast(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.btcpay__unsupported_title),
+            description = context.getString(descriptionRes),
+            testTag = "BTCPayInvalidSetupToast",
+        )
     }
 
     private suspend fun handleNonPaymentScan(action: suspend () -> Unit) {
@@ -2662,9 +2715,10 @@ class AppViewModel @Inject constructor(
 
     fun onScannerSheetResult(data: String) {
         val handler = scanResultHandler
+        val shouldHandleAsProtocol = SamRockSetupRequest.isProtocolUrl(data.removeLightningSchemes())
         scanResultHandler = null
         hideSheet()
-        if (handler != null) {
+        if (handler != null && !shouldHandleAsProtocol) {
             viewModelScope.launch {
                 delay(SCREEN_TRANSITION_DELAY)
                 handler(data)
@@ -2682,6 +2736,30 @@ class AppViewModel @Inject constructor(
     fun hideScannerSheet() {
         scanResultHandler = null
         hideSheet()
+    }
+
+    suspend fun connectBTCPay(setup: SamRockSetupRequest): Result<Unit> {
+        val result = samRockRepo.registerBitcoinOnchain(setup)
+        result
+            .onSuccess {
+                hideSheet()
+                toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.btcpay__success_title),
+                    description = context.getString(R.string.btcpay__success_description),
+                    testTag = "BTCPayConnectedToast",
+                )
+            }
+            .onFailure {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.btcpay__error_title),
+                    description = it.message ?: context.getString(R.string.btcpay__request_error),
+                    testTag = "BTCPayConnectionErrorToast",
+                )
+            }
+
+        return result
     }
 
     fun showSheet(sheetType: Sheet) {
@@ -2832,7 +2910,7 @@ class AppViewModel @Inject constructor(
     // endregion
 
     suspend fun canDecodeClipboard(text: String): Boolean = withContext(bgDispatcher) {
-        runCatching { coreService.decode(text) }.isSuccess
+        SamRockSetupRequest.isProtocolUrl(text) || runCatching { coreService.decode(text) }.isSuccess
     }
 
     fun onClipboardAutoRead(data: String) {
@@ -2926,7 +3004,7 @@ class AppViewModel @Inject constructor(
     fun handleDeeplinkIntent(intent: Intent) {
         if (intent.action != Intent.ACTION_VIEW) return
         intent.data?.let { uri ->
-            Logger.debug("Received deeplink: $uri")
+            Logger.debug("Received deeplink '${uri.toString().sanitizedDeeplinkLogValue()}'", context = TAG)
             processDeeplink(uri)
         }
     }
@@ -2938,7 +3016,15 @@ class AppViewModel @Inject constructor(
     }
 
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
-        if (uri.toString().contains("recovery-mode")) {
+        val value = uri.toString()
+        if (SamRockSetupRequest.isProtocolUrl(value)) {
+            if (!walletRepo.walletExists()) return@launch
+
+            launchScan(source = ScanSource.DEEPLINK, data = value, startDelay = SCREEN_TRANSITION_DELAY)
+            return@launch
+        }
+
+        if (uri.isRecoveryModeDeeplink()) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY)
             mainScreenEffect(
@@ -2964,7 +3050,15 @@ class AppViewModel @Inject constructor(
 
         if (!walletRepo.walletExists()) return@launch
 
-        launchScan(source = ScanSource.DEEPLINK, data = uri.toString(), startDelay = SCREEN_TRANSITION_DELAY)
+        launchScan(source = ScanSource.DEEPLINK, data = value, startDelay = SCREEN_TRANSITION_DELAY)
+    }
+
+    private fun Uri.isRecoveryModeDeeplink(): Boolean {
+        val normalizedScheme = scheme?.lowercase()
+        if (normalizedScheme != BITKIT_SCHEME) return false
+
+        return host == RECOVERY_MODE_DEEPLINK ||
+            pathSegments.singleOrNull() == RECOVERY_MODE_DEEPLINK
     }
 
     private suspend fun handlePubkyAuth(authUrl: String) {
@@ -3055,7 +3149,9 @@ class AppViewModel @Inject constructor(
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
+        private const val BITKIT_SCHEME = "bitkit"
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
+        private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
         private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
     }
 }

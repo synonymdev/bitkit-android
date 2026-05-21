@@ -60,6 +60,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
+import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
@@ -136,7 +137,7 @@ fun SendRecipientScreen(
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
                 val qrCode = result.getOrThrow()
-                Logger.debug("QR scanned: '$qrCode'", context = TAG)
+                Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                 onEvent(SendEvent.AddressContinue(qrCode))
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
@@ -205,7 +206,7 @@ fun SendRecipientScreen(
 
     // Gallery picker launchers
     val handleGalleryScanSuccess = { qrCode: String ->
-        Logger.debug("QR from gallery: $qrCode", context = TAG)
+        Logger.debug("Found gallery QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
         onEvent(SendEvent.AddressContinue(qrCode))
     }
 
@@ -469,7 +470,7 @@ private fun processImageFromGallery(
                 for (barcode in barcodes) {
                     barcode.rawValue?.let { qrCode ->
                         onScanSuccess(qrCode)
-                        Logger.info("QR from gallery: $qrCode", context = TAG)
+                        Logger.info("Found gallery QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                         return@addOnSuccessListener
                     }
                 }
