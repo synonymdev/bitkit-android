@@ -90,7 +90,7 @@ fun BlocksGlanceContent(
 private fun WideContent(fields: ImmutableList<BlocksWidgetField>, block: BlockModel, context: Context) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
         fields.forEachIndexed { index, field ->
-            if (index > 0) VerticalSpacer(12.dp)
+            if (index > 0) VerticalSpacer(16.dp)
             WideRow(
                 label = context.getString(field.labelRes),
                 value = field.value(block),
