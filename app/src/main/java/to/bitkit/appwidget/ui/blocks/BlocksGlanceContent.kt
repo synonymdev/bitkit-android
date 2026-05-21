@@ -24,10 +24,12 @@ import androidx.glance.layout.size
 import androidx.glance.unit.Dimension
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import to.bitkit.R
 import to.bitkit.appwidget.config.AppWidgetConfigActivity
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.model.HomeBlocksPreferences
+import to.bitkit.appwidget.ui.components.BodyM
 import to.bitkit.appwidget.ui.components.BodyMSB
 import to.bitkit.appwidget.ui.components.BodySSB
 import to.bitkit.appwidget.ui.components.CaptionB
@@ -35,8 +37,6 @@ import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
 import to.bitkit.appwidget.ui.components.VerticalSpacer
-import to.bitkit.appwidget.ui.theme.GlanceColors
-import to.bitkit.R
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksWidgetField
 import to.bitkit.models.widget.MAX_BLOCKS_FIELDS
@@ -116,9 +116,9 @@ private fun WideRow(label: String, value: String, icon: Int, modifier: GlanceMod
             modifier = GlanceModifier.size(20.dp)
         )
         HorizontalSpacer(8.dp)
-        BodyMSB(
+        BodyM(
             text = label,
-            color = GlanceColors.textSecondary,
+            color = ColorProvider(day = Colors.White80, night = Colors.White80),
             modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
         )
         BodyMSB(text = value)
