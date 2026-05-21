@@ -22,6 +22,7 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -36,7 +37,6 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.shareZipFile
-import to.bitkit.utils.PaykitFeatureFlags
 import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable

@@ -29,12 +29,12 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
-import to.bitkit.utils.PaykitFeatureFlags
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
@@ -60,7 +60,7 @@ class ActivityListViewModel @Inject constructor(
     val contacts: StateFlow<ImmutableList<PubkyProfile>> =
         combine(
             pubkyRepo.contacts,
-            settingsStore.data.map { PaykitFeatureFlags.isUiEnabled(it) },
+            settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
         ) { contacts, isPaykitEnabled ->
             if (isPaykitEnabled) contacts.toImmutableList() else persistentListOf<PubkyProfile>()
         }.stateInScope(persistentListOf())

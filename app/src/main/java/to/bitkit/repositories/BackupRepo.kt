@@ -49,7 +49,6 @@ import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import to.bitkit.utils.PaykitFeatureFlags
 import to.bitkit.utils.jsonLogOf
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -626,10 +625,6 @@ class BackupRepo @Inject constructor(
         addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
         val privateRepo = privatePaykitRepo.get()
         privateRepo.restoreBackup(parsed.privatePaykitContactLinks).getOrThrow()
-        val isPaykitEnabled = PaykitFeatureFlags.isUiEnabled(settingsStore.data.first())
-        if (!isPaykitEnabled && !parsed.privatePaykitContactLinks.isNullOrEmpty()) {
-            privateRepo.setContactSharingCleanupPending(true).getOrThrow()
-        }
         addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
         Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
         return parsed.createdAt

@@ -95,6 +95,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.watchUntil
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.FeeRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -146,7 +147,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
-import to.bitkit.utils.PaykitFeatureFlags
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -261,7 +261,7 @@ class AppViewModel @Inject constructor(
     private var isCompletingMigration = false
     private var addressValidationJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
-    private val isPaykitEnabled = settingsStore.data
+    private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -442,7 +442,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
         val settings = settingsStore.data.first()
-        if (!PaykitFeatureFlags.isUiEnabled(settings) || !settings.sharesPublicPaykitEndpoints) return
+        if (!isPaykitEnabled.value || !settings.sharesPublicPaykitEndpoints) return
 
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
@@ -457,7 +457,7 @@ class AppViewModel @Inject constructor(
                 pubkyRepo.publicKey,
                 pubkyRepo.contacts,
                 pubkyRepo.contactsLoadVersion,
-                settingsStore.data.map { PaykitFeatureFlags.isUiEnabled(it) },
+                settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
             ) { publicKey, contacts, contactsLoadVersion, isPaykitEnabled ->
                 PaykitContactSyncState(
                     publicKey = publicKey,
@@ -506,7 +506,7 @@ class AppViewModel @Inject constructor(
         val contactKeys = pubkyRepo.contacts.value.map { it.publicKey }
         retryPendingPaykitEndpointRemoval(contactKeys, reason)
 
-        if (!PaykitFeatureFlags.isUiEnabled(settingsStore.data.first())) return
+        if (!isPaykitEnabled.value) return
 
         privatePaykitRepo.reconcileReservedReceiveIndexes()
             .onFailure {
@@ -2951,13 +2951,13 @@ class AppViewModel @Inject constructor(
         }
 
         PubkyRingAuthCallback.parse(uri)?.let {
-            if (!PaykitFeatureFlags.isUiEnabled(settingsStore.data.first())) return@launch
+            if (!isPaykitEnabled.value) return@launch
             handlePubkyRingAuthCallback(it)
             return@launch
         }
 
         if (uri.scheme == PUBKYAUTH_SCHEME) {
-            if (!PaykitFeatureFlags.isUiEnabled(settingsStore.data.first())) return@launch
+            if (!isPaykitEnabled.value) return@launch
             handlePubkyAuth(uri.toString())
             return@launch
         }

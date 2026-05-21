@@ -3,8 +3,13 @@ package to.bitkit.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
@@ -16,7 +21,6 @@ import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.utils.Logger
-import to.bitkit.utils.PaykitFeatureFlags
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,13 +29,17 @@ private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
     serializer = SettingsSerializer,
 )
 
+private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore("local_settings")
+
 @Singleton
 class SettingsStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val store = context.settingsDataStore
+    private val localStore = context.localSettingsDataStore
 
     val data: Flow<SettingsData> = store.data
+    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -39,12 +47,7 @@ class SettingsStore @Inject constructor(
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
         runCatching {
-            val restored = payload.settings.resetPin()
-            val data = if (PaykitFeatureFlags.isUiEnabled(restored) || !restored.hasPaykitState()) {
-                restored
-            } else {
-                restored.paykitDisabled(markPublicCleanupPending = restored.hasPublicPaykitPublicationState())
-            }
+            val data = payload.settings.resetPin()
             store.updateData { data }
 
             val monitored = data.addressTypesToMonitor
@@ -57,6 +60,10 @@ class SettingsStore @Inject constructor(
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
         store.updateData(transform)
+    }
+
+    suspend fun setIsPaykitEnabled(value: Boolean) {
+        localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
     }
 
     suspend fun addLastUsedTag(newTag: String) {
@@ -82,6 +89,7 @@ class SettingsStore @Inject constructor(
 
     suspend fun reset() {
         store.updateData { SettingsData() }
+        localStore.edit { it.clear() }
         restoredMonitoredTypesFromBackup = false
         Logger.info("Deleted all user settings data.")
     }
@@ -89,6 +97,7 @@ class SettingsStore @Inject constructor(
     companion object {
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
+        private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
     }
 }
 
@@ -106,7 +115,6 @@ data class SettingsData(
     val hasSeenShopIntro: Boolean = false,
     val hasSeenProfileIntro: Boolean = false,
     val hasSeenContactsIntro: Boolean = false,
-    val isPaykitEnabled: Boolean = false,
     val hasConfirmedPublicPaykitEndpoints: Boolean = false,
     val sharesPublicPaykitEndpoints: Boolean = false,
     val sharesPrivatePaykitEndpoints: Boolean = false,
@@ -166,12 +174,10 @@ fun SettingsData.hasPublicPaykitPublicationState(): Boolean =
         publicPaykitBolt11ExpiresAtMillis > 0L
 
 fun SettingsData.hasPaykitState(): Boolean =
-    isPaykitEnabled ||
-        hasPublicPaykitPublicationState() ||
+    hasPublicPaykitPublicationState() ||
         sharesPrivatePaykitEndpoints
 
 fun SettingsData.paykitDisabled(markPublicCleanupPending: Boolean = false) = copy(
-    isPaykitEnabled = false,
     hasConfirmedPublicPaykitEndpoints = false,
     sharesPublicPaykitEndpoints = false,
     sharesPrivatePaykitEndpoints = false,

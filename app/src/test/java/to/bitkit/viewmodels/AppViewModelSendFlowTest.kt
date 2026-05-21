@@ -110,6 +110,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val settingsData = MutableStateFlow(SettingsData())
+    private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEvents = MutableSharedFlow<Event>()
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
@@ -185,6 +186,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun stubSettingsStore() {
         whenever(settingsStore.data).thenReturn(settingsData)
+        whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)
@@ -936,8 +938,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `private Paykit refresh clears stale public cleanup when public sharing is enabled`() = test {
+        isPaykitEnabled.value = true
         settingsData.value = SettingsData(
-            isPaykitEnabled = true,
             sharesPublicPaykitEndpoints = true,
             publicPaykitCleanupPending = true,
         )
@@ -982,11 +984,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private suspend fun enablePublicPaykitSharing() {
         whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any()) }.thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
-        settingsData.value = SettingsData(isPaykitEnabled = true, sharesPublicPaykitEndpoints = true)
+        isPaykitEnabled.value = true
+        settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)
     }
 
     private fun enablePaykitUi() {
-        settingsData.value = settingsData.value.copy(isPaykitEnabled = true)
+        isPaykitEnabled.value = true
     }
 
     @Suppress("UNCHECKED_CAST")

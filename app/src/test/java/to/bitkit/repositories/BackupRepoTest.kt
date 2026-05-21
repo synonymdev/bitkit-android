@@ -65,6 +65,8 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever { vssBackupClient.getObject(any()) }.thenReturn(Result.success(null))
+        whenever { vssBackupClient.putObject(any(), any()) }
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SETTINGS.name, value = byteArrayOf(), version = 1)))
         whenever { privatePaykitRepo.restoreBackup(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }.thenReturn(Result.success(Unit))
         whenever {
@@ -109,21 +111,6 @@ class BackupRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(settingsStore, never()).update(any())
-    }
-
-    @Test
-    fun `full restore marks private cleanup pending when restored links exist and Paykit is disabled`() = test {
-        val contactKey = "pubkycytinw71a3ge1esmzj5e53hsr3jtj6t4pogpgr6k75w9mzmyokzo"
-        stubWalletBackup(
-            privatePaykitContactLinks = mapOf(
-                contactKey to PrivatePaykitContactLinkBackupV1(publicKey = contactKey)
-            )
-        )
-
-        val result = sut.performFullRestoreFromLatestBackup()
-
-        assertTrue(result.isSuccess)
-        verify(privatePaykitRepo).setContactSharingCleanupPending(true)
     }
 
     private fun stubWalletBackup(

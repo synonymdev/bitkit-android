@@ -17,13 +17,13 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.utils.Logger
-import to.bitkit.utils.PaykitFeatureFlags
 import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
@@ -43,7 +43,8 @@ class SettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val settings = settingsStore.data.first()
-            if (!PaykitFeatureFlags.isUiEnabled(settings) && settings.hasPaykitState()) {
+            val isPaykitEnabled = PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first())
+            if (!isPaykitEnabled && settings.hasPaykitState()) {
                 updatePaykitEnabled(false)
             }
         }
@@ -181,10 +182,10 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val isPaykitEnabled = settingsStore.data.map { PaykitFeatureFlags.isUiEnabled(it) }
+    val isPaykitEnabled = settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) }
         .asStateFlow(initialValue = false)
 
-    val isPaykitStateLoaded = settingsStore.data.map { true }
+    val isPaykitStateLoaded = settingsStore.isPaykitEnabled.map { true }
         .asStateFlow(initialValue = false)
 
     fun setIsPaykitEnabled(value: Boolean) {
@@ -196,15 +197,12 @@ class SettingsViewModel @Inject constructor(
     private suspend fun updatePaykitEnabled(value: Boolean) {
         val shouldEnable = value && PaykitFeatureFlags.isUiAvailable
         val hadPublicPaykitState = settingsStore.data.first().hasPublicPaykitPublicationState()
-        settingsStore.update {
-            if (shouldEnable) {
-                it.copy(isPaykitEnabled = true)
-            } else {
-                it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
-            }
-        }
+        settingsStore.setIsPaykitEnabled(shouldEnable)
 
         if (!shouldEnable) {
+            settingsStore.update {
+                it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
+            }
             removePaykitEndpoints(hadPublicPaykitState)
         }
     }

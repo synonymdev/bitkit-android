@@ -37,6 +37,7 @@ class SettingsViewModelTest : BaseUnitTest() {
     private val widgetsRepo = mock<WidgetsRepo>()
 
     private val settingsData = MutableStateFlow(SettingsData())
+    private val isPaykitEnabled = MutableStateFlow(false)
     private val contacts = MutableStateFlow(
         listOf(
             PubkyProfile(
@@ -53,9 +54,14 @@ class SettingsViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(settingsStore.data).thenReturn(settingsData)
+        whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)
+            Unit
+        }
+        whenever { settingsStore.setIsPaykitEnabled(any()) }.thenAnswer {
+            isPaykitEnabled.value = it.getArgument(0)
             Unit
         }
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
@@ -69,8 +75,8 @@ class SettingsViewModelTest : BaseUnitTest() {
 
     @Test
     fun `disabling Paykit clears settings and removes published endpoints`() = test {
+        isPaykitEnabled.value = true
         settingsData.value = SettingsData(
-            isPaykitEnabled = true,
             hasConfirmedPublicPaykitEndpoints = true,
             sharesPublicPaykitEndpoints = true,
             sharesPrivatePaykitEndpoints = true,
@@ -83,7 +89,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val settings = settingsData.value
-        assertFalse(settings.isPaykitEnabled)
+        assertFalse(isPaykitEnabled.value)
         assertFalse(settings.hasConfirmedPublicPaykitEndpoints)
         assertFalse(settings.sharesPublicPaykitEndpoints)
         assertFalse(settings.sharesPrivatePaykitEndpoints)
@@ -99,8 +105,8 @@ class SettingsViewModelTest : BaseUnitTest() {
     fun `disabling Paykit keeps public cleanup pending when public removal fails`() = test {
         whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }
             .thenReturn(Result.failure(SettingsViewModelTestError("cleanup failed")))
+        isPaykitEnabled.value = true
         settingsData.value = SettingsData(
-            isPaykitEnabled = true,
             hasConfirmedPublicPaykitEndpoints = true,
             sharesPublicPaykitEndpoints = true,
         )
@@ -115,8 +121,8 @@ class SettingsViewModelTest : BaseUnitTest() {
     @Test
     fun `disabling Paykit with private-only state does not create public cleanup pending`() = test {
         clearInvocations(publicPaykitRepo)
+        isPaykitEnabled.value = true
         settingsData.value = SettingsData(
-            isPaykitEnabled = true,
             sharesPrivatePaykitEndpoints = true,
         )
 
@@ -131,7 +137,6 @@ class SettingsViewModelTest : BaseUnitTest() {
     @Test
     fun `init disables stale Paykit publication state when local flag is off`() = test {
         settingsData.value = SettingsData(
-            isPaykitEnabled = false,
             hasConfirmedPublicPaykitEndpoints = true,
             sharesPublicPaykitEndpoints = true,
             sharesPrivatePaykitEndpoints = true,
@@ -144,7 +149,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val settings = settingsData.value
-        assertFalse(settings.isPaykitEnabled)
+        assertFalse(isPaykitEnabled.value)
         assertFalse(settings.hasConfirmedPublicPaykitEndpoints)
         assertFalse(settings.sharesPublicPaykitEndpoints)
         assertFalse(settings.sharesPrivatePaykitEndpoints)
