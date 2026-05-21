@@ -29,11 +29,7 @@ data class SamRockSetupRequest(
 
             val pathComponents = uri.decodedPathComponents()
                 ?: return null
-
-            if (pathComponents.size != EXPECTED_PATH_COMPONENTS) return null
-            if (pathComponents[0] != PLUGINS_PATH_COMPONENT) return null
-            if (!pathComponents[2].equals(SAMROCK_PATH_COMPONENT, ignoreCase = true)) return null
-            if (!pathComponents[3].equals(PROTOCOL_PATH_COMPONENT, ignoreCase = true)) return null
+            val storeId = pathComponents.samRockStoreId() ?: return null
 
             val queryItems = runCatching { parseQuery(uri.rawQuery ?: return null) }.getOrNull() ?: return null
             val otp = queryItems.firstValue(OTP_QUERY_KEY)?.takeIf { it.isNotBlank() } ?: return null
@@ -42,7 +38,7 @@ data class SamRockSetupRequest(
 
             return SamRockSetupRequest(
                 postUrl = buildPostUrl(uri, setup, otp),
-                storeId = pathComponents[1],
+                storeId = storeId,
                 otp = otp,
                 requestedMethods = parsedMethods.methods,
                 hasUnknownMethods = parsedMethods.hasUnknownMethods,
@@ -145,10 +141,18 @@ data class SamRockSetupRequest(
             val pathComponents = decodedPathComponents()
                 ?: return false
 
-            return pathComponents.size == EXPECTED_PATH_COMPONENTS &&
-                pathComponents[0] == PLUGINS_PATH_COMPONENT &&
-                pathComponents[2].equals(SAMROCK_PATH_COMPONENT, ignoreCase = true) &&
-                pathComponents[3].equals(PROTOCOL_PATH_COMPONENT, ignoreCase = true)
+            return pathComponents.samRockStoreId() != null
+        }
+
+        private fun List<String>.samRockStoreId(): String? {
+            if (size < SAMROCK_PROTOCOL_COMPONENT_COUNT) return null
+
+            val pluginsIndex = size - SAMROCK_PROTOCOL_COMPONENT_COUNT
+            if (this[pluginsIndex] != PLUGINS_PATH_COMPONENT) return null
+            if (!this[pluginsIndex + 2].equals(SAMROCK_PATH_COMPONENT, ignoreCase = true)) return null
+            if (!this[pluginsIndex + 3].equals(PROTOCOL_PATH_COMPONENT, ignoreCase = true)) return null
+
+            return this[pluginsIndex + 1]
         }
 
         private fun URI.hasAuthority(): Boolean {
@@ -265,7 +269,7 @@ data class SamRockSetupRequest(
         private const val PATH_SEPARATOR = '/'
         private const val SCHEME_SEPARATOR = "://"
         private const val USER_INFO_SEPARATOR = '@'
-        private const val EXPECTED_PATH_COMPONENTS = 4
+        private const val SAMROCK_PROTOCOL_COMPONENT_COUNT = 4
         private const val PLUGINS_PATH_COMPONENT = "plugins"
         private const val SAMROCK_PATH_COMPONENT = "samrock"
         private const val PROTOCOL_PATH_COMPONENT = "protocol"

@@ -28,6 +28,28 @@ class SamRockSetupRequestTest {
     }
 
     @Test
+    fun `parse accepts setup URL under base path`() {
+        val setup = assertNotNull(
+            SamRockSetupRequest.parse(
+                "https://btcpay.example.com/btcpay/plugins/store-1/samrock/protocol?setup=btc-chain&otp=secret"
+            )
+        )
+
+        assertEquals("store-1", setup.storeId)
+        assertEquals("btcpay.example.com", setup.hostDisplayName)
+        assertEquals(
+            "https://btcpay.example.com/btcpay/plugins/store-1/samrock/protocol?setup=btc-chain&otp=secret",
+            setup.postUrl,
+        )
+        assertEquals(
+            "https://btcpay.example.com/btcpay/plugins/store-1/samrock/protocol",
+            SamRockSetupRequest.sanitizedDescription(
+                "https://btcpay.example.com/btcpay/plugins/store-1/samrock/protocol?setup=btc-chain&otp=secret"
+            ),
+        )
+    }
+
+    @Test
     fun `parse defaults missing setup to all`() {
         val setup = assertNotNull(
             SamRockSetupRequest.parse(
@@ -182,6 +204,11 @@ class SamRockSetupRequestTest {
         assertNull(SamRockSetupRequest.parse("https://btcpay.example.com/plugins/store/samrock?otp=secret"))
         assertNull(SamRockSetupRequest.parse("https://btcpay.example.com/plugins/store/samrock/protocol"))
         assertNull(SamRockSetupRequest.parse("https://btcpay.example.com/plugins/store/samrock/protocol?otp="))
+        assertNull(
+            SamRockSetupRequest.parse(
+                "https://btcpay.example.com/plugins/store/samrock/protocol/extra?otp=secret"
+            )
+        )
         assertNull(
             SamRockSetupRequest.parse(
                 "https://user:pass@btcpay.example.com/plugins/store/samrock/protocol?otp=secret"
