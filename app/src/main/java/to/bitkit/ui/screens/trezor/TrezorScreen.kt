@@ -45,7 +45,9 @@ import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.synonym.bitkitcore.CoinSelection
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.repositories.ConnectedTrezorDevice
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorDebugLog
@@ -657,9 +659,12 @@ private fun PreviewWithDevices() {
         Content(
             trezorState = TrezorState(
                 isInitialized = true,
-                knownDevices = listOf(TrezorPreviewData.sampleKnownDevice),
-                nearbyDevices = listOf(TrezorPreviewData.sampleNearbyDevice),
-                connectedDeviceId = TrezorPreviewData.sampleKnownDevice.id,
+                knownDevices = listOf(TrezorPreviewData.sampleKnownDevice).toImmutableList(),
+                nearbyDevices = listOf(TrezorPreviewData.sampleNearbyDevice).toImmutableList(),
+                connected = ConnectedTrezorDevice(
+                    id = TrezorPreviewData.sampleKnownDevice.id,
+                    features = TrezorPreviewData.sampleFeatures,
+                ),
             ),
             uiState = TrezorUiState(),
         )

@@ -158,7 +158,7 @@ private fun PreviewSignMessageSectionWithSignature() {
 private fun PreviewSignMessageSectionSigning() {
     AppThemeSurface {
         SignMessageSection(
-            uiState = TrezorUiState(isSigningMessage = true),
+            uiState = TrezorUiState(message = TrezorMessageState(isSigningMessage = true)),
             onMessageChange = {},
             onSignMessage = {},
             onVerifyMessage = {},

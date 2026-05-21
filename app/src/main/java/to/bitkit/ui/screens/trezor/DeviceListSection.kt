@@ -22,6 +22,7 @@ import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
 import to.bitkit.repositories.KnownDevice
+import to.bitkit.repositories.KnownDeviceTransportType
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -96,10 +97,9 @@ internal fun KnownDeviceCard(
     ) {
         Icon(
             painter = painterResource(
-                if (device.transportType == "bluetooth") {
-                    R.drawable.ic_broadcast
-                } else {
-                    R.drawable.ic_git_branch
+                when (device.transportType) {
+                    KnownDeviceTransportType.BLUETOOTH -> R.drawable.ic_broadcast
+                    KnownDeviceTransportType.USB -> R.drawable.ic_git_branch
                 }
             ),
             contentDescription = null,
@@ -119,7 +119,10 @@ internal fun KnownDeviceCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Caption(
-                    text = if (device.transportType == "bluetooth") "Bluetooth" else "USB",
+                    text = when (device.transportType) {
+                        KnownDeviceTransportType.BLUETOOTH -> "Bluetooth"
+                        KnownDeviceTransportType.USB -> "USB"
+                    },
                     color = Colors.White50,
                 )
                 Caption(

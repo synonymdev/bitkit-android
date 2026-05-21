@@ -1,5 +1,8 @@
 package to.bitkit.services
 
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,8 +13,8 @@ import java.util.Locale
 
 object TrezorDebugLog {
     private const val MAX_LINES = 300
-    private val _lines = MutableStateFlow<List<String>>(emptyList())
-    val lines: StateFlow<List<String>> = _lines.asStateFlow()
+    private val _lines = MutableStateFlow<ImmutableList<String>>(persistentListOf())
+    val lines: StateFlow<ImmutableList<String>> = _lines.asStateFlow()
 
     private val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 
@@ -20,11 +23,15 @@ object TrezorDebugLog {
         val line = "$ts [$tag] $msg"
         _lines.update { current ->
             val updated = current + line
-            if (updated.size > MAX_LINES) updated.takeLast(MAX_LINES) else updated
+            if (updated.size > MAX_LINES) {
+                updated.takeLast(MAX_LINES).toImmutableList()
+            } else {
+                updated.toImmutableList()
+            }
         }
     }
 
     fun clear() {
-        _lines.update { emptyList() }
+        _lines.update { persistentListOf() }
     }
 }

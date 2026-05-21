@@ -175,7 +175,12 @@ private fun PreviewTransactionHistoryEmpty() {
 private fun PreviewTransactionHistoryLoading() {
     AppThemeSurface {
         TransactionHistorySection(
-            uiState = TrezorUiState(txHistoryInput = "vpub5Y...", isLoadingTxHistory = true),
+            uiState = TrezorUiState(
+                txHistory = TrezorTxHistoryState(
+                    input = "vpub5Y...",
+                    isLoading = true,
+                ),
+            ),
             onInputChange = {},
             onLookup = {},
         )

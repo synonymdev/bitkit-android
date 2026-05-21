@@ -16,7 +16,10 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.TrezorStore
 import to.bitkit.env.Env
@@ -102,6 +105,22 @@ class TrezorRepoTest : BaseUnitTest() {
         on { this.model }.thenReturn(model)
     }
 
+    private fun mockKnownDevice(
+        id: String = DEVICE_ID,
+        name: String? = DEVICE_NAME,
+        path: String = DEVICE_PATH,
+        label: String? = DEVICE_LABEL,
+        model: String? = DEVICE_MODEL,
+    ) = KnownDevice(
+        id = id,
+        name = name,
+        path = path,
+        transportType = KnownDeviceTransportType.USB,
+        label = label,
+        model = model,
+        lastConnectedAt = 123L,
+    )
+
     // region initialize
 
     @Test
@@ -146,6 +165,23 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scan should exclude known devices from nearbyDevices state`() = test {
+        val knownDevice = mockKnownDevice()
+        val known = mockDeviceInfo()
+        val nearby = mockDeviceInfo(id = "device-456", path = "/dev/trezor1")
+        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(listOf(known, nearby))
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.scan()
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(known, nearby), result.getOrNull())
+        assertEquals(listOf(nearby), sut.state.value.nearbyDevices)
+    }
+
+    @Test
     fun `scan should set error on failure`() = test {
         whenever(trezorService.scan()).thenThrow(RuntimeException("scan failed"))
         sut = createSut()
@@ -179,6 +215,56 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(features, sut.state.value.connectedDevice)
         assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
         assertFalse(sut.state.value.isConnecting)
+    }
+
+    @Test
+    fun `connect should persist connected device as known device`() = test {
+        val features = mockFeatures(label = "Savings", model = "Safe 5")
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(trezorStore).saveKnownDevices(captor.capture())
+        val saved = captor.firstValue.single()
+        assertEquals(DEVICE_ID, saved.id)
+        assertEquals(KnownDeviceTransportType.USB, saved.transportType)
+        assertEquals("Savings", saved.label)
+        assertEquals("Safe 5", saved.model)
+    }
+
+    @Test
+    fun `connect should retry once for retryable THP errors`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(DEVICE_ID))
+            .thenThrow(RuntimeException("thp timeout"))
+            .thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        verify(trezorService, times(2)).connect(DEVICE_ID)
+    }
+
+    @Test
+    fun `connect should not retry non-retryable errors`() = test {
+        whenever(trezorService.connect(DEVICE_ID)).thenThrow(RuntimeException("bad pin"))
+        sut = createSut()
+
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        verify(trezorService, times(1)).connect(DEVICE_ID)
     }
 
     @Test
@@ -216,6 +302,48 @@ class TrezorRepoTest : BaseUnitTest() {
         assertNull(sut.state.value.connectedDeviceId)
         assertNull(sut.state.value.lastAddress)
         assertNull(sut.state.value.lastPublicKey)
+    }
+
+    @Test
+    fun `disconnect should clear connectedDevice state on service failure`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        val addressResponse = mock<TrezorAddressResponse>()
+        val publicKeyResponse = mock<TrezorPublicKeyResponse>()
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(
+            trezorService.getAddress(
+                path = any(),
+                coin = any(),
+                showOnTrezor = any(),
+                scriptType = anyOrNull(),
+            )
+        ).thenReturn(addressResponse)
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = any(),
+                showOnTrezor = any(),
+            )
+        ).thenReturn(publicKeyResponse)
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        sut.getAddress()
+        sut.getPublicKey()
+        whenever(trezorService.disconnect()).thenThrow(RuntimeException("disconnect failed"))
+
+        val result = sut.disconnect()
+
+        assertTrue(result.isFailure)
+        assertNull(sut.state.value.connectedDevice)
+        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.lastAddress)
+        assertNull(sut.state.value.lastPublicKey)
+        assertEquals("disconnect failed", sut.state.value.error)
     }
 
     // endregion
@@ -349,6 +477,62 @@ class TrezorRepoTest : BaseUnitTest() {
 
     // endregion
 
+    // region autoReconnect
+
+    @Test
+    fun `autoReconnect should fail when no known devices exist`() = test {
+        sut = createSut()
+
+        val result = sut.autoReconnect()
+
+        assertTrue(result.isFailure)
+        assertEquals("No known devices", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `autoReconnect should scan and connect known nearby device`() = test {
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.isConnected()).thenReturn(false)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.autoReconnect()
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertFalse(sut.state.value.isAutoReconnecting)
+    }
+
+    // endregion
+
+    // region connectKnownDevice
+
+    @Test
+    fun `connectKnownDevice should connect exact known device match`() = test {
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.connectKnownDevice(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+    }
+
+    // endregion
+
     // region clearError
 
     @Test
@@ -379,6 +563,72 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(devices, result.getOrNull())
         assertEquals(devices, sut.state.value.nearbyDevices)
+    }
+
+    // endregion
+
+    // region ensureConnected
+
+    @Test
+    fun `getAddress should reconnect known device before reading address`() = test {
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        val addressResponse = mock<TrezorAddressResponse>()
+        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(
+            trezorService.getAddress(
+                path = any(),
+                coin = any(),
+                showOnTrezor = any(),
+                scriptType = anyOrNull(),
+            )
+        ).thenReturn(addressResponse)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.getAddress()
+
+        assertTrue(result.isSuccess)
+        assertEquals(addressResponse, result.getOrNull())
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        verify(trezorService).scan()
+        verify(trezorService).connect(DEVICE_ID)
+    }
+
+    // endregion
+
+    // region forgetDevice
+
+    @Test
+    fun `forgetDevice should remove known device when service cleanup fails`() = test {
+        val knownDevice = mockKnownDevice()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.initialize()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.disconnect()).thenThrow(RuntimeException("disconnect failed"))
+        whenever(trezorService.clearCredentials(DEVICE_ID)).thenThrow(RuntimeException("clear failed"))
+
+        val result = sut.forgetDevice(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertTrue(sut.state.value.knownDevices.isEmpty())
+        assertNull(sut.state.value.connectedDevice)
+        assertNull(sut.state.value.connectedDeviceId)
+        assertEquals("disconnect failed", sut.state.value.error)
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+        verify(trezorStore).saveKnownDevices(emptyList())
     }
 
     // endregion
