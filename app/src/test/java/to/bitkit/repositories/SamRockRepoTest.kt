@@ -113,7 +113,7 @@ class SamRockRepoTest : BaseUnitTest() {
             payloadCaptor.capture(),
         )
         assertEquals(
-            """{"Version":"1.0","BTC":{"Descriptor":"$DESCRIPTOR"}}""",
+            """{"BTC":{"Descriptor":"$DESCRIPTOR"}}""",
             payloadCaptor.firstValue,
         )
     }

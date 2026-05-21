@@ -53,7 +53,6 @@ class SamRockRepo @Inject constructor(
 ) {
     companion object {
         private const val BITCOIN_METHOD = "BTC"
-        private const val SAMROCK_VERSION = "1.0"
     }
 
     suspend fun registerBitcoinOnchain(setup: SamRockSetupRequest): Result<Unit> = withContext(ioDispatcher) {
@@ -65,8 +64,7 @@ class SamRockRepo @Inject constructor(
             val descriptor = derivePrimaryAddressDescriptor()
             val payload = json.encodeToString(
                 SamRockDescriptorPayload(
-                    version = SAMROCK_VERSION,
-                    btc = SamRockBitcoinDescriptor(descriptor = descriptor)
+                    btc = SamRockBitcoinDescriptor(descriptor = descriptor),
                 )
             )
 
@@ -240,8 +238,6 @@ internal fun String?.toSamRockAccountType(): AccountType {
 
 @Serializable
 private data class SamRockDescriptorPayload(
-    @SerialName("Version")
-    val version: String,
     @SerialName("BTC")
     val btc: SamRockBitcoinDescriptor,
 )
