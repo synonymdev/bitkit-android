@@ -27,9 +27,6 @@ class SuggestionsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT), false)
 
-    val showWidgetTitles: StateFlow<Boolean> = widgetsRepo.showWidgetTitles
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT), false)
-
     fun addWidget() {
         viewModelScope.launch {
             widgetsRepo.addWidget(WidgetType.SUGGESTIONS)

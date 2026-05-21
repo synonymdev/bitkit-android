@@ -900,7 +900,6 @@
     <string name="settings__support__title_unsuccess">Failed To Send</string>
     <string name="settings__support_title">Support</string>
     <string name="settings__widgets__nav_title">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Show Widget Titles</string>
     <string name="settings__widgets__reset_suggestions">Reset Suggestions Cards</string>
     <string name="settings__widgets__reset_widgets">Reset Widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Are you sure you want to reset the widgets? The default widget set with default configurations will be displayed.</string>

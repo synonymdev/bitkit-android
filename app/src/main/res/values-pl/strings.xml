@@ -560,7 +560,6 @@
     <string name="settings__general__section_payments">Płatności</string>
     <string name="settings__widgets__nav_title">Widgety</string>
     <string name="settings__widgets__showWidgets">Widgety</string>
-    <string name="settings__widgets__showWidgetTitles">Pokazuj tytuły widgetów</string>
     <string name="settings__widgets__reset_suggestions">Resetuj karty sugestii</string>
     <string name="settings__widgets__reset_widgets">Resetuj widgety</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Czy na pewno chcesz zresetować widgety? Zostanie wyświetlony domyślny zestaw widgetów z domyślnymi konfiguracjami.</string>
