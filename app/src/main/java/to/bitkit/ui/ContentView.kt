@@ -60,6 +60,7 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
+import to.bitkit.ui.screens.common.ComingSoonScreen
 import to.bitkit.ui.screens.contacts.AddContactScreen
 import to.bitkit.ui.screens.contacts.AddContactViewModel
 import to.bitkit.ui.screens.contacts.ContactActivityScreen
@@ -395,6 +396,7 @@ fun ContentView(
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
+        val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
 
         Box(
@@ -556,6 +558,7 @@ fun ContentView(
                 hasSeenContactsIntro = hasSeenContactsIntro,
                 hasContacts = hasPubkyContacts,
                 isProfileAuthenticated = isProfileAuthenticated,
+                isPaykitEnabled = isPaykitEnabled,
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }
@@ -594,7 +597,7 @@ private fun RootNavHost(
         contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
-        generalSettingsSubScreens(navController)
+        generalSettingsSubScreens(navController, settingsViewModel)
         advancedSettingsSubScreens(navController)
         transactionSpeedSettings(navController)
         pinManagement(navController)
@@ -606,7 +609,7 @@ private fun RootNavHost(
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
         lightningConnections(navController)
-        activityItem(activityListViewModel, navController)
+        activityItem(activityListViewModel, navController, settingsViewModel)
         authCheck(navController)
         logs(navController)
         suggestions(navController)
@@ -977,6 +980,30 @@ private fun NavGraphBuilder.settings(
     }
 }
 
+@Composable
+private fun PaykitRouteGuard(
+    settingsViewModel: SettingsViewModel,
+    navController: NavHostController,
+    redirectWhenDisabled: Boolean = true,
+    disabledContent: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
+    val isPaykitStateLoaded by settingsViewModel.isPaykitStateLoaded.collectAsStateWithLifecycle()
+
+    if (!isPaykitStateLoaded) return
+
+    if (isPaykitEnabled) {
+        content()
+    } else if (redirectWhenDisabled) {
+        LaunchedEffect(Unit) {
+            navController.navigateToHome()
+        }
+    } else {
+        disabledContent()
+    }
+}
+
 @Suppress("LongMethod")
 private fun NavGraphBuilder.contacts(
     navController: NavHostController,
@@ -984,102 +1011,128 @@ private fun NavGraphBuilder.contacts(
     appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Contacts> { backStackEntry ->
-        val route = backStackEntry.toRoute<Routes.Contacts>()
-        val viewModel: ContactsViewModel = hiltViewModel()
-        ContactsScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onClickMyProfile = { navController.navigateTo(Routes.Profile) },
-            onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
-            onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
-            onScanQr = {
-                appViewModel.showScannerSheet { scannedData ->
-                    navController.navigateTo(Routes.AddContact(scannedData))
-                }
+        PaykitRouteGuard(
+            settingsViewModel = settingsViewModel,
+            navController = navController,
+            redirectWhenDisabled = false,
+            disabledContent = {
+                ComingSoonScreen(
+                    onWalletOverviewClick = { navController.navigateToHome() },
+                    onBackClick = { navController.popBackStack() }
+                )
             },
-            openAddContactSheet = route.showAddContactSheet,
-        )
+        ) {
+            val route = backStackEntry.toRoute<Routes.Contacts>()
+            val viewModel: ContactsViewModel = hiltViewModel()
+            ContactsScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onClickMyProfile = { navController.navigateTo(Routes.Profile) },
+                onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
+                onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
+                onScanQr = {
+                    appViewModel.showScannerSheet { scannedData ->
+                        navController.navigateTo(Routes.AddContact(scannedData))
+                    }
+                },
+                openAddContactSheet = route.showAddContactSheet,
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactsIntro> {
-        val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
-        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-        ContactsIntroScreen(
-            onContinue = {
-                settingsViewModel.setHasSeenContactsIntro(true)
-                when {
-                    isAuthenticated -> navController.navigateTo(
-                        Routes.Contacts(showAddContactSheet = true)
-                    ) { popUpTo(Routes.Home) }
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+            val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            ContactsIntroScreen(
+                onContinue = {
+                    settingsViewModel.setHasSeenContactsIntro(true)
+                    when {
+                        isAuthenticated -> navController.navigateTo(
+                            Routes.Contacts(showAddContactSheet = true)
+                        ) { popUpTo(Routes.Home) }
 
-                    hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
-                    else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
-                }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+                        hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+                        else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
+                    }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactDetail> {
-        val viewModel: ContactDetailViewModel = hiltViewModel()
-        ContactDetailScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onPayContact = { paymentRequest, publicKey ->
-                appViewModel.openContactPayment(paymentRequest, publicKey)
-            },
-            onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
-            onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactDetailViewModel = hiltViewModel()
+            ContactDetailScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onPayContact = { paymentRequest, publicKey ->
+                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                },
+                onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
+                onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactActivity> {
-        val viewModel: ContactActivityViewModel = hiltViewModel()
-        ContactActivityScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactActivityViewModel = hiltViewModel()
+            ContactActivityScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onActivityItemClick = { navController.navigateToActivityItem(it) },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.AddContact> {
-        val viewModel: AddContactViewModel = hiltViewModel()
-        AddContactScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onContactSaved = { navController.popBackStack() },
-            onPayContact = { paymentRequest, publicKey ->
-                navController.popBackStack()
-                appViewModel.openContactPayment(paymentRequest, publicKey)
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: AddContactViewModel = hiltViewModel()
+            AddContactScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onContactSaved = { navController.popBackStack() },
+                onPayContact = { paymentRequest, publicKey ->
+                    navController.popBackStack()
+                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.EditContact> {
-        val viewModel: EditContactViewModel = hiltViewModel()
-        EditContactScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onContactDeleted = {
-                navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: EditContactViewModel = hiltViewModel()
+            EditContactScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onContactDeleted = {
+                    navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactImportOverview> {
-        val viewModel: ContactImportOverviewViewModel = hiltViewModel()
-        ContactImportOverviewScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onNavigateToSelect = { navController.navigateTo(Routes.ContactImportSelect) },
-            onImportComplete = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactImportOverviewViewModel = hiltViewModel()
+            ContactImportOverviewScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onNavigateToSelect = { navController.navigateTo(Routes.ContactImportSelect) },
+                onImportComplete = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactImportSelect> {
-        val viewModel: ContactImportSelectViewModel = hiltViewModel()
-        ContactImportSelectScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onImportComplete = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactImportSelectViewModel = hiltViewModel()
+            ContactImportSelectScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onImportComplete = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
 }
 
@@ -1089,71 +1142,93 @@ private fun NavGraphBuilder.profile(
     settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Profile> {
-        val viewModel: ProfileViewModel = hiltViewModel()
-        ProfileScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onEditProfile = { navController.navigateTo(Routes.EditProfile) },
-        )
+        PaykitRouteGuard(
+            settingsViewModel = settingsViewModel,
+            navController = navController,
+            redirectWhenDisabled = false,
+            disabledContent = {
+                ComingSoonScreen(
+                    onWalletOverviewClick = { navController.navigateToHome() },
+                    onBackClick = { navController.popBackStack() }
+                )
+            },
+        ) {
+            val viewModel: ProfileViewModel = hiltViewModel()
+            ProfileScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onEditProfile = { navController.navigateTo(Routes.EditProfile) },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ProfileIntro> {
-        ProfileIntroScreen(
-            onContinue = {
-                settingsViewModel.setHasSeenProfileIntro(true)
-                navController.navigateTo(Routes.PubkyChoice)
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            ProfileIntroScreen(
+                onContinue = {
+                    settingsViewModel.setHasSeenProfileIntro(true)
+                    navController.navigateTo(Routes.PubkyChoice)
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.PubkyChoice> {
-        val viewModel: PubkyChoiceViewModel = hiltViewModel()
-        PubkyChoiceScreen(
-            viewModel = viewModel,
-            onNavigateToCreateProfile = { navController.navigateTo(Routes.CreateProfile) },
-            onNavigateToContactImportOverview = {
-                navController.navigateTo(Routes.ContactImportOverview) { popUpTo(Routes.Home) }
-            },
-            onNavigateToPayContacts = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: PubkyChoiceViewModel = hiltViewModel()
+            PubkyChoiceScreen(
+                viewModel = viewModel,
+                onNavigateToCreateProfile = { navController.navigateTo(Routes.CreateProfile) },
+                onNavigateToContactImportOverview = {
+                    navController.navigateTo(Routes.ContactImportOverview) { popUpTo(Routes.Home) }
+                },
+                onNavigateToPayContacts = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.CreateProfile> {
-        val viewModel: CreateProfileViewModel = hiltViewModel()
-        CreateProfileScreen(
-            viewModel = viewModel,
-            onNavigateToPayContacts = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: CreateProfileViewModel = hiltViewModel()
+            CreateProfileScreen(
+                viewModel = viewModel,
+                onNavigateToPayContacts = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.EditProfile> {
-        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-        val viewModel: EditProfileViewModel = hiltViewModel()
-        EditProfileScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onExitProfile = {
-                val nextRoute = if (hasSeenProfileIntro) {
-                    Routes.PubkyChoice
-                } else {
-                    Routes.ProfileIntro
-                }
-                navController.navigateTo(nextRoute) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            val viewModel: EditProfileViewModel = hiltViewModel()
+            EditProfileScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onExitProfile = {
+                    val nextRoute = if (hasSeenProfileIntro) {
+                        Routes.PubkyChoice
+                    } else {
+                        Routes.ProfileIntro
+                    }
+                    navController.navigateTo(nextRoute) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.PayContacts> {
-        val viewModel: PayContactsViewModel = hiltViewModel()
-        PayContactsScreen(
-            viewModel = viewModel,
-            onContinue = {
-                navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: PayContactsViewModel = hiltViewModel()
+            PayContactsScreen(
+                viewModel = viewModel,
+                onContinue = {
+                    navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
 }
 
@@ -1194,7 +1269,10 @@ private fun NavGraphBuilder.shop(
     }
 }
 
-private fun NavGraphBuilder.generalSettingsSubScreens(navController: NavHostController) {
+private fun NavGraphBuilder.generalSettingsSubScreens(
+    navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
+) {
     composableWithDefaultTransitions<Routes.WidgetsSettings> {
         WidgetsSettingsScreen(navController)
     }
@@ -1208,9 +1286,11 @@ private fun NavGraphBuilder.generalSettingsSubScreens(navController: NavHostCont
         )
     }
     composableWithDefaultTransitions<Routes.PaymentPreferenceSettings> {
-        PaymentPreferenceScreen(
-            onBack = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            PaymentPreferenceScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
     }
 
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
@@ -1359,6 +1439,7 @@ private fun NavGraphBuilder.lightningConnections(
 private fun NavGraphBuilder.activityItem(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.ActivityDetail> {
         ActivityDetailScreen(
@@ -1374,11 +1455,13 @@ private fun NavGraphBuilder.activityItem(
         )
     }
     composableWithDefaultTransitions<Routes.ActivityAssignContact> {
-        val route = it.toRoute<Routes.ActivityAssignContact>()
-        ActivityAssignContactScreen(
-            activityId = route.id,
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val route = it.toRoute<Routes.ActivityAssignContact>()
+            ActivityAssignContactScreen(
+                activityId = route.id,
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ActivityExplore> {
         ActivityExploreScreen(

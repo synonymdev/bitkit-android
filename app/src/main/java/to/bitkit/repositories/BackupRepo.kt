@@ -591,7 +591,7 @@ class BackupRepo @Inject constructor(
             }
             performRestore(BackupCategory.WALLET) { dataBytes ->
                 restoreWalletBackup(dataBytes)
-            }
+            }.getOrThrow()
             performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
                 val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
                 blocktankRepo.restoreFromBackup(parsed)
@@ -621,20 +621,11 @@ class BackupRepo @Inject constructor(
         if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
             cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
         }
-        privatePaykitAddressReservationRepo.get()
-            .restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType)
-            .onFailure {
-                Logger.warn("Failed to restore private Paykit reservations", it, context = TAG)
-            }
-        privatePaykitRepo.get().restoreBackup(parsed.privatePaykitContactLinks)
-            .onFailure {
-                Logger.warn("Failed to restore private Paykit contact links", it, context = TAG)
-            }
-        privatePaykitAddressReservationRepo.get()
-            .reconcileReservedIndexesWithLdk()
-            .onFailure {
-                Logger.warn("Failed to reconcile restored private Paykit reservations", it, context = TAG)
-            }
+        val addressReservationRepo = privatePaykitAddressReservationRepo.get()
+        addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
+        val privateRepo = privatePaykitRepo.get()
+        privateRepo.restoreBackup(parsed.privatePaykitContactLinks).getOrThrow()
+        addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
         Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
         return parsed.createdAt
     }

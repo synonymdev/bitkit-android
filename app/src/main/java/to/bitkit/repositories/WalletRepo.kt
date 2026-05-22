@@ -25,6 +25,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
@@ -33,12 +34,15 @@ import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.msatFloorOf
+import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toDerivationPath
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.measured
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -401,7 +405,14 @@ class WalletRepo @Inject constructor(
                 isChange = isChange,
                 startIndex = startIndex,
                 count = count,
-            ).getOrThrow()
+            ).getOrElse {
+                deriveAddressInfosFromMnemonic(
+                    addressType = addressType,
+                    isChange = isChange,
+                    startIndex = startIndex,
+                    count = count,
+                )
+            }
 
             val addresses = result.map { address ->
                 AddressModel(
@@ -414,6 +425,33 @@ class WalletRepo @Inject constructor(
             return@runCatching addresses
         }.onFailure {
             Logger.error("Error getting addresses", it, context = TAG)
+        }
+    }
+
+    private suspend fun deriveAddressInfosFromMnemonic(
+        addressType: AddressType,
+        isChange: Boolean,
+        startIndex: Int,
+        count: Int,
+    ): List<AddressDerivationInfo> {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val baseDerivationPath = addressType.toAccountDerivationPath()
+
+        return coreService.onchain.deriveBitcoinAddresses(
+            mnemonicPhrase = mnemonic,
+            derivationPathStr = baseDerivationPath,
+            network = Env.network,
+            bip39Passphrase = passphrase,
+            isChange = isChange,
+            startIndex = startIndex.toUInt(),
+            count = count.toUInt(),
+        ).addresses.mapIndexed { offset, address ->
+            AddressDerivationInfo(
+                address = address.address,
+                index = startIndex + offset,
+            )
         }
     }
 

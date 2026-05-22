@@ -193,6 +193,7 @@ fun HomeScreen(
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val isPubkyAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+    val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
     val profileDisplayName by homeViewModel.profileDisplayName.collectAsStateWithLifecycle()
     val profileDisplayImageUri by homeViewModel.profileDisplayImageUri.collectAsStateWithLifecycle()
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
@@ -235,6 +236,7 @@ fun HomeScreen(
         drawerState = drawerState,
         profileDisplayName = profileDisplayName,
         profileDisplayImageUri = profileDisplayImageUri,
+        showProfileButton = isPaykitEnabled,
         onClickProfile = navigateToProfile,
         latestActivities = latestActivities,
         onRefresh = {
@@ -280,7 +282,9 @@ fun HomeScreen(
                     )
                 }
 
-                Suggestion.PROFILE -> navigateToProfile()
+                Suggestion.PROFILE -> {
+                    if (isPaykitEnabled) navigateToProfile() else rootNavController.navigateTo(Routes.Profile)
+                }
 
                 Suggestion.SHOP -> {
                     if (!hasSeenShopIntro) {
@@ -354,6 +358,7 @@ private fun Content(
     drawerState: DrawerState,
     profileDisplayName: String? = null,
     profileDisplayImageUri: String? = null,
+    showProfileButton: Boolean = false,
     onClickProfile: () -> Unit = {},
     latestActivities: ImmutableList<Activity>?,
     onRefresh: () -> Unit = {},
@@ -426,6 +431,7 @@ private fun Content(
             hazeState = hazeState,
             profileDisplayName = profileDisplayName,
             profileDisplayImageUri = profileDisplayImageUri,
+            showProfileButton = showProfileButton,
             onClickProfile = {
                 dismissKeyboard {
                     onClickProfile()
@@ -1024,6 +1030,7 @@ private fun TopBar(
     hazeState: HazeState,
     profileDisplayName: String? = null,
     profileDisplayImageUri: String? = null,
+    showProfileButton: Boolean = false,
     onClickProfile: () -> Unit = {},
     showEditWidgets: Boolean = false,
     isEditingWidgets: Boolean = false,
@@ -1042,11 +1049,13 @@ private fun TopBar(
     ) {
         TopAppBar(
             title = {
-                ProfileButton(
-                    displayName = profileDisplayName,
-                    displayImageUri = profileDisplayImageUri,
-                    onClick = onClickProfile,
-                )
+                if (showProfileButton) {
+                    ProfileButton(
+                        displayName = profileDisplayName,
+                        displayImageUri = profileDisplayImageUri,
+                        onClick = onClickProfile,
+                    )
+                }
             },
             actions = {
                 AnimatedVisibility(showEditWidgets) {

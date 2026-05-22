@@ -322,7 +322,9 @@ class HomeViewModel @Inject constructor(
             else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
-        baseSuggestions.filterNot { it in dismissedList }.take(MAX_SUGGESTIONS)
+        baseSuggestions
+            .filterNot { it in dismissedList }
+            .take(MAX_SUGGESTIONS)
     }
 
     private fun spendingSuggestions(
