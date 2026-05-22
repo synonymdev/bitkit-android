@@ -914,7 +914,6 @@ class MigrationService @Inject constructor(
                 enableAutoReadClipboard = settings.enableAutoReadClipboard ?: current.enableAutoReadClipboard,
                 enableSendAmountWarning = settings.enableSendAmountWarning ?: current.enableSendAmountWarning,
                 showWidgets = settings.showWidgets ?: current.showWidgets,
-                showWidgetTitles = settings.showWidgetTitles ?: current.showWidgetTitles,
                 defaultTransactionSpeed = when (settings.transactionSpeed) {
                     "fast" -> TransactionSpeed.Fast
                     "slow" -> TransactionSpeed.Slow
@@ -2153,7 +2152,6 @@ data class RNSettings(
     val enableQuickpay: Boolean? = null,
     val quickpayAmount: Int? = null,
     val showWidgets: Boolean? = null,
-    val showWidgetTitles: Boolean? = null,
     val transactionSpeed: String? = null,
     val customFeeRate: Int? = null,
     val hideBalance: Boolean? = null,

@@ -728,7 +728,6 @@
     <string name="settings__support__copyright">Bitkit è stato realizzato da Synonym Software, S.A. DE C.V. ©2025. Tutti i diritti riservati.</string>
     <string name="settings__support_title">Supporto</string>
     <string name="settings__widgets__nav_title">Widget</string>
-    <string name="settings__widgets__showWidgetTitles">Mostra titoli dei widget</string>
     <string name="settings__widgets__showWidgets">Widget</string>
     <string name="settings__widgets__reset_suggestions">Reimposta schede suggerimenti</string>
     <string name="settings__widgets__reset_widgets">Reimposta widget</string>

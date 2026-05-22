@@ -85,7 +85,6 @@ class HomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         showWidgets = settings.showWidgets,
-                        showWidgetTitles = settings.showWidgetTitles,
                         widgetsWithPosition = if (it.isEditingWidgets &&
                             it.widgetsWithPosition.size == widgetsData.widgets.size
                         ) {

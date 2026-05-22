@@ -248,15 +248,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
-        .asStateFlow(initialValue = false)
-
-    fun setShowWidgetTitles(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(showWidgetTitles = value) }
-        }
-    }
-
     fun resetDismissedSuggestions() {
         viewModelScope.launch {
             settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }

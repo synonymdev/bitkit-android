@@ -21,7 +21,6 @@ data class HomeUiState(
     val suggestions: ImmutableList<Suggestion> = persistentListOf(),
     val banners: ImmutableList<BannerItem> = persistentListOf(),
     val showWidgets: Boolean = false,
-    val showWidgetTitles: Boolean = false,
     val widgetsWithPosition: ImmutableList<WidgetWithPosition> = persistentListOf(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val currentArticle: ArticleModel? = null,

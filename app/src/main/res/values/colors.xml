@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="brand">#FF4400</color>
-    <color name="gray5">#FF2A2A2A</color>
+    <color name="gray6">#FF1C1C1C</color>
     <color name="brand_200">#FFF1EE</color>
     <color name="brand_500">#EF886A</color>
     <color name="teal_200">#03DAC5</color>

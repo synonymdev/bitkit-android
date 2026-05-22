@@ -134,7 +134,6 @@ data class SettingsData(
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = Env.isDebug,
     val showWidgets: Boolean = true,
-    val showWidgetTitles: Boolean = false,
     val lastUsedTags: List<String> = emptyList(),
     val enableSwipeToHideBalance: Boolean = true,
     val hideBalance: Boolean = false,

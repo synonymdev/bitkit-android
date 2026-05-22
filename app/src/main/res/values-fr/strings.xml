@@ -562,7 +562,6 @@
     <string name="settings__general__section_payments">Paiements</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Afficher les titres des widgets</string>
     <string name="settings__widgets__reset_suggestions">Réinitialiser les cartes de suggestions</string>
     <string name="settings__widgets__reset_widgets">Réinitialiser les widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Êtes-vous sûr de vouloir réinitialiser les widgets ? L\'ensemble de widgets par défaut avec les configurations par défaut sera affiché.</string>

@@ -728,7 +728,6 @@
     <string name="settings__support__copyright">Το Bitkit δημιουργήθηκε από τη Synonym Software, S.A. DE C.V. ©2025. Με επιφύλαξη παντός δικαιώματος.</string>
     <string name="settings__support_title">Υποστήριξη</string>
     <string name="settings__widgets__nav_title">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Εμφάνιση τίτλων Widget</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
     <string name="settings__widgets__reset_suggestions">Επαναφορά καρτών προτάσεων</string>
     <string name="settings__widgets__reset_widgets">Επαναφορά widgets</string>

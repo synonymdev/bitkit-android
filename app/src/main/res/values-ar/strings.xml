@@ -728,7 +728,6 @@
     <string name="settings__support__copyright">Bitkit من تصميم Synonym Software, S.A. DE C.V. ©2025. جميع الحقوق محفوظة.</string>
     <string name="settings__support_title">الدعم</string>
     <string name="settings__widgets__nav_title">الأدوات</string>
-    <string name="settings__widgets__showWidgetTitles">عرض عناوين الأدوات</string>
     <string name="settings__widgets__showWidgets">الأدوات</string>
     <string name="settings__widgets__reset_suggestions">إعادة تعيين بطاقات الاقتراحات</string>
     <string name="settings__widgets__reset_widgets">إعادة تعيين الأدوات</string>

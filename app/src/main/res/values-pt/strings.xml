@@ -559,7 +559,6 @@
     <string name="settings__general__section_payments">Pagamentos</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Mostrar Títulos dos Widgets</string>
     <string name="settings__widgets__reset_suggestions">Repor cartões de sugestões</string>
     <string name="settings__widgets__reset_widgets">Repor widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Tem certeza de que deseja repor os widgets? O conjunto padrão de widgets com configurações padrão será exibido.</string>

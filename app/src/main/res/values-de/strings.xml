@@ -562,7 +562,6 @@
     <string name="settings__general__section_payments">Zahlungen</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Titel anzeigen</string>
     <string name="settings__widgets__reset_suggestions">Vorschlagskarten zurücksetzen</string>
     <string name="settings__widgets__reset_widgets">Widgets zurücksetzen</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Bist du sicher, dass du die Widgets zurücksetzen möchtest? Die Standard-Widgets mit Standardkonfigurationen werden angezeigt.</string>
