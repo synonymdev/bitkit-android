@@ -62,6 +62,7 @@ class WakeNodeWorker @AssistedInject constructor(
     private var notificationPayload: JsonObject? = null
 
     private val timeout = 2.minutes
+    private val slowWakeNodeThreshold = 10.seconds
     private val deliverSignal = CompletableDeferred<Unit>()
 
     override suspend fun doWork(): Result {
@@ -80,7 +81,7 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         return runCatching {
-            measured(label = "doWork", context = TAG) {
+            measured(label = "doWork", context = TAG, slowThreshold = slowWakeNodeThreshold) {
                 lightningRepo.start(
                     walletIndex = 0,
                     timeout = timeout,

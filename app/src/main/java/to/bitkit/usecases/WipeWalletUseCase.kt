@@ -6,7 +6,6 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.env.Env
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -72,10 +71,7 @@ class WipeWalletUseCase @Inject constructor(
             migrationService.markMigrationChecked()
 
             lightningRepo.wipeStorage(walletIndex)
-                .onSuccess {
-                    onSuccess()
-                    if (Env.isDebug) Logger.reset()
-                }
+                .onSuccess { onSuccess() }
                 .getOrThrow()
         }.onFailure {
             Logger.error("Wipe wallet error", it, context = TAG)

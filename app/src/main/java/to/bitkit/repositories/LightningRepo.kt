@@ -351,6 +351,7 @@ class LightningRepo @Inject constructor(
 
                 // Initial state sync
                 syncState()
+                logNodeSupportSummary("node started")
                 updateGeoBlockState()
                 refreshChannelCache()
 
@@ -377,6 +378,7 @@ class LightningRepo @Inject constructor(
                 connectToTrustedPeers().onFailure {
                     Logger.error("Failed to connect to trusted peers", it, context = TAG)
                 }
+                logNodeSupportSummary("trusted peers connected")
 
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
@@ -1322,6 +1324,52 @@ class LightningRepo @Inject constructor(
                 peers = getPeers().orEmpty().toImmutableList(),
                 channels = getChannels().orEmpty().toImmutableList(),
                 balances = getBalances(),
+            )
+        }
+    }
+
+    private fun logNodeSupportSummary(reason: String) {
+        val state = _lightningState.value
+        val connectedPeers = state.peers.count { it.isConnected }
+        val persistedPeers = state.peers.count { it.isPersisted }
+        val readyChannels = state.channels.count { it.isChannelReady }
+        val usableChannels = state.channels.count { it.isUsable }
+
+        Logger.info(
+            "Collected node support summary for '$reason': " +
+                "nodeId='${state.nodeId}', " +
+                "lifecycle='${state.nodeLifecycleState}', " +
+                "peers='${state.peers.size}', " +
+                "connectedPeers='$connectedPeers', " +
+                "persistedPeers='$persistedPeers', " +
+                "channels='${state.channels.size}', " +
+                "readyChannels='$readyChannels', " +
+                "usableChannels='$usableChannels'",
+            context = TAG,
+        )
+
+        state.peers.forEach {
+            Logger.info(
+                "Collected peer support summary for '$reason': " +
+                    "nodeId='${it.nodeId}', " +
+                    "address='${it.address}', " +
+                    "connected='${it.isConnected}', " +
+                    "persisted='${it.isPersisted}'",
+                context = TAG,
+            )
+        }
+
+        state.channels.forEach {
+            Logger.info(
+                "Collected channel support summary for '$reason': " +
+                    "channelId='${it.channelId}', " +
+                    "counterparty='${it.counterpartyNodeId}', " +
+                    "ready='${it.isChannelReady}', " +
+                    "usable='${it.isUsable}', " +
+                    "announced='${it.isAnnounced}', " +
+                    "outboundMsat='${it.outboundCapacityMsat}', " +
+                    "inboundMsat='${it.inboundCapacityMsat}'",
+                context = TAG,
             )
         }
     }
