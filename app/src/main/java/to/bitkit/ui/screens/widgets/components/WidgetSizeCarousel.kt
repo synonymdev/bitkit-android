@@ -15,16 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import to.bitkit.R
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.Colors
 
 private const val PAGE_WIDE = 0
-private const val PAGE_SMALL = 1
+// private const val PAGE_SMALL = 1
 
 // temporarily removed until small size widgets variants are implemented
 private const val PAGE_COUNT = 1
@@ -65,20 +61,20 @@ fun WidgetSizeCarousel(
         }
 
         VerticalSpacer(16.dp)
-
-        Caption13Up(
-            text = stringResource(
-                when (pagerState.currentPage) {
-                    PAGE_SMALL -> R.string.widgets__widget__size_small
-                    else -> R.string.widgets__widget__size_wide
-                },
-            ),
-            color = Colors.White64,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("widget_size_label")
-        )
+        // temporarily removed until small size widgets variants are implemented
+        // Caption13Up(
+        //     text = stringResource(
+        //         when (pagerState.currentPage) {
+        //             PAGE_SMALL -> R.string.widgets__widget__size_small
+        //             else -> R.string.widgets__widget__size_wide
+        //         },
+        //     ),
+        //     color = Colors.White64,
+        //     textAlign = TextAlign.Center,
+        //     modifier = Modifier
+        //         .fillMaxWidth()
+        //         .testTag("widget_size_label")
+        // )
 
         VerticalSpacer(16.dp)
 
