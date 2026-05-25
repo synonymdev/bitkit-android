@@ -46,6 +46,7 @@ class CalculatorViewModel @Inject constructor(
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
     private var pendingValues: CalculatorValues? = null
     private var lastCurrencyKey: CalculatorCurrencyKey? = null
+    private var lastRates: ImmutableList<FxRate>? = null
     private var activeInput: MoneyType? = null
 
     val isCalculatorWidgetEnabled: StateFlow<Boolean> = widgetsRepo.widgetsDataFlow
@@ -164,14 +165,17 @@ class CalculatorViewModel @Inject constructor(
         val currencyKey = CalculatorCurrencyKey(
             selectedCurrency = currencyState.selectedCurrency,
             displayUnit = currencyState.displayUnit,
-            rates = currencyState.rates,
         )
         val previousCurrencyKey = lastCurrencyKey
+        val previousRates = lastRates
         lastCurrencyKey = currencyKey
+        lastRates = currencyState.rates
 
-        val currencyChanged = previousCurrencyKey != null && previousCurrencyKey != currencyKey
+        val currencyChanged = previousCurrencyKey != null &&
+            previousCurrencyKey.selectedCurrency != currencyKey.selectedCurrency
         val displayUnitChanged = previousCurrencyKey != null &&
             previousCurrencyKey.displayUnit != currencyKey.displayUnit
+        val ratesChanged = previousRates != null && previousRates != currencyState.rates
         val isInitialSync = previousCurrencyKey == null
         val nextActiveValues = deriveActiveValues(
             activeValues = activeValues,
@@ -188,7 +192,7 @@ class CalculatorViewModel @Inject constructor(
             )
         }
 
-        val shouldRefreshFiat = isInitialSync || currencyChanged || shouldHydrateFiatFromStoredBtc(
+        val shouldRefreshFiat = isInitialSync || currencyChanged || ratesChanged || shouldHydrateFiatFromStoredBtc(
             storedBtcValue = storedValues.btcValue,
             storedFiatValue = storedValues.fiatValue,
             currentFiatValue = nextActiveValues.fiatValue,
@@ -219,7 +223,10 @@ class CalculatorViewModel @Inject constructor(
         if (convertedFiat.isEmpty()) return persistCanonicalValues(activeValues, nextActiveValues)
 
         val updatedValues = nextActiveValues.copy(fiatValue = convertedFiat)
-        updateCalculatorValues(updatedValues)
+        persistCanonicalValuesIfNeeded(
+            activeValues = activeValues,
+            nextActiveValues = updatedValues,
+        )
         return updatedValues
     }
 
@@ -228,18 +235,7 @@ class CalculatorViewModel @Inject constructor(
         nextActiveValues: CalculatorValues,
         displayUnit: BitcoinDisplayUnit,
     ): CalculatorValues {
-        if (nextActiveValues.fiatValue.isEmpty()) {
-            val updatedValues = nextActiveValues.copy(
-                btcValue = "",
-                satsValue = 0L,
-                displayUnit = displayUnit,
-            )
-            persistCanonicalValuesIfNeeded(
-                activeValues = activeValues,
-                nextActiveValues = updatedValues,
-            )
-            return updatedValues
-        }
+        if (nextActiveValues.fiatValue.isEmpty()) return persistCanonicalValues(activeValues, nextActiveValues)
 
         val satsValue = convertFiatToSats(nextActiveValues.fiatValue)
         val updatedValues = nextActiveValues.copy(
@@ -382,7 +378,6 @@ data class CalculatorUiState(
 private data class CalculatorCurrencyKey(
     val selectedCurrency: String,
     val displayUnit: BitcoinDisplayUnit,
-    val rates: ImmutableList<FxRate>,
 )
 
 internal fun shouldHydrateFiatFromStoredBtc(

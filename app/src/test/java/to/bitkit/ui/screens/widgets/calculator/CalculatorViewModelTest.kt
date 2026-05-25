@@ -14,6 +14,7 @@ import to.bitkit.data.WidgetsData
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.models.MoneyType
 import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
@@ -34,6 +35,7 @@ class CalculatorViewModelTest : BaseUnitTest() {
     private var fiatConversionValue: String? = null
     private var fiatConversionFormatted: String? = null
     private var fiatToSatsValue = 12_345uL
+    private var updateCalculatorValuesCalls = 0
 
     private lateinit var sut: CalculatorViewModel
 
@@ -46,6 +48,7 @@ class CalculatorViewModelTest : BaseUnitTest() {
         fiatConversionValue = null
         fiatConversionFormatted = null
         fiatToSatsValue = 12_345uL
+        updateCalculatorValuesCalls = 0
 
         whenever(widgetsRepo.widgetsDataFlow).thenReturn(widgetsData)
         whenever(currencyRepo.currencyState).thenReturn(currencyState)
@@ -64,6 +67,7 @@ class CalculatorViewModelTest : BaseUnitTest() {
         }
         whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull())).thenAnswer { fiatToSatsValue }
         whenever { widgetsRepo.updateCalculatorValues(any()) }.thenAnswer {
+            updateCalculatorValuesCalls++
             val calculatorValues = it.getArgument<CalculatorValues>(0)
             widgetsData.value = widgetsData.value.copy(calculatorValues = calculatorValues)
             Unit
@@ -290,6 +294,25 @@ class CalculatorViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `rate refresh skips persist when fiat display value is unchanged`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        sut.onBtcInputChanged("10000")
+        advanceUntilIdle()
+
+        val updatesBeforeRateRefresh = updateCalculatorValuesCalls
+        currencyState.value = currencyState.value.copy(
+            rates = persistentListOf(fxRate(lastPrice = "62501")),
+        )
+        advanceUntilIdle()
+
+        assertEquals("10000", sut.uiState.value.btcValue)
+        assertEquals("6.25", sut.uiState.value.fiatValue)
+        assertEquals(updatesBeforeRateRefresh, updateCalculatorValuesCalls)
+    }
+
+    @Test
     fun `currency change preserves fiat input as source`() = test {
         sut = createSut()
         advanceUntilIdle()
@@ -310,6 +333,27 @@ class CalculatorViewModelTest : BaseUnitTest() {
         assertEquals("12.34", sut.uiState.value.fiatValue)
         assertEquals(54_321L, widgetsData.value.calculatorValues.satsValue)
         assertEquals("12.34", widgetsData.value.calculatorValues.fiatValue)
+    }
+
+    @Test
+    fun `active empty fiat refresh preserves bitcoin value`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        sut.onInputSelected(MoneyType.FIAT)
+        widgetsData.value = WidgetsData(
+            calculatorValues = CalculatorValues(
+                btcValue = "10000",
+                fiatValue = "",
+                satsValue = 10_000L,
+                displayUnit = BitcoinDisplayUnit.MODERN,
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals("10000", sut.uiState.value.btcValue)
+        assertEquals("", sut.uiState.value.fiatValue)
+        assertEquals(10_000L, widgetsData.value.calculatorValues.satsValue)
     }
 
     @Test
