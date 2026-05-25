@@ -105,10 +105,10 @@ fun CalculatorCardEditor(
     fiatName: String,
     fiatValue: String,
     onFiatChange: (String) -> Unit,
+    onInputSelected: (MoneyType) -> Unit,
+    onInputDismissed: () -> Unit,
     dismissNumberPadKey: Int = 0,
     onInputActiveChange: (Boolean) -> Unit = {},
-    onInputSelected: (MoneyType) -> Unit = {},
-    onInputDismissed: () -> Unit = {},
     onNumberPadBoundsChanged: (Rect?) -> Unit = {},
 ) {
     val numpadState = rememberNumpadState()
@@ -526,6 +526,8 @@ private fun Preview() {
                 fiatValue = "4.55",
                 fiatName = "USD",
                 onFiatChange = {},
+                onInputSelected = {},
+                onInputDismissed = {},
                 btcPrimaryDisplayUnit = BitcoinDisplayUnit.MODERN,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -537,6 +539,8 @@ private fun Preview() {
                 fiatValue = "4.55",
                 fiatName = "USD",
                 onFiatChange = {},
+                onInputSelected = {},
+                onInputDismissed = {},
                 btcPrimaryDisplayUnit = BitcoinDisplayUnit.CLASSIC,
                 modifier = Modifier.fillMaxWidth()
             )
