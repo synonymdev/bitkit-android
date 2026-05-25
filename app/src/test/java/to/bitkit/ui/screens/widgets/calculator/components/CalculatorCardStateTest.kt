@@ -217,7 +217,7 @@ class CalculatorCardStateTest {
 
     @Test
     fun `formatFiatPlaceholder returns missing decimal zeros`() {
-        assertEquals("", formatFiatPlaceholder(""))
+        assertEquals("0", formatFiatPlaceholder(""))
         assertEquals("", formatFiatPlaceholder("1"))
         assertEquals("00", formatFiatPlaceholder("1."))
         assertEquals("0", formatFiatPlaceholder("1.2"))
@@ -227,8 +227,9 @@ class CalculatorCardStateTest {
 
     @Test
     fun `formatBitcoinPlaceholder returns missing classic decimal zeros`() {
-        assertEquals("", formatBitcoinPlaceholder("", BitcoinDisplayUnit.CLASSIC))
-        assertEquals("", formatBitcoinPlaceholder("1", BitcoinDisplayUnit.CLASSIC))
+        assertEquals("0", formatBitcoinPlaceholder("", BitcoinDisplayUnit.MODERN))
+        assertEquals("0.00000000", formatBitcoinPlaceholder("", BitcoinDisplayUnit.CLASSIC))
+        assertEquals(".00000000", formatBitcoinPlaceholder("1", BitcoinDisplayUnit.CLASSIC))
         assertEquals("", formatBitcoinPlaceholder("1.2", BitcoinDisplayUnit.MODERN))
         assertEquals("00000000", formatBitcoinPlaceholder("1.", BitcoinDisplayUnit.CLASSIC))
         assertEquals("0000", formatBitcoinPlaceholder("1.2345", BitcoinDisplayUnit.CLASSIC))
