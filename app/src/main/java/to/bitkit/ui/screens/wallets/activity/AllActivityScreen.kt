@@ -3,14 +3,9 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -23,7 +18,6 @@ import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PinnedTabsScaffold
@@ -34,6 +28,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.shared.modifiers.swipeToChangeTab
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.ActivityListViewModel
@@ -93,23 +88,6 @@ private fun AllActivityScreenContent(
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
 ) {
-    val pagerState = rememberPagerState(
-        initialPage = currentTabIndex,
-        pageCount = { tabs.size },
-    )
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != currentTabIndex) {
-            onTabChange(pagerState.currentPage)
-        }
-    }
-    LaunchedEffect(currentTabIndex) {
-        if (currentTabIndex != pagerState.currentPage) {
-            pagerState.animateScrollToPage(currentTabIndex)
-        }
-    }
-
     Column(
         modifier = Modifier.screen()
     ) {
@@ -133,25 +111,26 @@ private fun AllActivityScreenContent(
                     onRemoveTag = onRemoveTag,
                     onDateRangeClick = onDateRangeClick,
                     tabs = tabs,
-                    currentTabIndex = pagerState.currentPage,
-                    onTabChange = { tab -> scope.launch { pagerState.animateScrollToPage(tabs.indexOf(tab)) } },
+                    currentTabIndex = currentTabIndex,
+                    onTabChange = { onTabChange(tabs.indexOf(it)) },
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
         ) { topPadding ->
-            HorizontalPager(state = pagerState) { _ ->
-                key(currentTabIndex) {
-                    ActivityListGrouped(
-                        items = filteredActivities,
-                        onActivityItemClick = onActivityItemClick,
-                        onEmptyActivityRowClick = onEmptyActivityRowClick,
-                        contentPadding = PaddingValues(top = topPadding + 16.dp),
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .testTag("ActivityList")
+            ActivityListGrouped(
+                items = filteredActivities,
+                onActivityItemClick = onActivityItemClick,
+                onEmptyActivityRowClick = onEmptyActivityRowClick,
+                contentPadding = PaddingValues(top = topPadding + 16.dp),
+                modifier = Modifier
+                    .swipeToChangeTab(
+                        currentTabIndex = currentTabIndex,
+                        tabCount = tabs.size,
+                        onTabChange = onTabChange,
                     )
-                }
-            }
+                    .padding(horizontal = 16.dp)
+                    .testTag("ActivityList")
+            )
         }
     }
 }
