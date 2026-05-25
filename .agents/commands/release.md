@@ -205,12 +205,13 @@ Print the path to the release notes file so the user can share it for review.
 ### 7. Build Mainnet Release
 
 ```bash
-./gradlew assembleMainnetRelease
+just release
 ```
 
 Expected APK path: `app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk`
+Expected AAB path: `app/build/outputs/bundle/mainnetRelease/bitkit-mainnet-release-{newVersionCode}.aab`
 
-Verify the file exists. If the build fails, stop and report the error to the user.
+Verify both files exist. If the build fails, stop and report the error to the user.
 
 ### 8. Upload APK to Draft Release
 
