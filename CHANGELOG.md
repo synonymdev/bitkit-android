@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [2.3.0] - 2026-05-25
-- Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 
 ### Added
 - Added Trezor hardware wallet support for connecting devices, signing messages, and managing on-chain transactions. #792
@@ -30,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve Pubky profile restore, contact editing, and contact routing flows #905
 
 ### Fixed
+- Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 - Align currency settings and calculator widget behavior with iOS #884
 - Align onboarding slides and Create Wallet screen image size, spacing, and dots layout with iOS #904
 - Align tab colors, Show details button, notifications bell figure, and home activity count with iOS #907
