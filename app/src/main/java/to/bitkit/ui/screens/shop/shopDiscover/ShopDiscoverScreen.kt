@@ -74,21 +74,23 @@ fun ShopDiscoverScreen(
     val scope = rememberCoroutineScope()
 
     ScreenColumn(modifier = modifier) {
-        AppTopBar(
-            titleText = stringResource(R.string.other__shop__discover__nav_title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
-        )
-
         PinnedTabsScaffold(
             header = {
-                CustomTabRowWithSpacing(
-                    tabs = tabs,
-                    currentTabIndex = pagerState.currentPage,
-                    selectedColor = Colors.White,
-                    onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                Column(modifier = modifier.fillMaxWidth()) {
+                    AppTopBar(
+                        titleText = stringResource(R.string.other__shop__discover__nav_title),
+                        onBackClick = onBack,
+                        actions = { DrawerNavIcon() },
+                    )
+
+                    CustomTabRowWithSpacing(
+                        tabs = tabs,
+                        currentTabIndex = pagerState.currentPage,
+                        selectedColor = Colors.White,
+                        onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
             }
         ) { topPadding ->
             HorizontalPager(
