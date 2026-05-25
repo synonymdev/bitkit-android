@@ -17,6 +17,8 @@ local.properties
 !*.local.template*
 # Secrets
 google-services.json
+# Tracked fallback config used only so debug variants compile from a fresh clone.
+!app/google-services.json
 .env
 *.keystore
 !debug.keystore
