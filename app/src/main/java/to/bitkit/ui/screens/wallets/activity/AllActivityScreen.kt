@@ -3,10 +3,11 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -89,6 +90,12 @@ private fun AllActivityScreenContent(
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(currentTabIndex) {
+        listState.scrollToItem(0)
+    }
+
     Column(
         modifier = Modifier.screen()
     ) {
@@ -118,22 +125,21 @@ private fun AllActivityScreenContent(
                 )
             }
         ) { topPadding ->
-            key(currentTabIndex) {
-                ActivityListGrouped(
-                    items = filteredActivities,
-                    onActivityItemClick = onActivityItemClick,
-                    onEmptyActivityRowClick = onEmptyActivityRowClick,
-                    contentPadding = PaddingValues(top = topPadding + 16.dp),
-                    modifier = Modifier
-                        .swipeToChangeTab(
-                            currentTabIndex = currentTabIndex,
-                            tabCount = tabs.size,
-                            onTabChange = onTabChange,
-                        )
-                        .padding(horizontal = 16.dp)
-                        .testTag("ActivityList")
-                )
-            }
+            ActivityListGrouped(
+                items = filteredActivities,
+                onActivityItemClick = onActivityItemClick,
+                onEmptyActivityRowClick = onEmptyActivityRowClick,
+                listState = listState,
+                contentPadding = PaddingValues(top = topPadding + 16.dp),
+                modifier = Modifier
+                    .swipeToChangeTab(
+                        currentTabIndex = currentTabIndex,
+                        tabCount = tabs.size,
+                        onTabChange = onTabChange,
+                    )
+                    .padding(horizontal = 16.dp)
+                    .testTag("ActivityList")
+            )
         }
     }
 }
