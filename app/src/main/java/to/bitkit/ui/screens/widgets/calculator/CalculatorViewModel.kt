@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.FxRate
+import to.bitkit.models.MoneyType
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.models.widget.resolveCalculatorSatsValue
@@ -43,6 +46,7 @@ class CalculatorViewModel @Inject constructor(
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
     private var pendingValues: CalculatorValues? = null
     private var lastCurrencyKey: CalculatorCurrencyKey? = null
+    private var activeInput: MoneyType? = null
 
     val isCalculatorWidgetEnabled: StateFlow<Boolean> = widgetsRepo.widgetsDataFlow
         .map { widgetsData ->
@@ -70,7 +74,16 @@ class CalculatorViewModel @Inject constructor(
         }
     }
 
+    fun onInputSelected(input: MoneyType) {
+        activeInput = input
+    }
+
+    fun onInputDismissed() {
+        activeInput = null
+    }
+
     fun onBtcInputChanged(rawValue: String) {
+        activeInput = MoneyType.BITCOIN
         val displayUnit = _uiState.value.displayUnit
         val btcValue = if (displayUnit.isModern()) {
             sanitizeIntegerInput(rawValue)
@@ -98,6 +111,7 @@ class CalculatorViewModel @Inject constructor(
     }
 
     fun onFiatInputChanged(rawValue: String) {
+        activeInput = MoneyType.FIAT
         val displayUnit = _uiState.value.displayUnit
         val fiatValue = sanitizeDecimalInput(rawValue, maxDecimalPlaces = CALCULATOR_FIAT_DECIMAL_PLACES)
         val satsValue = if (fiatValue.isEmpty()) 0L else convertFiatToSats(fiatValue)
@@ -150,6 +164,7 @@ class CalculatorViewModel @Inject constructor(
         val currencyKey = CalculatorCurrencyKey(
             selectedCurrency = currencyState.selectedCurrency,
             displayUnit = currencyState.displayUnit,
+            rates = currencyState.rates,
         )
         val previousCurrencyKey = lastCurrencyKey
         lastCurrencyKey = currencyKey
@@ -164,6 +179,15 @@ class CalculatorViewModel @Inject constructor(
             displayUnitChanged = displayUnitChanged,
             currencyKey = currencyKey,
         )
+        val refreshSource = nextActiveValues.refreshSource(activeInput)
+        if (refreshSource == MoneyType.FIAT) {
+            return refreshBitcoinFromFiat(
+                activeValues = activeValues,
+                nextActiveValues = nextActiveValues,
+                displayUnit = currencyState.displayUnit,
+            )
+        }
+
         val shouldRefreshFiat = isInitialSync || currencyChanged || shouldHydrateFiatFromStoredBtc(
             storedBtcValue = storedValues.btcValue,
             storedFiatValue = storedValues.fiatValue,
@@ -171,35 +195,74 @@ class CalculatorViewModel @Inject constructor(
             displayUnit = currencyState.displayUnit,
         )
 
-        if (!shouldRefreshFiat) {
-            persistCanonicalValuesIfNeeded(
-                activeValues = activeValues,
-                nextActiveValues = nextActiveValues,
-            )
-            return nextActiveValues
-        }
+        if (!shouldRefreshFiat) return persistCanonicalValues(activeValues, nextActiveValues)
+
+        return refreshFiatFromBitcoin(
+            activeValues = activeValues,
+            nextActiveValues = nextActiveValues,
+            displayUnit = currencyState.displayUnit,
+        )
+    }
+
+    private fun refreshFiatFromBitcoin(
+        activeValues: CalculatorValues,
+        nextActiveValues: CalculatorValues,
+        displayUnit: BitcoinDisplayUnit,
+    ): CalculatorValues {
         if (nextActiveValues.btcValue.isEmpty() ||
-            isZeroBtcValue(nextActiveValues.btcValue, currencyState.displayUnit)
+            isZeroBtcValue(nextActiveValues.btcValue, displayUnit)
         ) {
-            persistCanonicalValuesIfNeeded(
-                activeValues = activeValues,
-                nextActiveValues = nextActiveValues,
-            )
-            return nextActiveValues
+            return persistCanonicalValues(activeValues, nextActiveValues)
         }
 
         val convertedFiat = convertSatsToFiat(nextActiveValues.resolveCalculatorSatsValue())
-        if (convertedFiat.isEmpty()) {
-            persistCanonicalValuesIfNeeded(
-                activeValues = activeValues,
-                nextActiveValues = nextActiveValues,
-            )
-            return nextActiveValues
-        }
+        if (convertedFiat.isEmpty()) return persistCanonicalValues(activeValues, nextActiveValues)
 
         val updatedValues = nextActiveValues.copy(fiatValue = convertedFiat)
         updateCalculatorValues(updatedValues)
         return updatedValues
+    }
+
+    private fun refreshBitcoinFromFiat(
+        activeValues: CalculatorValues,
+        nextActiveValues: CalculatorValues,
+        displayUnit: BitcoinDisplayUnit,
+    ): CalculatorValues {
+        if (nextActiveValues.fiatValue.isEmpty()) {
+            val updatedValues = nextActiveValues.copy(
+                btcValue = "",
+                satsValue = 0L,
+                displayUnit = displayUnit,
+            )
+            persistCanonicalValuesIfNeeded(
+                activeValues = activeValues,
+                nextActiveValues = updatedValues,
+            )
+            return updatedValues
+        }
+
+        val satsValue = convertFiatToSats(nextActiveValues.fiatValue)
+        val updatedValues = nextActiveValues.copy(
+            btcValue = calculatorSatsToBtcValue(satsValue, displayUnit),
+            satsValue = satsValue,
+            displayUnit = displayUnit,
+        )
+        persistCanonicalValuesIfNeeded(
+            activeValues = activeValues,
+            nextActiveValues = updatedValues,
+        )
+        return updatedValues
+    }
+
+    private fun persistCanonicalValues(
+        activeValues: CalculatorValues,
+        nextActiveValues: CalculatorValues,
+    ): CalculatorValues {
+        persistCanonicalValuesIfNeeded(
+            activeValues = activeValues,
+            nextActiveValues = nextActiveValues,
+        )
+        return nextActiveValues
     }
 
     private fun deriveActiveValues(
@@ -319,6 +382,7 @@ data class CalculatorUiState(
 private data class CalculatorCurrencyKey(
     val selectedCurrency: String,
     val displayUnit: BitcoinDisplayUnit,
+    val rates: ImmutableList<FxRate>,
 )
 
 internal fun shouldHydrateFiatFromStoredBtc(
@@ -337,6 +401,15 @@ internal fun shouldHydrateFiatFromStoredBtc(
         return false
     }
     return currentFiatValue.isEmpty()
+}
+
+internal fun CalculatorValues.refreshSource(activeInput: MoneyType?): MoneyType {
+    activeInput?.let { return it }
+    return if (btcValue.isEmpty() && fiatValue.isNotEmpty()) {
+        MoneyType.FIAT
+    } else {
+        MoneyType.BITCOIN
+    }
 }
 
 internal fun isZeroBtcValue(
