@@ -119,6 +119,8 @@ private fun ShopTabContent(
         modifier = modifier.padding(horizontal = 16.dp)
     ) {
         item {
+            VerticalSpacer(16.dp)
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -249,7 +251,7 @@ private fun MapTabContent(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .padding(start = 16.dp, end = 16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp)
             .clip(Shapes.medium)
     ) {
         AndroidView(
