@@ -20,6 +20,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.ServiceError
 import java.math.BigDecimal
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -34,7 +35,7 @@ class CalculatorViewModelTest : BaseUnitTest() {
     private var lastConvertedSats = 0L
     private var fiatConversionValue: String? = null
     private var fiatConversionFormatted: String? = null
-    private var fiatToSatsValue = 12_345uL
+    private var fiatToSatsValue: ULong? = 12_345uL
     private var updateCalculatorValuesCalls = 0
 
     private lateinit var sut: CalculatorViewModel
@@ -65,7 +66,9 @@ class CalculatorViewModelTest : BaseUnitTest() {
                 sats = sats,
             )
         }
-        whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull())).thenAnswer { fiatToSatsValue }
+        whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull())).thenAnswer {
+            fiatToSatsValue ?: throw ServiceError.CurrencyRateUnavailable()
+        }
         whenever { widgetsRepo.updateCalculatorValues(any()) }.thenAnswer {
             updateCalculatorValuesCalls++
             val calculatorValues = it.getArgument<CalculatorValues>(0)
@@ -333,6 +336,27 @@ class CalculatorViewModelTest : BaseUnitTest() {
         assertEquals("12.34", sut.uiState.value.fiatValue)
         assertEquals(54_321L, widgetsData.value.calculatorValues.satsValue)
         assertEquals("12.34", widgetsData.value.calculatorValues.fiatValue)
+    }
+
+    @Test
+    fun `active fiat refresh preserves bitcoin when conversion is unavailable`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        sut.onFiatInputChanged("12.34")
+        advanceUntilIdle()
+
+        fiatToSatsValue = null
+        val updatesBeforeRateRefresh = updateCalculatorValuesCalls
+        currencyState.value = currencyState.value.copy(
+            rates = persistentListOf(fxRate(lastPrice = "62501")),
+        )
+        advanceUntilIdle()
+
+        assertEquals("12345", sut.uiState.value.btcValue)
+        assertEquals("12.34", sut.uiState.value.fiatValue)
+        assertEquals(12_345L, widgetsData.value.calculatorValues.satsValue)
+        assertEquals(updatesBeforeRateRefresh, updateCalculatorValuesCalls)
     }
 
     @Test

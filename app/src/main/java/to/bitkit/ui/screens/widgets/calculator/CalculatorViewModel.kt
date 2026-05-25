@@ -237,7 +237,8 @@ class CalculatorViewModel @Inject constructor(
     ): CalculatorValues {
         if (nextActiveValues.fiatValue.isEmpty()) return persistCanonicalValues(activeValues, nextActiveValues)
 
-        val satsValue = convertFiatToSats(nextActiveValues.fiatValue)
+        val satsValue = convertFiatToSatsOrNull(nextActiveValues.fiatValue)
+            ?: return persistCanonicalValues(activeValues, nextActiveValues)
         val updatedValues = nextActiveValues.copy(
             btcValue = calculatorSatsToBtcValue(satsValue, displayUnit),
             satsValue = satsValue,
@@ -361,8 +362,14 @@ class CalculatorViewModel @Inject constructor(
     }
 
     private fun convertFiatToSats(fiatValue: String): Long {
-        val fiatDecimal = fiatValue.toBigDecimalOrNull() ?: BigDecimal.ZERO
-        return currencyRepo.convertFiatToSats(fiatDecimal).getOrNull()?.toLong() ?: 0L
+        return convertFiatToSatsOrNull(fiatValue) ?: 0L
+    }
+
+    private fun convertFiatToSatsOrNull(fiatValue: String): Long? {
+        val fiatDecimal = fiatValue.toBigDecimalOrNull() ?: return null
+        return runCatching {
+            currencyRepo.convertFiatToSats(fiatDecimal).getOrNull()?.toLong()
+        }.getOrNull()
     }
 }
 
