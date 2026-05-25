@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -23,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +36,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.configureForBasicWebContent
@@ -66,7 +70,8 @@ fun ShopDiscoverScreen(
     modifier: Modifier = Modifier,
 ) {
     val tabs = remember { ShopDiscoverTab.entries.toImmutableList() }
-    var selectedTab by remember { mutableStateOf(ShopDiscoverTab.Shop) }
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val scope = rememberCoroutineScope()
 
     ScreenColumn(modifier = modifier) {
         AppTopBar(
@@ -79,20 +84,25 @@ fun ShopDiscoverScreen(
             header = {
                 CustomTabRowWithSpacing(
                     tabs = tabs,
-                    currentTabIndex = tabs.indexOf(selectedTab),
+                    currentTabIndex = pagerState.currentPage,
                     selectedColor = Colors.White,
-                    onTabChange = { selectedTab = it },
+                    onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
         ) { topPadding ->
-            when (selectedTab) {
-                ShopDiscoverTab.Shop -> ShopTabContent(
-                    navigateWebView = navigateWebView,
-                    contentPadding = PaddingValues(top = topPadding, bottom = 42.dp),
-                )
+            HorizontalPager(
+                state = pagerState,
+                userScrollEnabled = tabs[pagerState.settledPage] != ShopDiscoverTab.Map,
+            ) { page ->
+                when (tabs[page]) {
+                    ShopDiscoverTab.Shop -> ShopTabContent(
+                        navigateWebView = navigateWebView,
+                        contentPadding = PaddingValues(top = topPadding, bottom = 42.dp),
+                    )
 
-                ShopDiscoverTab.Map -> MapTabContent(modifier = Modifier.padding(top = topPadding))
+                    ShopDiscoverTab.Map -> MapTabContent(modifier = Modifier.padding(top = topPadding))
+                }
             }
         }
     }
