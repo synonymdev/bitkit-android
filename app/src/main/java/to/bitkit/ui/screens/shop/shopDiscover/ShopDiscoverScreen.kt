@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -37,6 +38,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.configureForBasicWebContent
 import to.bitkit.models.BitrefillCategory
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.PinnedTabsScaffold
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
@@ -73,17 +75,25 @@ fun ShopDiscoverScreen(
             actions = { DrawerNavIcon() },
         )
 
-        CustomTabRowWithSpacing(
-            tabs = tabs,
-            currentTabIndex = tabs.indexOf(selectedTab),
-            selectedColor = Colors.White,
-            onTabChange = { selectedTab = it },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+        PinnedTabsScaffold(
+            header = {
+                CustomTabRowWithSpacing(
+                    tabs = tabs,
+                    currentTabIndex = tabs.indexOf(selectedTab),
+                    selectedColor = Colors.White,
+                    onTabChange = { selectedTab = it },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        ) { topPadding ->
+            when (selectedTab) {
+                ShopDiscoverTab.Shop -> ShopTabContent(
+                    navigateWebView = navigateWebView,
+                    contentPadding = PaddingValues(top = topPadding, bottom = 42.dp),
+                )
 
-        when (selectedTab) {
-            ShopDiscoverTab.Shop -> ShopTabContent(navigateWebView = navigateWebView)
-            ShopDiscoverTab.Map -> MapTabContent()
+                ShopDiscoverTab.Map -> MapTabContent(modifier = Modifier.padding(top = topPadding))
+            }
         }
     }
 }
@@ -92,13 +102,13 @@ fun ShopDiscoverScreen(
 private fun ShopTabContent(
     navigateWebView: (String, String) -> Unit,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     LazyColumn(
+        contentPadding = contentPadding,
         modifier = modifier.padding(horizontal = 16.dp)
     ) {
         item {
-            VerticalSpacer(16.dp)
-
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -229,7 +239,7 @@ private fun MapTabContent(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+            .padding(start = 16.dp, end = 16.dp)
             .clip(Shapes.medium)
     ) {
         AndroidView(
