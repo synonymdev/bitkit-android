@@ -6,12 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.3.0] - 2026-05-25
 - Fix Spending and Savings screens scrolling behind top bar and add gradient fade effect #892
 
+### Added
+- Added Trezor hardware wallet support for connecting devices, signing messages, and managing on-chain transactions. #792
+- Connection issues overlay with connectivity fixes across Send, Receive, and Transfer flows #878
+- Home screen widgets foundation with Glance, including price widget as the first implementation #895
+- Return to Bitkit after Pubky Ring approval, cancellation, or error callbacks #917
+- Headlines home screen widget with v61 wide and compact layouts, including redesigned in-app preview and edit screens #919
+- Bitcoin Blocks home screen widget with v61 wide and compact layouts, including redesigned in-app preview and edit screens #922
+- Support public Paykit contact payments. #924
+- Bitcoin Facts home screen widget with v61 wide and compact layouts, including redesigned in-app facts card and preview screen #926
+- Bitcoin Weather home screen widget with v61 wide and compact layouts, including redesigned in-app weather card, preview, and edit screens #927
+- Added private Paykit contact payments with dedicated contact endpoints, rotation, cleanup, and restore-safe address reservations. #936
+- Added contact payment flows, activity contact attribution, and payment preference controls for private payments. #945
+
 ### Changed
+- Redesign price widget with v61 wide and compact layouts, new preview and edit screens, and tap-to-edit behavior #914
+- Redesigned the Bitcoin Calculator widget to v61 design and replaced the OS keyboard with a dark-themed in-app numpad #942
+- Hide experimental Paykit profile, contacts, and contact payment controls behind a developer setting. #954
 - Improve Pubky profile restore, contact editing, and contact routing flows #905
 
 ### Fixed
+- Align currency settings and calculator widget behavior with iOS #884
+- Align onboarding slides and Create Wallet screen image size, spacing, and dots layout with iOS #904
+- Align tab colors, Show details button, notifications bell figure, and home activity count with iOS #907
+- Payment QR scans now route reliably and avoid unnecessary delays when Lightning channels are unavailable. #925
+- Fix gift card flow showing false-positive confetti when the LSP payment fails, and re-opening unexpectedly after an app language change. #929
+- Improved public contact payment flows for manual Pubky entry, add-contact payments, and RBF activity display. #931
+- Fix several OS widget issues including an intermittent crash when removing or cancelling a home screen widget, ordering of widget options, and the color of disabled checkboxes in widget configuration screens. #935
+- Improved OS widgets so previews, settings, currency display, and OS-home interactions match v61 design iteration. #952
+- Improved support log handling so diagnostics stay smaller and include more useful Lightning connection details.
 - Fix probe results and add keysend probes #920
 - Align top bar back arrow and passphrase input cursor/placeholder with iOS #906
 - Polish Terms of Use screen padding to match iOS #903
@@ -56,5 +83,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/synonymdev/bitkit-android/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...v2.2.0
