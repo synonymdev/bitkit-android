@@ -22,13 +22,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.TopBarGradient
 
 private val PinnedTabsShadowHeight = 32.dp
+private val PinnedTabsBlurRadius = 24.dp
 
 @Composable
 fun PinnedTabsScaffold(
@@ -41,6 +43,13 @@ fun PinnedTabsScaffold(
     var headerHeight by remember { mutableStateOf(0.dp) }
     val shadowBrush = remember {
         Brush.verticalGradient(colors = listOf(Colors.Black, Color.Transparent))
+    }
+    val hazeStyle = remember {
+        HazeStyle(
+            backgroundColor = Colors.Black,
+            tint = HazeTint(Colors.Black50),
+            blurRadius = PinnedTabsBlurRadius,
+        )
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -66,8 +75,7 @@ fun PinnedTabsScaffold(
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
                 .zIndex(2f)
-                .hazeEffect(state = hazeState)
-                .background(TopBarGradient)
+                .hazeEffect(state = hazeState, style = hazeStyle)
                 .onSizeChanged { headerHeight = with(density) { it.height.toDp() } }
         ) {
             header()
