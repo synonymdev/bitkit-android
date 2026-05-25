@@ -47,7 +47,7 @@ fun PinnedTabsScaffold(
     val hazeStyle = remember {
         HazeStyle(
             backgroundColor = Colors.Black,
-            tint = HazeTint(Colors.Black50),
+            tint = HazeTint(Colors.Black70),
             blurRadius = PinnedTabsBlurRadius,
         )
     }
