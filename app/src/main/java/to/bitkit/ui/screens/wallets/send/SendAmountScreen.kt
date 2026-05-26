@@ -106,7 +106,7 @@ fun SendAmountScreen(
             onBack()
         }.takeIf { canGoBack },
         onClickMax = { maxSats ->
-            if (uiState.lnurl == null) {
+            if (uiState.lnurl == null && uiState.payMethod == SendMethod.LIGHTNING) {
                 app?.toast(
                     type = Toast.ToastType.INFO,
                     title = context.getString(R.string.wallet__send_max_spending__title),

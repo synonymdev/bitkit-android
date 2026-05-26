@@ -2,19 +2,29 @@ package to.bitkit.repositories
 
 import android.content.Context
 import com.synonym.vssclient.VssItem
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
@@ -22,6 +32,7 @@ import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.json
 import to.bitkit.models.BackupCategory
+import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.PrivatePaykitContactLinkBackupV1
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.services.LightningService
@@ -33,7 +44,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class BackupRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
@@ -51,7 +62,9 @@ class BackupRepoTest : BaseUnitTest() {
     private val clock = mock<Clock>()
     private val db = mock<AppDb>()
     private val transferDao = mock<TransferDao>()
+    private val cacheData = MutableStateFlow(AppCacheData())
     private val settingsData = MutableStateFlow(SettingsData())
+    private val widgetsData = MutableStateFlow(WidgetsData())
 
     private lateinit var sut: BackupRepo
 
@@ -62,13 +75,20 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { transferDao.upsert(any<List<TransferEntity>>()) }.thenReturn(Unit)
         whenever { cacheStore.updateBackupStatus(any(), any()) }.thenReturn(Unit)
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
+        whenever(cacheStore.data).thenReturn(cacheData)
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
+        whenever(widgetsStore.data).thenReturn(widgetsData)
         whenever { vssBackupClient.getObject(any()) }.thenReturn(Result.success(null))
         whenever { vssBackupClient.putObject(any(), any()) }
             .thenReturn(Result.success(VssItem(key = BackupCategory.SETTINGS.name, value = byteArrayOf(), version = 1)))
+        whenever { vssBackupClient.setupWithRetry(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { vssBackupClientLdk.setup() }.thenReturn(Result.success(Unit))
+        whenever { transferDao.getAll() }.thenReturn(emptyList())
         whenever { privatePaykitRepo.restoreBackup(anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.backupSnapshot() }.thenReturn(Result.success(null))
         whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitAddressReservationRepo.backupSnapshot() }.thenReturn(Result.success(null))
         whenever {
             privatePaykitAddressReservationRepo.reconcileReservedIndexesWithLdk()
         }.thenReturn(Result.success(Unit))
@@ -87,6 +107,72 @@ class BackupRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         verify(privatePaykitRepo, never()).restoreBackup(any())
         verify(settingsStore, never()).update(any())
+    }
+
+    @Test
+    fun `start observing backs up stale required status after clearing running flag`() = test {
+        val backupStatuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.WALLET to BackupItemStatus(
+                    running = true,
+                    synced = 1_000,
+                    required = 2_000,
+                ),
+            )
+        )
+        val allowWalletClear = CompletableDeferred<Unit>()
+        var delayedWalletClear = false
+        stubBackupStatuses(backupStatuses, allowWalletClear) {
+            delayedWalletClear = true
+        }
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+            allowWalletClear.complete(Unit)
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            assertTrue(delayedWalletClear)
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `failed automatic backup waits for new required timestamp before retrying`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        whenever { vssBackupClient.putObject(eq(BackupCategory.SETTINGS.name), any()) }
+            .thenReturn(Result.failure(BackupRepoTestError("backup failed")))
+        val backupStatuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.SETTINGS to BackupItemStatus(
+                    synced = 1_000,
+                    required = 2_000,
+                ),
+            )
+        )
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
     }
 
     @Test
@@ -132,6 +218,37 @@ class BackupRepoTest : BaseUnitTest() {
                     )
                 )
             )
+    }
+
+    private fun stubBackupStatuses(
+        backupStatuses: MutableStateFlow<Map<BackupCategory, BackupItemStatus>>,
+        allowWalletClear: CompletableDeferred<Unit>,
+        onWalletClearDelayed: () -> Unit,
+    ) {
+        whenever(cacheStore.backupStatuses).thenReturn(backupStatuses)
+        whenever { cacheStore.updateBackupStatus(any(), any()) }.doSuspendableAnswer {
+            val category = it.getArgument<BackupCategory>(0)
+            val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+            if (category == BackupCategory.WALLET && !allowWalletClear.isCompleted) {
+                onWalletClearDelayed()
+                allowWalletClear.await()
+            }
+            backupStatuses.update { statuses ->
+                val currentStatus = statuses[category] ?: BackupItemStatus()
+                statuses + (category to transform(currentStatus))
+            }
+        }
+    }
+
+    private fun stubBackupObservers() {
+        whenever { transferDao.observeAll() }.thenReturn(MutableStateFlow(emptyList()))
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
+        whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
+        whenever(pubkyRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(privatePaykitRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(privatePaykitAddressReservationRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(preActivityMetadataRepo.preActivityMetadataChanged).thenReturn(MutableStateFlow(0L))
+        whenever(lightningService.syncStatusChanged).thenReturn(MutableSharedFlow())
     }
 
     private fun createSut() = BackupRepo(

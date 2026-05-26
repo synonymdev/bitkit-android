@@ -29,6 +29,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     private val packageManager: PackageManager = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
+    private val isAuthenticated = MutableStateFlow(false)
     private val authCancelEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     private lateinit var sut: PubkyChoiceViewModel
@@ -39,7 +40,11 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
         whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
+        whenever(pubkyRepo.isAuthenticated).thenReturn(isAuthenticated)
         whenever(pubkyRepo.authCancelEvents).thenReturn(authCancelEvents)
+    }
+
+    private fun createSut() {
         sut = PubkyChoiceViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
@@ -47,7 +52,29 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `session restoration redirects to profile when already authenticated`() = test {
+        isAuthenticated.value = true
+        createSut()
+
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.navigateToProfile)
+    }
+
+    @Test
+    fun `clearProfileNavigation clears profile redirect`() = test {
+        createSut()
+        isAuthenticated.value = true
+        advanceUntilIdle()
+
+        sut.clearProfileNavigation()
+
+        assertFalse(sut.uiState.value.navigateToProfile)
+    }
+
+    @Test
     fun `waitForApproval prepareImport failure clears loading and emits no navigation`() = test {
+        createSut()
         whenever(pubkyRepo.completeAuthentication()).thenReturn(Result.success(Unit))
         whenever(pubkyRepo.prepareImport()).thenReturn(Result.failure(RuntimeException("Import failed")))
 
@@ -73,6 +100,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `startRingAuth shows dialog when Ring is not installed`() = test {
+        createSut()
         whenever(packageManager.getLaunchIntentForPackage(PubkyChoiceViewModel.PUBKY_RING_PACKAGE))
             .thenReturn(null)
 
@@ -95,6 +123,7 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onRingLaunchFailed shows dialog without toast`() = test {
+        createSut()
         val effects = mutableListOf<PubkyChoiceEffect>()
         val toasts = mutableListOf<Toast>()
         val effectsJob = launch { sut.effects.collect { effects.add(it) } }

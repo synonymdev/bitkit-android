@@ -230,7 +230,8 @@ fun SendSheet(
                         isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                         canGoBack = startDestination != SendRoute.Confirm,
                         onBack = {
-                            if (!navController.popBackStack()) {
+                            val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
+                            if (!didPopToAmount && !navController.popBackStack()) {
                                 appViewModel.hideSheet()
                             }
                         },

@@ -34,15 +34,17 @@ class FactsViewModel @Inject constructor(
             initialValue = DEFAULT_FACT
         )
 
-    fun saveWidget() {
+    fun saveWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.addWidget(WidgetType.FACTS)
+            onComplete()
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.FACTS)
+            onComplete()
         }
     }
 

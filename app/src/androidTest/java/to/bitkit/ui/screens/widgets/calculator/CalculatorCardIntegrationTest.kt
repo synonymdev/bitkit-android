@@ -51,7 +51,6 @@ import to.bitkit.test.annotations.DeviceIntegration
 import to.bitkit.test.annotations.DeviceUiIntegration
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.viewmodels.CurrencyViewModel
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Named
@@ -88,7 +87,6 @@ class CalculatorCardIntegrationTest {
 
     private lateinit var viewModelStore: ViewModelStore
     private lateinit var calculatorViewModel: CalculatorViewModel
-    private lateinit var currencyViewModel: CurrencyViewModel
     private lateinit var previousWidgetsData: WidgetsData
     private lateinit var previousSettingsData: SettingsData
     private lateinit var previousCacheData: AppCacheData
@@ -110,7 +108,6 @@ class CalculatorCardIntegrationTest {
                 it.copy(
                     selectedCurrency = USD,
                     displayUnit = BitcoinDisplayUnit.MODERN,
-                    showWidgetTitles = true,
                 )
             }
             cacheStore.update { it.copy(cachedRates = listOf(testUsdRate)) }
@@ -136,7 +133,6 @@ class CalculatorCardIntegrationTest {
         }
 
         calculatorViewModel = createCalculatorViewModel()
-        currencyViewModel = createCurrencyViewModel()
     }
 
     @After
@@ -203,31 +199,18 @@ class CalculatorCardIntegrationTest {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return CalculatorViewModel(
                         widgetsRepo = widgetsRepo,
+                        currencyRepo = currencyRepo,
                     ) as T
                 }
             },
         )[CalculatorViewModel::class.java]
     }
 
-    private fun createCurrencyViewModel(): CurrencyViewModel = ViewModelProvider(
-        viewModelStore,
-        object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return CurrencyViewModel(
-                    currencyRepo = currencyRepo,
-                ) as T
-            }
-        },
-    )[CurrencyViewModel::class.java]
-
     private fun setCalculatorCard() {
         composeTestRule.setContent {
             AppThemeSurface {
                 CalculatorCard(
-                    currencyViewModel = currencyViewModel,
                     calculatorViewModel = calculatorViewModel,
-                    showWidgetTitle = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -254,14 +237,14 @@ class CalculatorCardIntegrationTest {
     ) {
         runCatching {
             composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
-                calculatorViewModel.calculatorValues.value.btcValue == btcValue &&
-                    calculatorViewModel.calculatorValues.value.fiatValue == fiatValue
+                calculatorViewModel.uiState.value.btcValue == btcValue &&
+                    calculatorViewModel.uiState.value.fiatValue == fiatValue
             }
         }.onFailure {
             throw AssertionError(
                 buildString {
                     append("Expected calculatorValues btcValue='$btcValue', fiatValue='$fiatValue', ")
-                    append("but was '${calculatorViewModel.calculatorValues.value}'. Persisted values were ")
+                    append("but was '${calculatorViewModel.uiState.value}'. Persisted values were ")
                     append("'${widgetsRepo.widgetsDataFlow.value.calculatorValues}'. Semantics tree:\n")
                     append(composeTestRule.onRoot(useUnmergedTree = true).printToString())
                 },
@@ -272,6 +255,8 @@ class CalculatorCardIntegrationTest {
         val expectedValues = CalculatorValues(
             btcValue = btcValue,
             fiatValue = fiatValue,
+            satsValue = btcValue.toLong(),
+            displayUnit = BitcoinDisplayUnit.MODERN,
         )
         runCatching {
             composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
@@ -303,6 +288,8 @@ class CalculatorCardIntegrationTest {
             CalculatorValues(
                 btcValue = btcValue,
                 fiatValue = fiatValue,
+                satsValue = btcValue.toLong(),
+                displayUnit = BitcoinDisplayUnit.MODERN,
             ),
             widgetsRepo.widgetsDataFlow.value.calculatorValues,
         )

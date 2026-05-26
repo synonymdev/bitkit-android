@@ -38,10 +38,11 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun PriceEditScreen(
@@ -78,8 +79,10 @@ fun PriceEditContent(
 ) {
     val selectedPair = preferences.enabledPairs.firstOrNull() ?: TradingPair.BTC_USD
 
-    ScreenColumn(
-        modifier = modifier.testTag("price_edit_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("price_edit_screen")
     ) {
         Box(
             modifier = Modifier
@@ -129,9 +132,9 @@ fun PriceEditContent(
             }
 
             Column {
-                AppTopBar(
+                SheetTopBar(
                     titleText = stringResource(R.string.widgets__price__name),
-                    onBackClick = onBack,
+                    onBack = onBack,
                     modifier = Modifier.background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -148,7 +151,12 @@ fun PriceEditContent(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(16.dp)
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
+                )
                 .fillMaxWidth()
                 .testTag("buttons_row")
         ) {

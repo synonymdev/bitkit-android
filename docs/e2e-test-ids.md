@@ -683,4 +683,4 @@ Legend:
 | WidgetSave                 | ✅                           |
 | WidgetsAdd                 | ✅                           |
 | WidgetsEdit                | ✅                           |
-| WidgetsOnboarding-button   | ✅                           |
+| WidgetsOnboardingAddWidget   | ✅                           |

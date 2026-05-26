@@ -101,6 +101,7 @@ class BackupRepo @Inject constructor(
     private var periodicCheckJob: Job? = null
 
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
+    private val failedBackupRequired = ConcurrentHashMap<BackupCategory, Long>()
 
     private var isObserving = false
     private var lastNotificationTime = 0L
@@ -119,7 +120,11 @@ class BackupRepo @Inject constructor(
     fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
     private fun currentTimeMillis(): Long = nowMillis(clock)
     private fun shouldSkipBackup(): Boolean = _isRestoring.value || _isWiping.value
-    private fun BackupItemStatus.shouldBackup() = this.isRequired && !this.running && !shouldSkipBackup()
+    private fun BackupItemStatus.shouldBackup(category: BackupCategory) =
+        this.isRequired &&
+            !this.running &&
+            !shouldSkipBackup() &&
+            failedBackupRequired[category] != this.required
 
     fun startObservingBackups() {
         if (isObserving) return
@@ -197,11 +202,12 @@ class BackupRepo @Inject constructor(
                 cacheStore.backupStatuses
                     .map { statuses -> statuses[category] ?: BackupItemStatus() }
                     .distinctUntilChanged { old, new ->
-                        // restart scheduling when synced or required timestamps change
-                        old.synced == new.synced && old.required == new.required
+                        old.synced == new.synced &&
+                            old.required == new.required &&
+                            old.running == new.running
                     }
                     .collect { status ->
-                        if (status.shouldBackup()) {
+                        if (status.shouldBackup(category)) {
                             scheduleBackup(category)
                         }
                     }
@@ -355,6 +361,7 @@ class BackupRepo @Inject constructor(
 
     private fun markBackupRequired(category: BackupCategory) {
         scope.launch {
+            failedBackupRequired -= category
             cacheStore.updateBackupStatus(category) {
                 it.copy(required = currentTimeMillis())
             }
@@ -441,6 +448,7 @@ class BackupRepo @Inject constructor(
         Logger.debug("Backup starting for: '$category'", context = TAG)
 
         runningBackups += category
+        failedBackupRequired -= category
         cacheStore.updateBackupStatus(category) {
             it.copy(running = true, required = currentTimeMillis())
         }
@@ -448,6 +456,7 @@ class BackupRepo @Inject constructor(
         vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category))
             .onSuccess {
                 runningBackups -= category
+                failedBackupRequired -= category
                 cacheStore.updateBackupStatus(category) {
                     it.copy(
                         running = false,
@@ -459,6 +468,7 @@ class BackupRepo @Inject constructor(
             .onFailure { e ->
                 runningBackups -= category
                 cacheStore.updateBackupStatus(category) {
+                    failedBackupRequired[category] = it.required
                     it.copy(running = false)
                 }
                 Logger.error("Backup failed for: '$category'", e, context = TAG)

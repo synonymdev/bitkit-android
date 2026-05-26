@@ -31,10 +31,11 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun BlocksEditScreen(
@@ -76,12 +77,14 @@ private fun Content(
     block: BlockModel,
     modifier: Modifier = Modifier,
 ) {
-    ScreenColumn(
-        modifier = modifier.testTag("blocks_edit_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("blocks_edit_screen")
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.widgets__blocks__name),
-            onBackClick = onBack,
+            onBack = onBack,
         )
 
         Column(
@@ -115,7 +118,10 @@ private fun Content(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
-                    .padding(vertical = 21.dp)
+                    .padding(
+                        top = 21.dp,
+                        bottom = Insets.Bottom + 21.dp,
+                    )
                     .fillMaxWidth()
                     .testTag("buttons_row")
             ) {

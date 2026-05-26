@@ -29,10 +29,11 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun HeadlinesEditScreen(
@@ -75,12 +76,14 @@ fun HeadlinesEditContent(
     article: ArticleModel,
     modifier: Modifier = Modifier,
 ) {
-    ScreenColumn(
-        modifier = modifier.testTag("headlines_edit_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("headlines_edit_screen")
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.widgets__news__name),
-            onBackClick = onBack,
+            onBack = onBack,
         )
 
         Column(
@@ -206,11 +209,14 @@ fun HeadlinesEditContent(
             FillHeight()
 
             Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
-                    .padding(vertical = 21.dp)
+                    .padding(
+                        top = 21.dp,
+                        bottom = Insets.Bottom + 21.dp,
+                    )
                     .fillMaxWidth()
-                    .testTag("buttons_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .testTag("buttons_row")
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__reset),
