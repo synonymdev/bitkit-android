@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import java.util.Calendar
+import java.time.LocalDate
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -145,7 +145,7 @@ private fun Content(
     onClickVersion: () -> Unit = {},
 ) {
     val appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
-    val currentYear = remember { Calendar.getInstance().get(Calendar.YEAR).toString() }
+    val currentYear = remember { LocalDate.now().year.toString() }
     val copyrightText = stringResource(R.string.settings__support__copyright)
         .replace(COPYRIGHT_YEAR_PLACEHOLDER, currentYear)
         .replace(COPYRIGHT_YEAR_TOKEN, currentYear)
