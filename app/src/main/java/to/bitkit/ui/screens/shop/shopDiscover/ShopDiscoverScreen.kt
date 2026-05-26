@@ -76,7 +76,7 @@ fun ShopDiscoverScreen(
     ScreenColumn(modifier = modifier) {
         PinnedTabsScaffold(
             header = {
-                Column(modifier = modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     AppTopBar(
                         titleText = stringResource(R.string.other__shop__discover__nav_title),
                         onBackClick = onBack,
