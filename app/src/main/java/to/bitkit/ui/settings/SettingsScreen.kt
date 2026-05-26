@@ -262,7 +262,7 @@ private fun SettingsContent(
 private fun GeneralTabContent(
     state: GeneralTabState,
     onEvent: OnSettingsEvent,
-    topPadding: Dp = 0.dp,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
@@ -374,7 +374,7 @@ private fun GeneralTabContent(
 private fun SecurityTabContent(
     state: SecurityTabState,
     onEvent: OnSettingsEvent,
-    topPadding: Dp = 0.dp,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
@@ -491,7 +491,7 @@ private fun SecurityTabContent(
 private fun AdvancedTabContent(
     state: AdvancedTabState,
     onEvent: OnSettingsEvent,
-    topPadding: Dp = 0.dp,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
