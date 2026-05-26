@@ -7,21 +7,14 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
@@ -32,6 +25,8 @@ import to.bitkit.ui.theme.Colors
 private val PinnedTabsShadowHeight = 32.dp
 private val PinnedTabsBlurRadius = 24.dp
 
+private enum class PinnedTabsSlot { Header, Content, Shadow }
+
 @Composable
 fun PinnedTabsScaffold(
     header: @Composable ColumnScope.() -> Unit,
@@ -39,8 +34,6 @@ fun PinnedTabsScaffold(
     content: @Composable (topPadding: Dp) -> Unit,
 ) {
     val hazeState = rememberHazeState()
-    val density = LocalDensity.current
-    var headerHeight by remember { mutableStateOf(0.dp) }
     val shadowBrush = remember {
         Brush.verticalGradient(colors = listOf(Colors.Black, Color.Transparent))
     }
@@ -52,33 +45,44 @@ fun PinnedTabsScaffold(
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState)
-        ) {
-            content(headerHeight)
-        }
+    SubcomposeLayout(modifier = modifier.fillMaxSize()) { constraints ->
+        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(y = headerHeight)
-                .height(PinnedTabsShadowHeight)
-                .background(shadowBrush)
-                .zIndex(1f)
-        )
+        val headerPlaceables = subcompose(PinnedTabsSlot.Header) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .hazeEffect(state = hazeState, style = hazeStyle),
+                content = { header() },
+            )
+        }.map { it.measure(looseConstraints) }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .zIndex(2f)
-                .hazeEffect(state = hazeState, style = hazeStyle)
-                .onSizeChanged { headerHeight = with(density) { it.height.toDp() } }
-        ) {
-            header()
+        val headerHeightPx = headerPlaceables.maxOfOrNull { it.height } ?: 0
+        val headerHeightDp = headerHeightPx.toDp()
+
+        val contentPlaceables = subcompose(PinnedTabsSlot.Content) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(hazeState)
+            ) {
+                content(headerHeightDp)
+            }
+        }.map { it.measure(constraints) }
+
+        val shadowPlaceables = subcompose(PinnedTabsSlot.Shadow) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PinnedTabsShadowHeight)
+                    .background(shadowBrush)
+            )
+        }.map { it.measure(looseConstraints) }
+
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            contentPlaceables.forEach { it.placeRelative(0, 0) }
+            shadowPlaceables.forEach { it.placeRelative(0, headerHeightPx) }
+            headerPlaceables.forEach { it.placeRelative(0, 0) }
         }
     }
 }
