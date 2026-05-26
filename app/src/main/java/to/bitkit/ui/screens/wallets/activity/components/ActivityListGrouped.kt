@@ -150,6 +150,7 @@ fun ActivityListGrouped(
                     color = Colors.White64,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(contentPadding)
                         .padding(16.dp)
                 )
             }
