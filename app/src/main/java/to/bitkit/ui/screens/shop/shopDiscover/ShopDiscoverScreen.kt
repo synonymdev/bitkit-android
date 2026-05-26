@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.shop.shopDiscover
 
 import android.annotation.SuppressLint
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.annotation.StringRes
@@ -33,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.collections.immutable.toImmutableList
@@ -93,17 +95,14 @@ fun ShopDiscoverScreen(
                 }
             }
         ) { topPadding ->
-            HorizontalPager(
-                state = pagerState,
-                userScrollEnabled = tabs[pagerState.settledPage] != ShopDiscoverTab.Map,
-            ) { page ->
+            HorizontalPager(state = pagerState) { page ->
                 when (tabs[page]) {
                     ShopDiscoverTab.Shop -> ShopTabContent(
                         navigateWebView = navigateWebView,
                         contentPadding = PaddingValues(top = topPadding, bottom = 42.dp),
                     )
 
-                    ShopDiscoverTab.Map -> MapTabContent(modifier = Modifier.padding(top = topPadding))
+                    ShopDiscoverTab.Map -> MapTabContent(topPadding = topPadding)
                 }
             }
         }
@@ -237,10 +236,11 @@ private fun ShopTabContent(
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
 @Composable
 private fun MapTabContent(
     modifier: Modifier = Modifier,
+    topPadding: Dp = 0.dp,
 ) {
     var isLoading by remember { mutableStateOf(true) }
 
@@ -253,7 +253,7 @@ private fun MapTabContent(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = topPadding + 16.dp)
             .clip(Shapes.medium)
     ) {
         AndroidView(
@@ -266,6 +266,20 @@ private fun MapTabContent(
 
                     this.webViewClient = webViewClient
                     configureForBasicWebContent()
+                    // Keep the parent HorizontalPager from intercepting horizontal pans while the user is
+                    // interacting with the map. Outside the WebView bounds the pager still swipes normally.
+                    setOnTouchListener { view, event ->
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN,
+                            MotionEvent.ACTION_MOVE,
+                            -> view.parent?.requestDisallowInterceptTouchEvent(true)
+
+                            MotionEvent.ACTION_UP,
+                            MotionEvent.ACTION_CANCEL,
+                            -> view.parent?.requestDisallowInterceptTouchEvent(false)
+                        }
+                        false
+                    }
                     loadUrl(Env.BTC_MAP_URL)
                 }
             },
