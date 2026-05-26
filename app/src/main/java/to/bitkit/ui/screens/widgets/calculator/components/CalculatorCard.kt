@@ -89,6 +89,8 @@ fun CalculatorCard(
         onFiatChange = calculatorViewModel::onFiatInputChanged,
         dismissNumberPadKey = dismissNumberPadKey,
         onInputActiveChange = onInputActiveChange,
+        onInputSelected = calculatorViewModel::onInputSelected,
+        onInputDismissed = calculatorViewModel::onInputDismissed,
         onNumberPadBoundsChanged = onNumberPadBoundsChanged,
     )
 }
@@ -103,11 +105,17 @@ fun CalculatorCardEditor(
     fiatName: String,
     fiatValue: String,
     onFiatChange: (String) -> Unit,
+    onInputSelected: (MoneyType) -> Unit,
+    onInputDismissed: () -> Unit,
     dismissNumberPadKey: Int = 0,
     onInputActiveChange: (Boolean) -> Unit = {},
     onNumberPadBoundsChanged: (Rect?) -> Unit = {},
 ) {
     val numpadState = rememberNumpadState()
+    val selectInput = { input: MoneyType ->
+        onInputSelected(input)
+        numpadState.selectInput(input)
+    }
 
     Column(modifier = modifier) {
         Content(
@@ -117,7 +125,7 @@ fun CalculatorCardEditor(
             fiatName = fiatName,
             fiatValue = fiatValue,
             activeInput = numpadState.activeInput,
-            onSelectInput = numpadState::selectInput,
+            onSelectInput = selectInput,
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -130,6 +138,7 @@ fun CalculatorCardEditor(
             fiatValue = fiatValue,
             onBtcChange = onBtcChange,
             onFiatChange = onFiatChange,
+            onInputDismissed = onInputDismissed,
             onNumberPadBoundsChanged = onNumberPadBoundsChanged,
         )
     }
@@ -201,12 +210,14 @@ private fun ColumnScope.NumpadHost(
     fiatValue: String,
     onBtcChange: (String) -> Unit,
     onFiatChange: (String) -> Unit,
+    onInputDismissed: () -> Unit,
     onNumberPadBoundsChanged: (Rect?) -> Unit,
 ) {
     NumpadEffects(
         state = state,
         dismissNumberPadKey = dismissNumberPadKey,
         onInputActiveChange = onInputActiveChange,
+        onInputDismissed = onInputDismissed,
         onNumberPadBoundsChanged = onNumberPadBoundsChanged,
     )
 
@@ -226,9 +237,11 @@ private fun NumpadEffects(
     state: NumpadState,
     dismissNumberPadKey: Int,
     onInputActiveChange: (Boolean) -> Unit,
+    onInputDismissed: () -> Unit,
     onNumberPadBoundsChanged: (Rect?) -> Unit,
 ) {
     val updatedOnInputActiveChange by rememberUpdatedState(onInputActiveChange)
+    val updatedOnInputDismissed by rememberUpdatedState(onInputDismissed)
     val updatedOnNumberPadBoundsChanged by rememberUpdatedState(onNumberPadBoundsChanged)
     val isInputTargetActive = state.visibilityState.targetState
 
@@ -237,6 +250,7 @@ private fun NumpadEffects(
     LaunchedEffect(isInputTargetActive) {
         updatedOnInputActiveChange(isInputTargetActive)
         if (!isInputTargetActive) {
+            updatedOnInputDismissed()
             updatedOnNumberPadBoundsChanged(null)
         }
     }
@@ -248,7 +262,10 @@ private fun NumpadEffects(
     }
 
     DisposableEffect(Unit) {
-        onDispose { updatedOnInputActiveChange(false) }
+        onDispose {
+            updatedOnInputDismissed()
+            updatedOnInputActiveChange(false)
+        }
     }
 }
 
@@ -509,6 +526,8 @@ private fun Preview() {
                 fiatValue = "4.55",
                 fiatName = "USD",
                 onFiatChange = {},
+                onInputSelected = {},
+                onInputDismissed = {},
                 btcPrimaryDisplayUnit = BitcoinDisplayUnit.MODERN,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -520,6 +539,8 @@ private fun Preview() {
                 fiatValue = "4.55",
                 fiatName = "USD",
                 onFiatChange = {},
+                onInputSelected = {},
+                onInputDismissed = {},
                 btcPrimaryDisplayUnit = BitcoinDisplayUnit.CLASSIC,
                 modifier = Modifier.fillMaxWidth()
             )
