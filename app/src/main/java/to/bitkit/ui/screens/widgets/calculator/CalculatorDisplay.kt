@@ -100,7 +100,14 @@ internal fun formatBitcoinPlaceholder(
     displayUnit: BitcoinDisplayUnit,
     locale: Locale = Locale.getDefault(),
 ): String {
-    if (btcValue.isEmpty() || displayUnit.isModern()) return ""
+    if (btcValue.isEmpty()) {
+        return if (displayUnit.isModern()) {
+            ZERO_PLACEHOLDER
+        } else {
+            ZERO_PLACEHOLDER + DECIMAL_SEPARATOR + "0".repeat(CLASSIC_DECIMALS)
+        }
+    }
+    if (displayUnit.isModern()) return ""
     val normalizedBtcValue = sanitizeDecimalInput(
         raw = normalizeCalculatorDecimalInput(
             rawValue = btcValue,
@@ -112,6 +119,7 @@ internal fun formatBitcoinPlaceholder(
     return formatMissingDecimalZeros(
         value = normalizedBtcValue,
         maxDecimalPlaces = CLASSIC_DECIMALS,
+        includeDecimalSeparatorIfMissing = true,
     )
 }
 
@@ -119,7 +127,7 @@ internal fun formatFiatPlaceholder(
     fiatValue: String,
     locale: Locale = Locale.getDefault(),
 ): String {
-    if (fiatValue.isEmpty()) return ""
+    if (fiatValue.isEmpty()) return ZERO_PLACEHOLDER
     val normalizedFiatValue = sanitizeDecimalInput(
         raw = normalizeCalculatorDecimalInput(
             rawValue = fiatValue,
@@ -268,8 +276,15 @@ private fun formatGroupedIntegerPreservingZeros(
 private fun formatMissingDecimalZeros(
     value: String,
     maxDecimalPlaces: Int,
+    includeDecimalSeparatorIfMissing: Boolean = false,
 ): String {
-    if (!value.contains(PERIOD_SEPARATOR)) return ""
+    if (!value.contains(PERIOD_SEPARATOR)) {
+        return if (includeDecimalSeparatorIfMissing) {
+            DECIMAL_SEPARATOR + "0".repeat(maxDecimalPlaces)
+        } else {
+            ""
+        }
+    }
 
     val decimalLength = value.substringAfter(PERIOD_SEPARATOR).length
     val remainingDecimals = maxDecimalPlaces - decimalLength
@@ -298,5 +313,6 @@ private fun BigDecimal.toSatsLongClamped(): Long {
 private val MAX_SATS_DECIMAL = BigDecimal.valueOf(Long.MAX_VALUE)
 
 private const val GROUP_SIZE = 3
+private const val ZERO_PLACEHOLDER = "0"
 private const val COMMA_SEPARATOR = ','
 private const val PERIOD_SEPARATOR = '.'
