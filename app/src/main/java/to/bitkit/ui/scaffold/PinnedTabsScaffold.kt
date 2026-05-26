@@ -1,4 +1,4 @@
-package to.bitkit.ui.components
+package to.bitkit.ui.scaffold
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box

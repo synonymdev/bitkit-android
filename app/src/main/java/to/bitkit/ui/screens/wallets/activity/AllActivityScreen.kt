@@ -22,10 +22,10 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.PinnedTabsScaffold
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab

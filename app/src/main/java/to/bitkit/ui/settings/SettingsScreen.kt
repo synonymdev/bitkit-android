@@ -34,7 +34,6 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
-import to.bitkit.ui.components.PinnedTabsScaffold
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
@@ -56,6 +55,7 @@ import to.bitkit.ui.navigateToTransactionSpeedSettings
 import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem

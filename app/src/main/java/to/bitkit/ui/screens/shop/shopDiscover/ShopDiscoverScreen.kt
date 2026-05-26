@@ -42,12 +42,12 @@ import to.bitkit.env.Env
 import to.bitkit.ext.configureForBasicWebContent
 import to.bitkit.models.BitrefillCategory
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.PinnedTabsScaffold
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
