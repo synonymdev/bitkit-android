@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import java.util.Calendar
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -66,6 +67,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
+private const val COPYRIGHT_YEAR_PLACEHOLDER = "{year}"
+private const val COPYRIGHT_YEAR_TOKEN = "2025"
 
 @Composable
 fun SupportScreen(
@@ -142,6 +145,10 @@ private fun Content(
     onClickVersion: () -> Unit = {},
 ) {
     val appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+    val currentYear = remember { Calendar.getInstance().get(Calendar.YEAR).toString() }
+    val copyrightText = stringResource(R.string.settings__support__copyright)
+        .replace(COPYRIGHT_YEAR_PLACEHOLDER, currentYear)
+        .replace(COPYRIGHT_YEAR_TOKEN, currentYear)
 
     Column(
         modifier = Modifier
@@ -219,13 +226,15 @@ private fun Content(
 
             FillHeight()
 
-            SupportFooter()
+            SupportFooter(copyrightText = copyrightText)
         }
     }
 }
 
 @Composable
-private fun SupportFooter() {
+private fun SupportFooter(
+    copyrightText: String,
+) {
     // Bitkit logo with diagonal orange crossing through it
     Box(
         modifier = Modifier
@@ -269,7 +278,7 @@ private fun SupportFooter() {
         VerticalSpacer(16.dp)
 
         BodyM(
-            text = stringResource(R.string.settings__support__copyright),
+            text = copyrightText,
             color = Colors.White64,
         )
 

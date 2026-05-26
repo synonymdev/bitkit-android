@@ -888,7 +888,7 @@
     <string name="settings__support__report">Report Issue</string>
     <string name="settings__support__report_text">Please describe the issue you are experiencing or ask a general question.</string>
     <string name="settings__support__status">App Status</string>
-    <string name="settings__support__copyright">Bitkit was crafted by Synonym Software, S.A. DE C.V. ©2025. All rights reserved.</string>
+    <string name="settings__support__copyright">Bitkit was crafted by Synonym Software, S.A. DE C.V. ©{year}. All rights reserved.</string>
     <string name="settings__support__text">Need help? Report your issue from within Bitkit or visit our help center.</string>
     <string name="settings__support__text_button">Send</string>
     <string name="settings__support__text_success">Thank you for contacting us! We will try to get back to you as soon as possible.</string>
