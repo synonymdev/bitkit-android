@@ -31,6 +31,9 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
+// Trezor PINs can be up to 50 digits (https://trezor.io/learn/a/pin-protection-on-trezor-devices).
+private const val MAX_PIN_LENGTH = 50
+
 @Composable
 internal fun PinEntryDialog(
     onSubmit: (String) -> Unit,
@@ -65,7 +68,7 @@ internal fun PinEntryDialog(
                 )
                 VerticalSpacer(12.dp)
                 PinMatrix(
-                    onDigit = { digit -> if (pin.length < 9) pin += digit },
+                    onDigit = { digit -> if (pin.length < MAX_PIN_LENGTH) pin += digit },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 VerticalSpacer(8.dp)

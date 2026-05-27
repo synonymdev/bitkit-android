@@ -80,8 +80,11 @@ class TrezorUiHandler @Inject constructor() : TrezorUiCallback {
         TrezorWalletMode.PASSPHRASE_DEVICE -> WalletSelection.OnDevice
         TrezorWalletMode.PASSPHRASE_HOST -> {
             val cached = hostPassphrase
-            if (cached.isNullOrEmpty()) WalletSelection.Standard
-            else WalletSelection.Hidden(passphrase = cached)
+            if (cached.isNullOrEmpty()) {
+                WalletSelection.Standard
+            } else {
+                WalletSelection.Hidden(passphrase = cached)
+            }
         }
     }
 

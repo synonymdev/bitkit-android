@@ -490,7 +490,10 @@ private fun WalletModeRow(
 
     if (showHostEntry) {
         // Collect the passphrase up front — on THP it's bound at session creation.
+        // Only offer the "enter on Trezor" shortcut when the device supports it;
+        // otherwise picking it would select PASSPHRASE_DEVICE and fail to connect.
         PassphraseDialog(
+            allowDeviceEntry = passphraseEntryCapable,
             onSubmit = { passphrase ->
                 showHostEntry = false
                 onSetWalletMode(TrezorWalletMode.PASSPHRASE_HOST, passphrase)

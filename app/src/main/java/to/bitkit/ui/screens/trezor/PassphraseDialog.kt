@@ -30,6 +30,7 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 internal fun PassphraseDialog(
+    allowDeviceEntry: Boolean,
     onSubmit: (String) -> Unit,
     onUseTrezor: () -> Unit,
     onCancel: () -> Unit,
@@ -71,13 +72,15 @@ internal fun PassphraseDialog(
                         cursorColor = Colors.Brand,
                     ),
                 )
-                VerticalSpacer(12.dp)
-                TertiaryButton(
-                    text = "Enter on Trezor instead",
-                    onClick = onUseTrezor,
-                    size = ButtonSize.Small,
-                    fullWidth = false,
-                )
+                if (allowDeviceEntry) {
+                    VerticalSpacer(12.dp)
+                    TertiaryButton(
+                        text = "Enter on Trezor instead",
+                        onClick = onUseTrezor,
+                        size = ButtonSize.Small,
+                        fullWidth = false,
+                    )
+                }
             }
         },
         confirmButton = {
@@ -105,7 +108,7 @@ internal fun PassphraseDialog(
 private fun PreviewPassphraseDialog() {
     AppThemeSurface {
         Box(Modifier.fillMaxSize()) {
-            PassphraseDialog(onSubmit = {}, onUseTrezor = {}, onCancel = {})
+            PassphraseDialog(allowDeviceEntry = true, onSubmit = {}, onUseTrezor = {}, onCancel = {})
         }
     }
 }
