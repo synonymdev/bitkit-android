@@ -68,6 +68,9 @@ fun DevSettingsScreen(
             SettingsButtonRow("VSS") { navController.navigateTo(Routes.VssDebug) }
             SettingsButtonRow("Probing Tool") { navController.navigateTo(Routes.ProbingTool) }
 
+            SectionHeader("RECOVERY")
+            SettingsButtonRow("Legacy RN Close Recovery") { navController.navigateTo(Routes.LegacyRnRecovery) }
+
             if (PaykitFeatureFlags.isUiAvailable) {
                 SectionHeader("PAYKIT")
                 SettingsSwitchRow(
