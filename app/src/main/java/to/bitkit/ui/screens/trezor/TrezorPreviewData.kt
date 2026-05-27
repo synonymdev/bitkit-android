@@ -37,6 +37,7 @@ internal object TrezorPreviewData {
         passphraseProtection = false,
         initialized = true,
         needsBackup = false,
+        passphraseEntryCapable = true,
     )
 
     val sampleFeaturesMinimal = TrezorFeatures(
@@ -51,6 +52,7 @@ internal object TrezorPreviewData {
         passphraseProtection = null,
         initialized = null,
         needsBackup = null,
+        passphraseEntryCapable = null,
     )
 
     val sampleKnownDevice = KnownDevice(

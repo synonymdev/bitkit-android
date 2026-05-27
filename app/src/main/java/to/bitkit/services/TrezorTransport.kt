@@ -834,7 +834,11 @@ class TrezorTransport @Inject constructor(
     @SuppressLint("MissingPermission")
     private fun openBleDevice(path: String): TrezorTransportWriteResult {
         val address = path.removePrefix("ble:")
+        // Prefer a handle from a recent scan, but fall back to resolving the
+        // address directly so we can reconnect to a known device without a
+        // fresh scan — a scan right after a disconnect often finds nothing yet.
         val device = discoveredBleDevices[address]
+            ?: runCatching { bluetoothAdapter?.getRemoteDevice(address) }.getOrNull()
             ?: return TrezorTransportWriteResult(success = false, error = "Device not found: $path")
 
         closeBleDevice(path)

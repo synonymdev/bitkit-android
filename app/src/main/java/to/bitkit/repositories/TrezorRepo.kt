@@ -21,12 +21,14 @@ import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.WalletParams
+import com.synonym.bitkitcore.WalletSelection
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -42,6 +44,8 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
+import to.bitkit.services.TrezorUiHandler
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
@@ -55,6 +59,7 @@ class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trezorService: TrezorService,
     private val trezorTransport: TrezorTransport,
+    private val trezorUiHandler: TrezorUiHandler,
     private val trezorStore: TrezorStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -62,6 +67,7 @@ class TrezorRepo @Inject constructor(
         private const val TAG = "TrezorRepo"
         private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
         private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
+        private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
     }
 
     private val _state = MutableStateFlow(TrezorState())
@@ -85,6 +91,64 @@ class TrezorRepo @Inject constructor(
      */
     fun cancelPairingCode() {
         trezorTransport.cancelPairingCode()
+    }
+
+    val needsPinEntry = trezorUiHandler.needsPinEntry
+
+    fun submitPin(pin: String) {
+        trezorUiHandler.submitPin(pin)
+    }
+
+    fun cancelPin() {
+        trezorUiHandler.cancelPin()
+    }
+
+    val walletMode = trezorUiHandler.walletMode
+
+    /**
+     * Reset to the standard wallet and clear any selected passphrase, without
+     * reconnecting. Call this when the user explicitly picks a device from a
+     * list ([connect]/[connectKnownDevice]) so a passphrase or on-device
+     * selection left over from a previously connected device isn't silently
+     * applied to the newly selected one.
+     *
+     * Silent reconnects ([autoReconnect]/[ensureConnected]) deliberately skip
+     * this, so a dropped link reopens the same hidden wallet the user was using.
+     */
+    fun resetWalletSelection() {
+        trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
+    }
+
+    /**
+     * Switch between the standard wallet and a passphrase (hidden) wallet.
+     *
+     * The Trezor caches the passphrase for the whole session, so switching
+     * requires a fresh session: this sets the desired mode, then disconnects
+     * and reconnects. The new mode takes effect on the next wallet operation.
+     */
+    suspend fun setWalletMode(
+        mode: TrezorWalletMode,
+        passphrase: String = "",
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
+        runCatching {
+            val deviceId = _state.value.connectedDeviceId
+                ?: throw AppError("No connected Trezor")
+            TrezorDebugLog.log("WALLET_MODE", "Switching to $mode, resetting session for $deviceId")
+            // Reset the session via disconnect/reconnect. disconnect() resets the
+            // UI handler's wallet mode to standard, so set the desired mode AFTER
+            // the disconnect and right before reconnecting.
+            runCatching { disconnect() }
+            // Reconnect by id WITHOUT a scan: scan() clears the discovered-device
+            // cache and a scan right after a disconnect usually finds nothing,
+            // whereas the cached handle (and direct address resolution) still work.
+            delay(WALLET_MODE_RECONNECT_DELAY_MS)
+            // Record the selection on the handler: THP reads it via
+            // currentSelection() to bind the passphrase at session creation,
+            // while non-THP devices re-request it mid-operation and are answered
+            // from the same value. connect() then derives the wallet from it.
+            trezorUiHandler.setWalletMode(mode, passphrase)
+            connect(deviceId).getOrThrow()
+        }
     }
 
     suspend fun initialize(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
@@ -131,7 +195,7 @@ class TrezorRepo @Inject constructor(
         runCatching {
             _state.update { it.copy(isConnecting = true, error = null) }
             TrezorDebugLog.log("CONNECT", "connect() called for deviceId=$deviceId")
-            val features = connectWithThpRetry(deviceId)
+            val features = connectWithThpRetry(deviceId, trezorUiHandler.currentSelection())
             TrezorDebugLog.log("CONNECT", "connect() succeeded: label=${features.label}, model=${features.model}")
             val deviceInfo = _state.value.nearbyDevices.find { it.id == deviceId }
                 ?: _state.value.knownDevices.find { it.id == deviceId }?.let { known ->
@@ -319,6 +383,14 @@ class TrezorRepo @Inject constructor(
     suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
         TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=${_state.value.connectedDeviceId}")
         val result = runCatching { trezorService.disconnect() }
+        // Mirror the core: trezorService.disconnect() resets the session
+        // passphrase to the standard wallet, so reset the UI handler's wallet
+        // mode too. This keeps the THP path, the legacy PassphraseRequest
+        // callback, and the displayed mode consistent on the next (re)connect —
+        // a hidden wallet must be re-selected explicitly after an explicit
+        // disconnect. (A transient external disconnect does not call this and so
+        // retains the selection, matching the core's behaviour.)
+        trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
         _state.update {
             it.copy(connected = null, lastAddress = null, lastPublicKey = null)
         }
@@ -428,20 +500,13 @@ class TrezorRepo @Inject constructor(
                 "RECONNECT",
                 "Scan found ${scannedDevices.size} devices: ${scannedDevices.map { it.id }}",
             )
-            val exactMatch = scannedDevices.find { it.id == deviceId }
-            val knownIds = _state.value.knownDevices.map { it.id }.toSet()
-            val usbDevice = scannedDevices.find {
-                it.transportType == TrezorTransportType.USB && it.id in knownIds
-            }
-            val device = if (exactMatch?.transportType == TrezorTransportType.BLUETOOTH && usbDevice != null) {
-                TrezorDebugLog.log("RECONNECT", "Preferring USB over BLE")
-                usbDevice
-            } else {
-                exactMatch ?: throw AppError("Device not found nearby — is it powered on?")
-            }
+            // Honor the transport the user selected — connect to exactly the
+            // entry they tapped instead of overriding Bluetooth with USB.
+            val device = scannedDevices.find { it.id == deviceId }
+                ?: throw AppError("Device not found nearby — is it powered on?")
             TrezorDebugLog.log("RECONNECT", "Found matching device: id=${device.id}, name=${device.name}")
             TrezorDebugLog.log("RECONNECT", "Calling connectWithThpRetry...")
-            val features = connectWithThpRetry(device.id)
+            val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
             TrezorDebugLog.log("RECONNECT", "Connected! label=${features.label}, model=${features.model}")
             addOrUpdateKnownDevice(device, features)
             _state.update {
@@ -461,6 +526,9 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             val disconnectResult = if (_state.value.connectedDeviceId == deviceId) {
                 runCatching { trezorService.disconnect() }.also {
+                    // Clear any cached host passphrase so it can't be reused
+                    // against a different device on a later connect.
+                    trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
                     _state.update { it.copy(connected = null) }
                 }
             } else {
@@ -541,7 +609,7 @@ class TrezorRepo @Inject constructor(
         val devices = trezorService.scan()
         val device = devices.find { it.id == deviceId }
             ?: throw AppError("Device not found during reconnect")
-        val features = connectWithThpRetry(device.id)
+        val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
         _state.update { it.copy(connected = ConnectedTrezorDevice(id = deviceId, features = features)) }
     }
 
@@ -555,11 +623,14 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    private suspend fun connectWithThpRetry(deviceId: String): TrezorFeatures {
+    private suspend fun connectWithThpRetry(
+        deviceId: String,
+        selection: WalletSelection,
+    ): TrezorFeatures {
         TrezorDebugLog.log("THPRetry", "First connect attempt for: $deviceId")
         logCredentialFileState(deviceId, "BEFORE 1st attempt")
         return runCatching {
-            trezorService.connect(deviceId)
+            trezorService.connect(deviceId, selection)
         }.onSuccess {
             logCredentialFileState(deviceId, "AFTER 1st attempt (success)")
             TrezorDebugLog.log("THPRetry", "First attempt succeeded")
@@ -573,7 +644,7 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
             Logger.warn("Connection failed for $deviceId, retrying", e, context = TAG)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
-            val result = trezorService.connect(deviceId)
+            val result = trezorService.connect(deviceId, selection)
             logCredentialFileState(deviceId, "AFTER 2nd attempt (success)")
             TrezorDebugLog.log("THPRetry", "Second attempt succeeded")
             result
@@ -591,6 +662,11 @@ class TrezorRepo @Inject constructor(
 
     private fun isRetryableError(e: Throwable): Boolean {
         val msg = e.message?.lowercase() ?: return false
+        // A rejected session (wrong passphrase, or the user cancelling on-device
+        // passphrase entry) is a definitive failure, not a transient THP/transport
+        // hiccup. Retrying it just re-prompts the device and risks wedging the
+        // connection, so don't treat ThpCreateNewSession rejections as retryable.
+        if ("rejected" in msg) return false
         return "thp" in msg || "session" in msg || "timeout" in msg || "disconnect" in msg
     }
 }

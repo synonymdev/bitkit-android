@@ -51,6 +51,7 @@ import to.bitkit.repositories.ConnectedTrezorDevice
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorDebugLog
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
@@ -96,6 +97,8 @@ private fun TrezorScreenContent(
     val trezorState by viewModel.trezorState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val needsPairingCode by viewModel.needsPairingCode.collectAsStateWithLifecycle()
+    val needsPinEntry by viewModel.needsPinEntry.collectAsStateWithLifecycle()
+    val walletMode by viewModel.walletMode.collectAsStateWithLifecycle()
 
     val permissionsState = rememberMultiplePermissionsState(bluetoothPermissions)
 
@@ -118,6 +121,13 @@ private fun TrezorScreenContent(
         )
     }
 
+    if (needsPinEntry) {
+        PinEntryDialog(
+            onSubmit = viewModel::submitPin,
+            onCancel = viewModel::cancelPin,
+        )
+    }
+
     ScreenColumn {
         AppTopBar(
             titleText = "Trezor",
@@ -132,6 +142,8 @@ private fun TrezorScreenContent(
             onConnectNearby = viewModel::connect,
             onConnectKnown = viewModel::connectKnownDevice,
             onForgetDevice = viewModel::forgetDevice,
+            walletMode = walletMode,
+            onSetWalletMode = viewModel::setWalletMode,
             onGetAddress = viewModel::getAddress,
             onGetPublicKey = viewModel::getPublicKey,
             onIncrementIndex = viewModel::incrementAddressIndex,
@@ -170,6 +182,8 @@ private fun Content(
     onConnectNearby: (String) -> Unit = {},
     onConnectKnown: (String) -> Unit = {},
     onForgetDevice: (KnownDevice) -> Unit = {},
+    walletMode: TrezorWalletMode = TrezorWalletMode.STANDARD,
+    onSetWalletMode: (TrezorWalletMode, String) -> Unit = { _, _ -> },
     onGetAddress: (Boolean) -> Unit = {},
     onGetPublicKey: (Boolean) -> Unit = {},
     onIncrementIndex: () -> Unit = {},
@@ -231,6 +245,14 @@ private fun Content(
                     onDisconnect = onDisconnect,
                     permissionsGranted = permissionsGranted,
                 )
+
+                if (trezorState.connected != null) {
+                    WalletModeRow(
+                        walletMode = walletMode,
+                        passphraseEntryCapable = trezorState.connectedDevice?.passphraseEntryCapable == true,
+                        onSetWalletMode = onSetWalletMode,
+                    )
+                }
 
                 // Known Devices Section
                 AnimatedVisibility(
@@ -409,6 +431,76 @@ private fun Content(
                 DebugLogSection()
             }
         }
+    }
+}
+
+@Composable
+private fun WalletModeRow(
+    walletMode: TrezorWalletMode,
+    passphraseEntryCapable: Boolean,
+    onSetWalletMode: (TrezorWalletMode, String) -> Unit,
+) {
+    var showChooser by remember { mutableStateOf(false) }
+    var showHostEntry by remember { mutableStateOf(false) }
+
+    Column {
+        VerticalSpacer(16.dp)
+        Caption13Up("WALLET", color = Colors.White64)
+        VerticalSpacer(8.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TagButton(
+                text = "Standard",
+                onClick = { onSetWalletMode(TrezorWalletMode.STANDARD, "") },
+                isSelected = walletMode == TrezorWalletMode.STANDARD,
+            )
+            TagButton(
+                text = "Passphrase",
+                onClick = {
+                    // Capable devices can enter on-device, so offer the choice;
+                    // otherwise go straight to host passphrase entry.
+                    if (passphraseEntryCapable) showChooser = true else showHostEntry = true
+                },
+                isSelected = walletMode != TrezorWalletMode.STANDARD,
+            )
+        }
+        VerticalSpacer(4.dp)
+        Footnote(
+            text = when (walletMode) {
+                TrezorWalletMode.STANDARD -> "Standard wallet (no passphrase)"
+                TrezorWalletMode.PASSPHRASE_HOST -> "Hidden wallet — passphrase entered on this phone"
+                TrezorWalletMode.PASSPHRASE_DEVICE -> "Hidden wallet — passphrase entered on the Trezor"
+            },
+            color = Colors.White64,
+        )
+    }
+
+    if (showChooser) {
+        WalletModeChooserDialog(
+            onHost = {
+                showChooser = false
+                showHostEntry = true
+            },
+            onTrezor = {
+                showChooser = false
+                onSetWalletMode(TrezorWalletMode.PASSPHRASE_DEVICE, "")
+            },
+            onCancel = { showChooser = false },
+        )
+    }
+
+    if (showHostEntry) {
+        // Collect the passphrase up front — on THP it's bound at session creation.
+        PassphraseDialog(
+            onSubmit = { passphrase ->
+                showHostEntry = false
+                onSetWalletMode(TrezorWalletMode.PASSPHRASE_HOST, passphrase)
+            },
+            onUseTrezor = {
+                showHostEntry = false
+                onSetWalletMode(TrezorWalletMode.PASSPHRASE_DEVICE, "")
+            },
+            onCancel = { showHostEntry = false },
+        )
     }
 }
 
