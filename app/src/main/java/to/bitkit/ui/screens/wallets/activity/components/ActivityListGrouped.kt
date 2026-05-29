@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +48,7 @@ fun ActivityListGrouped(
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(top = 20.dp),
@@ -65,6 +68,7 @@ fun ActivityListGrouped(
             val groupedItems = groupActivityItems(items)
 
             LazyColumn(
+                state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = contentPadding,
                 modifier = Modifier.fillMaxWidth()
@@ -146,6 +150,7 @@ fun ActivityListGrouped(
                     color = Colors.White64,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(top = contentPadding.calculateTopPadding())
                         .padding(16.dp)
                 )
             }

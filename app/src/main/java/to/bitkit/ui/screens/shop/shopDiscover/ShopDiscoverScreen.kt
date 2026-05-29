@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.shop.shopDiscover
 
 import android.annotation.SuppressLint
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.annotation.StringRes
@@ -8,12 +9,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -22,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,9 +34,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.configureForBasicWebContent
@@ -42,6 +49,7 @@ import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
@@ -64,26 +72,39 @@ fun ShopDiscoverScreen(
     modifier: Modifier = Modifier,
 ) {
     val tabs = remember { ShopDiscoverTab.entries.toImmutableList() }
-    var selectedTab by remember { mutableStateOf(ShopDiscoverTab.Shop) }
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val scope = rememberCoroutineScope()
 
     ScreenColumn(modifier = modifier) {
-        AppTopBar(
-            titleText = stringResource(R.string.other__shop__discover__nav_title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
-        )
+        PinnedTabsScaffold(
+            header = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    AppTopBar(
+                        titleText = stringResource(R.string.other__shop__discover__nav_title),
+                        onBackClick = onBack,
+                        actions = { DrawerNavIcon() },
+                    )
 
-        CustomTabRowWithSpacing(
-            tabs = tabs,
-            currentTabIndex = tabs.indexOf(selectedTab),
-            selectedColor = Colors.White,
-            onTabChange = { selectedTab = it },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+                    CustomTabRowWithSpacing(
+                        tabs = tabs,
+                        currentTabIndex = pagerState.currentPage,
+                        selectedColor = Colors.White,
+                        onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+            }
+        ) { topPadding ->
+            HorizontalPager(state = pagerState) { page ->
+                when (tabs[page]) {
+                    ShopDiscoverTab.Shop -> ShopTabContent(
+                        navigateWebView = navigateWebView,
+                        contentPadding = PaddingValues(top = topPadding, bottom = 42.dp),
+                    )
 
-        when (selectedTab) {
-            ShopDiscoverTab.Shop -> ShopTabContent(navigateWebView = navigateWebView)
-            ShopDiscoverTab.Map -> MapTabContent()
+                    ShopDiscoverTab.Map -> MapTabContent(topPadding = topPadding)
+                }
+            }
         }
     }
 }
@@ -92,8 +113,10 @@ fun ShopDiscoverScreen(
 private fun ShopTabContent(
     navigateWebView: (String, String) -> Unit,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     LazyColumn(
+        contentPadding = contentPadding,
         modifier = modifier.padding(horizontal = 16.dp)
     ) {
         item {
@@ -213,10 +236,11 @@ private fun ShopTabContent(
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
 @Composable
 private fun MapTabContent(
     modifier: Modifier = Modifier,
+    topPadding: Dp = 0.dp,
 ) {
     var isLoading by remember { mutableStateOf(true) }
 
@@ -229,7 +253,7 @@ private fun MapTabContent(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = topPadding + 16.dp)
             .clip(Shapes.medium)
     ) {
         AndroidView(
@@ -242,6 +266,20 @@ private fun MapTabContent(
 
                     this.webViewClient = webViewClient
                     configureForBasicWebContent()
+                    // Keep the parent HorizontalPager from intercepting horizontal pans while the user is
+                    // interacting with the map. Outside the WebView bounds the pager still swipes normally.
+                    setOnTouchListener { view, event ->
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN,
+                            MotionEvent.ACTION_MOVE,
+                            -> view.parent?.requestDisallowInterceptTouchEvent(true)
+
+                            MotionEvent.ACTION_UP,
+                            MotionEvent.ACTION_CANCEL,
+                            -> view.parent?.requestDisallowInterceptTouchEvent(false)
+                        }
+                        false
+                    }
                     loadUrl(Env.BTC_MAP_URL)
                 }
             },

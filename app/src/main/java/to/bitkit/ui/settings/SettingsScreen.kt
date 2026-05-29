@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +55,7 @@ import to.bitkit.ui.navigateToTransactionSpeedSettings
 import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
@@ -220,30 +222,37 @@ private fun SettingsContent(
             actions = { DrawerNavIcon() },
         )
 
-        CustomTabRowWithSpacing(
-            tabs = tabs,
-            currentTabIndex = pagerState.currentPage,
-            selectedColor = Colors.White,
-            onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
-        HorizontalPager(state = pagerState) { page ->
-            when (tabs[page]) {
-                SettingsTab.General -> GeneralTabContent(
-                    state = generalState,
-                    onEvent = onEvent,
+        PinnedTabsScaffold(
+            header = {
+                CustomTabRowWithSpacing(
+                    tabs = tabs,
+                    currentTabIndex = pagerState.currentPage,
+                    selectedColor = Colors.White,
+                    onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
+            }
+        ) { topPadding ->
+            HorizontalPager(state = pagerState) { page ->
+                when (tabs[page]) {
+                    SettingsTab.General -> GeneralTabContent(
+                        state = generalState,
+                        onEvent = onEvent,
+                        topPadding = topPadding,
+                    )
 
-                SettingsTab.Security -> SecurityTabContent(
-                    state = securityState,
-                    onEvent = onEvent,
-                )
+                    SettingsTab.Security -> SecurityTabContent(
+                        state = securityState,
+                        onEvent = onEvent,
+                        topPadding = topPadding,
+                    )
 
-                SettingsTab.Advanced -> AdvancedTabContent(
-                    state = advancedState,
-                    onEvent = onEvent,
-                )
+                    SettingsTab.Advanced -> AdvancedTabContent(
+                        state = advancedState,
+                        onEvent = onEvent,
+                        topPadding = topPadding,
+                    )
+                }
             }
         }
     }
@@ -253,12 +262,13 @@ private fun SettingsContent(
 private fun GeneralTabContent(
     state: GeneralTabState,
     onEvent: OnSettingsEvent,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(top = topPadding, start = 16.dp, end = 16.dp)
     ) {
         SectionHeader(title = stringResource(R.string.settings__general__section_interface))
 
@@ -364,12 +374,13 @@ private fun GeneralTabContent(
 private fun SecurityTabContent(
     state: SecurityTabState,
     onEvent: OnSettingsEvent,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(top = topPadding, start = 16.dp, end = 16.dp)
     ) {
         SectionHeader(title = stringResource(R.string.settings__security__section_backup))
 
@@ -480,12 +491,13 @@ private fun SecurityTabContent(
 private fun AdvancedTabContent(
     state: AdvancedTabState,
     onEvent: OnSettingsEvent,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(top = topPadding, start = 16.dp, end = 16.dp)
             .testTag("advanced_settings_screen")
     ) {
         if (state.isDevModeEnabled) {
