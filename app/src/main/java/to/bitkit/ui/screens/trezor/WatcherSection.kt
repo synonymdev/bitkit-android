@@ -108,6 +108,7 @@ internal fun WatcherSection(
             SecondaryButton(
                 text = "Stop Watching",
                 onClick = onStopWatcher,
+                enabled = !uiState.isStartingWatcher,
                 size = ButtonSize.Small,
             )
         } else {
