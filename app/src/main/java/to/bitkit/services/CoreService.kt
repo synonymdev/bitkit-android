@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
@@ -16,6 +17,8 @@ import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
+import com.synonym.bitkitcore.LegacyRnCloseRecoveryScanResult
+import com.synonym.bitkitcore.LegacyRnCloseRecoverySweepPreview
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
@@ -28,6 +31,7 @@ import com.synonym.bitkitcore.addTags
 import com.synonym.bitkitcore.createCjitEntry
 import com.synonym.bitkitcore.createOrder
 import com.synonym.bitkitcore.deleteActivityById
+import com.synonym.bitkitcore.deriveOnchainDescriptor
 import com.synonym.bitkitcore.estimateOrderFeeFull
 import com.synonym.bitkitcore.getActivities
 import com.synonym.bitkitcore.getActivityById
@@ -40,10 +44,13 @@ import com.synonym.bitkitcore.getOrders
 import com.synonym.bitkitcore.getTags
 import com.synonym.bitkitcore.initDb
 import com.synonym.bitkitcore.insertActivity
+import com.synonym.bitkitcore.onchainBroadcastRawTx
 import com.synonym.bitkitcore.openChannel
+import com.synonym.bitkitcore.prepareLegacyRnNativeSegwitRecoverySweep
 import com.synonym.bitkitcore.refreshActiveCjitEntries
 import com.synonym.bitkitcore.refreshActiveOrders
 import com.synonym.bitkitcore.removeTags
+import com.synonym.bitkitcore.scanLegacyRnNativeSegwitRecoveryFunds
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.updateBlocktankUrl
 import com.synonym.bitkitcore.upsertActivities
@@ -1810,6 +1817,56 @@ class OnchainService {
         }
     }
 
+    suspend fun scanLegacyRnNativeSegwitRecoveryFunds(
+        mnemonicPhrase: String,
+        network: Network?,
+        electrumUrl: String,
+        indexLimit: UInt,
+        bip39Passphrase: String?,
+    ): LegacyRnCloseRecoveryScanResult {
+        return ServiceQueue.CORE.background {
+            scanLegacyRnNativeSegwitRecoveryFunds(
+                mnemonicPhrase = mnemonicPhrase,
+                network = network?.toCoreNetwork(),
+                electrumUrl = electrumUrl,
+                indexLimit = indexLimit,
+                bip39Passphrase = bip39Passphrase,
+            )
+        }
+    }
+
+    @Suppress("LongParameterList")
+    suspend fun prepareLegacyRnNativeSegwitRecoverySweep(
+        mnemonicPhrase: String,
+        network: Network?,
+        electrumUrl: String,
+        destinationAddress: String,
+        feeRateSatsPerVbyte: UInt?,
+        indexLimit: UInt,
+        bip39Passphrase: String?,
+    ): LegacyRnCloseRecoverySweepPreview {
+        return ServiceQueue.CORE.background {
+            prepareLegacyRnNativeSegwitRecoverySweep(
+                mnemonicPhrase = mnemonicPhrase,
+                network = network?.toCoreNetwork(),
+                electrumUrl = electrumUrl,
+                destinationAddress = destinationAddress,
+                feeRateSatsPerVbyte = feeRateSatsPerVbyte,
+                indexLimit = indexLimit,
+                bip39Passphrase = bip39Passphrase,
+            )
+        }
+    }
+
+    suspend fun broadcastRawTx(
+        serializedTx: String,
+        electrumUrl: String,
+    ): String {
+        return ServiceQueue.CORE.background {
+            onchainBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
+        }
+    }
+
     suspend fun derivePrivateKey(
         mnemonicPhrase: String,
         derivationPathStr: String?,
@@ -1822,6 +1879,24 @@ class OnchainService {
                 derivationPathStr = derivationPathStr,
                 network = network?.toCoreNetwork(),
                 bip39Passphrase = bip39Passphrase,
+            )
+        }
+    }
+
+    suspend fun deriveOnchainDescriptor(
+        mnemonicPhrase: String,
+        network: Network,
+        bip39Passphrase: String?,
+        accountType: AccountType,
+        accountIndex: UInt,
+    ): String {
+        return ServiceQueue.CORE.background {
+            deriveOnchainDescriptor(
+                mnemonicPhrase = mnemonicPhrase,
+                network = network.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+                accountType = accountType,
+                accountIndex = accountIndex,
             )
         }
     }

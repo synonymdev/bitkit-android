@@ -94,6 +94,7 @@ import to.bitkit.ui.screens.recovery.RecoveryModeScreen
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.settings.LdkDebugScreen
+import to.bitkit.ui.screens.settings.LegacyRnRecoveryScreen
 import to.bitkit.ui.screens.settings.ProbingToolScreen
 import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
@@ -186,6 +187,7 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
@@ -442,6 +444,7 @@ fun ContentView(
                             onDismiss = { appViewModel.hideSheet() },
                         )
 
+                        is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         Sheet.QrScanner -> QrScanningSheet(appViewModel)
                         is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(
@@ -954,6 +957,9 @@ private fun NavGraphBuilder.settings(
     }
     composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.LegacyRnRecovery> {
+        LegacyRnRecoveryScreen(navController)
     }
     composableWithDefaultTransitions<Routes.Trezor> {
         TrezorScreen(navController)
@@ -1945,6 +1951,9 @@ sealed interface Routes {
 
     @Serializable
     data object DevSettings : Routes
+
+    @Serializable
+    data object LegacyRnRecovery : Routes
 
     @Serializable
     data object LdkDebug : Routes

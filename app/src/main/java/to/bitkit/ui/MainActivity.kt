@@ -34,6 +34,7 @@ import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
@@ -237,10 +238,12 @@ class MainActivity : FragmentActivity() {
     }
 }
 
-private fun Intent?.launchKey(): String? {
+internal fun Intent?.launchKey(): String? {
     this ?: return null
     return when (action) {
-        Intent.ACTION_VIEW -> data?.toString()
+        Intent.ACTION_VIEW -> data?.toString()?.let {
+            SamRockSetupRequest.sanitizedLaunchKey(it) ?: it
+        }
         else -> null
     }
 }

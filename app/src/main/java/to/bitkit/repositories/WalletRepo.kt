@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import androidx.compose.runtime.Immutable
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.LegacyRnCloseRecoveryScanResult
+import com.synonym.bitkitcore.LegacyRnCloseRecoverySweepPreview
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.ImmutableList
@@ -111,6 +113,77 @@ class WalletRepo @Inject constructor(
             coreService.isAddressUsed(address)
         }.onFailure {
             Logger.error("checkAddressUsage error", it, context = TAG)
+        }
+    }
+
+    suspend fun scanLegacyRnNativeSegwitRecoveryFunds(
+        indexLimit: UInt,
+    ): Result<LegacyRnCloseRecoveryScanResult> = withContext(bgDispatcher) {
+        runCatching {
+            val (mnemonic, passphrase) = recoveryWalletCredentials()
+            val electrumUrl = settingsStore.data.first().electrumServer
+
+            coreService.onchain.scanLegacyRnNativeSegwitRecoveryFunds(
+                mnemonicPhrase = mnemonic,
+                network = Env.network,
+                electrumUrl = electrumUrl,
+                indexLimit = indexLimit,
+                bip39Passphrase = passphrase,
+            )
+        }.onFailure {
+            Logger.error("Legacy RN recovery scan failed", it, context = TAG)
+        }
+    }
+
+    suspend fun prepareLegacyRnNativeSegwitRecoverySweep(
+        indexLimit: UInt,
+        feeRateSatsPerVbyte: UInt?,
+    ): Result<LegacyRnCloseRecoverySweepPreview> = withContext(bgDispatcher) {
+        runCatching {
+            val (mnemonic, passphrase) = recoveryWalletCredentials()
+            val electrumUrl = settingsStore.data.first().electrumServer
+            val destinationAddress = recoverySweepDestinationAddress()
+
+            coreService.onchain.prepareLegacyRnNativeSegwitRecoverySweep(
+                mnemonicPhrase = mnemonic,
+                network = Env.network,
+                electrumUrl = electrumUrl,
+                destinationAddress = destinationAddress,
+                feeRateSatsPerVbyte = feeRateSatsPerVbyte,
+                indexLimit = indexLimit,
+                bip39Passphrase = passphrase,
+            )
+        }.onFailure {
+            Logger.error("Legacy RN recovery sweep prepare failed", it, context = TAG)
+        }
+    }
+
+    suspend fun broadcastLegacyRnNativeSegwitRecoverySweep(txHex: String): Result<String> = withContext(bgDispatcher) {
+        runCatching {
+            val electrumUrl = settingsStore.data.first().electrumServer
+            val txid = coreService.onchain.broadcastRawTx(serializedTx = txHex, electrumUrl = electrumUrl)
+            syncNodeAndWallet(SyncSource.MANUAL).onFailure {
+                Logger.warn("Legacy RN recovery post-broadcast sync failed", it, context = TAG)
+            }
+            txid
+        }.onFailure {
+            Logger.error("Legacy RN recovery sweep broadcast failed", it, context = TAG)
+        }
+    }
+
+    private fun recoveryWalletCredentials(): Pair<String, String?> {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        return mnemonic to passphrase
+    }
+
+    private suspend fun recoverySweepDestinationAddress(): String {
+        val currentAddress = getOnchainAddress()
+        if (currentAddress.isNotBlank()) return currentAddress
+
+        return newAddress().getOrThrow().also {
+            require(it.isNotBlank()) { "Destination address unavailable" }
         }
     }
 
