@@ -1,8 +1,10 @@
 package to.bitkit.ui.screens.trezor
 
 import com.synonym.bitkitcore.TrezorSignedTx
+import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -34,6 +36,7 @@ class TrezorViewModelTest : BaseUnitTest() {
     private val needsPairingCodeFlow = MutableStateFlow(false)
     private val needsPinEntryFlow = MutableStateFlow(false)
     private val walletModeFlow = MutableStateFlow(TrezorWalletMode.STANDARD)
+    private val watcherEventsFlow = MutableSharedFlow<Pair<String, WatcherEvent>>()
 
     private lateinit var sut: TrezorViewModel
 
@@ -43,6 +46,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         whenever(trezorRepo.needsPairingCode).thenReturn(needsPairingCodeFlow)
         whenever(trezorRepo.needsPinEntry).thenReturn(needsPinEntryFlow)
         whenever(trezorRepo.walletMode).thenReturn(walletModeFlow)
+        whenever(trezorRepo.watcherEvents).thenReturn(watcherEventsFlow)
         whenever(trezorRepo.observeExternalDisconnects(any())).then { }
         sut = createViewModel()
     }

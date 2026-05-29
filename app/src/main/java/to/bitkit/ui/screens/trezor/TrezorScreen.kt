@@ -167,6 +167,11 @@ private fun TrezorScreenContent(
             onResetSend = viewModel::resetSendFlow,
             onTxHistoryInputChange = viewModel::setTxHistoryInput,
             onLookupTxHistory = viewModel::lookupTransactionHistory,
+            onWatcherExtendedKeyChange = viewModel::setWatcherExtendedKey,
+            onWatcherGapLimitChange = viewModel::setWatcherGapLimit,
+            onStartWatcher = viewModel::startWatcher,
+            onStopWatcher = viewModel::stopWatcher,
+            onPopulateWatcherFromXpub = viewModel::populateWatcherFromXpub,
             permissionsGranted = permissionsState.allPermissionsGranted,
         )
     }
@@ -207,6 +212,11 @@ private fun Content(
     onResetSend: () -> Unit = {},
     onTxHistoryInputChange: (String) -> Unit = {},
     onLookupTxHistory: () -> Unit = {},
+    onWatcherExtendedKeyChange: (String) -> Unit = {},
+    onWatcherGapLimitChange: (String) -> Unit = {},
+    onStartWatcher: () -> Unit = {},
+    onStopWatcher: () -> Unit = {},
+    onPopulateWatcherFromXpub: () -> Unit = {},
     permissionsGranted: Boolean = true,
 ) {
     Column(
@@ -419,12 +429,24 @@ private fun Content(
                     onResetSend = onResetSend,
                 )
 
-                // Transaction History (always visible, no device needed)
+                // Transaction History (one-shot snapshot, no device needed)
                 VerticalSpacer(32.dp)
                 TransactionHistorySection(
                     uiState = uiState,
                     onInputChange = onTxHistoryInputChange,
                     onLookup = onLookupTxHistory,
+                )
+
+                // Event Watcher (live subscription, no device needed)
+                VerticalSpacer(32.dp)
+                WatcherSection(
+                    uiState = uiState,
+                    trezorState = trezorState,
+                    onExtendedKeyChange = onWatcherExtendedKeyChange,
+                    onGapLimitChange = onWatcherGapLimitChange,
+                    onStartWatcher = onStartWatcher,
+                    onStopWatcher = onStopWatcher,
+                    onPopulateFromXpub = onPopulateWatcherFromXpub,
                 )
 
                 // Debug Log Window
@@ -668,7 +690,7 @@ private fun StatusRow(trezorState: TrezorState) {
 }
 
 @Composable
-private fun StatusBadge(text: String, color: Color) {
+internal fun StatusBadge(text: String, color: Color) {
     Caption(
         text = text,
         color = color,
