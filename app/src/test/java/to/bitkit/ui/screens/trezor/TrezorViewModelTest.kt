@@ -11,12 +11,14 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.repositories.TrezorRepo
 import to.bitkit.repositories.TrezorState
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -30,6 +32,8 @@ class TrezorViewModelTest : BaseUnitTest() {
     private val trezorRepo: TrezorRepo = mock()
     private val trezorStateFlow = MutableStateFlow(TrezorState())
     private val needsPairingCodeFlow = MutableStateFlow(false)
+    private val needsPinEntryFlow = MutableStateFlow(false)
+    private val walletModeFlow = MutableStateFlow(TrezorWalletMode.STANDARD)
 
     private lateinit var sut: TrezorViewModel
 
@@ -37,6 +41,8 @@ class TrezorViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(trezorRepo.state).thenReturn(trezorStateFlow)
         whenever(trezorRepo.needsPairingCode).thenReturn(needsPairingCodeFlow)
+        whenever(trezorRepo.needsPinEntry).thenReturn(needsPinEntryFlow)
+        whenever(trezorRepo.walletMode).thenReturn(walletModeFlow)
         whenever(trezorRepo.observeExternalDisconnects(any())).then { }
         sut = createViewModel()
     }
@@ -180,14 +186,33 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `connect should call trezorRepo connect with deviceId`() = test {
+    fun `connect should reset wallet selection then call trezorRepo connect with deviceId`() = test {
         val deviceId = "device-123"
         whenever(trezorRepo.connect(deviceId)).thenReturn(Result.failure(RuntimeException("test")))
 
         sut.connect(deviceId)
         advanceUntilIdle()
 
-        verify(trezorRepo).connect(deviceId)
+        // An explicit device pick starts from the standard wallet, so the reset
+        // must happen before the connect.
+        inOrder(trezorRepo) {
+            verify(trezorRepo).resetWalletSelection()
+            verify(trezorRepo).connect(deviceId)
+        }
+    }
+
+    @Test
+    fun `connectKnownDevice should reset wallet selection then call trezorRepo connectKnownDevice`() = test {
+        val deviceId = "device-123"
+        whenever(trezorRepo.connectKnownDevice(deviceId)).thenReturn(Result.failure(RuntimeException("test")))
+
+        sut.connectKnownDevice(deviceId)
+        advanceUntilIdle()
+
+        inOrder(trezorRepo) {
+            verify(trezorRepo).resetWalletSelection()
+            verify(trezorRepo).connectKnownDevice(deviceId)
+        }
     }
 
     @Test

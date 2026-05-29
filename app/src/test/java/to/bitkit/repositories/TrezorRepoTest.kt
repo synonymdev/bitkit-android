@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorTransportType
+import com.synonym.bitkitcore.WalletSelection
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
@@ -17,6 +18,7 @@ import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -25,6 +27,7 @@ import to.bitkit.data.TrezorStore
 import to.bitkit.env.Env
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
+import to.bitkit.services.TrezorUiHandler
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -51,6 +54,7 @@ class TrezorRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val trezorService = mock<TrezorService>()
     private val trezorTransport = mock<TrezorTransport>()
+    private val trezorUiHandler = mock<TrezorUiHandler>()
     private val trezorStore = mock<TrezorStore>()
     private val prefs = mock<SharedPreferences>()
     private val prefsEditor = mock<SharedPreferences.Editor>()
@@ -66,6 +70,8 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(prefsEditor.putString(any(), any())).thenReturn(prefsEditor)
         whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(false))
         whenever(trezorTransport.externalDisconnect).thenReturn(MutableSharedFlow())
+        whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
+        whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(context.filesDir).thenReturn(tempFolder.root)
         whenever { trezorStore.loadKnownDevices() }.thenReturn(emptyList())
     }
@@ -74,6 +80,7 @@ class TrezorRepoTest : BaseUnitTest() {
         context = context,
         trezorService = trezorService,
         trezorTransport = trezorTransport,
+        trezorUiHandler = trezorUiHandler,
         trezorStore = trezorStore,
         ioDispatcher = testDispatcher,
     )
@@ -201,7 +208,7 @@ class TrezorRepoTest : BaseUnitTest() {
     fun `connect should return features and update connectedDevice state`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
 
@@ -221,7 +228,7 @@ class TrezorRepoTest : BaseUnitTest() {
     fun `connect should persist connected device as known device`() = test {
         val features = mockFeatures(label = "Savings", model = "Safe 5")
         val device = mockDeviceInfo()
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
 
@@ -242,7 +249,7 @@ class TrezorRepoTest : BaseUnitTest() {
     fun `connect should retry once for retryable THP errors`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()
-        whenever(trezorService.connect(DEVICE_ID))
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
             .thenThrow(RuntimeException("thp timeout"))
             .thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
@@ -253,23 +260,23 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        verify(trezorService, times(2)).connect(DEVICE_ID)
+        verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
     }
 
     @Test
     fun `connect should not retry non-retryable errors`() = test {
-        whenever(trezorService.connect(DEVICE_ID)).thenThrow(RuntimeException("bad pin"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenThrow(RuntimeException("bad pin"))
         sut = createSut()
 
         val result = sut.connect(DEVICE_ID)
 
         assertTrue(result.isFailure)
-        verify(trezorService, times(1)).connect(DEVICE_ID)
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
     }
 
     @Test
     fun `connect should set error on failure`() = test {
-        whenever(trezorService.connect(DEVICE_ID)).thenThrow(RuntimeException("connect failed"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenThrow(RuntimeException("connect failed"))
         sut = createSut()
 
         val result = sut.connect(DEVICE_ID)
@@ -287,7 +294,7 @@ class TrezorRepoTest : BaseUnitTest() {
     fun `disconnect should clear connectedDevice state`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
 
@@ -310,7 +317,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val device = mockDeviceInfo()
         val addressResponse = mock<TrezorAddressResponse>()
         val publicKeyResponse = mock<TrezorPublicKeyResponse>()
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         whenever(trezorService.isConnected()).thenReturn(true)
         whenever(
@@ -496,7 +503,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val features = mockFeatures()
         whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.isConnected()).thenReturn(false)
         sut = createSut()
 
@@ -520,7 +527,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val features = mockFeatures()
         whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         sut = createSut()
 
         sut.initialize()
@@ -578,7 +585,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.isConnected()).thenReturn(false)
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(
             trezorService.getAddress(
                 path = any(),
@@ -596,7 +603,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(addressResponse, result.getOrNull())
         assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
         verify(trezorService).scan()
-        verify(trezorService).connect(DEVICE_ID)
+        verify(trezorService).connect(eq(DEVICE_ID), any())
     }
 
     // endregion
@@ -609,7 +616,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val features = mockFeatures()
         val device = mockDeviceInfo()
         whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
-        whenever(trezorService.connect(DEVICE_ID)).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
 

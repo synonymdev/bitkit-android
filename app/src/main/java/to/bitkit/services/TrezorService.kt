@@ -37,6 +37,7 @@ import com.synonym.bitkitcore.trezorIsInitialized
 import com.synonym.bitkitcore.trezorListDevices
 import com.synonym.bitkitcore.trezorScan
 import com.synonym.bitkitcore.trezorSetTransportCallback
+import com.synonym.bitkitcore.trezorSetUiCallback
 import com.synonym.bitkitcore.trezorSignMessage
 import com.synonym.bitkitcore.trezorSignTxFromPsbt
 import com.synonym.bitkitcore.trezorVerifyMessage
@@ -49,6 +50,7 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 @Singleton
 class TrezorService @Inject constructor(
     private val transport: TrezorTransport,
+    private val uiHandler: TrezorUiHandler,
 ) {
     @Volatile
     private var callbackRegistered = false
@@ -58,6 +60,7 @@ class TrezorService @Inject constructor(
             synchronized(this) {
                 if (!callbackRegistered) {
                     trezorSetTransportCallback(transport)
+                    trezorSetUiCallback(uiHandler)
                     callbackRegistered = true
                 }
             }
@@ -89,9 +92,14 @@ class TrezorService @Inject constructor(
         }
     }
 
-    suspend fun connect(deviceId: String): TrezorFeatures {
+    /**
+     * Connect to a device, opening the wallet given by [selection]. On THP
+     * devices (Safe 5/7) the passphrase is bound to the session at creation, so
+     * it is supplied per-connect rather than cached between calls.
+     */
+    suspend fun connect(deviceId: String, selection: WalletSelection): TrezorFeatures {
         return ServiceQueue.CORE.background {
-            trezorConnect(deviceId = deviceId, selection = WalletSelection.Standard)
+            trezorConnect(deviceId = deviceId, selection = selection)
         }
     }
 

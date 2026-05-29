@@ -793,6 +793,13 @@ private fun WidgetsPage(
                 text = stringResource(R.string.widgets__add),
                 onClick = onClickAddWidget,
                 enabled = !isCalculatorInputActive,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_plus),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
                 modifier = Modifier
                     .alpha(footerAlpha)
                     .testTag("WidgetsAdd")
