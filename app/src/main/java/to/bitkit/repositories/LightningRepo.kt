@@ -1603,6 +1603,26 @@ class LightningRepo @Inject constructor(
         outcome?.let { Result.success(it) }
             ?: Result.failure(ProbeError.TimedOut())
     }
+
+    fun probeReadiness(): ProbeReadiness {
+        val state = _lightningState.value
+        val graph = getNetworkGraphInfo()
+        return ProbeReadiness(
+            nodeRunning = state.nodeLifecycleState.isRunning(),
+            nodeId = state.nodeId.takeIf { it.isNotBlank() },
+            lifecycle = state.nodeLifecycleState.toString(),
+            peers = state.peers.size,
+            connectedPeers = state.peers.count { it.isConnected },
+            channels = state.channels.size,
+            readyChannels = state.channels.count { it.isChannelReady },
+            usableChannels = state.channels.count { it.isUsable },
+            outboundCapacitySats = state.channels.totalNextOutboundHtlcLimitSats(),
+            graphNodeCount = graph?.nodeCount,
+            graphChannelCount = graph?.channelCount,
+            latestRgsSyncTimestamp = graph?.latestRgsSyncTimestamp,
+            syncHealthy = state.isSyncHealthy,
+        )
+    }
     // endregion
 
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
@@ -1668,6 +1688,29 @@ data class LightningState(
 data class ProbeDispatch(
     val paymentIds: Set<PaymentId>,
 )
+
+data class ProbeReadiness(
+    val nodeRunning: Boolean,
+    val nodeId: String?,
+    val lifecycle: String,
+    val peers: Int,
+    val connectedPeers: Int,
+    val channels: Int,
+    val readyChannels: Int,
+    val usableChannels: Int,
+    val outboundCapacitySats: ULong,
+    val graphNodeCount: Int?,
+    val graphChannelCount: Int?,
+    val latestRgsSyncTimestamp: ULong?,
+    val syncHealthy: Boolean,
+) {
+    val ready: Boolean
+        get() = nodeRunning &&
+            connectedPeers > 0 &&
+            usableChannels > 0 &&
+            (graphChannelCount ?: 0) > 0 &&
+            syncHealthy
+}
 
 sealed interface ProbeOutcome {
     val paymentId: PaymentId
