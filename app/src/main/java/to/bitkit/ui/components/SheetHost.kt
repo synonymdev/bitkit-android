@@ -50,7 +50,11 @@ sealed interface Sheet {
     data object ForceTransfer : Sheet
     data class Gift(val code: String, val amount: ULong) : Sheet
     data object ConnectionClosed : Sheet
-    data class BTCPayConnection(val setup: SamRockSetupRequest) : Sheet
+    data class BTCPayConnection(
+        val setup: SamRockSetupRequest,
+        val isConnecting: Boolean = false,
+        val errorText: String? = null,
+    ) : Sheet
     data object QrScanner : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
 

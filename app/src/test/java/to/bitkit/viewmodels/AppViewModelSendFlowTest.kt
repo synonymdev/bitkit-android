@@ -371,10 +371,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(Sheet.BTCPayConnection(setup))
         advanceUntilIdle()
 
-        val result = sut.connectBTCPay(setup)
+        sut.connectBTCPay(setup)
         advanceUntilIdle()
 
-        assertTrue(result.isSuccess)
         assertNull(sut.currentSheet.value)
         verify(toastManager).enqueue(
             check {
@@ -390,11 +389,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(Sheet.BTCPayConnection(setup))
         advanceUntilIdle()
 
-        val result = sut.connectBTCPay(setup)
+        sut.connectBTCPay(setup)
         advanceUntilIdle()
 
-        assertTrue(result.isFailure)
-        assertTrue(sut.currentSheet.value is Sheet.BTCPayConnection)
+        val sheet = sut.currentSheet.value
+        assertTrue(sheet is Sheet.BTCPayConnection)
+        assertFalse(sheet.isConnecting)
+        assertEquals("failed", sheet.errorText)
         verify(toastManager).enqueue(
             check {
                 assertEquals("BTCPayConnectionErrorToast", it.testTag)

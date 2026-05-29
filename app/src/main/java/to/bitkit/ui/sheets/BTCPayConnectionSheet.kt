@@ -13,11 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,7 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
@@ -57,6 +51,8 @@ fun BTCPayConnectionSheet(
 ) {
     Content(
         setup = sheet.setup,
+        isConnecting = sheet.isConnecting,
+        errorText = sheet.errorText,
         onCancel = { app.hideSheet() },
         onConnect = { app.connectBTCPay(sheet.setup) },
     )
@@ -65,15 +61,12 @@ fun BTCPayConnectionSheet(
 @Composable
 private fun Content(
     setup: SamRockSetupRequest,
+    isConnecting: Boolean = false,
+    errorText: String? = null,
     modifier: Modifier = Modifier,
     onCancel: () -> Unit = {},
-    onConnect: suspend () -> Result<Unit> = { Result.success(Unit) },
+    onConnect: () -> Unit = {},
 ) {
-    val scope = rememberCoroutineScope()
-    val fallbackError = stringResource(R.string.btcpay__request_error)
-    var isConnecting by remember { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf<String?>(null) }
-
     Column(
         modifier = modifier
             .sheetHeight(SheetSize.MEDIUM)
@@ -139,15 +132,7 @@ private fun Content(
             )
             PrimaryButton(
                 text = stringResource(R.string.common__connect),
-                onClick = {
-                    scope.launch {
-                        isConnecting = true
-                        errorText = null
-                        onConnect()
-                            .onFailure { errorText = it.message ?: fallbackError }
-                        isConnecting = false
-                    }
-                },
+                onClick = onConnect,
                 isLoading = isConnecting,
                 fullWidth = false,
                 modifier = Modifier
@@ -253,7 +238,7 @@ private fun Preview() {
                     hasUnknownMethods = false,
                     hostDisplayName = "example.com",
                     logDescription = "https://example.com/plugins/store/samrock/protocol",
-                )
+                ),
             )
         }
     }

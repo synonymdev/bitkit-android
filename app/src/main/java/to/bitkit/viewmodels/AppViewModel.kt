@@ -2738,28 +2738,51 @@ class AppViewModel @Inject constructor(
         hideSheet()
     }
 
-    suspend fun connectBTCPay(setup: SamRockSetupRequest): Result<Unit> {
-        val result = samRockRepo.registerBitcoinOnchain(setup)
-        result
-            .onSuccess {
-                hideSheet()
-                toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.btcpay__success_title),
-                    description = context.getString(R.string.btcpay__success_description),
-                    testTag = "BTCPayConnectedToast",
-                )
-            }
-            .onFailure {
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.btcpay__error_title),
-                    description = it.message ?: context.getString(R.string.btcpay__request_error),
-                    testTag = "BTCPayConnectionErrorToast",
+    fun connectBTCPay(setup: SamRockSetupRequest) {
+        viewModelScope.launch {
+            updateBTCPayConnectionSheet(setup) {
+                it.copy(
+                    isConnecting = true,
+                    errorText = null,
                 )
             }
 
-        return result
+            samRockRepo.registerBitcoinOnchain(setup)
+                .onSuccess {
+                    hideSheet()
+                    toast(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.btcpay__success_title),
+                        description = context.getString(R.string.btcpay__success_description),
+                        testTag = "BTCPayConnectedToast",
+                    )
+                }
+                .onFailure {
+                    val description = it.message ?: context.getString(R.string.btcpay__request_error)
+                    updateBTCPayConnectionSheet(setup) {
+                        it.copy(
+                            isConnecting = false,
+                            errorText = description,
+                        )
+                    }
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.btcpay__error_title),
+                        description = description,
+                        testTag = "BTCPayConnectionErrorToast",
+                    )
+                }
+        }
+    }
+
+    private fun updateBTCPayConnectionSheet(
+        setup: SamRockSetupRequest,
+        update: (Sheet.BTCPayConnection) -> Sheet.BTCPayConnection,
+    ) {
+        _currentSheet.update {
+            val sheet = it as? Sheet.BTCPayConnection ?: return@update it
+            if (sheet.setup == setup) update(sheet) else sheet
+        }
     }
 
     fun showSheet(sheetType: Sheet) {
