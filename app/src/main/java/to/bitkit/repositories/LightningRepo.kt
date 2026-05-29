@@ -1708,6 +1708,7 @@ data class ProbeReadiness(
         get() = nodeRunning &&
             connectedPeers > 0 &&
             usableChannels > 0 &&
+            outboundCapacitySats > 0u &&
             (graphChannelCount ?: 0) > 0 &&
             syncHealthy
 }
