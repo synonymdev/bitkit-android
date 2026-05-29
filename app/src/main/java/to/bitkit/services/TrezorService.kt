@@ -18,6 +18,7 @@ import com.synonym.bitkitcore.TrezorSignMessageParams
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorVerifyMessageParams
+import com.synonym.bitkitcore.WalletSelection
 import com.synonym.bitkitcore.onchainBroadcastRawTx
 import com.synonym.bitkitcore.onchainComposeTransaction
 import com.synonym.bitkitcore.onchainGetAccountInfo
@@ -90,7 +91,7 @@ class TrezorService @Inject constructor(
 
     suspend fun connect(deviceId: String): TrezorFeatures {
         return ServiceQueue.CORE.background {
-            trezorConnect(deviceId = deviceId)
+            trezorConnect(deviceId = deviceId, selection = WalletSelection.Standard)
         }
     }
 

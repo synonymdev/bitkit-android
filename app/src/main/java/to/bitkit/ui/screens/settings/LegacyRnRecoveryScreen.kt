@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,6 +29,7 @@ import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.DevSettingsViewModel
 import to.bitkit.viewmodels.LegacyRnRecoveryUiState
@@ -38,6 +40,30 @@ fun LegacyRnRecoveryScreen(
     viewModel: DevSettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.legacyRnRecoveryState.collectAsStateWithLifecycle()
+
+    LegacyRnRecoveryContent(
+        state = state,
+        onBackClick = { navController.popBackStack() },
+        onDone = { navController.popBackStack() },
+        onIndexLimitChange = viewModel::setLegacyRnRecoveryIndexLimit,
+        onScan = viewModel::scanLegacyRnRecovery,
+        onPrepare = viewModel::prepareLegacyRnRecoverySweep,
+        onBroadcast = viewModel::broadcastLegacyRnRecoverySweep,
+        onScanAgain = viewModel::scanLegacyRnRecovery,
+    )
+}
+
+@Composable
+private fun LegacyRnRecoveryContent(
+    state: LegacyRnRecoveryUiState,
+    onBackClick: () -> Unit,
+    onDone: () -> Unit,
+    onIndexLimitChange: (String) -> Unit,
+    onScan: () -> Unit,
+    onPrepare: () -> Unit,
+    onBroadcast: () -> Unit,
+    onScanAgain: () -> Unit,
+) {
     val broadcastTxid = state.broadcastTxid
     val scanResult = state.scanResult
     val isBusy = state.isScanning || state.isPreparing || state.isBroadcasting
@@ -47,7 +73,7 @@ fun LegacyRnRecoveryScreen(
     ScreenColumn {
         AppTopBar(
             titleText = "Legacy Recovery",
-            onBackClick = { navController.popBackStack() },
+            onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
 
@@ -56,9 +82,9 @@ fun LegacyRnRecoveryScreen(
                 state = state,
                 canScan = canScan,
                 txid = broadcastTxid,
-                onIndexLimitChange = viewModel::setLegacyRnRecoveryIndexLimit,
-                onScan = viewModel::scanLegacyRnRecovery,
-                onDone = { navController.popBackStack() },
+                onIndexLimitChange = onIndexLimitChange,
+                onScan = onScan,
+                onDone = onDone,
             )
         } else {
             Column(
@@ -70,8 +96,8 @@ fun LegacyRnRecoveryScreen(
                     state = state,
                     canScan = canScan,
                     showScanButton = !hasResult,
-                    onIndexLimitChange = viewModel::setLegacyRnRecoveryIndexLimit,
-                    onScan = viewModel::scanLegacyRnRecovery,
+                    onIndexLimitChange = onIndexLimitChange,
+                    onScan = onScan,
                 )
 
                 state.error?.let { error ->
@@ -82,21 +108,21 @@ fun LegacyRnRecoveryScreen(
                     state.sweepPreview != null -> PreviewContent(
                         state = state,
                         isBusy = isBusy,
-                        onBroadcast = viewModel::broadcastLegacyRnRecoverySweep,
-                        onScanAgain = viewModel::scanLegacyRnRecovery,
+                        onBroadcast = onBroadcast,
+                        onScanAgain = onScanAgain,
                     )
 
                     scanResult != null && scanResult.outputsCount == 0u -> NoFundsContent(
                         indexLimit = state.indexLimit,
                         isBusy = isBusy,
-                        onScanAgain = viewModel::scanLegacyRnRecovery,
+                        onScanAgain = onScanAgain,
                     )
 
                     scanResult != null -> FoundContent(
                         state = state,
                         isBusy = isBusy,
-                        onPrepare = viewModel::prepareLegacyRnRecoverySweep,
-                        onScanAgain = viewModel::scanLegacyRnRecovery,
+                        onPrepare = onPrepare,
+                        onScanAgain = onScanAgain,
                     )
                 }
 
@@ -126,7 +152,7 @@ private fun ScanContent(
         placeholder = "10000",
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     )
 
     if (showScanButton) {
@@ -288,4 +314,21 @@ private fun sats(value: ULong): String = "${value.formatToModernDisplay()} sats"
 private fun String.shortened(): String {
     if (length <= 24) return this
     return "${take(10)}...${takeLast(10)}"
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        LegacyRnRecoveryContent(
+            state = LegacyRnRecoveryUiState(),
+            onBackClick = {},
+            onDone = {},
+            onIndexLimitChange = {},
+            onScan = {},
+            onPrepare = {},
+            onBroadcast = {},
+            onScanAgain = {},
+        )
+    }
 }
