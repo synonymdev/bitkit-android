@@ -28,6 +28,7 @@ import to.bitkit.models.toTrezorCoinType
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorRepo
 import to.bitkit.services.TrezorDebugLog
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
@@ -52,6 +53,12 @@ class TrezorViewModel @Inject constructor(
      */
     val needsPairingCode = trezorRepo.needsPairingCode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val needsPinEntry = trezorRepo.needsPinEntry
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val walletMode = trezorRepo.walletMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TrezorWalletMode.STANDARD)
 
     private val _uiState = MutableStateFlow(TrezorUiState())
     val uiState = _uiState.asStateFlow()
@@ -95,6 +102,10 @@ class TrezorViewModel @Inject constructor(
 
     fun connect(deviceId: String) {
         viewModelScope.launch(bgDispatcher) {
+            // Explicit device pick starts from the standard wallet; the user
+            // opts back into a passphrase wallet afterwards. Prevents a stale
+            // on-device/passphrase selection from a prior device being applied.
+            trezorRepo.resetWalletSelection()
             trezorRepo.connect(deviceId)
                 .onSuccess { features ->
                     val label = features.label ?: features.model ?: "Trezor"
@@ -106,6 +117,10 @@ class TrezorViewModel @Inject constructor(
 
     fun connectKnownDevice(deviceId: String) {
         viewModelScope.launch(bgDispatcher) {
+            // Explicit device pick starts from the standard wallet; the user
+            // opts back into a passphrase wallet afterwards. Prevents a stale
+            // on-device/passphrase selection from a prior device being applied.
+            trezorRepo.resetWalletSelection()
             trezorRepo.connectKnownDevice(deviceId)
                 .onSuccess { features ->
                     val label = features.label ?: features.model ?: "Trezor"
@@ -603,6 +618,25 @@ class TrezorViewModel @Inject constructor(
      */
     fun cancelPairingCode() {
         trezorRepo.cancelPairingCode()
+    }
+
+    fun submitPin(pin: String) {
+        trezorRepo.submitPin(pin)
+    }
+
+    fun cancelPin() {
+        trezorRepo.cancelPin()
+    }
+
+    /**
+     * Switch between the standard wallet and a passphrase (hidden) wallet.
+     * Resets the device session (disconnect/reconnect) so the choice applies.
+     */
+    fun setWalletMode(mode: TrezorWalletMode, passphrase: String = "") {
+        viewModelScope.launch(bgDispatcher) {
+            trezorRepo.setWalletMode(mode, passphrase)
+                .onFailure { ToastEventBus.send(it) }
+        }
     }
 
     /**
