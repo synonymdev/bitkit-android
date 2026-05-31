@@ -19,6 +19,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.ProbeOutcome
 import to.bitkit.utils.Logger
 import kotlin.time.Duration.Companion.seconds
+import to.bitkit.repositories.ProbeReadiness as NodeProbeReadiness
 
 private const val TAG = "DevToolsProvider"
 private val DEV_JSON = Json { encodeDefaults = true }
@@ -61,6 +62,7 @@ private sealed interface DevCommand {
         fun parse(method: String, arg: String?): DevCommand? = when (method) {
             CreateInvoice.METHOD -> CreateInvoice.parse(arg)
             ProbeInvoice.METHOD -> ProbeInvoice.parse(arg)
+            ProbeReadiness.METHOD -> ProbeReadiness
             else -> null
         }
     }
@@ -123,6 +125,13 @@ private sealed interface DevCommand {
                 )
         }
     }
+
+    data object ProbeReadiness : DevCommand {
+        const val METHOD = "probeReadiness"
+
+        override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult =
+            DevResult.ProbeReadiness.from(deps.lightningRepo().probeReadiness())
+    }
 }
 
 @Serializable
@@ -155,6 +164,43 @@ private sealed interface DevResult {
             fun from(error: Throwable, paymentIds: Set<String> = emptySet()) = ProbeFailure(
                 message = error.message,
                 paymentIds = paymentIds.toList(),
+            )
+        }
+    }
+
+    @Serializable
+    data class ProbeReadiness(
+        val ready: Boolean,
+        val nodeRunning: Boolean,
+        val lifecycle: String,
+        val peers: Int,
+        val connectedPeers: Int,
+        val channels: Int,
+        val readyChannels: Int,
+        val usableChannels: Int,
+        val outboundCapacitySats: ULong,
+        val syncHealthy: Boolean,
+        val nodeId: String? = null,
+        val graphNodeCount: Int? = null,
+        val graphChannelCount: Int? = null,
+        val latestRgsSyncTimestamp: ULong? = null,
+    ) : DevResult {
+        companion object {
+            fun from(readiness: NodeProbeReadiness) = ProbeReadiness(
+                ready = readiness.ready,
+                nodeRunning = readiness.nodeRunning,
+                lifecycle = readiness.lifecycle,
+                peers = readiness.peers,
+                connectedPeers = readiness.connectedPeers,
+                channels = readiness.channels,
+                readyChannels = readiness.readyChannels,
+                usableChannels = readiness.usableChannels,
+                outboundCapacitySats = readiness.outboundCapacitySats,
+                syncHealthy = readiness.syncHealthy,
+                nodeId = readiness.nodeId,
+                graphNodeCount = readiness.graphNodeCount,
+                graphChannelCount = readiness.graphChannelCount,
+                latestRgsSyncTimestamp = readiness.latestRgsSyncTimestamp,
             )
         }
     }

@@ -52,6 +52,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
+import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.UrlValidator
@@ -1370,6 +1371,96 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(setOf(probePaymentA), result.getOrThrow().paymentIds)
         verifyBlocking(lightningService) { sendKeysendProbe(probeNodeId, 42_000uL) }
+    }
+
+    @Test
+    fun `probeReadiness reports ready with connected peer, usable channel and network graph`() = test {
+        startNodeForTesting()
+        val peer = PeerDetails(
+            nodeId = probeNodeId,
+            address = "1.2.3.4:9735",
+            isConnected = true,
+            isPersisted = true,
+        )
+        val channel = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 2_000_000u,
+        )
+        whenever(lightningService.nodeId).thenReturn("node-1")
+        whenever(lightningService.peers).thenReturn(listOf(peer))
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        whenever(lightningService.getNetworkGraphInfo())
+            .thenReturn(NetworkGraphInfo(nodeCount = 1500, channelCount = 4200, latestRgsSyncTimestamp = 123u))
+        sut.syncState()
+
+        val readiness = sut.probeReadiness()
+
+        assertTrue(readiness.ready)
+        assertTrue(readiness.nodeRunning)
+        assertTrue(readiness.syncHealthy)
+        assertEquals("node-1", readiness.nodeId)
+        assertEquals(1, readiness.connectedPeers)
+        assertEquals(1, readiness.readyChannels)
+        assertEquals(1, readiness.usableChannels)
+        assertEquals(2_000uL, readiness.outboundCapacitySats)
+        assertEquals(1500, readiness.graphNodeCount)
+        assertEquals(4200, readiness.graphChannelCount)
+        assertEquals(123u, readiness.latestRgsSyncTimestamp)
+    }
+
+    @Test
+    fun `probeReadiness reports not ready when usable channel has no outbound capacity`() = test {
+        startNodeForTesting()
+        val peer = PeerDetails(
+            nodeId = probeNodeId,
+            address = "1.2.3.4:9735",
+            isConnected = true,
+            isPersisted = true,
+        )
+        val channel = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 0u,
+        )
+        whenever(lightningService.peers).thenReturn(listOf(peer))
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        whenever(lightningService.getNetworkGraphInfo())
+            .thenReturn(NetworkGraphInfo(nodeCount = 1500, channelCount = 4200, latestRgsSyncTimestamp = 123u))
+        sut.syncState()
+
+        val readiness = sut.probeReadiness()
+
+        assertFalse(readiness.ready)
+        assertEquals(1, readiness.usableChannels)
+        assertEquals(0uL, readiness.outboundCapacitySats)
+    }
+
+    @Test
+    fun `probeReadiness reports not ready when channels are not usable`() = test {
+        startNodeForTesting()
+        val peer = PeerDetails(
+            nodeId = probeNodeId,
+            address = "1.2.3.4:9735",
+            isConnected = true,
+            isPersisted = true,
+        )
+        val channel = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = false,
+            nextOutboundHtlcLimitMsat = 0u,
+        )
+        whenever(lightningService.peers).thenReturn(listOf(peer))
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        whenever(lightningService.getNetworkGraphInfo())
+            .thenReturn(NetworkGraphInfo(nodeCount = 1500, channelCount = 4200, latestRgsSyncTimestamp = 123u))
+        sut.syncState()
+
+        val readiness = sut.probeReadiness()
+
+        assertFalse(readiness.ready)
+        assertEquals(0, readiness.usableChannels)
+        assertEquals(0uL, readiness.outboundCapacitySats)
     }
 
     @Test
