@@ -9,7 +9,9 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -41,6 +43,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
     companion object {
         private const val TAG = "AppWidgetRefreshWorker"
         private const val WORK_NAME = "appwidget_refresh"
+        private const val CATCH_UP_WORK_NAME = "appwidget_refresh_catch_up"
 
         fun enqueue(context: Context) {
             val constraints = Constraints.Builder()
@@ -58,13 +61,35 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
             )
         }
 
+        fun enqueueCatchUp(context: Context) {
+            if (!hasActiveWidgets(context)) return
+
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+            val request = OneTimeWorkRequestBuilder<AppWidgetRefreshWorker>()
+                .setConstraints(constraints)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                CATCH_UP_WORK_NAME,
+                ExistingWorkPolicy.KEEP,
+                request,
+            )
+        }
+
         fun cancelIfNoWidgets(context: Context) {
-            val manager = AppWidgetManager.getInstance(context)
-            val hasAny = AppWidgetType.entries.any { type ->
-                manager.getAppWidgetIds(ComponentName(context, receiverClassFor(type))).isNotEmpty()
-            }
-            if (!hasAny) {
+            if (!hasActiveWidgets(context)) {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+                WorkManager.getInstance(context).cancelUniqueWork(CATCH_UP_WORK_NAME)
+            }
+        }
+
+        private fun hasActiveWidgets(context: Context): Boolean {
+            val manager = AppWidgetManager.getInstance(context)
+            return AppWidgetType.entries.any { type ->
+                manager.getAppWidgetIds(ComponentName(context, receiverClassFor(type))).isNotEmpty()
             }
         }
 

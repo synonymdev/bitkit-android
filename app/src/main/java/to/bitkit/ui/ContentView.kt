@@ -45,6 +45,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
@@ -245,6 +246,7 @@ fun ContentView(
 
                     appViewModel.consumePaymentReceivedInBackground()
 
+                    AppWidgetRefreshWorker.enqueueCatchUp(context)
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
                     appViewModel.refreshPublicPaykitEndpoints()

@@ -12,6 +12,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.hardware.usb.UsbManager
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -38,6 +39,9 @@ val Context.usbManager: UsbManager
 
 val Context.bluetoothManager: BluetoothManager
     get() = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+
+val Context.powerManager: PowerManager
+    get() = getSystemService(Context.POWER_SERVICE) as PowerManager
 
 // Permissions
 
