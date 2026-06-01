@@ -44,7 +44,7 @@ class LogsRepo @Inject constructor(
     suspend fun postQuestion(email: String, message: String): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
             val logsBase64 = zipLogs(maxEncodedBytes = MAX_SUPPORT_UPLOAD_BASE64_BYTES).getOrDefault("")
-            val logsFileName = createLogsArchiveFileName(SUPPORT_LOGS_ARCHIVE_PREFIX)
+            val logsArchiveBaseName = currentLogsArchiveName(SUPPORT_LOGS_ARCHIVE_PREFIX).baseName
 
             chatwootHttpClient.postQuestion(
                 message = ChatwootMessage(
@@ -53,7 +53,7 @@ class LogsRepo @Inject constructor(
                     platform = Env.platform,
                     version = Env.version,
                     logs = logsBase64,
-                    logsFileName = logsFileName,
+                    logsFileName = logsArchiveBaseName,
                 )
             )
         }.onFailure {
@@ -108,7 +108,7 @@ class LogsRepo @Inject constructor(
             val file = withContext(ioDispatcher) {
                 val tempDir = context.cacheDir.resolve("logs").apply { mkdirs() }
 
-                val zipFileName = createLogsArchiveFileName()
+                val zipFileName = currentLogsArchiveName().fileName
                 val tempFile = File(tempDir, zipFileName)
 
                 // Convert base64 back to bytes and write to file
@@ -143,72 +143,10 @@ class LogsRepo @Inject constructor(
                 allLogs.take(limit)
             }
 
-            return@runCatching createZipBase64(logsToZip, maxEncodedBytes)
+            return@runCatching createZipBase64(logsToZip, maxEncodedBytes, ::createSupportSnapshot)
         }.onFailure {
             Logger.error("Failed to zip logs", it, context = TAG)
         }
-    }
-
-    @Suppress("NestedBlockDepth")
-    private fun createZipBase64(logFiles: List<LogFile>, maxEncodedBytes: Int?): String {
-        val selectedLogFiles = logFiles.toMutableList()
-
-        while (true) {
-            val encoded = createZipBytes(selectedLogFiles).toBase64()
-            if (maxEncodedBytes == null || encoded.length <= maxEncodedBytes || selectedLogFiles.isEmpty()) {
-                Logger.info("Created support logs archive with '${selectedLogFiles.size}' log file(s)", context = TAG)
-                return encoded
-            }
-
-            selectedLogFiles.removeAt(selectedLogFiles.lastIndex)
-        }
-    }
-
-    @Suppress("NestedBlockDepth")
-    private fun createZipBytes(logFiles: List<LogFile>): ByteArray {
-        return ByteArrayOutputStream().use { byteArrayOut ->
-            ZipOutputStream(byteArrayOut).use { zipOut ->
-                zipOut.putNextEntry(ZipEntry(SUPPORT_SNAPSHOT_FILE_NAME))
-                zipOut.write(createSupportSnapshot().toByteArray())
-                zipOut.closeEntry()
-
-                logFiles.forEach { logFile ->
-                    if (logFile.file.exists()) {
-                        val zipEntry = ZipEntry("${logFile.source.name.lowercase()}/${logFile.fileName}")
-                        zipOut.putNextEntry(zipEntry)
-
-                        FileInputStream(logFile.file).use { fileIn ->
-                            fileIn.copyTo(zipOut)
-                        }
-                        zipOut.closeEntry()
-                    }
-                }
-            }
-            byteArrayOut.toByteArray()
-        }
-    }
-
-    private fun File.toLogFile(): LogFile {
-        val match = LOG_FILE_NAME_REGEX.matchEntire(name)
-        val serviceName = match
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-            ?: LogSource.Unknown.name
-        val timestamp = match?.groupValues?.getOrNull(2)?.replace("_", " ")
-        val part = match?.groupValues?.getOrNull(3)?.ifBlank { null }
-        val partSuffix = part?.let { " part $it" }.orEmpty()
-        val displayName = if (timestamp != null) {
-            "$serviceName Log: $timestamp$partSuffix"
-        } else {
-            "$serviceName Log: $name"
-        }
-
-        return LogFile(
-            displayName = displayName,
-            file = this,
-            source = getEnumValueOf<LogSource>(serviceName).getOrDefault(LogSource.Unknown),
-        )
     }
 
     private fun createSupportSnapshot(): String {
@@ -262,24 +200,83 @@ class LogsRepo @Inject constructor(
         return appJson.encodeToString(snapshot)
     }
 
-    private fun createLogsArchiveFileName(prefix: String = LOGS_ARCHIVE_PREFIX): String {
-        return "${prefix}_${currentLogTimestamp()}.zip"
+    private fun currentLogsArchiveName(prefix: String = LOGS_ARCHIVE_PREFIX): LogsArchiveName {
+        return createLogsArchiveName(prefix, currentLogTimestamp())
     }
 
     private fun currentLogTimestamp(): String {
         return utcDateFormatterOf(DatePattern.LOG_FILE).format(Date())
     }
+}
 
-    private companion object {
-        const val TAG = "SupportRepo"
-        const val LOGS_ARCHIVE_PREFIX = "bitkit_logs"
-        const val MAX_SUPPORT_UPLOAD_BASE64_BYTES = 900 * 1024
-        const val SUPPORT_LOGS_ARCHIVE_PREFIX = "bitkit_support_logs"
-        const val SUPPORT_SNAPSHOT_FILE_NAME = "support_snapshot.json"
-        val LOG_FILE_NAME_REGEX = Regex(
-            "^([A-Za-z]+)_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})(?:\\.part_(\\d{3}))?\\.log$"
-        )
+internal fun createZipBase64(
+    logFiles: List<LogFile>,
+    maxEncodedBytes: Int?,
+    supportSnapshot: () -> String,
+): String {
+    val selectedLogFiles = logFiles.toMutableList()
+
+    while (true) {
+        val encoded = createZipBytes(selectedLogFiles, supportSnapshot).toBase64()
+        if (maxEncodedBytes == null || encoded.length <= maxEncodedBytes || selectedLogFiles.isEmpty()) {
+            Logger.info("Created support logs archive with '${selectedLogFiles.size}' log file(s)", context = TAG)
+            return encoded
+        }
+
+        selectedLogFiles.removeAt(selectedLogFiles.lastIndex)
     }
+}
+
+internal fun createZipBytes(
+    logFiles: List<LogFile>,
+    supportSnapshot: () -> String,
+): ByteArray {
+    return ByteArrayOutputStream().use { byteArrayOut ->
+        ZipOutputStream(byteArrayOut).use { zipOut ->
+            zipOut.writeSupportSnapshot(supportSnapshot())
+            logFiles.filter { it.file.exists() }.forEach { logFile ->
+                zipOut.writeLogFile(logFile)
+            }
+        }
+        byteArrayOut.toByteArray()
+    }
+}
+
+private fun ZipOutputStream.writeSupportSnapshot(supportSnapshot: String) {
+    putNextEntry(ZipEntry(SUPPORT_SNAPSHOT_FILE_NAME))
+    write(supportSnapshot.toByteArray())
+    closeEntry()
+}
+
+private fun ZipOutputStream.writeLogFile(logFile: LogFile) {
+    putNextEntry(ZipEntry("${logFile.source.name.lowercase()}/${logFile.fileName}"))
+    FileInputStream(logFile.file).use { fileIn ->
+        fileIn.copyTo(this)
+    }
+    closeEntry()
+}
+
+internal fun File.toLogFile(): LogFile {
+    val match = LOG_FILE_NAME_REGEX.matchEntire(name)
+    val serviceName = match
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        ?: LogSource.Unknown.name
+    val timestamp = match?.groupValues?.getOrNull(2)?.replace("_", " ")
+    val part = match?.groupValues?.getOrNull(3)?.ifBlank { null }
+    val partSuffix = part?.let { " part $it" }.orEmpty()
+    val displayName = if (timestamp != null) {
+        "$serviceName Log: $timestamp$partSuffix"
+    } else {
+        "$serviceName Log: $name"
+    }
+
+    return LogFile(
+        displayName = displayName,
+        file = this,
+        source = getEnumValueOf<LogSource>(serviceName).getOrDefault(LogSource.Unknown),
+    )
 }
 
 data class LogFile(
@@ -288,6 +285,24 @@ data class LogFile(
     val source: LogSource,
 ) {
     val fileName: String get() = file.name
+}
+
+internal data class LogsArchiveName(
+    val baseName: String,
+) {
+    val fileName: String get() = "$baseName$ZIP_EXTENSION"
+}
+
+internal fun createLogsArchiveName(prefix: String, timestamp: String): LogsArchiveName {
+    return LogsArchiveName("${prefix}_$timestamp".withoutZipExtension())
+}
+
+internal fun String.withoutZipExtension(): String {
+    var name = this
+    while (name.endsWith(ZIP_EXTENSION, ignoreCase = true)) {
+        name = name.dropLast(ZIP_EXTENSION.length)
+    }
+    return name
 }
 
 private fun NodeLifecycleState.supportName(): String = when (this) {
@@ -347,4 +362,14 @@ private data class SupportBalanceSnapshot(
     val totalLightningBalanceSats: String,
     val lightningBalancesCount: Int,
     val pendingChannelClosureBalancesCount: Int,
+)
+
+private const val TAG = "LogsRepo"
+private const val LOGS_ARCHIVE_PREFIX = "bitkit_logs"
+private const val MAX_SUPPORT_UPLOAD_BASE64_BYTES = 900 * 1024
+private const val SUPPORT_LOGS_ARCHIVE_PREFIX = "bitkit_support_logs"
+private const val SUPPORT_SNAPSHOT_FILE_NAME = "support_snapshot.json"
+private const val ZIP_EXTENSION = ".zip"
+private val LOG_FILE_NAME_REGEX = Regex(
+    "^([A-Za-z]+)_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})(?:\\.part_(\\d{3}))?\\.log$"
 )

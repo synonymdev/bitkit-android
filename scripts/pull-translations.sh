@@ -69,11 +69,26 @@ rename_or_merge() {
 # Validate XML file is well-formed before processing
 validate_xml() {
     local file="$1"
-    # Basic validation: check for opening and closing resources tags
+    if command -v python3 &> /dev/null; then
+        python3 - "$file" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+try:
+    ET.parse(sys.argv[1])
+except Exception as e:
+    print(e)
+    raise SystemExit(1)
+PY
+        return $?
+    fi
+
+    # Fallback validation: check for opening and closing resources tags
     if ! grep -q '<resources' "$file" 2>/dev/null || ! grep -q '</resources>' "$file" 2>/dev/null; then
-        echo "  Warning: $file appears to be malformed XML, skipping normalization"
+        echo "missing resources root"
         return 1
     fi
+
     return 0
 }
 
@@ -164,10 +179,33 @@ echo ""
 echo "Normalizing XML formatting..."
 
 # Normalize XML
+MARKUP_FIXED_COUNT=0
 NORMALIZED_COUNT=0
+XML_ERROR_COUNT=0
 while IFS= read -r file; do
+    if sed \
+        -e 's#<accent&gt;#\&lt;accent\&gt;#g' \
+        -e 's#</accent&gt;#\&lt;/accent\&gt;#g' \
+        -e 's#<bold&gt;#\&lt;bold\&gt;#g' \
+        -e 's#</bold&gt;#\&lt;/bold\&gt;#g' \
+        "$file" > "$file.markup.tmp"; then
+        if cmp -s "$file" "$file.markup.tmp"; then
+            rm -f "$file.markup.tmp"
+        elif mv "$file.markup.tmp" "$file"; then
+            MARKUP_FIXED_COUNT=$((MARKUP_FIXED_COUNT + 1))
+        else
+            echo "  Warning: Failed to fix markup in $file"
+            rm -f "$file.markup.tmp"
+        fi
+    else
+        echo "  Warning: Failed to scan markup in $file"
+        rm -f "$file.markup.tmp"
+    fi
+
     # Validate XML before processing
-    if ! validate_xml "$file"; then
+    if ! validation_error=$(validate_xml "$file" 2>&1); then
+        echo "  Error: $file is malformed XML: $validation_error"
+        XML_ERROR_COUNT=$((XML_ERROR_COUNT + 1))
         continue
     fi
 
@@ -196,7 +234,13 @@ while IFS= read -r file; do
     fi
 done < <(find "$RES_DIR" -type f -path "*/values-*/strings.xml" 2>/dev/null)
 
+echo "  Fixed markup in $MARKUP_FIXED_COUNT files"
 echo "  Normalized $NORMALIZED_COUNT files"
+
+if [ "$XML_ERROR_COUNT" -ne 0 ]; then
+    echo "Error: Found $XML_ERROR_COUNT malformed XML file(s) after pull"
+    exit 1
+fi
 
 echo ""
 echo "Cleaning up empty files and directories..."
@@ -239,3 +283,4 @@ echo "Complete!"
 echo "  Renamed: $RENAMED_COUNT, Removed: $REMOVED_COUNT"
 echo "  Normalized: $NORMALIZED_COUNT"
 echo "  Deleted files: $EMPTY_COUNT, Deleted dirs: $DELETED_DIRS"
+echo "Pull complete!"
