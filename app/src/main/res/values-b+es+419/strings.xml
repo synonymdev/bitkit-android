@@ -728,7 +728,6 @@
     <string name="settings__support__copyright">Bitkit fue creado por Synonym Software, S.A. DE C.V. ©2025. Todos los derechos reservados.</string>
     <string name="settings__support_title">Soporte</string>
     <string name="settings__widgets__nav_title">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Mostrar títulos de widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
     <string name="settings__widgets__reset_suggestions">Restablecer tarjetas de sugerencias</string>
     <string name="settings__widgets__reset_widgets">Restablecer widgets</string>
@@ -1009,6 +1008,5 @@
     <string name="widgets__widget__edit_default">Por defecto</string>
     <string name="widgets__widget__edit_description">Seleccione los campos que desea mostrar en el widget {name}.</string>
     <string name="widgets__widget__nav_title">Widget</string>
-    <string name="widgets__widget__source">Fuente</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>

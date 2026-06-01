@@ -3,7 +3,6 @@ package to.bitkit.appwidget.ui.blocks
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
-import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.ColorFilter
@@ -20,7 +19,6 @@ import androidx.glance.layout.Row
 import androidx.glance.layout.WidthModifier
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.unit.Dimension
 import kotlinx.collections.immutable.ImmutableList
@@ -30,6 +28,7 @@ import to.bitkit.appwidget.config.AppWidgetConfigActivity
 import to.bitkit.appwidget.model.AppWidgetEntry
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.model.HomeBlocksPreferences
+import to.bitkit.appwidget.ui.components.BodyM
 import to.bitkit.appwidget.ui.components.BodyMSB
 import to.bitkit.appwidget.ui.components.BodySSB
 import to.bitkit.appwidget.ui.components.CaptionB
@@ -37,17 +36,21 @@ import to.bitkit.appwidget.ui.components.GlanceLayoutDimens
 import to.bitkit.appwidget.ui.components.GlanceWidgetScaffold
 import to.bitkit.appwidget.ui.components.HorizontalSpacer
 import to.bitkit.appwidget.ui.components.VerticalSpacer
-import to.bitkit.appwidget.ui.theme.GlanceColors
 import to.bitkit.models.widget.BlockModel
+import to.bitkit.models.widget.BlocksWidgetField
+import to.bitkit.models.widget.MAX_BLOCKS_FIELDS
 import to.bitkit.ui.theme.Colors
 
-private const val MAX_SMALL_ROWS = 4
-
-private data class BlockRow(
-    @DrawableRes val icon: Int,
-    val label: String,
-    val value: String,
-)
+fun HomeBlocksPreferences.enabledFields(): List<BlocksWidgetField> = BlocksWidgetField.entries.filter {
+    when (it) {
+        BlocksWidgetField.BLOCK -> showBlock
+        BlocksWidgetField.TIME -> showTime
+        BlocksWidgetField.DATE -> showDate
+        BlocksWidgetField.TRANSACTIONS -> showTransactions
+        BlocksWidgetField.SIZE -> showSize
+        BlocksWidgetField.FEES -> showFees
+    }
+}
 
 @Suppress("RestrictedApi")
 @Composable
@@ -68,120 +71,85 @@ fun BlocksGlanceContent(
             return@GlanceWidgetScaffold
         }
 
-        val rows = buildRows(context, entry.blocksPreferences, block)
-        if (rows.isEmpty()) {
+        val fields = entry.blocksPreferences.enabledFields()
+            .filter { it.value(block).isNotEmpty() }
+            .take(MAX_BLOCKS_FIELDS)
+        if (fields.isEmpty()) {
             CaptionB(text = context.getString(R.string.appwidget__loading))
             return@GlanceWidgetScaffold
         }
 
         if (LocalSize.current.width >= GlanceLayoutDimens.WIDE_LAYOUT_MIN_WIDTH) {
-            WideContent(rows = rows)
+            WideContent(fields = fields.toImmutableList(), block = block, context = context)
         } else {
-            CompactContent(rows = rows.take(MAX_SMALL_ROWS).toImmutableList())
+            CompactContent(fields = fields.toImmutableList(), block = block)
         }
     }
 }
 
 @Suppress("RestrictedApi")
 @Composable
-private fun WideContent(rows: ImmutableList<BlockRow>) {
+private fun WideContent(fields: ImmutableList<BlocksWidgetField>, block: BlockModel, context: Context) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
-        rows.forEach { row ->
-            WideRow(row = row, modifier = GlanceModifier.padding(vertical = 6.dp))
+        fields.forEachIndexed { index, field ->
+            if (index > 0) VerticalSpacer(16.dp)
+            WideRow(
+                label = context.getString(field.labelRes),
+                value = field.value(block),
+                icon = field.icon,
+            )
         }
     }
 }
 
 @Suppress("RestrictedApi")
 @Composable
-private fun WideRow(row: BlockRow, modifier: GlanceModifier = GlanceModifier) {
+private fun WideRow(label: String, value: String, icon: Int, modifier: GlanceModifier = GlanceModifier) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth()
     ) {
         Image(
-            provider = ImageProvider(row.icon),
+            provider = ImageProvider(icon),
             contentDescription = null,
             colorFilter = ColorFilter.tint(ColorProvider(day = Colors.Brand, night = Colors.Brand)),
             modifier = GlanceModifier.size(20.dp)
         )
         HorizontalSpacer(8.dp)
-        BodyMSB(
-            text = row.label,
-            color = GlanceColors.textSecondary,
+        BodyM(
+            text = label,
+            color = ColorProvider(day = Colors.White80, night = Colors.White80),
             modifier = GlanceModifier.then(WidthModifier(Dimension.Expand))
         )
-        BodyMSB(text = row.value)
+        BodyMSB(text = value)
     }
 }
 
 @Suppress("RestrictedApi")
 @Composable
-private fun CompactContent(rows: ImmutableList<BlockRow>) {
+private fun CompactContent(fields: ImmutableList<BlocksWidgetField>, block: BlockModel) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
-        rows.forEachIndexed { index, row ->
+        fields.forEachIndexed { index, field ->
             if (index > 0) VerticalSpacer(16.dp)
-            CompactRow(row = row)
+            CompactRow(value = field.value(block), icon = field.icon)
         }
     }
 }
 
 @Suppress("RestrictedApi")
 @Composable
-private fun CompactRow(row: BlockRow) {
+private fun CompactRow(value: String, icon: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = GlanceModifier.fillMaxWidth()
     ) {
         Image(
-            provider = ImageProvider(row.icon),
+            provider = ImageProvider(icon),
             contentDescription = null,
             colorFilter = ColorFilter.tint(ColorProvider(day = Colors.Brand, night = Colors.Brand)),
             modifier = GlanceModifier.size(20.dp)
         )
         HorizontalSpacer(8.dp)
-        BodySSB(text = row.value)
+        BodySSB(text = value)
     }
 }
-
-private fun buildRows(
-    context: Context,
-    preferences: HomeBlocksPreferences,
-    block: BlockModel,
-): ImmutableList<BlockRow> = listOfNotNull(
-    BlockRow(
-        icon = R.drawable.ic_cube,
-        label = context.getString(R.string.widgets__blocks__field__block),
-        value = block.height,
-    ).takeIf { preferences.showBlock && block.height.isNotEmpty() },
-    BlockRow(
-        icon = R.drawable.ic_clock,
-        label = context.getString(R.string.widgets__blocks__field__time),
-        value = block.time,
-    ).takeIf { preferences.showTime && block.time.isNotEmpty() },
-    BlockRow(
-        icon = R.drawable.ic_calendar,
-        label = context.getString(R.string.widgets__blocks__field__date),
-        value = block.date,
-    ).takeIf { preferences.showDate && block.date.isNotEmpty() },
-    BlockRow(
-        icon = R.drawable.ic_transfer,
-        label = context.getString(R.string.widgets__blocks__field__transactions),
-        value = block.transactionCount,
-    ).takeIf { preferences.showTransactions && block.transactionCount.isNotEmpty() },
-    BlockRow(
-        icon = R.drawable.ic_file_text,
-        label = context.getString(R.string.widgets__blocks__field__size),
-        value = block.size,
-    ).takeIf { preferences.showSize && block.size.isNotEmpty() },
-    BlockRow(
-        icon = R.drawable.ic_coins,
-        label = context.getString(R.string.widgets__blocks__field__fees),
-        value = block.fees,
-    ).takeIf { preferences.showFees && block.fees.isNotEmpty() },
-    BlockRow(
-        icon = R.drawable.ic_globe,
-        label = context.getString(R.string.widgets__widget__source),
-        value = block.source,
-    ).takeIf { preferences.showSource && block.source.isNotEmpty() },
-).toImmutableList()

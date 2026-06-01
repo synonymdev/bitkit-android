@@ -25,11 +25,13 @@ import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.BlocksWidgetField
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.models.widget.toArticleModel
+import to.bitkit.models.widget.toggleField
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
@@ -118,49 +120,9 @@ class AppWidgetConfigViewModel @Inject constructor(
         }
     }
 
-    fun toggleBlockShowBlock() {
+    fun toggleBlockField(field: BlocksWidgetField) {
         _uiState.update {
-            it.copy(blocksPreferences = it.blocksPreferences.copy(showBlock = !it.blocksPreferences.showBlock))
-        }
-    }
-
-    fun toggleBlockShowTime() {
-        _uiState.update {
-            it.copy(blocksPreferences = it.blocksPreferences.copy(showTime = !it.blocksPreferences.showTime))
-        }
-    }
-
-    fun toggleBlockShowDate() {
-        _uiState.update {
-            it.copy(blocksPreferences = it.blocksPreferences.copy(showDate = !it.blocksPreferences.showDate))
-        }
-    }
-
-    fun toggleBlockShowTransactions() {
-        _uiState.update {
-            it.copy(
-                blocksPreferences = it.blocksPreferences.copy(
-                    showTransactions = !it.blocksPreferences.showTransactions,
-                ),
-            )
-        }
-    }
-
-    fun toggleBlockShowSize() {
-        _uiState.update {
-            it.copy(blocksPreferences = it.blocksPreferences.copy(showSize = !it.blocksPreferences.showSize))
-        }
-    }
-
-    fun toggleBlockShowFees() {
-        _uiState.update {
-            it.copy(blocksPreferences = it.blocksPreferences.copy(showFees = !it.blocksPreferences.showFees))
-        }
-    }
-
-    fun toggleBlockShowSource() {
-        _uiState.update {
-            it.copy(blocksPreferences = it.blocksPreferences.copy(showSource = !it.blocksPreferences.showSource))
+            it.copy(blocksPreferences = it.blocksPreferences.toggleField(field))
         }
     }
 
@@ -307,7 +269,6 @@ private fun HomeBlocksPreferences.toInApp() = BlocksPreferences(
     showTransactions = showTransactions,
     showSize = showSize,
     showFees = showFees,
-    showSource = showSource,
 )
 
 private fun BlocksPreferences.toHome() = HomeBlocksPreferences(
@@ -317,7 +278,6 @@ private fun BlocksPreferences.toHome() = HomeBlocksPreferences(
     showTransactions = showTransactions,
     showSize = showSize,
     showFees = showFees,
-    showSource = showSource,
 )
 
 private fun HomeWeatherPreferences.toInApp() = WeatherPreferences(selectedOption = selectedOption)

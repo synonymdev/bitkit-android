@@ -44,6 +44,22 @@ See also:
 
 - For LNURL dev testing see [bitkit-docker](https://github.com/synonymdev/bitkit-docker)
 
+### Command Launcher
+
+This repo includes a Justfile for common Gradle and script commands.
+
+Install `just` ([more options](https://github.com/casey/just#packages)):
+- macOS: `brew install just`
+- Linux: `mkdir -p ~/.local/bin && curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/.local/bin`
+- Windows: `winget install --id Casey.Just --exact`
+- Windows shell: install Git for Windows or another `sh` provider for Bash-backed recipes.
+
+Set up local env:
+- `just init`
+- Uncomment only the values you need in the fresh `.env` file, such as `GITHUB_ACTOR`, `GITHUB_TOKEN`, `TX_TOKEN`, and E2E build settings.
+
+Run `just list` to see available commands. The common ones are `just init`, `just compile`, `just run`, `just build`, `just release`, `just test`, `just lint`, and `just translations pull`. `just run` prefers a physical device and falls back to an emulator.
+
 ### Lint
 
 This project uses detekt with default ktlint and compose-rules for android code linting.
@@ -61,8 +77,8 @@ The following IDE plugins are recommended for development with Android Studio or
 
 **Commands** 
 ```sh
-./gradlew detekt # run analysis + formatting check
-./gradlew detekt --auto-correct # auto-fix formatting issues
+just lint # run analysis + formatting check
+just format # auto-fix formatting issues
 ```
 Reports are generated in: `app/build/reports/detekt/`.
 
@@ -82,11 +98,11 @@ Install or update all bundled plugins with:
 
 **Commands**
 ```sh
-./gradlew testDevDebugUnitTest # run unit tests
+just test # run unit tests
 
 # run android tests:
-./gradlew installDevDebug # install
-./gradlew connectedDevDebugAndroidTest # run
+just install # install
+just test android # run
 ```
 
 ## Localization
@@ -108,7 +124,7 @@ To pull the latest translations from Transifex:
 
 3. **Pull translations**:
    ```sh
-   ./scripts/pull-translations.sh
+   just translations pull
    ```
 
 ### Pushing Source Strings
@@ -116,15 +132,17 @@ To pull the latest translations from Transifex:
 When you add or modify translation keys in the EN source file, push them to Transifex:
 
 ```sh
-tx push --source
+just translations push source
 ```
+
+To intentionally round-trip local source and translation files back to Transifex, use `just translations push all`.
 
 ### Translation Workflow
 
 1. **Add/modify strings** in `app/src/main/res/values/strings.xml`
-2. **Push to Transifex:** `tx push --source`
+2. **Push to Transifex:** `just translations push source`
 3. **Translators** work on translations in Transifex
-4. **Pull translations:** `./scripts/pull-translations.sh`
+4. **Pull translations:** `just translations pull`
 5. **Commit** the updated translation files
 
 ## Build
@@ -147,8 +165,8 @@ Setup the signing config:
 
 Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
-./gradlew assembleDevRelease
-# ./gradlew assembleRelease # for all flavors
+just build assembleDevRelease
+# just build assembleRelease # for all flavors
 ```
 
 APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet').
@@ -159,18 +177,12 @@ Example for dev: `app/build/outputs/apk/dev/release`
 To build the mainnet flavor for release run:
 
 ```sh
-./gradlew assembleMainnetRelease
+just release
 ```
 
 #### Android App Bundle (AAB)
 
-For Play Store submission, build an AAB instead of APK:
-
-```sh
-./gradlew bundleMainnetRelease
-```
-
-AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
+`just release` builds both the mainnet APK and Play Store AAB. AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
 
 See [reproducible builds](docs/reproducible-builds.md) for the WalletScrutiny-oriented release reproduction flow.
 
@@ -179,7 +191,7 @@ See [reproducible builds](docs/reproducible-builds.md) for the WalletScrutiny-or
 Pass `E2E=true` and build any flavor. By default, E2E uses a local Electrum override.
 
 ```sh
-E2E=true ./gradlew assembleDevRelease
+just e2e
 ```
 
 #### Use Network Electrum (Staging/Mainnet)
@@ -188,11 +200,11 @@ Set `E2E_BACKEND=network` to use the network Electrum based on the build flavor:
 
 ```sh
 # regtest (dev flavor)
-E2E=true E2E_BACKEND=network ./gradlew assembleDevRelease
+just e2e network assembleDevRelease
 # testnet (tnet flavor)
-E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
+just e2e network assembleTnetRelease
 # mainnet
-E2E=true E2E_BACKEND=network ./gradlew assembleMainnetRelease
+just e2e network assembleMainnetRelease
 ```
 
 #### Disable Geoblocking Checks
@@ -200,7 +212,7 @@ E2E=true E2E_BACKEND=network ./gradlew assembleMainnetRelease
 By default, geoblocking checks via API are enabled. To disable at build time, use the `GEO` environment variable:
 
 ```sh
-GEO=false E2E=true ./gradlew assembleDevRelease
+just e2e no geo
 ```
 
 ## Contributing

@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
@@ -49,6 +50,11 @@ sealed interface Sheet {
     data object ForceTransfer : Sheet
     data class Gift(val code: String, val amount: ULong) : Sheet
     data object ConnectionClosed : Sheet
+    data class BTCPayConnection(
+        val setup: SamRockSetupRequest,
+        val isConnecting: Boolean = false,
+        val errorText: String? = null,
+    ) : Sheet
     data object QrScanner : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
 

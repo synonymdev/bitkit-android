@@ -193,6 +193,7 @@ fun HomeScreen(
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val isPubkyAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+    val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
     val profileDisplayName by homeViewModel.profileDisplayName.collectAsStateWithLifecycle()
     val profileDisplayImageUri by homeViewModel.profileDisplayImageUri.collectAsStateWithLifecycle()
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
@@ -235,6 +236,7 @@ fun HomeScreen(
         drawerState = drawerState,
         profileDisplayName = profileDisplayName,
         profileDisplayImageUri = profileDisplayImageUri,
+        showProfileButton = isPaykitEnabled,
         onClickProfile = navigateToProfile,
         latestActivities = latestActivities,
         onRefresh = {
@@ -280,7 +282,9 @@ fun HomeScreen(
                     )
                 }
 
-                Suggestion.PROFILE -> navigateToProfile()
+                Suggestion.PROFILE -> {
+                    if (isPaykitEnabled) navigateToProfile() else rootNavController.navigateTo(Routes.Profile)
+                }
 
                 Suggestion.SHOP -> {
                     if (!hasSeenShopIntro) {
@@ -354,6 +358,7 @@ private fun Content(
     drawerState: DrawerState,
     profileDisplayName: String? = null,
     profileDisplayImageUri: String? = null,
+    showProfileButton: Boolean = false,
     onClickProfile: () -> Unit = {},
     latestActivities: ImmutableList<Activity>?,
     onRefresh: () -> Unit = {},
@@ -426,6 +431,7 @@ private fun Content(
             hazeState = hazeState,
             profileDisplayName = profileDisplayName,
             profileDisplayImageUri = profileDisplayImageUri,
+            showProfileButton = showProfileButton,
             onClickProfile = {
                 dismissKeyboard {
                     onClickProfile()
@@ -787,6 +793,13 @@ private fun WidgetsPage(
                 text = stringResource(R.string.widgets__add),
                 onClick = onClickAddWidget,
                 enabled = !isCalculatorInputActive,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_plus),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
                 modifier = Modifier
                     .alpha(footerAlpha)
                     .testTag("WidgetsAdd")
@@ -933,22 +946,10 @@ private fun Widgets(
         widgets.forEach { widgetsWithPosition ->
             when (widgetsWithPosition.type) {
                 WidgetType.BLOCK -> {
-                    homeUiState.currentBlock?.run {
+                    homeUiState.currentBlock?.let { block ->
                         BlockCard(
-                            showBlock = homeUiState.blocksPreferences.showBlock,
-                            showTime = homeUiState.blocksPreferences.showTime,
-                            showDate = homeUiState.blocksPreferences.showDate,
-                            showTransactions = homeUiState.blocksPreferences.showTransactions,
-                            showSize = homeUiState.blocksPreferences.showSize,
-                            showFees = homeUiState.blocksPreferences.showFees,
-                            showSource = homeUiState.blocksPreferences.showSource,
-                            time = time,
-                            date = date,
-                            transactions = transactionCount,
-                            size = size,
-                            fees = fees,
-                            source = source,
-                            block = height,
+                            preferences = homeUiState.blocksPreferences,
+                            block = block,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("BlocksWidget")
@@ -1036,6 +1037,7 @@ private fun TopBar(
     hazeState: HazeState,
     profileDisplayName: String? = null,
     profileDisplayImageUri: String? = null,
+    showProfileButton: Boolean = false,
     onClickProfile: () -> Unit = {},
     showEditWidgets: Boolean = false,
     isEditingWidgets: Boolean = false,
@@ -1054,11 +1056,13 @@ private fun TopBar(
     ) {
         TopAppBar(
             title = {
-                ProfileButton(
-                    displayName = profileDisplayName,
-                    displayImageUri = profileDisplayImageUri,
-                    onClick = onClickProfile,
-                )
+                if (showProfileButton) {
+                    ProfileButton(
+                        displayName = profileDisplayName,
+                        displayImageUri = profileDisplayImageUri,
+                        onClick = onClickProfile,
+                    )
+                }
             },
             actions = {
                 AnimatedVisibility(showEditWidgets) {
@@ -1175,7 +1179,6 @@ private val previewBlock = BlockModel(
     date = "01/2/2022",
     transactionCount = "2,175",
     size = "1,606kB",
-    source = "mempool.io",
     fees = "25 059 357",
 )
 

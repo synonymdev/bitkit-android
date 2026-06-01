@@ -17,6 +17,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.MoneyType
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -45,6 +46,8 @@ fun CalculatorPreviewScreen(
         uiState = uiState,
         onBtcChange = viewModel::onBtcInputChanged,
         onFiatChange = viewModel::onFiatInputChanged,
+        onInputSelected = viewModel::onInputSelected,
+        onInputDismissed = viewModel::onInputDismissed,
         onClickDelete = {
             viewModel.removeWidget()
             onClose()
@@ -67,6 +70,8 @@ fun CalculatorPreviewContent(
     uiState: CalculatorUiState = CalculatorUiState(),
     onBtcChange: (String) -> Unit = {},
     onFiatChange: (String) -> Unit = {},
+    onInputSelected: (MoneyType) -> Unit = {},
+    onInputDismissed: () -> Unit = {},
 ) {
     ScreenColumn(
         modifier = modifier.testTag("calculator_preview_screen")
@@ -117,6 +122,8 @@ fun CalculatorPreviewContent(
                         fiatName = uiState.selectedCurrency,
                         fiatValue = uiState.fiatValue,
                         onFiatChange = onFiatChange,
+                        onInputSelected = onInputSelected,
+                        onInputDismissed = onInputDismissed,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("calculator_card_wide")

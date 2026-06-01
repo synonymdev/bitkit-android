@@ -164,6 +164,7 @@ android {
         buildConfigField("boolean", "TREZOR_BRIDGE", trezorBridgeEnv)
         buildConfigField("String", "TREZOR_BRIDGE_URL", "\"$trezorBridgeUrlEnv\"")
         buildConfigField("boolean", "GEO", System.getenv("GEO")?.toBoolean()?.toString() ?: "true")
+        buildConfigField("boolean", "FEATURE_PAYKIT_UI_DISABLED", System.getenv("PAYKIT_UI_DISABLED")?.toBoolean()?.toString() ?: "false")
         buildConfigField("String", "LOCALES", "\"${bcp47Locales.joinToString(",")}\"")
     }
 

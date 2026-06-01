@@ -351,6 +351,7 @@ class LightningRepo @Inject constructor(
 
                 // Initial state sync
                 syncState()
+                logNodeSupportSummary("node started")
                 updateGeoBlockState()
                 refreshChannelCache()
 
@@ -377,6 +378,7 @@ class LightningRepo @Inject constructor(
                 connectToTrustedPeers().onFailure {
                     Logger.error("Failed to connect to trusted peers", it, context = TAG)
                 }
+                logNodeSupportSummary("trusted peers connected")
 
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
@@ -1326,6 +1328,52 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    private fun logNodeSupportSummary(reason: String) {
+        val state = _lightningState.value
+        val connectedPeers = state.peers.count { it.isConnected }
+        val persistedPeers = state.peers.count { it.isPersisted }
+        val readyChannels = state.channels.count { it.isChannelReady }
+        val usableChannels = state.channels.count { it.isUsable }
+
+        Logger.info(
+            "Collected node support summary for '$reason': " +
+                "nodeId='${state.nodeId}', " +
+                "lifecycle='${state.nodeLifecycleState}', " +
+                "peers='${state.peers.size}', " +
+                "connectedPeers='$connectedPeers', " +
+                "persistedPeers='$persistedPeers', " +
+                "channels='${state.channels.size}', " +
+                "readyChannels='$readyChannels', " +
+                "usableChannels='$usableChannels'",
+            context = TAG,
+        )
+
+        state.peers.forEach {
+            Logger.info(
+                "Collected peer support summary for '$reason': " +
+                    "nodeId='${it.nodeId}', " +
+                    "address='${it.address}', " +
+                    "connected='${it.isConnected}', " +
+                    "persisted='${it.isPersisted}'",
+                context = TAG,
+            )
+        }
+
+        state.channels.forEach {
+            Logger.info(
+                "Collected channel support summary for '$reason': " +
+                    "channelId='${it.channelId}', " +
+                    "counterparty='${it.counterpartyNodeId}', " +
+                    "ready='${it.isChannelReady}', " +
+                    "usable='${it.isUsable}', " +
+                    "announced='${it.isAnnounced}', " +
+                    "outboundMsat='${it.outboundCapacityMsat}', " +
+                    "inboundMsat='${it.inboundCapacityMsat}'",
+                context = TAG,
+            )
+        }
+    }
+
     suspend fun awaitPeerConnected(timeout: Duration = 30.seconds) = withContext(bgDispatcher) {
         if (lightningService.peers?.any { it.isConnected } == true) return@withContext
         Logger.debug("Waiting for peer to reconnect (timeout='$timeout')...", context = TAG)
@@ -1555,6 +1603,26 @@ class LightningRepo @Inject constructor(
         outcome?.let { Result.success(it) }
             ?: Result.failure(ProbeError.TimedOut())
     }
+
+    fun probeReadiness(): ProbeReadiness {
+        val state = _lightningState.value
+        val graph = getNetworkGraphInfo()
+        return ProbeReadiness(
+            nodeRunning = state.nodeLifecycleState.isRunning(),
+            nodeId = state.nodeId.takeIf { it.isNotBlank() },
+            lifecycle = state.nodeLifecycleState.toString(),
+            peers = state.peers.size,
+            connectedPeers = state.peers.count { it.isConnected },
+            channels = state.channels.size,
+            readyChannels = state.channels.count { it.isChannelReady },
+            usableChannels = state.channels.count { it.isUsable },
+            outboundCapacitySats = state.channels.totalNextOutboundHtlcLimitSats(),
+            graphNodeCount = graph?.nodeCount,
+            graphChannelCount = graph?.channelCount,
+            latestRgsSyncTimestamp = graph?.latestRgsSyncTimestamp,
+            syncHealthy = state.isSyncHealthy,
+        )
+    }
     // endregion
 
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
@@ -1620,6 +1688,30 @@ data class LightningState(
 data class ProbeDispatch(
     val paymentIds: Set<PaymentId>,
 )
+
+data class ProbeReadiness(
+    val nodeRunning: Boolean,
+    val nodeId: String?,
+    val lifecycle: String,
+    val peers: Int,
+    val connectedPeers: Int,
+    val channels: Int,
+    val readyChannels: Int,
+    val usableChannels: Int,
+    val outboundCapacitySats: ULong,
+    val graphNodeCount: Int?,
+    val graphChannelCount: Int?,
+    val latestRgsSyncTimestamp: ULong?,
+    val syncHealthy: Boolean,
+) {
+    val ready: Boolean
+        get() = nodeRunning &&
+            connectedPeers > 0 &&
+            usableChannels > 0 &&
+            outboundCapacitySats > 0u &&
+            (graphChannelCount ?: 0) > 0 &&
+            syncHealthy
+}
 
 sealed interface ProbeOutcome {
     val paymentId: PaymentId

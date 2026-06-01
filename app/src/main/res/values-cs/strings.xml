@@ -728,7 +728,6 @@
     <string name="settings__support__copyright">Bitkit vytvořila společnost Synonym Software, S.A. DE C.V. ©2025. Všechna práva vyhrazena.</string>
     <string name="settings__support_title">Podpora</string>
     <string name="settings__widgets__nav_title">Widgety</string>
-    <string name="settings__widgets__showWidgetTitles">Zobrazit názvy widgetů</string>
     <string name="settings__widgets__showWidgets">Widgety</string>
     <string name="settings__widgets__reset_suggestions">Resetovat karty návrhů</string>
     <string name="settings__widgets__reset_widgets">Resetovat widgety</string>
@@ -1009,6 +1008,5 @@
     <string name="widgets__widget__edit_default">Výchozí</string>
     <string name="widgets__widget__edit_description">Vyberte, která pole chcete zobrazit ve widgetu {name}.</string>
     <string name="widgets__widget__nav_title">Widget</string>
-    <string name="widgets__widget__source">Zdroj</string>
     <string name="widgets__widgets">Widgety</string>
 </resources>

@@ -20,6 +20,8 @@ google-services.json
 # Tracked fallback config used only so debug variants compile from a fresh clone.
 !app/google-services.json
 .env
+.env.*
+!.env.example
 *.keystore
 !debug.keystore
 keystore.*

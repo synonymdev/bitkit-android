@@ -62,6 +62,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
+import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -123,7 +124,7 @@ fun QrScanningScreen(
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
                 val qrCode = result.getOrThrow()
-                Logger.debug("QR code scanned: $qrCode")
+                Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                 setScanResult(qrCode)
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
@@ -359,7 +360,7 @@ private fun processImageFromGallery(
                 for (barcode in barcodes) {
                     barcode.rawValue?.let { qrCode ->
                         onScanSuccess(qrCode)
-                        Logger.info("QR code found $qrCode")
+                        Logger.info("Found QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                         return@addOnSuccessListener
                     }
                 }

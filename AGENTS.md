@@ -10,43 +10,46 @@ Durable shared agent command specs live in `.agents/commands/`. For PR creation,
 
 ```sh
 # compile
-./gradlew compileDevDebugKotlin
+just compile
+
+# Build, install, launch dev app on connected target
+just run
 
 # Build for dev
-./gradlew assembleDevDebug
+just build
 
 # Run unit tests
-./gradlew testDevDebugUnitTest
+just test
 
 # Run specific unit test file
-./gradlew testDevDebugUnitTest --tests LightningRepoTest
+just test file LightningRepoTest
 
 # Run instrumented tests
-./gradlew connectedDevDebugAndroidTest
+just test android
 
 # Build for E2E tests (UI hooks enabled, local Electrum by default)
-E2E=true ./gradlew assembleDevRelease
+just e2e
 
 # Build for E2E tests with geoblocking disabled
-GEO=false E2E=true ./gradlew assembleDevRelease
+just e2e no geo
 
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
-E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
+just e2e network assembleTnetRelease
 
 # Lint using detekt
-./gradlew detekt
+just lint
 
 # Auto-format using detekt
-./gradlew detekt --auto-correct
+just format
 
 # Update detekt baseline
-./gradlew detektBaseline
+just lint baseline
 
 # Install dev build
-./gradlew installDevDebug
+just install
 
 # Clean build artifacts
-./gradlew clean
+just clean
 ```
 
 ## Architecture Overview
@@ -162,7 +165,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 
 - USE coding rules from `.cursor/default.rules.mdc`
 - For multi-step changes, stacked PR surgery, and review follow-up with several small edits, batch validation instead of running the full build/check suite after every edit. Run the relevant Gradle checks once the coherent change set is ready, before updating a PR or pushing.
-- Still run `./gradlew compileDevDebugKotlin`, `./gradlew testDevDebugUnitTest`, and `./gradlew detekt` before the final PR update/push for code changes, and fix failures before pushing.
+- Still run `just compile`, `just test`, and `just lint` before the final PR update/push for code changes, and fix failures before pushing.
 - After fixing validation failures, rerun the narrowest useful check that proves the fix. If only test files changed, prefer the targeted test task and a test-focused lint/detekt check when the project tooling supports it; otherwise use the standard detekt task before pushing.
 - Use narrower checks earlier only when they answer an immediate risk, e.g. a single unit test after touching focused business logic or a Kotlin compile after a risky refactor.
 - ALWAYS ask clarifying questions to ensure an optimal plan when encountering functional or technical uncertainties in requests
@@ -188,6 +191,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER manually append the `Throwable`'s message or any other props to the string passed as the 1st param of `Logger.*` calls, its internals are already enriching the final log message with the details of the `Throwable` passed via the `e` arg
 - ALWAYS wrap parameter values in log messages with single quotes, e.g. `Logger.info("Received event '$eventName'", context = TAG)`
 - ALWAYS start log messages with a verb, e.g. `Logger.info("Received payment for '$hash'", context = TAG)`
+- ALWAYS keep log names, tags, labels, and references mechanically traceable to the caller. Do not rewrite them into long descriptions.
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch

@@ -75,6 +75,7 @@ fun DrawerMenu(
     hasSeenContactsIntro: Boolean = false,
     hasContacts: Boolean = false,
     isProfileAuthenticated: Boolean = false,
+    isPaykitEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -128,6 +129,11 @@ fun DrawerMenu(
             },
             onClickContacts = {
                 when {
+                    !isPaykitEnabled -> {
+                        onBeforeNavigate(Routes.Contacts())
+                        rootNavController.navigateIfNotCurrent(Routes.Contacts())
+                    }
+
                     !hasSeenContactsIntro && !hasContacts -> {
                         onBeforeNavigate(Routes.ContactsIntro)
                         rootNavController.navigateIfNotCurrent(Routes.ContactsIntro)
@@ -150,17 +156,22 @@ fun DrawerMenu(
                 }
             },
             onClickProfile = {
-                onBeforeNavigate(
-                    when {
-                        isProfileAuthenticated -> Routes.Profile
-                        hasSeenProfileIntro -> Routes.PubkyChoice
-                        else -> Routes.ProfileIntro
-                    }
-                )
-                rootNavController.navigateToProfile(
-                    isAuthenticated = isProfileAuthenticated,
-                    hasSeenIntro = hasSeenProfileIntro,
-                )
+                if (!isPaykitEnabled) {
+                    onBeforeNavigate(Routes.Profile)
+                    rootNavController.navigateIfNotCurrent(Routes.Profile)
+                } else {
+                    onBeforeNavigate(
+                        when {
+                            isProfileAuthenticated -> Routes.Profile
+                            hasSeenProfileIntro -> Routes.PubkyChoice
+                            else -> Routes.ProfileIntro
+                        }
+                    )
+                    rootNavController.navigateToProfile(
+                        isAuthenticated = isProfileAuthenticated,
+                        hasSeenIntro = hasSeenProfileIntro,
+                    )
+                }
             },
             onBeforeNavigate = onBeforeNavigate,
         )

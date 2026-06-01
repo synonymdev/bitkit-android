@@ -87,6 +87,18 @@ fun AddressType.toDerivationPath(
     }
 }
 
+fun AddressType.toAccountDerivationPath(network: Network = Env.network): String {
+    val coinType = if (network == Network.BITCOIN) 0 else 1
+
+    return when (this) {
+        AddressType.P2TR -> "m/86'/$coinType'/0'"
+        AddressType.P2WPKH -> "m/84'/$coinType'/0'"
+        AddressType.P2SH -> "m/49'/$coinType'/0'"
+        AddressType.P2PKH -> "m/44'/$coinType'/0'"
+        else -> ""
+    }
+}
+
 fun AddressType.toSettingsString(): String = when (this) {
     AddressType.P2TR -> "taproot"
     AddressType.P2WPKH -> "nativeSegwit"

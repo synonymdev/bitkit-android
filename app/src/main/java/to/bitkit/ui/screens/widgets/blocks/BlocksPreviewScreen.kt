@@ -119,39 +119,15 @@ private fun Content(
                 WidgetSizeCarousel(
                     smallContent = {
                         BlockCardSmall(
-                            showBlock = blocksPreferences.showBlock,
-                            showTime = blocksPreferences.showTime,
-                            showDate = blocksPreferences.showDate,
-                            showTransactions = blocksPreferences.showTransactions,
-                            showSize = blocksPreferences.showSize,
-                            showFees = blocksPreferences.showFees,
-                            showSource = blocksPreferences.showSource,
-                            block = it.height,
-                            time = it.time,
-                            date = it.date,
-                            transactions = it.transactionCount,
-                            size = it.size,
-                            fees = it.fees,
-                            source = it.source,
+                            preferences = blocksPreferences,
+                            block = it,
                             modifier = Modifier.testTag("block_card_small")
                         )
                     },
                     wideContent = {
                         BlockCard(
-                            showBlock = blocksPreferences.showBlock,
-                            showTime = blocksPreferences.showTime,
-                            showDate = blocksPreferences.showDate,
-                            showTransactions = blocksPreferences.showTransactions,
-                            showSize = blocksPreferences.showSize,
-                            showFees = blocksPreferences.showFees,
-                            showSource = blocksPreferences.showSource,
-                            block = it.height,
-                            time = it.time,
-                            date = it.date,
-                            transactions = it.transactionCount,
-                            size = it.size,
-                            fees = it.fees,
-                            source = it.source,
+                            preferences = blocksPreferences,
+                            block = it,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("block_card_wide")
@@ -215,7 +191,6 @@ private fun Preview() {
                 date = "2023-01-01",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                source = "mempool.space",
                 fees = "25 059 357",
             ),
             isBlocksWidgetEnabled = false,
@@ -238,7 +213,6 @@ private fun Preview2() {
                 showDate = false,
                 showTransactions = true,
                 showSize = false,
-                showSource = true
             ),
             block = BlockModel(
                 height = "123456",
@@ -246,7 +220,6 @@ private fun Preview2() {
                 date = "2023-01-01",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                source = "mempool.space",
                 fees = "25 059 357",
             ),
             isBlocksWidgetEnabled = true,

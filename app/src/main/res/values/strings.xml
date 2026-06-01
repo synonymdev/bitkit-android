@@ -8,6 +8,26 @@
     <string name="appwidget__price__timeframe">Timeframe</string>
     <string name="appwidget__price__week">Week</string>
     <string name="appwidget__price__year">Year</string>
+    <string name="btcpay__descriptor_label">Primary address type descriptor</string>
+    <string name="btcpay__error_title">BTCPay setup failed</string>
+    <string name="btcpay__invalid_link_text">This BTCPay setup link is invalid.</string>
+    <string name="btcpay__invalid_response">Invalid setup response.</string>
+    <string name="btcpay__limited_support_label">Limited support</string>
+    <string name="btcpay__missing_mnemonic">Bitkit could not read your recovery phrase.</string>
+    <string name="btcpay__missing_result">The store did not return a Bitcoin setup result.</string>
+    <string name="btcpay__onchain_label">Bitcoin on-chain</string>
+    <string name="btcpay__rejected_descriptor">The store rejected the Bitcoin descriptor.</string>
+    <string name="btcpay__request_error">Could not prepare the setup request.</string>
+    <string name="btcpay__setup_failed">Setup failed.</string>
+    <string name="btcpay__sheet_description">Bitkit will share a Bitcoin on-chain receive descriptor so this BTCPay store can generate addresses for your wallet.</string>
+    <string name="btcpay__sheet_title">Connect BTCPay</string>
+    <string name="btcpay__store_label">BTCPay store</string>
+    <string name="btcpay__success_description">Bitcoin on-chain receiving is ready for this store.</string>
+    <string name="btcpay__success_title">BTCPay connected</string>
+    <string name="btcpay__unsupported_http_text">BTCPay setup links must use HTTPS unless they point to a local or private server.</string>
+    <string name="btcpay__unsupported_note">Only Bitcoin on-chain will be connected. Other methods from this QR are not supported in Bitkit yet.</string>
+    <string name="btcpay__unsupported_text">This QR does not request Bitcoin on-chain setup.</string>
+    <string name="btcpay__unsupported_title">Setup not supported</string>
     <string name="cards__backupSeedPhrase__description">Store your bitcoin</string>
     <string name="cards__backupSeedPhrase__title">Back up</string>
     <string name="cards__buyBitcoin__description">Buy some bitcoin</string>
@@ -888,7 +908,7 @@
     <string name="settings__support__report">Report Issue</string>
     <string name="settings__support__report_text">Please describe the issue you are experiencing or ask a general question.</string>
     <string name="settings__support__status">App Status</string>
-    <string name="settings__support__copyright">Bitkit was crafted by Synonym Software, S.A. DE C.V. ©2025. All rights reserved.</string>
+    <string name="settings__support__copyright">Bitkit was crafted by Synonym Software, S.A. DE C.V. ©{year}. All rights reserved.</string>
     <string name="settings__support__text">Need help? Report your issue from within Bitkit or visit our help center.</string>
     <string name="settings__support__text_button">Send</string>
     <string name="settings__support__text_success">Thank you for contacting us! We will try to get back to you as soon as possible.</string>
@@ -900,7 +920,6 @@
     <string name="settings__support__title_unsuccess">Failed To Send</string>
     <string name="settings__support_title">Support</string>
     <string name="settings__widgets__nav_title">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Show Widget Titles</string>
     <string name="settings__widgets__reset_suggestions">Reset Suggestions Cards</string>
     <string name="settings__widgets__reset_widgets">Reset Widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Are you sure you want to reset the widgets? The default widget set with default configurations will be displayed.</string>
@@ -1166,7 +1185,8 @@
     <string name="wallet__transfer_to_spending">Transfer To Spending</string>
     <string name="wallet__withdraw_error">Your withdrawal was unsuccessful. Please scan the QR code again or contact support.</string>
     <string name="widgets__add">Add Widget</string>
-    <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks.</string>
+    <string name="widgets__blocks__data_header">Data (max 4)</string>
+    <string name="widgets__blocks__description">Examine various statistics on newly mined Bitcoin Blocks. Powered by mempool.space.</string>
     <string name="widgets__blocks__field__block">Block</string>
     <string name="widgets__blocks__field__date">Date</string>
     <string name="widgets__blocks__field__fees">Fees</string>
@@ -1218,6 +1238,5 @@
     <string name="widgets__widget__settings">Widget Settings</string>
     <string name="widgets__widget__size_small">Small</string>
     <string name="widgets__widget__size_wide">Wide</string>
-    <string name="widgets__widget__source">Source</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>

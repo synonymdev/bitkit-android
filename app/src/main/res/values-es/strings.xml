@@ -562,7 +562,6 @@
     <string name="settings__general__section_payments">Pagos</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Mostrar Títulos de Widgets</string>
     <string name="settings__widgets__reset_suggestions">Restablecer tarjetas de sugerencias</string>
     <string name="settings__widgets__reset_widgets">Restablecer widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">¿Estás seguro de que deseas restablecer los widgets? Se mostrará el conjunto de widgets predeterminado con las configuraciones predeterminadas.</string>
@@ -976,7 +975,6 @@
     <string name="widgets__widget__nav_title">Widget</string>
     <string name="widgets__widget__edit_custom">Personalizar</string>
     <string name="widgets__widget__edit_description">Por favor, seleccione cuales campos quiere mostrar en el widget {name}.</string>
-    <string name="widgets__widget__source">Fuente</string>
     <string name="widgets__add">Añadir Widget</string>
     <string name="widgets__delete__title">¿Borrar Widget?</string>
     <string name="widgets__delete__description">¿Está seguro de querer borrar ‘{name}‘ de sus widgets?</string>

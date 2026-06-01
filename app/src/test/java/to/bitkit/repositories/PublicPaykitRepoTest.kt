@@ -114,6 +114,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
                 publicPaykitBolt11 = "lnbc1old",
                 publicPaykitBolt11PaymentHash = "010203",
                 publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+                publicPaykitCleanupPending = true,
             ),
         )
 
@@ -131,6 +132,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
+        assertEquals(false, settingsFlow.value.publicPaykitCleanupPending)
         verify(pubkyRepo).removePaymentEndpoint(MethodId.Bolt11.rawValue)
         verify(pubkyRepo).removePaymentEndpoint(MethodId.P2tr.rawValue)
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Lnurl.rawValue)

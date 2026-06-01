@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import androidx.compose.runtime.Immutable
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.LegacyRnCloseRecoveryScanResult
+import com.synonym.bitkitcore.LegacyRnCloseRecoverySweepPreview
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.ImmutableList
@@ -25,6 +27,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
@@ -33,16 +36,20 @@ import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.msatFloorOf
+import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toDerivationPath
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.measured
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LongParameterList", "TooManyFunctions")
 @Singleton
@@ -106,6 +113,77 @@ class WalletRepo @Inject constructor(
             coreService.isAddressUsed(address)
         }.onFailure {
             Logger.error("checkAddressUsage error", it, context = TAG)
+        }
+    }
+
+    suspend fun scanLegacyRnNativeSegwitRecoveryFunds(
+        indexLimit: UInt,
+    ): Result<LegacyRnCloseRecoveryScanResult> = withContext(bgDispatcher) {
+        runCatching {
+            val (mnemonic, passphrase) = recoveryWalletCredentials()
+            val electrumUrl = settingsStore.data.first().electrumServer
+
+            coreService.onchain.scanLegacyRnNativeSegwitRecoveryFunds(
+                mnemonicPhrase = mnemonic,
+                network = Env.network,
+                electrumUrl = electrumUrl,
+                indexLimit = indexLimit,
+                bip39Passphrase = passphrase,
+            )
+        }.onFailure {
+            Logger.error("Legacy RN recovery scan failed", it, context = TAG)
+        }
+    }
+
+    suspend fun prepareLegacyRnNativeSegwitRecoverySweep(
+        indexLimit: UInt,
+        feeRateSatsPerVbyte: UInt?,
+    ): Result<LegacyRnCloseRecoverySweepPreview> = withContext(bgDispatcher) {
+        runCatching {
+            val (mnemonic, passphrase) = recoveryWalletCredentials()
+            val electrumUrl = settingsStore.data.first().electrumServer
+            val destinationAddress = recoverySweepDestinationAddress()
+
+            coreService.onchain.prepareLegacyRnNativeSegwitRecoverySweep(
+                mnemonicPhrase = mnemonic,
+                network = Env.network,
+                electrumUrl = electrumUrl,
+                destinationAddress = destinationAddress,
+                feeRateSatsPerVbyte = feeRateSatsPerVbyte,
+                indexLimit = indexLimit,
+                bip39Passphrase = passphrase,
+            )
+        }.onFailure {
+            Logger.error("Legacy RN recovery sweep prepare failed", it, context = TAG)
+        }
+    }
+
+    suspend fun broadcastLegacyRnNativeSegwitRecoverySweep(txHex: String): Result<String> = withContext(bgDispatcher) {
+        runCatching {
+            val electrumUrl = settingsStore.data.first().electrumServer
+            val txid = coreService.onchain.broadcastRawTx(serializedTx = txHex, electrumUrl = electrumUrl)
+            syncNodeAndWallet(SyncSource.MANUAL).onFailure {
+                Logger.warn("Legacy RN recovery post-broadcast sync failed", it, context = TAG)
+            }
+            txid
+        }.onFailure {
+            Logger.error("Legacy RN recovery sweep broadcast failed", it, context = TAG)
+        }
+    }
+
+    private fun recoveryWalletCredentials(): Pair<String, String?> {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        return mnemonic to passphrase
+    }
+
+    private suspend fun recoverySweepDestinationAddress(): String {
+        val currentAddress = getOnchainAddress()
+        if (currentAddress.isNotBlank()) return currentAddress
+
+        return newAddress().getOrThrow().also {
+            require(it.isNotBlank()) { "Destination address unavailable" }
         }
     }
 
@@ -176,7 +254,7 @@ class WalletRepo @Inject constructor(
         val startHeight = lightningRepo.lightningState.value.block()?.height
         Logger.debug("Sync $sourceLabel started at block height=$startHeight", context = TAG)
 
-        val result = measured(label = "Sync $sourceLabel", context = TAG) {
+        val result = measured(label = "Sync $sourceLabel", context = TAG, slowThreshold = SLOW_SYNC_THRESHOLD) {
             syncBalances()
             lightningRepo.sync().onSuccess {
                 syncBalances()
@@ -401,7 +479,14 @@ class WalletRepo @Inject constructor(
                 isChange = isChange,
                 startIndex = startIndex,
                 count = count,
-            ).getOrThrow()
+            ).getOrElse {
+                deriveAddressInfosFromMnemonic(
+                    addressType = addressType,
+                    isChange = isChange,
+                    startIndex = startIndex,
+                    count = count,
+                )
+            }
 
             val addresses = result.map { address ->
                 AddressModel(
@@ -414,6 +499,33 @@ class WalletRepo @Inject constructor(
             return@runCatching addresses
         }.onFailure {
             Logger.error("Error getting addresses", it, context = TAG)
+        }
+    }
+
+    private suspend fun deriveAddressInfosFromMnemonic(
+        addressType: AddressType,
+        isChange: Boolean,
+        startIndex: Int,
+        count: Int,
+    ): List<AddressDerivationInfo> {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val baseDerivationPath = addressType.toAccountDerivationPath()
+
+        return coreService.onchain.deriveBitcoinAddresses(
+            mnemonicPhrase = mnemonic,
+            derivationPathStr = baseDerivationPath,
+            network = Env.network,
+            bip39Passphrase = passphrase,
+            isChange = isChange,
+            startIndex = startIndex.toUInt(),
+            count = count.toUInt(),
+        ).addresses.mapIndexed { offset, address ->
+            AddressDerivationInfo(
+                address = address.address,
+                index = startIndex + offset,
+            )
         }
     }
 
@@ -602,6 +714,7 @@ class WalletRepo @Inject constructor(
     private companion object {
         const val TAG = "WalletRepo"
         const val EVENT_SYNC_DEBOUNCE_MS = 500L
+        val SLOW_SYNC_THRESHOLD = 5.seconds
     }
 }
 

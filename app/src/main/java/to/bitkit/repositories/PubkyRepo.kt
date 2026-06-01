@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -30,6 +31,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -983,7 +985,8 @@ class PubkyRepo @Inject constructor(
     // region Sign out
 
     suspend fun signOut(): Result<Unit> {
-        removeBitkitPaymentEndpoints()
+        val hadPublicPaykitState = settingsStore.data.first().hasPublicPaykitPublicationState()
+        val endpointCleanupResult = removeBitkitPaymentEndpoints()
             .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
 
         val result = runCatching {
@@ -993,7 +996,7 @@ class PubkyRepo @Inject constructor(
             withContext(ioDispatcher) { pubkyService.forceSignOut() }
         }
 
-        clearLocalState()
+        clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPublicPaykitState)
         return result
     }
 
@@ -1074,16 +1077,16 @@ class PubkyRepo @Inject constructor(
         _contactsLoadVersion.update { it + 1 }
     }
 
-    private suspend fun clearLocalState() = withContext(ioDispatcher) {
+    private suspend fun clearLocalState(publicPaykitCleanupPending: Boolean = false) = withContext(ioDispatcher) {
         runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
-        runCatching { clearPublicPaykitSharingState() }
+        runCatching { clearPublicPaykitSharingState(publicPaykitCleanupPending) }
             .onFailure { Logger.warn("Failed to clear public Paykit sharing state", it, context = TAG) }
         notifyBackupStateChanged()
         clearAuthenticatedState()
     }
 
-    private suspend fun clearPublicPaykitSharingState() {
+    private suspend fun clearPublicPaykitSharingState(publicPaykitCleanupPending: Boolean) {
         settingsStore.update {
             it.copy(
                 hasConfirmedPublicPaykitEndpoints = false,
@@ -1091,6 +1094,7 @@ class PubkyRepo @Inject constructor(
                 publicPaykitBolt11 = "",
                 publicPaykitBolt11PaymentHash = "",
                 publicPaykitBolt11ExpiresAtMillis = 0,
+                publicPaykitCleanupPending = publicPaykitCleanupPending,
             )
         }
     }

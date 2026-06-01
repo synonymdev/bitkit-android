@@ -3,8 +3,13 @@ package to.bitkit.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
@@ -24,13 +29,17 @@ private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
     serializer = SettingsSerializer,
 )
 
+private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore("local_settings")
+
 @Singleton
 class SettingsStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val store = context.settingsDataStore
+    private val localStore = context.localSettingsDataStore
 
     val data: Flow<SettingsData> = store.data
+    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -51,6 +60,10 @@ class SettingsStore @Inject constructor(
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
         store.updateData(transform)
+    }
+
+    suspend fun setIsPaykitEnabled(value: Boolean) {
+        localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
     }
 
     suspend fun addLastUsedTag(newTag: String) {
@@ -76,6 +89,7 @@ class SettingsStore @Inject constructor(
 
     suspend fun reset() {
         store.updateData { SettingsData() }
+        localStore.edit { it.clear() }
         restoredMonitoredTypesFromBackup = false
         Logger.info("Deleted all user settings data.")
     }
@@ -83,6 +97,7 @@ class SettingsStore @Inject constructor(
     companion object {
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
+        private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
     }
 }
 
@@ -103,6 +118,7 @@ data class SettingsData(
     val hasConfirmedPublicPaykitEndpoints: Boolean = false,
     val sharesPublicPaykitEndpoints: Boolean = false,
     val sharesPrivatePaykitEndpoints: Boolean = false,
+    val publicPaykitCleanupPending: Boolean = false,
     val publicPaykitLightningEnabled: Boolean = true,
     val publicPaykitOnchainEnabled: Boolean = true,
     val publicPaykitBolt11: String = "",
@@ -118,7 +134,6 @@ data class SettingsData(
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = Env.isDebug,
     val showWidgets: Boolean = true,
-    val showWidgetTitles: Boolean = false,
     val lastUsedTags: List<String> = emptyList(),
     val enableSwipeToHideBalance: Boolean = true,
     val hideBalance: Boolean = false,
@@ -147,4 +162,26 @@ fun SettingsData.resetPin() = this.copy(
     isPinEnabled = false,
     isPinForPaymentsEnabled = false,
     isBiometricEnabled = false,
+)
+
+fun SettingsData.hasPublicPaykitPublicationState(): Boolean =
+    hasConfirmedPublicPaykitEndpoints ||
+        sharesPublicPaykitEndpoints ||
+        publicPaykitCleanupPending ||
+        publicPaykitBolt11.isNotBlank() ||
+        publicPaykitBolt11PaymentHash.isNotBlank() ||
+        publicPaykitBolt11ExpiresAtMillis > 0L
+
+fun SettingsData.hasPaykitState(): Boolean =
+    hasPublicPaykitPublicationState() ||
+        sharesPrivatePaykitEndpoints
+
+fun SettingsData.paykitDisabled(markPublicCleanupPending: Boolean = false) = copy(
+    hasConfirmedPublicPaykitEndpoints = false,
+    sharesPublicPaykitEndpoints = false,
+    sharesPrivatePaykitEndpoints = false,
+    publicPaykitCleanupPending = publicPaykitCleanupPending || markPublicCleanupPending,
+    publicPaykitBolt11 = "",
+    publicPaykitBolt11PaymentHash = "",
+    publicPaykitBolt11ExpiresAtMillis = 0,
 )

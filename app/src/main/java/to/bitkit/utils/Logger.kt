@@ -21,10 +21,18 @@ import java.io.FileOutputStream
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.time.measureTime
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTimedValue
 
 private const val APP = "APP"
 private const val COMPACT = false
+private const val LOG_FILE_EXTENSION = "log"
+private const val MAX_LOG_FILE_BYTES = 1L * 1024L * 1024L
+private const val MAX_LOG_RETENTION_BYTES = 500L * 1024L * 1024L
+private const val MAX_LOG_RETENTION_DAYS = 60L
+private const val MILLIS_IN_DAY = 24L * 60L * 60L * 1000L
+private val DEFAULT_SLOW_OPERATION_THRESHOLD = 1.seconds
 
 enum class LogSource { Ldk, Bitkit, Unknown }
 enum class LogLevel { PERF, VERBOSE, GOSSIP, TRACE, DEBUG, INFO, WARN, ERROR }
@@ -208,14 +216,18 @@ class LogSaverImpl(
     private val queue: CoroutineScope by lazy {
         CoroutineScope(newSingleThreadDispatcher(ServiceQueue.LOG.name) + SupervisorJob())
     }
+    private var currentLogFilePath: String? = null
 
     init {
         if (sessionFilePath.isNotEmpty()) {
+            val sessionFile = File(sessionFilePath)
+            currentLogFilePath = sessionFile.absolutePath
+            sessionFile.parentFile?.mkdirs()
             log("Log session initialized with file path: '$sessionFilePath'")
 
-            // Clean all old log files in background
+            // Apply retention in background without wiping useful startup context.
             CoroutineScope(Dispatchers.IO).launch {
-                cleanupOldLogFiles()
+                enforceLogRetentionLimits(activeLogFile = sessionFile)
             }
         }
     }
@@ -226,8 +238,23 @@ class LogSaverImpl(
         queue.launch {
             runCatching {
                 val sanitized = message.replace("\n", " ")
-                FileOutputStream(File(sessionFilePath), true).use { stream ->
-                    stream.write("$sanitized\n".toByteArray())
+                val bytes = "$sanitized\n".toByteArray()
+                val file = getWritableLogFile(
+                    sessionFilePath = sessionFilePath,
+                    currentLogFilePath = currentLogFilePath,
+                    nextWriteBytes = bytes.size,
+                )
+                val previousLogFilePath = currentLogFilePath
+                currentLogFilePath = file.absolutePath
+
+                FileOutputStream(file, true).use { stream ->
+                    stream.write(bytes)
+                }
+
+                if (previousLogFilePath != file.absolutePath) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        enforceLogRetentionLimits(activeLogFile = file)
+                    }
                 }
             }.onFailure {
                 Log.e(APP, "Error writing to log file: '$sessionFilePath'", it)
@@ -245,38 +272,124 @@ class LogSaverImpl(
         save(formatted)
     }
 
-    private fun cleanupOldLogFiles(maxTotalSizeMB: Int = 20) {
-        log("Deleting old log files…", LogLevel.VERBOSE, Log::v)
+    private fun enforceLogRetentionLimits(
+        maxTotalSizeBytes: Long = MAX_LOG_RETENTION_BYTES,
+        maxAgeDays: Long = MAX_LOG_RETENTION_DAYS,
+        activeLogFile: File? = null,
+    ) {
+        log("Enforcing log retention limits…", LogLevel.VERBOSE, Log::v)
         val logDir = runCatching { Env.logDir }.getOrNull() ?: return
 
-        val logFiles = logDir
-            .listFiles { file -> file.extension == "log" }
-            ?: return
+        enforceLogRetentionLimits(
+            logDir = logDir,
+            maxTotalSizeBytes = maxTotalSizeBytes,
+            maxAgeDays = maxAgeDays,
+            activeLogFile = activeLogFile,
+            deleteLogFile = ::deleteLogFile,
+        )
 
-        var totalSize = logFiles.sumOf { it.length() }
-        val maxSizeBytes = maxTotalSizeMB * 1024L * 1024L
+        log("Enforced log retention limits.", LogLevel.VERBOSE, Log::v)
+    }
 
-        // Sort by creation date (oldest first)
-        logFiles
-            .sortedBy { it.lastModified() }
-            .forEach { file ->
-                if (totalSize <= maxSizeBytes) return
-
-                runCatching {
-                    log("Deleting old log file: '${file.name}'", LogLevel.DEBUG, Log::d)
-                    if (file.delete()) {
-                        totalSize -= file.length()
-                    }
-                }.onFailure {
-                    log("Failed to delete old log file: '${file.name}'", LogLevel.WARN, Log::w)
-                }
-            }
-        log("Deleted all old log files.", LogLevel.VERBOSE, Log::v)
+    private fun deleteLogFile(file: File): Boolean {
+        return runCatching {
+            log("Deleting old log file: '${file.name}'", LogLevel.DEBUG, Log::d)
+            file.delete()
+        }.onFailure {
+            log("Failed to delete old log file: '${file.name}'", LogLevel.WARN, Log::w)
+        }.getOrDefault(false)
     }
 
     companion object {
         private const val TAG = "LogSaver"
     }
+}
+
+internal fun getWritableLogFile(
+    sessionFilePath: String,
+    currentLogFilePath: String?,
+    nextWriteBytes: Int,
+    logDir: File? = null,
+    maxLogFileBytes: Long = MAX_LOG_FILE_BYTES,
+): File {
+    val sessionFile = File(sessionFilePath)
+    val sessionDir = sessionFile.parentFile ?: logDir ?: Env.logDir
+    val sessionName = sessionFile.nameWithoutExtension
+
+    sessionDir.mkdirs()
+
+    val currentFile = currentLogFilePath
+        ?.let(::File)
+        ?.takeIf {
+            it.parentFile?.absolutePath == sessionDir.absolutePath &&
+                it.nameWithoutExtension.startsWith(sessionName)
+        }
+
+    if (currentFile != null && currentFile.hasRoomFor(nextWriteBytes, maxLogFileBytes)) {
+        return currentFile
+    }
+
+    var file = currentFile ?: sessionFile
+    var part = file.logPartNumber(sessionFile)
+    while (file.exists() && file.length() + nextWriteBytes > maxLogFileBytes) {
+        part += 1
+        file = sessionDir.resolve("$sessionName.part_${part.toString().padStart(3, '0')}.$LOG_FILE_EXTENSION")
+    }
+
+    return file
+}
+
+@Suppress("LongParameterList")
+internal fun enforceLogRetentionLimits(
+    logDir: File,
+    maxTotalSizeBytes: Long = MAX_LOG_RETENTION_BYTES,
+    maxAgeDays: Long = MAX_LOG_RETENTION_DAYS,
+    activeLogFile: File? = null,
+    nowMillis: Long = System.currentTimeMillis(),
+    deleteLogFile: (File) -> Boolean = { it.delete() },
+) {
+    val logFiles = logDir
+        .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
+        ?: return
+
+    val activeLogFilePath = activeLogFile?.absolutePath
+    val removableFiles = logFiles.filterNot { it.absolutePath == activeLogFilePath }
+    val oldestAllowedModifiedAt = nowMillis - maxAgeDays * MILLIS_IN_DAY
+
+    removableFiles
+        .sortedBy { it.lastModified() }
+        .forEach { file ->
+            if (file.lastModified() < oldestAllowedModifiedAt) {
+                deleteLogFile(file)
+            }
+        }
+
+    var totalSize = logDir
+        .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
+        ?.sumOf { it.length() }
+        ?: return
+
+    logDir
+        .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
+        ?.filterNot { it.absolutePath == activeLogFilePath }
+        ?.sortedBy { it.lastModified() }
+        ?.forEach { file ->
+            if (totalSize <= maxTotalSizeBytes) return@forEach
+
+            val fileSize = file.length()
+            if (deleteLogFile(file)) {
+                totalSize -= fileSize
+            }
+        }
+}
+
+private fun File.hasRoomFor(nextWriteBytes: Int, maxLogFileBytes: Long): Boolean {
+    return !exists() || length() + nextWriteBytes <= maxLogFileBytes
+}
+
+private fun File.logPartNumber(sessionFile: File): Int {
+    if (absolutePath == sessionFile.absolutePath) return 1
+    return nameWithoutExtension.substringAfter(".part_", "1").toIntOrNull() ?: 1
 }
 
 private fun buildSessionLogFilePath(): String {
@@ -344,12 +457,12 @@ fun errorLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"
 internal inline fun <T> measured(
     label: String,
     context: String,
+    slowThreshold: Duration = DEFAULT_SLOW_OPERATION_THRESHOLD,
     block: () -> T,
 ): T {
-    var result: T
-    val elapsed = measureTime {
-        result = block()
+    val timedValue = measureTimedValue(block)
+    if (timedValue.duration >= slowThreshold) {
+        Logger.perf("Measured '$label' in '${timedValue.duration}'", context = context)
     }
-    Logger.perf("$label took $elapsed", context = context)
-    return result
+    return timedValue.value
 }

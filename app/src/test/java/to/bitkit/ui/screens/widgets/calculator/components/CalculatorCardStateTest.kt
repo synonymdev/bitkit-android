@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.widgets.calculator.components
 import org.junit.Before
 import org.junit.Test
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.MoneyType
 import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.models.widget.resolveCalculatorSatsValue
 import to.bitkit.ui.components.KEY_000
@@ -18,6 +19,7 @@ import to.bitkit.ui.screens.widgets.calculator.formatBitcoinValue
 import to.bitkit.ui.screens.widgets.calculator.formatFiatPlaceholder
 import to.bitkit.ui.screens.widgets.calculator.formatFiatValue
 import to.bitkit.ui.screens.widgets.calculator.isBtcValueInSatsRange
+import to.bitkit.ui.screens.widgets.calculator.refreshSource
 import to.bitkit.ui.screens.widgets.calculator.sanitizeDecimalInput
 import to.bitkit.ui.screens.widgets.calculator.sanitizeIntegerInput
 import to.bitkit.ui.screens.widgets.calculator.shouldHydrateFiatFromStoredBtc
@@ -103,6 +105,34 @@ class CalculatorCardStateTest {
         )
 
         assertFalse(result)
+    }
+
+    @Test
+    fun `refreshSource preserves active fiat input when both values exist`() {
+        val values = CalculatorValues(btcValue = "10000", fiatValue = "12.34")
+
+        assertEquals(MoneyType.FIAT, values.refreshSource(activeInput = MoneyType.FIAT))
+    }
+
+    @Test
+    fun `refreshSource preserves active bitcoin input when fiat-only would otherwise win`() {
+        val values = CalculatorValues(btcValue = "", fiatValue = "12.34")
+
+        assertEquals(MoneyType.BITCOIN, values.refreshSource(activeInput = MoneyType.BITCOIN))
+    }
+
+    @Test
+    fun `refreshSource falls back to fiat for fiat-only value`() {
+        val values = CalculatorValues(btcValue = "", fiatValue = "12.34")
+
+        assertEquals(MoneyType.FIAT, values.refreshSource(activeInput = null))
+    }
+
+    @Test
+    fun `refreshSource falls back to bitcoin when both values exist`() {
+        val values = CalculatorValues(btcValue = "10000", fiatValue = "12.34")
+
+        assertEquals(MoneyType.BITCOIN, values.refreshSource(activeInput = null))
     }
 
     @Test
@@ -217,7 +247,7 @@ class CalculatorCardStateTest {
 
     @Test
     fun `formatFiatPlaceholder returns missing decimal zeros`() {
-        assertEquals("", formatFiatPlaceholder(""))
+        assertEquals("0", formatFiatPlaceholder(""))
         assertEquals("", formatFiatPlaceholder("1"))
         assertEquals("00", formatFiatPlaceholder("1."))
         assertEquals("0", formatFiatPlaceholder("1.2"))
@@ -227,8 +257,9 @@ class CalculatorCardStateTest {
 
     @Test
     fun `formatBitcoinPlaceholder returns missing classic decimal zeros`() {
-        assertEquals("", formatBitcoinPlaceholder("", BitcoinDisplayUnit.CLASSIC))
-        assertEquals("", formatBitcoinPlaceholder("1", BitcoinDisplayUnit.CLASSIC))
+        assertEquals("0", formatBitcoinPlaceholder("", BitcoinDisplayUnit.MODERN))
+        assertEquals("0.00000000", formatBitcoinPlaceholder("", BitcoinDisplayUnit.CLASSIC))
+        assertEquals(".00000000", formatBitcoinPlaceholder("1", BitcoinDisplayUnit.CLASSIC))
         assertEquals("", formatBitcoinPlaceholder("1.2", BitcoinDisplayUnit.MODERN))
         assertEquals("00000000", formatBitcoinPlaceholder("1.", BitcoinDisplayUnit.CLASSIC))
         assertEquals("0000", formatBitcoinPlaceholder("1.2345", BitcoinDisplayUnit.CLASSIC))

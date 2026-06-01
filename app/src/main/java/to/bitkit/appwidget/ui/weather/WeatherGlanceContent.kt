@@ -136,7 +136,7 @@ private fun FeeBlock(weather: WeatherModel, preferences: WeatherPreferences) {
 
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         CaptionB(
-            text = context.getString(labelRes),
+            text = context.getString(labelRes).uppercase(),
             color = GlanceColors.textSecondary,
             maxLines = 1,
         )

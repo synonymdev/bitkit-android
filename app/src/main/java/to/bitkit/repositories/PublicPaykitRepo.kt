@@ -179,11 +179,13 @@ class PublicPaykitRepo @Inject constructor(
         runCatching {
             if (!publish) {
                 removePublishedEndpoints()
+                settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
                 return@runCatching
             }
 
             val desired = buildWalletEndpoints(refresh = true)
             applyPublishedEndpoints(desired)
+            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
         }
     }
 
@@ -198,6 +200,7 @@ class PublicPaykitRepo @Inject constructor(
                 requireEndpoint = requireEndpoint,
             )
             applyPublishedEndpoints(desired)
+            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
         }
     }
 

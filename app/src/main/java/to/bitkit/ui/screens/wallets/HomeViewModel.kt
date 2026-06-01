@@ -85,7 +85,6 @@ class HomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         showWidgets = settings.showWidgets,
-                        showWidgetTitles = settings.showWidgetTitles,
                         widgetsWithPosition = if (it.isEditingWidgets &&
                             it.widgetsWithPosition.size == widgetsData.widgets.size
                         ) {
@@ -322,7 +321,9 @@ class HomeViewModel @Inject constructor(
             else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
-        baseSuggestions.filterNot { it in dismissedList }.take(MAX_SUGGESTIONS)
+        baseSuggestions
+            .filterNot { it in dismissedList }
+            .take(MAX_SUGGESTIONS)
     }
 
     private fun spendingSuggestions(

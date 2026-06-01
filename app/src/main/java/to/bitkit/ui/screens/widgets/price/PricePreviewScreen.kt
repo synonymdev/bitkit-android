@@ -121,7 +121,7 @@ fun PricePreviewContent(
             )
 
             SettingsButtonRow(
-                title = stringResource(R.string.widgets__widget__edit),
+                title = stringResource(R.string.widgets__widget__settings),
                 value = SettingsButtonValue.StringValue(
                     if (pricePreferences == PricePreferences()) {
                         stringResource(R.string.widgets__widget__edit_default)

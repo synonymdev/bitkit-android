@@ -130,7 +130,7 @@ fun PriceEditContent(
 
             Column {
                 AppTopBar(
-                    titleText = stringResource(R.string.widgets__widget__edit),
+                    titleText = stringResource(R.string.widgets__price__name),
                     onBackClick = onBack,
                     modifier = Modifier.background(
                         Brush.verticalGradient(

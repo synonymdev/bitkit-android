@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.GetAddressResponse
+import com.synonym.bitkitcore.GetAddressesResponse
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +13,7 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
@@ -30,6 +33,7 @@ import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeWalletUseCase
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -682,5 +686,60 @@ class WalletRepoTest : BaseUnitTest() {
         assertEquals(1, result.getOrNull()?.size)
         assertTrue(result.getOrNull()?.firstOrNull()?.path?.startsWith("m/86'") == true)
         verify(lightningRepo).addressInfosForType(AddressType.P2TR, isChange = false, startIndex = 0, count = 20)
+    }
+
+    @Test
+    fun `getAddresses should derive addresses from mnemonic when ldk address infos are unavailable`() = test {
+        whenever { lightningRepo.addressInfosForType(any(), any(), any(), any()) }
+            .thenReturn(Result.failure(ServiceError.NodeNotStarted()))
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
+        whenever(
+            onchainService.deriveBitcoinAddresses(
+                mnemonicPhrase = "test mnemonic",
+                derivationPathStr = "m/84'/1'/0'",
+                network = Network.REGTEST,
+                bip39Passphrase = null,
+                isChange = false,
+                startIndex = 3u,
+                count = 2u,
+            ),
+        ).thenReturn(
+            GetAddressesResponse(
+                listOf(
+                    GetAddressResponse(
+                        address = "bc1qfallback0000000000000000000000000000000",
+                        path = "m/84'/0'/0'/0/3",
+                        publicKey = "public-key",
+                    ),
+                    GetAddressResponse(
+                        address = "bc1qfallback1111111111111111111111111111111",
+                        path = "m/84'/0'/0'/0/4",
+                        publicKey = "public-key",
+                    ),
+                ),
+            ),
+        )
+
+        val result = sut.getAddresses(startIndex = 3, count = 2)
+
+        assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString().orEmpty())
+        val addresses = result.getOrThrow()
+        assertEquals(2, addresses.size)
+        assertEquals("bc1qfallback0000000000000000000000000000000", addresses[0].address)
+        assertEquals(3, addresses[0].index)
+        assertEquals("m/84'/1'/0'/0/3", addresses[0].path)
+        assertEquals("bc1qfallback1111111111111111111111111111111", addresses[1].address)
+        assertEquals(4, addresses[1].index)
+        assertEquals("m/84'/1'/0'/0/4", addresses[1].path)
+        verify(onchainService).deriveBitcoinAddresses(
+            mnemonicPhrase = "test mnemonic",
+            derivationPathStr = "m/84'/1'/0'",
+            network = Network.REGTEST,
+            bip39Passphrase = null,
+            isChange = false,
+            startIndex = 3u,
+            count = 2u,
+        )
     }
 }

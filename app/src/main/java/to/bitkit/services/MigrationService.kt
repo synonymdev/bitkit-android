@@ -62,6 +62,7 @@ import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
+import to.bitkit.models.widget.limitedToMax
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.services.core.Bip39Service
 import to.bitkit.utils.AppError
@@ -913,7 +914,6 @@ class MigrationService @Inject constructor(
                 enableAutoReadClipboard = settings.enableAutoReadClipboard ?: current.enableAutoReadClipboard,
                 enableSendAmountWarning = settings.enableSendAmountWarning ?: current.enableSendAmountWarning,
                 showWidgets = settings.showWidgets ?: current.showWidgets,
-                showWidgetTitles = settings.showWidgetTitles ?: current.showWidgetTitles,
                 defaultTransactionSpeed = when (settings.transactionSpeed) {
                     "fast" -> TransactionSpeed.Fast
                     "slow" -> TransactionSpeed.Slow
@@ -1190,7 +1190,6 @@ class MigrationService @Inject constructor(
                 val showTransactions = blocksJson["transactionCount"]?.jsonPrimitive?.content
                     ?.toBooleanStrictOrNull() ?: false
                 val showSize = blocksJson["size"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-                val showSource = blocksJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateBlocksPreferences(
                     BlocksPreferences(
@@ -1199,8 +1198,7 @@ class MigrationService @Inject constructor(
                         showDate = showDate,
                         showTransactions = showTransactions,
                         showSize = showSize,
-                        showSource = showSource
-                    )
+                    ).limitedToMax()
                 )
             }.onFailure {
                 Logger.error("Failed to migrate blocks preferences: $it", it, context = TAG)
@@ -2102,7 +2100,6 @@ class MigrationService @Inject constructor(
                 put("date", getBool(prefs, "date", "showDate", defaultValue = true))
                 put("transactionCount", getBool(prefs, "transactionCount", "showTransactions", defaultValue = false))
                 put("size", getBool(prefs, "size", "showSize", defaultValue = false))
-                put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["blocks"] = blocksOptions.toString().encodeToByteArray()
         }
@@ -2155,7 +2152,6 @@ data class RNSettings(
     val enableQuickpay: Boolean? = null,
     val quickpayAmount: Int? = null,
     val showWidgets: Boolean? = null,
-    val showWidgetTitles: Boolean? = null,
     val transactionSpeed: String? = null,
     val customFeeRate: Int? = null,
     val hideBalance: Boolean? = null,

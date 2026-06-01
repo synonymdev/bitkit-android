@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dto.ArticleDTO
@@ -54,15 +53,12 @@ class WidgetsRepo @Inject constructor(
     private val weatherService: WeatherService,
     private val priceService: PriceService,
     private val widgetsStore: WidgetsStore,
-    private val settingsStore: SettingsStore,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val widgetJobs = ConcurrentHashMap<WidgetType, Job>()
 
     val widgetsDataFlow: StateFlow<WidgetsData> = widgetsStore.data
         .stateIn(repoScope, SharingStarted.Eagerly, WidgetsData())
-
-    val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
 
     val articlesFlow: StateFlow<List<ArticleDTO>> = widgetsDataFlow
         .map { it.articles }
