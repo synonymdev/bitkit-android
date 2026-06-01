@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -97,10 +98,13 @@ private fun WidgetsSheetContent(
     onDone: () -> Unit,
     onOpenWidgetsSettings: () -> Unit,
 ) {
-    val sheetViewModelStoreOwner = rememberSheetViewModelStoreOwner()
+    val galleryViewModelStoreOwner = rememberSheetViewModelStoreOwner()
     val galleryScrollState = rememberScrollState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val isGalleryRoute = navBackStackEntry?.destination?.hasRoute<WidgetsRoute.Gallery>() == true
+    val widgetFlowKey = navBackStackEntry?.destination?.widgetFlowKey()
+        ?: startRoute.widgetFlowKey().takeIf { navBackStackEntry == null }
+    val widgetViewModelStoreOwner = rememberWidgetFlowViewModelStoreOwner(widgetFlowKey)
 
     LaunchedEffect(isGalleryRoute) {
         galleryScrollState.scrollTo(0)
@@ -120,7 +124,7 @@ private fun WidgetsSheetContent(
         ) {
             composableWithDefaultTransitions<WidgetsRoute.Gallery> {
                 val galleryViewModel = hiltViewModel<WidgetsGalleryViewModel>(
-                    viewModelStoreOwner = sheetViewModelStoreOwner
+                    viewModelStoreOwner = galleryViewModelStoreOwner
                 )
                 val weather by galleryViewModel.currentWeather.collectAsStateWithLifecycle()
                 val block by galleryViewModel.currentBlock.collectAsStateWithLifecycle()
@@ -149,7 +153,7 @@ private fun WidgetsSheetContent(
                 )
             }
             composableWithDefaultTransitions<WidgetsRoute.PricePreview> {
-                val priceViewModel = hiltViewModel<PriceViewModel>(viewModelStoreOwner = sheetViewModelStoreOwner)
+                val priceViewModel = hiltViewModel<PriceViewModel>(viewModelStoreOwner = widgetViewModelStoreOwner)
 
                 PricePreviewScreen(
                     priceViewModel = priceViewModel,
@@ -160,7 +164,7 @@ private fun WidgetsSheetContent(
                 )
             }
             composableWithDefaultTransitions<WidgetsRoute.PriceEdit> {
-                val priceViewModel = hiltViewModel<PriceViewModel>(viewModelStoreOwner = sheetViewModelStoreOwner)
+                val priceViewModel = hiltViewModel<PriceViewModel>(viewModelStoreOwner = widgetViewModelStoreOwner)
 
                 PriceEditScreen(
                     viewModel = priceViewModel,
@@ -170,7 +174,7 @@ private fun WidgetsSheetContent(
                 )
             }
             composableWithDefaultTransitions<WidgetsRoute.WeatherPreview> {
-                val weatherViewModel = hiltViewModel<WeatherViewModel>(viewModelStoreOwner = sheetViewModelStoreOwner)
+                val weatherViewModel = hiltViewModel<WeatherViewModel>(viewModelStoreOwner = widgetViewModelStoreOwner)
 
                 WeatherPreviewScreen(
                     weatherViewModel = weatherViewModel,
@@ -181,7 +185,7 @@ private fun WidgetsSheetContent(
                 )
             }
             composableWithDefaultTransitions<WidgetsRoute.WeatherEdit> {
-                val weatherViewModel = hiltViewModel<WeatherViewModel>(viewModelStoreOwner = sheetViewModelStoreOwner)
+                val weatherViewModel = hiltViewModel<WeatherViewModel>(viewModelStoreOwner = widgetViewModelStoreOwner)
 
                 WeatherEditScreen(
                     weatherViewModel = weatherViewModel,
@@ -191,7 +195,7 @@ private fun WidgetsSheetContent(
                 )
             }
             composableWithDefaultTransitions<WidgetsRoute.BlocksPreview> {
-                val blocksViewModel = hiltViewModel<BlocksViewModel>(viewModelStoreOwner = sheetViewModelStoreOwner)
+                val blocksViewModel = hiltViewModel<BlocksViewModel>(viewModelStoreOwner = widgetViewModelStoreOwner)
 
                 BlocksPreviewScreen(
                     blocksViewModel = blocksViewModel,
@@ -202,7 +206,7 @@ private fun WidgetsSheetContent(
                 )
             }
             composableWithDefaultTransitions<WidgetsRoute.BlocksEdit> {
-                val blocksViewModel = hiltViewModel<BlocksViewModel>(viewModelStoreOwner = sheetViewModelStoreOwner)
+                val blocksViewModel = hiltViewModel<BlocksViewModel>(viewModelStoreOwner = widgetViewModelStoreOwner)
 
                 BlocksEditScreen(
                     blocksViewModel = blocksViewModel,
@@ -213,7 +217,7 @@ private fun WidgetsSheetContent(
             }
             composableWithDefaultTransitions<WidgetsRoute.HeadlinesPreview> {
                 val headlinesViewModel = hiltViewModel<HeadlinesViewModel>(
-                    viewModelStoreOwner = sheetViewModelStoreOwner
+                    viewModelStoreOwner = widgetViewModelStoreOwner
                 )
 
                 HeadlinesPreviewScreen(
@@ -226,7 +230,7 @@ private fun WidgetsSheetContent(
             }
             composableWithDefaultTransitions<WidgetsRoute.HeadlinesEdit> {
                 val headlinesViewModel = hiltViewModel<HeadlinesViewModel>(
-                    viewModelStoreOwner = sheetViewModelStoreOwner
+                    viewModelStoreOwner = widgetViewModelStoreOwner
                 )
 
                 HeadlinesEditScreen(
@@ -237,7 +241,7 @@ private fun WidgetsSheetContent(
                 )
             }
             composableWithDefaultTransitions<WidgetsRoute.FactsPreview> {
-                val factsViewModel = hiltViewModel<FactsViewModel>(viewModelStoreOwner = sheetViewModelStoreOwner)
+                val factsViewModel = hiltViewModel<FactsViewModel>(viewModelStoreOwner = widgetViewModelStoreOwner)
 
                 FactsPreviewScreen(
                     factsViewModel = factsViewModel,
@@ -255,7 +259,7 @@ private fun WidgetsSheetContent(
             }
             composableWithDefaultTransitions<WidgetsRoute.SuggestionsPreview> {
                 val suggestionsViewModel = hiltViewModel<SuggestionsViewModel>(
-                    viewModelStoreOwner = sheetViewModelStoreOwner
+                    viewModelStoreOwner = widgetViewModelStoreOwner
                 )
 
                 SuggestionsPreviewScreen(
@@ -270,14 +274,24 @@ private fun WidgetsSheetContent(
 }
 
 @Composable
+private fun rememberWidgetFlowViewModelStoreOwner(widgetFlowKey: WidgetFlowKey?): ViewModelStoreOwner {
+    return rememberViewModelStoreOwner(key = widgetFlowKey)
+}
+
+@Composable
 private fun rememberSheetViewModelStoreOwner(): ViewModelStoreOwner {
+    return rememberViewModelStoreOwner(key = "sheet")
+}
+
+@Composable
+private fun rememberViewModelStoreOwner(key: Any?): ViewModelStoreOwner {
     val parentOwner = checkNotNull(LocalViewModelStoreOwner.current) {
         "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
     }
     val parentFactoryOwner = checkNotNull(parentOwner as? HasDefaultViewModelProviderFactory) {
         "WidgetsSheet requires a default ViewModelProvider.Factory owner"
     }
-    val viewModelStore = remember { ViewModelStore() }
+    val viewModelStore = remember(key) { ViewModelStore() }
     DisposableEffect(viewModelStore) {
         onDispose { viewModelStore.clear() }
     }
@@ -312,6 +326,49 @@ fun WidgetType.toWidgetsPreviewRoute(): WidgetsRoute = when (this) {
     WidgetType.PRICE -> WidgetsRoute.PricePreview
     WidgetType.WEATHER -> WidgetsRoute.WeatherPreview
     WidgetType.SUGGESTIONS -> WidgetsRoute.SuggestionsPreview
+}
+
+private fun WidgetsRoute.widgetFlowKey(): WidgetFlowKey? = when (this) {
+    WidgetsRoute.PricePreview,
+    WidgetsRoute.PriceEdit,
+    -> WidgetFlowKey.PRICE
+
+    WidgetsRoute.WeatherPreview,
+    WidgetsRoute.WeatherEdit,
+    -> WidgetFlowKey.WEATHER
+
+    WidgetsRoute.BlocksPreview,
+    WidgetsRoute.BlocksEdit,
+    -> WidgetFlowKey.BLOCKS
+
+    WidgetsRoute.HeadlinesPreview,
+    WidgetsRoute.HeadlinesEdit,
+    -> WidgetFlowKey.HEADLINES
+
+    WidgetsRoute.FactsPreview -> WidgetFlowKey.FACTS
+    WidgetsRoute.SuggestionsPreview -> WidgetFlowKey.SUGGESTIONS
+    WidgetsRoute.Gallery,
+    WidgetsRoute.CalculatorPreview,
+    -> null
+}
+
+private fun NavDestination.widgetFlowKey(): WidgetFlowKey? = when {
+    hasRoute<WidgetsRoute.PricePreview>() || hasRoute<WidgetsRoute.PriceEdit>() -> WidgetFlowKey.PRICE
+    hasRoute<WidgetsRoute.WeatherPreview>() || hasRoute<WidgetsRoute.WeatherEdit>() -> WidgetFlowKey.WEATHER
+    hasRoute<WidgetsRoute.BlocksPreview>() || hasRoute<WidgetsRoute.BlocksEdit>() -> WidgetFlowKey.BLOCKS
+    hasRoute<WidgetsRoute.HeadlinesPreview>() || hasRoute<WidgetsRoute.HeadlinesEdit>() -> WidgetFlowKey.HEADLINES
+    hasRoute<WidgetsRoute.FactsPreview>() -> WidgetFlowKey.FACTS
+    hasRoute<WidgetsRoute.SuggestionsPreview>() -> WidgetFlowKey.SUGGESTIONS
+    else -> null
+}
+
+private enum class WidgetFlowKey {
+    PRICE,
+    WEATHER,
+    BLOCKS,
+    HEADLINES,
+    FACTS,
+    SUGGESTIONS,
 }
 
 sealed interface WidgetsRoute {
