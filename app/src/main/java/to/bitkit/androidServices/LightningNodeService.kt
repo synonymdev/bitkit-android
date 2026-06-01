@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
+import to.bitkit.appwidget.AppWidgetRefreshWorker
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
@@ -201,6 +202,8 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
+        AppWidgetRefreshWorker.enqueue(this)
+        AppWidgetRefreshWorker.enqueueCatchUp(this)
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
         serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()
