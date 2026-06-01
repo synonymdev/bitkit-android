@@ -75,6 +75,6 @@ alwaysApply: true
 ---
 
 ## Rules for Android Unit tests and Instrumentation tests:
-- run unit tests for specific files like this: `./gradlew :app:testDevDebugUnitTest --tests "to.bitkit.repositories.LightningRepoTest"`
+- run unit tests for specific files like this: `just test file "to.bitkit.repositories.LightningRepoTest"`
 - write unit tests in the same style and using same libraries as: `CurrencyRepoTest`, `LightningRepoTest`, `WalletRepoTest`
 - in unit tests, use asserts from `kotlin.test` and mockito-kotlin for mocks
