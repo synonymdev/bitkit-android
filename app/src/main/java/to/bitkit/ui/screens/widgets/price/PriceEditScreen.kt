@@ -1,12 +1,9 @@
 package to.bitkit.ui.screens.widgets.price
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,14 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -84,66 +77,50 @@ fun PriceEditContent(
             .widgetSheetContent()
             .testTag("price_edit_screen")
     ) {
-        Box(
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__price__name),
+            onBack = onBack,
+        )
+
+        Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+                .testTag("WidgetEditScrollView")
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState())
-                    .testTag("WidgetEditScrollView")
-            ) {
-                VerticalSpacer(82.dp)
+            VerticalSpacer(16.dp)
 
-                Caption13Up(
-                    text = stringResource(R.string.appwidget__price__currency),
-                    color = Colors.White64,
-                    modifier = Modifier.padding(bottom = 16.dp)
+            Caption13Up(
+                text = stringResource(R.string.appwidget__price__currency),
+                color = Colors.White64,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            for (pair in TradingPair.entries) {
+                SelectableRow(
+                    label = pair.displayName,
+                    isSelected = pair == selectedPair,
+                    onClick = { onSelectTradingPair(pair) },
+                    testTagPrefix = pair.displayName,
                 )
-
-                for (pair in TradingPair.entries) {
-                    SelectableRow(
-                        label = pair.displayName,
-                        isSelected = pair == selectedPair,
-                        onClick = { onSelectTradingPair(pair) },
-                        testTagPrefix = pair.displayName,
-                    )
-                }
-
-                VerticalSpacer(16.dp)
-
-                Caption13Up(
-                    text = stringResource(R.string.appwidget__price__timeframe),
-                    color = Colors.White64,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-
-                for (period in GraphPeriod.entries) {
-                    SelectableRow(
-                        label = period.label(),
-                        isSelected = period == preferences.period,
-                        onClick = { onSelectPeriod(period) },
-                        testTagPrefix = period.value,
-                    )
-                }
             }
 
-            Column {
-                SheetTopBar(
-                    titleText = stringResource(R.string.widgets__price__name),
-                    onBack = onBack,
-                    modifier = Modifier.background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.background,
-                                Color.Transparent,
-                            ),
-                            tileMode = TileMode.Decal,
-                        ),
-                    )
+            VerticalSpacer(16.dp)
+
+            Caption13Up(
+                text = stringResource(R.string.appwidget__price__timeframe),
+                color = Colors.White64,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+
+            for (period in GraphPeriod.entries) {
+                SelectableRow(
+                    label = period.label(),
+                    isSelected = period == preferences.period,
+                    onClick = { onSelectPeriod(period) },
+                    testTagPrefix = period.value,
                 )
             }
         }
