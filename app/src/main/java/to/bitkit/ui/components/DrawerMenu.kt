@@ -43,7 +43,6 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
@@ -70,7 +69,11 @@ fun DrawerMenu(
     hasSeenWidgetsIntro: Boolean,
     hasSeenShopIntro: Boolean,
     onBeforeNavigate: (Routes?) -> Unit,
+    showWidgets: Boolean,
     modifier: Modifier = Modifier,
+    onOpenWalletHome: () -> Unit = {},
+    onOpenWidgetsHome: () -> Unit = {},
+    onOpenWidgetsSheet: () -> Unit = {},
     hasSeenProfileIntro: Boolean = false,
     hasSeenContactsIntro: Boolean = false,
     hasContacts: Boolean = false,
@@ -114,8 +117,13 @@ fun DrawerMenu(
                     onBeforeNavigate(Routes.WidgetsIntro)
                     rootNavController.navigateIfNotCurrent(Routes.WidgetsIntro)
                 } else {
-                    onBeforeNavigate(Routes.AddWidget)
-                    rootNavController.navigateIfNotCurrent(Routes.AddWidget)
+                    if (showWidgets) {
+                        onBeforeNavigate(Routes.Home)
+                        onOpenWidgetsHome()
+                    } else {
+                        onBeforeNavigate(null)
+                        onOpenWidgetsSheet()
+                    }
                 }
             },
             onClickShop = {
@@ -173,6 +181,10 @@ fun DrawerMenu(
                     )
                 }
             },
+            onClickWallet = {
+                onBeforeNavigate(Routes.Home)
+                onOpenWalletHome()
+            },
             onBeforeNavigate = onBeforeNavigate,
         )
     }
@@ -186,6 +198,7 @@ private fun Menu(
     onClickShop: () -> Unit,
     onClickContacts: () -> Unit,
     onClickProfile: () -> Unit,
+    onClickWallet: () -> Unit,
     onBeforeNavigate: (Routes?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -203,9 +216,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__wallet),
             iconRes = R.drawable.ic_coins,
             onClick = {
-                val isInHome = rootNavController.currentBackStackEntry?.destination?.hasRoute<Routes.Home>() ?: false
-                onBeforeNavigate(null)
-                if (!isInHome) rootNavController.navigateToHome()
+                onClickWallet()
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerWallet")
@@ -383,6 +394,7 @@ private fun Preview() {
                 hasSeenWidgetsIntro = false,
                 hasSeenShopIntro = false,
                 onBeforeNavigate = {},
+                showWidgets = true,
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }

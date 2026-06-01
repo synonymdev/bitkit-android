@@ -74,16 +74,18 @@ class BlocksViewModel @Inject constructor(
         _customPreferences.value = BlocksPreferences()
     }
 
-    fun savePreferences() {
+    fun savePreferences(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.updateBlocksPreferences(_customPreferences.value)
             widgetsRepo.addWidget(WidgetType.BLOCK)
+            onComplete()
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.BLOCK)
+            onComplete()
         }
     }
 

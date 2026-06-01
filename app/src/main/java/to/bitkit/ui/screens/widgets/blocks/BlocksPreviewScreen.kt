@@ -24,11 +24,12 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun BlocksPreviewScreen(
@@ -53,12 +54,10 @@ fun BlocksPreviewScreen(
         block = currentBlock,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
-            blocksViewModel.removeWidget()
-            onClose()
+            blocksViewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
-            blocksViewModel.savePreferences()
-            onClose()
+            blocksViewModel.savePreferences(onComplete = onClose)
         },
         modifier = modifier
     )
@@ -75,12 +74,14 @@ private fun Content(
     block: BlockModel?,
     modifier: Modifier = Modifier,
 ) {
-    ScreenColumn(
-        modifier = modifier.testTag("blocks_preview_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("blocks_preview_screen")
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.widgets__blocks__name),
-            onBackClick = onBack,
+            onBack = onBack,
         )
 
         Column(
@@ -146,7 +147,7 @@ private fun Content(
                 .padding(
                     start = 16.dp,
                     end = 16.dp,
-                    bottom = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
                     top = 22.dp,
                 )
                 .fillMaxWidth()

@@ -107,9 +107,10 @@ class PriceViewModel @Inject constructor(
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.PRICE)
+            onComplete()
         }
     }
 

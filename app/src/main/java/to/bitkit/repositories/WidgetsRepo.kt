@@ -23,7 +23,9 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.BlockDTO
 import to.bitkit.data.dto.WeatherDTO
+import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
+import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.data.widgets.BlocksService
 import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
@@ -196,6 +198,13 @@ class WidgetsRepo @Inject constructor(
     }
 
     suspend fun fetchAllPeriods() = withContext(bgDispatcher) { priceService.fetchAllPeriods() }
+
+    suspend fun fetchPriceData(
+        pairs: List<TradingPair>,
+        period: GraphPeriod,
+    ) = withContext(bgDispatcher) {
+        priceService.fetchData(pairs = pairs, period = period)
+    }
 
     private suspend fun <T> updateWidget(
         service: WidgetService<T>,

@@ -30,12 +30,13 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun PricePreviewScreen(
@@ -70,8 +71,7 @@ fun PricePreviewScreen(
         priceDTO = previewPrice ?: price,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
-            priceViewModel.removeWidget()
-            onClose()
+            priceViewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
             priceViewModel.savePreferences()
@@ -93,12 +93,14 @@ fun PricePreviewContent(
     isLoading: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    ScreenColumn(
-        modifier = modifier.testTag("price_preview_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("price_preview_screen")
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.widgets__price__name),
-            onBackClick = onBack,
+            onBack = onBack,
         )
 
         Column(
@@ -169,7 +171,7 @@ fun PricePreviewContent(
                 .padding(
                     start = 16.dp,
                     end = 16.dp,
-                    bottom = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
                     top = 22.dp,
                 )
                 .fillMaxWidth()

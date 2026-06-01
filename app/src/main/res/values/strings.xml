@@ -1208,6 +1208,7 @@
     <string name="widgets__news__name">Bitcoin Headlines</string>
     <string name="widgets__onboarding__description">Enjoy decentralized feeds from your favorite web services, by adding fun and useful widgets to your Bitkit wallet.</string>
     <string name="widgets__onboarding__title">Hello,\n&lt;accent&gt;Widgets&lt;/accent&gt;</string>
+    <string name="widgets__onboarding__view_organize">View &amp; Organize</string>
     <string name="widgets__onboarding_swipe">Swipe to find\n&lt;accent&gt;your widgets&lt;/accent&gt;</string>
     <string name="widgets__price__description">Check the latest Bitcoin exchange rates for a variety of fiat currencies.</string>
     <string name="widgets__price__name">Bitcoin Price</string>

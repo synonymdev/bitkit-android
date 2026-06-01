@@ -14,6 +14,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,12 +48,13 @@ import kotlinx.serialization.Serializable
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.models.WidgetType
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
+import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.SheetHandlePlacement
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TimedSheetType
@@ -133,25 +135,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
-import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
-import to.bitkit.ui.screens.widgets.calculator.CalculatorPreviewScreen
-import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
-import to.bitkit.ui.screens.widgets.facts.FactsViewModel
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
-import to.bitkit.ui.screens.widgets.price.PriceEditScreen
-import to.bitkit.ui.screens.widgets.price.PricePreviewScreen
-import to.bitkit.ui.screens.widgets.price.PriceViewModel
-import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewScreen
-import to.bitkit.ui.screens.widgets.suggestions.SuggestionsViewModel
-import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
-import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
-import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.CJitDetailScreen
@@ -204,6 +188,8 @@ import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
+import to.bitkit.ui.sheets.WidgetsSheet
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
@@ -399,7 +385,24 @@ fun ContentView(
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
+        val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        var homeWalletPageRequest by remember { mutableIntStateOf(0) }
+        var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
+        val navigateToHomeWallet = {
+            homeWalletPageRequest++
+            navController.navigateToHome()
+        }
+        val navigateToHomeWidgets = {
+            homeWidgetsPageRequest++
+            navController.navigateToHome()
+        }
+        val onConsumeHomeWalletPageRequest = {
+            homeWalletPageRequest = 0
+        }
+        val onConsumeHomeWidgetsPageRequest = {
+            homeWidgetsPageRequest = 0
+        }
 
         Box(
             modifier = modifier.fillMaxSize()
@@ -407,6 +410,14 @@ fun ContentView(
             SheetHost(
                 shouldExpand = currentSheet != null,
                 onDismiss = { appViewModel.hideSheet() },
+                sheetHandlePlacement = when (currentSheet) {
+                    is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
+                    else -> SheetHandlePlacement.ScaffoldSlot
+                },
+                sheetContainerColor = when (currentSheet) {
+                    is Sheet.Widgets -> Colors.Gray7
+                    else -> DefaultSheetContainerColor
+                },
                 sheets = {
                     when (val sheet = currentSheet) {
                         null -> Unit
@@ -438,6 +449,18 @@ fun ContentView(
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
+                        is Sheet.Widgets -> {
+                            WidgetsSheet(
+                                sheet = sheet,
+                                app = appViewModel,
+                                fiatSymbol = LocalCurrencies.current.currencySymbol,
+                                showWidgets = showWidgets,
+                                onNavigateHomeWidgets = navigateToHomeWidgets,
+                                onOpenWidgetsSettings = {
+                                    navController.navigateTo(Routes.WidgetsSettings)
+                                },
+                            )
+                        }
                         is Sheet.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
                         Sheet.ForceTransfer -> ForceTransferSheet(appViewModel, transferViewModel)
                         Sheet.ConnectionClosed -> ConnectionClosedSheet(
@@ -516,6 +539,11 @@ fun ContentView(
                         settingsViewModel = settingsViewModel,
                         currencyViewModel = currencyViewModel,
                         transferViewModel = transferViewModel,
+                        homeWalletPageRequest = homeWalletPageRequest,
+                        homeWidgetsPageRequest = homeWidgetsPageRequest,
+                        onConsumeHomeWalletPageRequest = onConsumeHomeWalletPageRequest,
+                        onConsumeHomeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
+                        onNavigateHomeWidgets = navigateToHomeWidgets,
                         onHomeCalculatorInputActiveChanged = { isHomeCalculatorInputActive = it },
                     )
 
@@ -562,6 +590,10 @@ fun ContentView(
                 hasContacts = hasPubkyContacts,
                 isProfileAuthenticated = isProfileAuthenticated,
                 isPaykitEnabled = isPaykitEnabled,
+                showWidgets = showWidgets,
+                onOpenWalletHome = navigateToHomeWallet,
+                onOpenWidgetsHome = navigateToHomeWidgets,
+                onOpenWidgetsSheet = { appViewModel.showSheet(Sheet.Widgets()) },
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }
@@ -578,6 +610,11 @@ private fun RootNavHost(
     settingsViewModel: SettingsViewModel,
     currencyViewModel: CurrencyViewModel,
     transferViewModel: TransferViewModel,
+    homeWalletPageRequest: Int,
+    homeWidgetsPageRequest: Int,
+    onConsumeHomeWalletPageRequest: () -> Unit,
+    onConsumeHomeWidgetsPageRequest: () -> Unit,
+    onNavigateHomeWidgets: () -> Unit,
     onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -590,6 +627,10 @@ private fun RootNavHost(
             settingsViewModel = settingsViewModel,
             navController = navController,
             drawerState = drawerState,
+            homeWalletPageRequest = homeWalletPageRequest,
+            homeWidgetsPageRequest = homeWidgetsPageRequest,
+            onConsumeHomeWalletPageRequest = onConsumeHomeWalletPageRequest,
+            onConsumeHomeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
             onCalculatorInputActiveChanged = onHomeCalculatorInputActiveChanged,
         )
         allActivity(
@@ -617,7 +658,12 @@ private fun RootNavHost(
         logs(navController)
         suggestions(navController)
         support(navController)
-        widgets(navController, settingsViewModel)
+        widgets(
+            navController = navController,
+            settingsViewModel = settingsViewModel,
+            appViewModel = appViewModel,
+            onNavigateHomeWidgets = onNavigateHomeWidgets,
+        )
         update()
         recoveryMode(navController, appViewModel)
 
@@ -834,6 +880,10 @@ private fun NavGraphBuilder.home(
     settingsViewModel: SettingsViewModel,
     navController: NavHostController,
     drawerState: DrawerState,
+    homeWalletPageRequest: Int,
+    homeWidgetsPageRequest: Int,
+    onConsumeHomeWalletPageRequest: () -> Unit,
+    onConsumeHomeWidgetsPageRequest: () -> Unit,
     onCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     composable<Routes.Home> {
@@ -861,6 +911,10 @@ private fun NavGraphBuilder.home(
                 walletViewModel = walletViewModel,
                 appViewModel = appViewModel,
                 activityListViewModel = activityListViewModel,
+                walletPageRequest = homeWalletPageRequest,
+                widgetsPageRequest = homeWidgetsPageRequest,
+                onConsumeWalletPageRequest = onConsumeHomeWalletPageRequest,
+                onConsumeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
                 onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
             )
         }
@@ -1189,6 +1243,9 @@ private fun NavGraphBuilder.profile(
                 },
                 onNavigateToPayContacts = {
                     navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+                onNavigateToProfile = {
+                    navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
                 },
                 onBackClick = { navController.popBackStack() },
             )
@@ -1582,168 +1639,30 @@ private fun NavGraphBuilder.support(
     }
 }
 
-@Suppress("LongMethod")
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
+    appViewModel: AppViewModel,
+    onNavigateHomeWidgets: () -> Unit,
 ) {
     composableWithDefaultTransitions<Routes.WidgetsIntro> {
-        WidgetsIntroScreen(
-            onContinue = {
-                settingsViewModel.setHasSeenWidgetsIntro(true)
-                navController.navigateTo(Routes.AddWidget)
-            },
-            onBackClick = { navController.popBackStack() },
-        )
-    }
-    composableWithDefaultTransitions<Routes.AddWidget> {
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
-        AddWidgetsScreen(
-            onWidgetSelected = { widgetType ->
-                when (widgetType) {
-                    WidgetType.BLOCK -> navController.navigateTo(Routes.BlocksPreview)
-                    WidgetType.CALCULATOR -> navController.navigateTo(Routes.CalculatorPreview)
-                    WidgetType.FACTS -> navController.navigateTo(Routes.FactsPreview)
-                    WidgetType.NEWS -> navController.navigateTo(Routes.HeadlinesPreview)
-                    WidgetType.PRICE -> navController.navigateTo(Routes.PricePreview)
-                    WidgetType.WEATHER -> navController.navigateTo(Routes.WeatherPreview)
-                    WidgetType.SUGGESTIONS -> navController.navigateTo(Routes.SuggestionsPreview)
+
+        WidgetsIntroScreen(
+            onViewOrganize = {
+                settingsViewModel.setHasSeenWidgetsIntro(true)
+                if (showWidgets) {
+                    onNavigateHomeWidgets()
+                } else {
+                    appViewModel.showSheet(Sheet.Widgets())
                 }
             },
-            fiatSymbol = LocalCurrencies.current.currencySymbol,
+            onAddWidget = {
+                settingsViewModel.setHasSeenWidgetsIntro(true)
+                appViewModel.showSheet(Sheet.Widgets())
+            },
             onBackClick = { navController.popBackStack() },
-            showWidgets = showWidgets,
-            onEnableInSettingsClick = { navController.navigateTo(Routes.WidgetsSettings) },
         )
-    }
-    composableWithDefaultTransitions<Routes.SuggestionsPreview> {
-        val viewModel = hiltViewModel<SuggestionsViewModel>()
-        SuggestionsPreviewScreen(
-            suggestionsViewModel = viewModel,
-            onClose = { navController.navigateToHome() },
-            onBack = { navController.popBackStack() },
-        )
-    }
-    composableWithDefaultTransitions<Routes.CalculatorPreview> {
-        CalculatorPreviewScreen(
-            onClose = { navController.navigateToHome() },
-            onBack = { navController.popBackStack() },
-        )
-    }
-    navigationWithDefaultTransitions<Routes.Headlines>(
-        startDestination = Routes.HeadlinesPreview
-    ) {
-        composableWithDefaultTransitions<Routes.HeadlinesPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
-            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
-
-            HeadlinesPreviewScreen(
-                headlinesViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.HeadlinesEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.HeadlinesEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
-            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
-
-            HeadlinesEditScreen(
-                headlinesViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = {
-                    navController.navigateTo(Routes.HeadlinesPreview)
-                }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Facts>(
-        startDestination = Routes.FactsPreview
-    ) {
-        composableWithDefaultTransitions<Routes.FactsPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Facts) }
-            val viewModel = hiltViewModel<FactsViewModel>(parentEntry)
-
-            FactsPreviewScreen(
-                factsViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Blocks>(
-        startDestination = Routes.BlocksPreview
-    ) {
-        composableWithDefaultTransitions<Routes.BlocksPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
-            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
-
-            BlocksPreviewScreen(
-                blocksViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.BlocksEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.BlocksEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
-            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
-
-            BlocksEditScreen(
-                blocksViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.BlocksPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Weather>(
-        startDestination = Routes.WeatherPreview
-    ) {
-        composableWithDefaultTransitions<Routes.WeatherPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
-            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
-
-            WeatherPreviewScreen(
-                weatherViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.WeatherEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.WeatherEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
-            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
-
-            WeatherEditScreen(
-                weatherViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.WeatherPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Price>(
-        startDestination = Routes.PricePreview
-    ) {
-        composableWithDefaultTransitions<Routes.PricePreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
-            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
-
-            PricePreviewScreen(
-                priceViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.PriceEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.PriceEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
-            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
-            PriceEditScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.PricePreview) }
-            )
-        }
     }
 }
 
@@ -2119,57 +2038,6 @@ sealed interface Routes {
 
     @Serializable
     data object WidgetsIntro : Routes
-
-    @Serializable
-    data object AddWidget : Routes
-
-    @Serializable
-    data object SuggestionsPreview : Routes
-
-    @Serializable
-    data object Headlines : Routes
-
-    @Serializable
-    data object HeadlinesPreview : Routes
-
-    @Serializable
-    data object HeadlinesEdit : Routes
-
-    @Serializable
-    data object Facts : Routes
-
-    @Serializable
-    data object FactsPreview : Routes
-
-    @Serializable
-    data object Blocks : Routes
-
-    @Serializable
-    data object BlocksPreview : Routes
-
-    @Serializable
-    data object BlocksEdit : Routes
-
-    @Serializable
-    data object Weather : Routes
-
-    @Serializable
-    data object WeatherPreview : Routes
-
-    @Serializable
-    data object WeatherEdit : Routes
-
-    @Serializable
-    data object Price : Routes
-
-    @Serializable
-    data object PricePreview : Routes
-
-    @Serializable
-    data object PriceEdit : Routes
-
-    @Serializable
-    data object CalculatorPreview : Routes
 
     @Serializable
     data object AppStatus : Routes
