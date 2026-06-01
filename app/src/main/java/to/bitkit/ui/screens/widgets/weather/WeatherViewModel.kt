@@ -91,16 +91,18 @@ class WeatherViewModel @Inject constructor(
         _customPreferences.value = WeatherPreferences()
     }
 
-    fun savePreferences() {
+    fun savePreferences(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.updateWeatherPreferences(_customPreferences.value)
             widgetsRepo.addWidget(WidgetType.WEATHER)
+            onComplete()
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.WEATHER)
+            onComplete()
         }
     }
 

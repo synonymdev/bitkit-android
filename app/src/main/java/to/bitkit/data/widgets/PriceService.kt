@@ -41,8 +41,16 @@ class PriceService @Inject constructor(
         fetchData(period).getOrThrow()
     }
 
-    suspend fun fetchData(period: GraphPeriod): Result<PriceDTO> = runCatching {
-        val widgets = TradingPair.entries.mapNotNull { pair ->
+    suspend fun fetchData(period: GraphPeriod): Result<PriceDTO> = fetchData(
+        pairs = TradingPair.entries.toList(),
+        period = period,
+    )
+
+    suspend fun fetchData(
+        pairs: List<TradingPair>,
+        period: GraphPeriod,
+    ): Result<PriceDTO> = runCatching {
+        val widgets = pairs.mapNotNull { pair ->
             runCatching { fetchPairData(pair = pair, period = period) }
                 .onFailure { Logger.warn(e = it, msg = "Failed to fetch ${pair.ticker}", context = TAG) }
                 .getOrNull()

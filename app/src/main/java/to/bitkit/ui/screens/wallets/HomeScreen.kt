@@ -158,6 +158,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
+import to.bitkit.ui.sheets.toWidgetsPreviewRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
@@ -185,6 +186,10 @@ fun HomeScreen(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
     activityListViewModel: ActivityListViewModel,
+    walletPageRequest: Int = 0,
+    widgetsPageRequest: Int = 0,
+    onConsumeWalletPageRequest: () -> Unit = {},
+    onConsumeWidgetsPageRequest: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     homeViewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -315,21 +320,13 @@ fun HomeScreen(
             if (!hasSeenWidgetsIntro) {
                 rootNavController.navigateTo(Routes.WidgetsIntro)
             } else {
-                rootNavController.navigateTo(Routes.AddWidget)
+                appViewModel.showSheet(Sheet.Widgets())
             }
         },
         onClickEditWidgetList = homeViewModel::onClickEditWidgetList,
         onClickEditWidget = { widgetType ->
             homeViewModel.disableEditMode()
-            when (widgetType) {
-                WidgetType.BLOCK -> rootNavController.navigateTo(Routes.BlocksPreview)
-                WidgetType.CALCULATOR -> rootNavController.navigateTo(Routes.CalculatorPreview)
-                WidgetType.FACTS -> rootNavController.navigateTo(Routes.FactsPreview)
-                WidgetType.NEWS -> rootNavController.navigateTo(Routes.HeadlinesPreview)
-                WidgetType.PRICE -> rootNavController.navigateTo(Routes.PricePreview)
-                WidgetType.WEATHER -> rootNavController.navigateTo(Routes.WeatherPreview)
-                WidgetType.SUGGESTIONS -> rootNavController.navigateTo(Routes.SuggestionsPreview)
-            }
+            appViewModel.showSheet(Sheet.Widgets(widgetType.toWidgetsPreviewRoute()))
         },
         onClickDeleteWidget = { widgetType ->
             homeViewModel.displayAlertDeleteWidget(widgetType)
@@ -337,6 +334,10 @@ fun HomeScreen(
         onMoveWidget = { fromIndex, toIndex ->
             homeViewModel.moveWidget(fromIndex, toIndex)
         },
+        walletPageRequest = walletPageRequest,
+        widgetsPageRequest = widgetsPageRequest,
+        onConsumeWalletPageRequest = onConsumeWalletPageRequest,
+        onConsumeWidgetsPageRequest = onConsumeWidgetsPageRequest,
         onPageChanged = homeViewModel::onPageChanged,
         onDismissWidgetsOnboardingHint = homeViewModel::dismissWidgetsOnboardingHint,
         onNavigateToAppStatus = { rootNavController.navigate(Routes.AppStatus) },
@@ -349,7 +350,7 @@ fun HomeScreen(
     )
 }
 
-@Suppress("MagicNumber")
+@Suppress("CyclomaticComplexMethod", "MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun Content(
@@ -369,6 +370,10 @@ private fun Content(
     onClickEditWidget: (WidgetType) -> Unit = {},
     onClickDeleteWidget: (WidgetType) -> Unit = {},
     onMoveWidget: (Int, Int) -> Unit = { _, _ -> },
+    walletPageRequest: Int = 0,
+    widgetsPageRequest: Int = 0,
+    onConsumeWalletPageRequest: () -> Unit = {},
+    onConsumeWidgetsPageRequest: () -> Unit = {},
     onPageChanged: (Int) -> Unit = {},
     onDismissWidgetsOnboardingHint: () -> Unit = {},
     onNavigateToAppStatus: () -> Unit = {},
@@ -407,6 +412,24 @@ private fun Content(
         if (pagerState.currentPage == 1 && !latestActivities.isNullOrEmpty()) {
             onDismissWidgetsOnboardingHint()
         }
+    }
+
+    LaunchedEffect(walletPageRequest) {
+        if (walletPageRequest == 0) return@LaunchedEffect
+
+        pagerState.animateScrollToPage(0)
+        onPageChanged(0)
+        onConsumeWalletPageRequest()
+    }
+
+    LaunchedEffect(widgetsPageRequest, pageCount) {
+        if (widgetsPageRequest == 0) return@LaunchedEffect
+
+        if (pageCount > 1) {
+            pagerState.animateScrollToPage(1)
+            onPageChanged(1)
+        }
+        onConsumeWidgetsPageRequest()
     }
 
     LaunchedEffect(pagerState.currentPage, isCalculatorInputActive) {
@@ -764,9 +787,9 @@ private fun WidgetsPage(
                         title = stringResource(widgetWithPosition.type.title),
                         onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
                         onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
-                        modifier = Modifier
-                            .fillMaxWidth(),
                         dragModifier = dragModifier,
+                        modifier = Modifier
+                            .fillMaxWidth()
                     )
                 }
             } else {

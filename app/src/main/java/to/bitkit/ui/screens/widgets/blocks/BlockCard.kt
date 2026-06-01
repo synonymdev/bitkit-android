@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -35,6 +36,7 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun BlockCard(
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Colors.White10,
     preferences: BlocksPreferences,
     block: BlockModel,
 ) {
@@ -45,7 +47,7 @@ fun BlockCard(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(backgroundColor)
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -68,6 +70,7 @@ fun BlockCard(
 @Composable
 fun BlockCardSmall(
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Colors.White10,
     preferences: BlocksPreferences,
     block: BlockModel,
 ) {
@@ -79,7 +82,7 @@ fun BlockCardSmall(
         modifier = modifier
             .size(WidgetCardDimens.COMPACT_CARD_SIZE)
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(backgroundColor)
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),

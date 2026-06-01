@@ -1,12 +1,9 @@
 package to.bitkit.ui.screens.widgets.price
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,14 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -38,10 +31,11 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun PriceEditScreen(
@@ -78,69 +72,55 @@ fun PriceEditContent(
 ) {
     val selectedPair = preferences.enabledPairs.firstOrNull() ?: TradingPair.BTC_USD
 
-    ScreenColumn(
-        modifier = modifier.testTag("price_edit_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("price_edit_screen")
     ) {
-        Box(
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__price__name),
+            onBack = onBack,
+        )
+
+        Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+                .testTag("WidgetEditScrollView")
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState())
-                    .testTag("WidgetEditScrollView")
-            ) {
-                VerticalSpacer(82.dp)
+            VerticalSpacer(16.dp)
 
-                Caption13Up(
-                    text = stringResource(R.string.appwidget__price__currency),
-                    color = Colors.White64,
-                    modifier = Modifier.padding(bottom = 16.dp)
+            Caption13Up(
+                text = stringResource(R.string.appwidget__price__currency),
+                color = Colors.White64,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            for (pair in TradingPair.entries) {
+                SelectableRow(
+                    label = pair.displayName,
+                    isSelected = pair == selectedPair,
+                    onClick = { onSelectTradingPair(pair) },
+                    testTagPrefix = pair.displayName,
                 )
-
-                for (pair in TradingPair.entries) {
-                    SelectableRow(
-                        label = pair.displayName,
-                        isSelected = pair == selectedPair,
-                        onClick = { onSelectTradingPair(pair) },
-                        testTagPrefix = pair.displayName,
-                    )
-                }
-
-                VerticalSpacer(16.dp)
-
-                Caption13Up(
-                    text = stringResource(R.string.appwidget__price__timeframe),
-                    color = Colors.White64,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-
-                for (period in GraphPeriod.entries) {
-                    SelectableRow(
-                        label = period.label(),
-                        isSelected = period == preferences.period,
-                        onClick = { onSelectPeriod(period) },
-                        testTagPrefix = period.value,
-                    )
-                }
             }
 
-            Column {
-                AppTopBar(
-                    titleText = stringResource(R.string.widgets__price__name),
-                    onBackClick = onBack,
-                    modifier = Modifier.background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.background,
-                                Color.Transparent,
-                            ),
-                            tileMode = TileMode.Decal,
-                        ),
-                    )
+            VerticalSpacer(16.dp)
+
+            Caption13Up(
+                text = stringResource(R.string.appwidget__price__timeframe),
+                color = Colors.White64,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+
+            for (period in GraphPeriod.entries) {
+                SelectableRow(
+                    label = period.label(),
+                    isSelected = period == preferences.period,
+                    onClick = { onSelectPeriod(period) },
+                    testTagPrefix = period.value,
                 )
             }
         }
@@ -148,7 +128,12 @@ fun PriceEditContent(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(16.dp)
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
+                )
                 .fillMaxWidth()
                 .testTag("buttons_row")
         ) {

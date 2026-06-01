@@ -18,8 +18,10 @@ fun Modifier.sheetHeight(
     size: SheetSize = SheetSize.LARGE,
     isModal: Boolean = false,
 ): Modifier = composed {
-    val offset = if (isModal) Insets.Bottom else 0.dp
-    val topPadding = Insets.Top + Insets.Bottom + offset + TopBarHeight - 6.dp
+    // Bottom safe-area belongs in sheet content padding; including it here moves
+    // non-modal sheet tops down on devices with larger navigation-bar insets.
+    val modalBottomPadding = if (isModal) Insets.Bottom + Insets.Bottom else 0.dp
+    val topPadding = Insets.Top + modalBottomPadding + TopBarHeight - 6.dp
 
     val height = when (size) {
         SheetSize.LARGE -> screenHeight(minus = topPadding) // topbar visible

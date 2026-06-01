@@ -63,15 +63,17 @@ class CalculatorViewModel @Inject constructor(
         observeCalculatorState()
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.CALCULATOR)
+            onComplete()
         }
     }
 
-    fun saveWidget() {
+    fun saveWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.addWidget(WidgetType.CALCULATOR)
+            onComplete()
         }
     }
 
