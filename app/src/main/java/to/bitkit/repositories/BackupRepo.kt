@@ -447,10 +447,11 @@ class BackupRepo @Inject constructor(
     suspend fun triggerBackup(category: BackupCategory) = withContext(ioDispatcher) {
         Logger.debug("Backup starting for: '$category'", context = TAG)
 
+        val backupRequired = currentTimeMillis()
         runningBackups += category
         failedBackupRequired -= category
         cacheStore.updateBackupStatus(category) {
-            it.copy(running = true, required = currentTimeMillis())
+            it.copy(running = true, required = backupRequired)
         }
 
         vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category))
@@ -468,7 +469,11 @@ class BackupRepo @Inject constructor(
             .onFailure { e ->
                 runningBackups -= category
                 cacheStore.updateBackupStatus(category) {
-                    failedBackupRequired[category] = it.required
+                    if (it.required == backupRequired) {
+                        failedBackupRequired[category] = backupRequired
+                    } else {
+                        failedBackupRequired -= category
+                    }
                     it.copy(running = false)
                 }
                 Logger.error("Backup failed for: '$category'", e, context = TAG)

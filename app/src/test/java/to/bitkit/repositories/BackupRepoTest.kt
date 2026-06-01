@@ -17,6 +17,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
@@ -170,6 +171,56 @@ class BackupRepoTest : BaseUnitTest() {
             runCurrent()
 
             verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `failed automatic backup retries newer required timestamp`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        val backupStatuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.SETTINGS to BackupItemStatus(
+                    synced = 1_000,
+                    required = 2_000,
+                ),
+            )
+        )
+        var uploadAttempts = 0
+        whenever { vssBackupClient.putObject(eq(BackupCategory.SETTINGS.name), any()) }
+            .doSuspendableAnswer {
+                uploadAttempts += 1
+                if (uploadAttempts == 1) {
+                    backupStatuses.update { statuses ->
+                        val status = statuses.getValue(BackupCategory.SETTINGS)
+                        statuses + (BackupCategory.SETTINGS to status.copy(required = 4_000))
+                    }
+                    whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(5_000))
+                    Result.failure(BackupRepoTestError("backup failed"))
+                } else {
+                    Result.success(
+                        VssItem(
+                            key = BackupCategory.SETTINGS.name,
+                            value = byteArrayOf(),
+                            version = 1,
+                        )
+                    )
+                }
+            }
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            verify(vssBackupClient, times(2)).putObject(eq(BackupCategory.SETTINGS.name), any())
         } finally {
             sut.stopObservingBackups()
         }
