@@ -1,8 +1,12 @@
 package to.bitkit.appwidget
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.os.SystemClock
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.updateAll
 import androidx.hilt.work.HiltWorker
@@ -28,6 +32,7 @@ import to.bitkit.appwidget.ui.price.PriceGlanceReceiver
 import to.bitkit.appwidget.ui.price.PriceGlanceWidget
 import to.bitkit.appwidget.ui.weather.WeatherGlanceReceiver
 import to.bitkit.appwidget.ui.weather.WeatherGlanceWidget
+import to.bitkit.ext.alarmManager
 import to.bitkit.utils.Logger
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
@@ -44,13 +49,18 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         private const val TAG = "AppWidgetRefreshWorker"
         private const val WORK_NAME = "appwidget_refresh"
         private const val CATCH_UP_WORK_NAME = "appwidget_refresh_catch_up"
+        private const val CATCH_UP_ALARM_REQUEST_CODE = 0
+        internal const val CATCH_UP_ALARM_ACTION = "to.bitkit.appwidget.REFRESH_ALARM"
+        private val REFRESH_INTERVAL = 15.minutes
 
         fun enqueue(context: Context) {
+            if (!hasActiveWidgets(context)) return
+
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
 
-            val request = PeriodicWorkRequestBuilder<AppWidgetRefreshWorker>(15.minutes.toJavaDuration())
+            val request = PeriodicWorkRequestBuilder<AppWidgetRefreshWorker>(REFRESH_INTERVAL.toJavaDuration())
                 .setConstraints(constraints)
                 .build()
 
@@ -59,6 +69,7 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )
+            scheduleCatchUpAlarm(context)
         }
 
         fun enqueueCatchUp(context: Context) {
@@ -83,7 +94,22 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
             if (!hasActiveWidgets(context)) {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
                 WorkManager.getInstance(context).cancelUniqueWork(CATCH_UP_WORK_NAME)
+                cancelCatchUpAlarm(context)
             }
+        }
+
+        fun scheduleCatchUpAlarm(context: Context) {
+            if (!hasActiveWidgets(context)) {
+                cancelCatchUpAlarm(context)
+                return
+            }
+
+            val triggerAt = SystemClock.elapsedRealtime() + REFRESH_INTERVAL.inWholeMilliseconds
+            context.alarmManager.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerAt,
+                catchUpAlarmPendingIntent(context),
+            )
         }
 
         private fun hasActiveWidgets(context: Context): Boolean {
@@ -92,6 +118,30 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                 manager.getAppWidgetIds(ComponentName(context, receiverClassFor(type))).isNotEmpty()
             }
         }
+
+        private fun cancelCatchUpAlarm(context: Context) {
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                CATCH_UP_ALARM_REQUEST_CODE,
+                catchUpAlarmIntent(context),
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+            ) ?: return
+
+            context.alarmManager.cancel(pendingIntent)
+            pendingIntent.cancel()
+        }
+
+        private fun catchUpAlarmPendingIntent(context: Context): PendingIntent =
+            PendingIntent.getBroadcast(
+                context,
+                CATCH_UP_ALARM_REQUEST_CODE,
+                catchUpAlarmIntent(context),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+        private fun catchUpAlarmIntent(context: Context): Intent =
+            Intent(context, AppWidgetRefreshAlarmReceiver::class.java)
+                .setAction(CATCH_UP_ALARM_ACTION)
 
         private fun receiverClassFor(type: AppWidgetType): Class<out GlanceAppWidgetReceiver> = when (type) {
             AppWidgetType.PRICE -> PriceGlanceReceiver::class.java

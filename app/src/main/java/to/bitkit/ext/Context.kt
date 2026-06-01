@@ -2,6 +2,7 @@ package to.bitkit.ext
 
 import android.app.Activity
 import android.app.ActivityManager
+import android.app.AlarmManager
 import android.app.NotificationManager
 import android.bluetooth.BluetoothManager
 import android.content.ClipData
@@ -33,6 +34,9 @@ val Context.clipboardManager: ClipboardManager
 
 val Context.activityManager: ActivityManager
     get() = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+
+val Context.alarmManager: AlarmManager
+    get() = getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
 val Context.usbManager: UsbManager
     get() = getSystemService(Context.USB_SERVICE) as UsbManager

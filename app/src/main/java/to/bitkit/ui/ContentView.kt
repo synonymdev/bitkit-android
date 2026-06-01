@@ -246,6 +246,7 @@ fun ContentView(
 
                     appViewModel.consumePaymentReceivedInBackground()
 
+                    AppWidgetRefreshWorker.enqueue(context)
                     AppWidgetRefreshWorker.enqueueCatchUp(context)
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()

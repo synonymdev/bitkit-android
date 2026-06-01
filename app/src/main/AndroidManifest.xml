@@ -172,6 +172,10 @@
             </intent-filter>
         </service>
 
+        <receiver
+            android:name=".appwidget.AppWidgetRefreshAlarmReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
