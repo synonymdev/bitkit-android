@@ -1,5 +1,7 @@
 package to.bitkit.models
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -46,6 +48,24 @@ class SamRockSetupRequestTest {
             SamRockSetupRequest.sanitizedDescription(
                 "https://btcpay.example.com/btcpay/plugins/store-1/samrock/protocol?setup=btc-chain&otp=secret"
             ),
+        )
+    }
+
+    @Test
+    fun `parse accepts Bitkit SamRock deeplink wrapper`() {
+        val setup = assertNotNull(
+            SamRockSetupRequest.parse(
+                samRockDeepLink(
+                    "https://btcpay.example.com/btcpay/plugins/store-1/samrock/protocol?setup=btc-chain&otp=secret"
+                )
+            )
+        )
+
+        assertEquals("store-1", setup.storeId)
+        assertEquals("secret", setup.otp)
+        assertEquals(
+            "https://btcpay.example.com/btcpay/plugins/store-1/samrock/protocol?setup=btc-chain&otp=secret",
+            setup.postUrl,
         )
     }
 
@@ -156,6 +176,13 @@ class SamRockSetupRequestTest {
         assertTrue(
             SamRockSetupRequest.isPublicHttpProtocolUrl(
                 "http://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+            )
+        )
+        assertTrue(
+            SamRockSetupRequest.isPublicHttpProtocolUrl(
+                samRockDeepLink(
+                    "http://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+                )
             )
         )
     }
@@ -277,6 +304,12 @@ class SamRockSetupRequestTest {
             "bitkit://pubky-auth/success",
             "bitkit://pubky-auth/success?nonce=secret".sanitizedDeeplinkLogValue(),
         )
+        assertEquals(
+            "https://btcpay.example.com/plugins/store/samrock/protocol",
+            samRockDeepLink(
+                "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+            ).sanitizedDeeplinkLogValue(),
+        )
     }
 
     @Test
@@ -300,6 +333,22 @@ class SamRockSetupRequestTest {
     }
 
     @Test
+    fun `sanitized launch key redacts Bitkit SamRock deeplink wrapper`() {
+        val key = assertNotNull(
+            SamRockSetupRequest.sanitizedLaunchKey(
+                samRockDeepLink(
+                    "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+                )
+            )
+        )
+
+        assertTrue(key.startsWith("https://btcpay.example.com/plugins/store/samrock/protocol#"))
+        assertFalse(key.contains("otp"))
+        assertFalse(key.contains("secret"))
+        assertFalse(key.contains("setup"))
+    }
+
+    @Test
     fun `sanitized description drops userinfo and malformed paths`() {
         assertEquals(
             "https://btcpay.example.com/plugins/store/samrock/protocol",
@@ -319,5 +368,13 @@ class SamRockSetupRequestTest {
                 "https://btcpay.example.com/plugins/store/samrock/protocol?otp=%zz"
             ),
         )
+    }
+
+    private fun samRockDeepLink(setupUrl: String): String {
+        return "bitkit://btcpay/samrock?url=${setupUrl.urlEncode()}"
+    }
+
+    private fun String.urlEncode(): String {
+        return URLEncoder.encode(this, StandardCharsets.UTF_8.name()).replace("+", "%20")
     }
 }

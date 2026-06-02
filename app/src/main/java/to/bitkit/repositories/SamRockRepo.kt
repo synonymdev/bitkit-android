@@ -85,14 +85,19 @@ class SamRockRepo @Inject constructor(
                 throw AppError(context.getString(R.string.btcpay__invalid_response))
             }
 
+            val btcResult = envelope.result?.results?.get(BITCOIN_METHOD)
+
             when (envelope.success) {
                 true -> Unit
-                false -> throw AppError(envelope.message ?: context.getString(R.string.btcpay__setup_failed))
+                false -> throw AppError(
+                    btcResult?.failureMessage() ?: envelope.message ?: context.getString(R.string.btcpay__setup_failed)
+                )
                 null -> throw AppError(context.getString(R.string.btcpay__invalid_response))
             }
 
-            val btcResult = envelope.result?.results?.get(BITCOIN_METHOD)
-                ?: throw AppError(context.getString(R.string.btcpay__missing_result))
+            if (btcResult == null) {
+                throw AppError(context.getString(R.string.btcpay__missing_result))
+            }
 
             if (!btcResult.success) {
                 throw AppError(btcResult.message ?: context.getString(R.string.btcpay__rejected_descriptor))
@@ -223,7 +228,13 @@ internal data class SamRockSetupResponse(
 internal data class SamRockMethodResponse(
     val success: Boolean,
     val message: String?,
-)
+) {
+    fun failureMessage(): String? {
+        if (success) return null
+
+        return message
+    }
+}
 
 internal fun String?.toSamRockAccountType(): AccountType {
     return (this?.toAddressType() ?: DEFAULT_ADDRESS_TYPE).let {
