@@ -4,18 +4,14 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.app.Application.ActivityLifecycleCallbacks
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
-import android.os.PowerManager
-import androidx.core.content.ContextCompat
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
-import to.bitkit.appwidget.AppWidgetRefreshReceiver
-import to.bitkit.appwidget.AppWidgetRefreshWorker
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.services.BluetoothInit
 import javax.inject.Inject
@@ -28,6 +24,9 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var imageLoader: ImageLoader
 
+    @Inject
+    lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
+
     override val workManagerConfiguration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -35,26 +34,12 @@ internal open class App : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        Env.initAppStoragePath(filesDir.absolutePath)
         SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
-        registerAppWidgetRefreshReceiver()
-        AppWidgetRefreshWorker.enqueue(this)
-        Env.initAppStoragePath(filesDir.absolutePath)
+        appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
         // Initialize btleplug for Bluetooth support (required before any BLE usage)
         BluetoothInit.ensureInitialized()
-    }
-
-    private fun registerAppWidgetRefreshReceiver() {
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_USER_PRESENT)
-            addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
-        }
-        ContextCompat.registerReceiver(
-            this,
-            AppWidgetRefreshReceiver(),
-            filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
     }
 
     companion object {

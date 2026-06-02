@@ -19,7 +19,8 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
-import to.bitkit.appwidget.AppWidgetRefreshWorker
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
@@ -61,6 +62,9 @@ class LightningNodeService : Service() {
 
     @Inject
     lateinit var cacheStore: CacheStore
+
+    @Inject
+    lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
 
     private var hasStartedNode = false
 
@@ -163,6 +167,8 @@ class LightningNodeService : Service() {
             }
             ACTION_STOP_SERVICE_AND_APP -> {
                 Logger.debug("Received stop service action", context = TAG)
+                appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+                appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
                 stopForegroundService(startId)
                 activityManager.appTasks.forEach { it.finishAndRemoveTask() }
                 serviceScope.launch { lightningRepo.stop() }
@@ -202,8 +208,6 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
-        AppWidgetRefreshWorker.enqueue(this)
-        AppWidgetRefreshWorker.enqueueCatchUp(this)
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
         serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()
