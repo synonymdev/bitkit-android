@@ -6,9 +6,9 @@ cd "$repo_root"
 
 output_dir=${OUTPUT_DIR:-.ai/reproducible-release}
 bundletool_version=${BUNDLETOOL_VERSION:-1.18.1}
-bundletool_sha256=${BUNDLETOOL_SHA256:-a73341a7945abcb0e6b8971c7b1b2801bd765006447ca0d2437a4260d572ceac}
-bundletool_url=${BUNDLETOOL_URL:-https://dl.google.com/dl/android/maven2/com/android/tools/build/bundletool/${bundletool_version}/bundletool-${bundletool_version}.jar}
-bundletool_jar=${BUNDLETOOL_JAR:-${output_dir}/tools/bundletool-${bundletool_version}.jar}
+bundletool_sha256=${BUNDLETOOL_SHA256:-675786493983787ffa11550bdb7c0715679a44e1643f3ff980a529e9c822595c}
+bundletool_url=${BUNDLETOOL_URL:-https://github.com/google/bundletool/releases/download/${bundletool_version}/bundletool-all-${bundletool_version}.jar}
+bundletool_jar=${BUNDLETOOL_JAR:-${output_dir}/tools/bundletool-all-${bundletool_version}.jar}
 
 artifacts_dir="$output_dir/artifacts"
 checksums_dir="$output_dir/checksums"
