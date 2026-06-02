@@ -76,6 +76,8 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -288,8 +290,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `SamRock deeplink opens BTCPay connection sheet without core decode`() = test {
-        sut.handleDeeplinkIntent(samRockIntent(SAMROCK_SETUP_URL))
+    fun `Bitkit SamRock deeplink opens BTCPay connection sheet without core decode`() = test {
+        sut.handleDeeplinkIntent(samRockIntent(samRockDeepLink(SAMROCK_SETUP_URL)))
         advanceUntilIdle()
 
         val sheet = sut.currentSheet.value
@@ -299,9 +301,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `SamRock deeplink containing recovery mode text opens BTCPay sheet`() = test {
+    fun `Bitkit SamRock deeplink containing recovery mode text opens BTCPay sheet`() = test {
         sut.handleDeeplinkIntent(
-            samRockIntent("https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=recovery-mode")
+            samRockIntent(
+                samRockDeepLink(
+                    "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=recovery-mode"
+                )
+            )
         )
         advanceUntilIdle()
 
@@ -313,9 +319,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `public http SamRock deeplink shows setup error without core decode`() = test {
+    fun `public http Bitkit SamRock deeplink shows setup error without core decode`() = test {
         sut.handleDeeplinkIntent(
-            samRockIntent("http://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret")
+            samRockIntent(
+                samRockDeepLink(
+                    "http://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+                )
+            )
         )
         advanceUntilIdle()
 
@@ -329,9 +339,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unsupported SamRock deeplink shows unsupported toast without sheet`() = test {
+    fun `unsupported Bitkit SamRock deeplink shows unsupported toast without sheet`() = test {
         sut.handleDeeplinkIntent(
-            samRockIntent("https://btcpay.example.com/plugins/store/samrock/protocol?setup=btcln&otp=secret")
+            samRockIntent(
+                samRockDeepLink(
+                    "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btcln&otp=secret"
+                )
+            )
         )
         advanceUntilIdle()
 
@@ -345,10 +359,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `SamRock deeplink is ignored when wallet does not exist`() = test {
+    fun `Bitkit SamRock deeplink is ignored when wallet does not exist`() = test {
         whenever(walletRepo.walletExists()).thenReturn(false)
 
-        sut.handleDeeplinkIntent(samRockIntent(SAMROCK_SETUP_URL))
+        sut.handleDeeplinkIntent(samRockIntent(samRockDeepLink(SAMROCK_SETUP_URL)))
         advanceUntilIdle()
 
         assertNull(sut.currentSheet.value)
@@ -1257,6 +1271,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             on { action }.thenReturn(Intent.ACTION_VIEW)
             on { data }.thenReturn(uri)
         }
+    }
+
+    private fun samRockDeepLink(setupUrl: String): String {
+        return "bitkit://btcpay/samrock?url=${setupUrl.urlEncode()}"
+    }
+
+    private fun String.urlEncode(): String {
+        return URLEncoder.encode(this, StandardCharsets.UTF_8.name()).replace("+", "%20")
     }
 
     private fun recoveryModeIntent(): Intent {

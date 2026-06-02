@@ -19,7 +19,8 @@ data class SamRockSetupRequest(
     companion object {
         @Suppress("CyclomaticComplexMethod", "ReturnCount")
         fun parse(raw: String): SamRockSetupRequest? {
-            val uri = runCatching { URI(raw.trim()) }.getOrNull() ?: return null
+            val setupUrl = raw.samRockSetupUrl()
+            val uri = runCatching { URI(setupUrl.trim()) }.getOrNull() ?: return null
             val scheme = uri.scheme?.lowercase(Locale.US) ?: return null
             val host = uri.host ?: return null
             if (uri.rawUserInfo != null) return null
@@ -48,7 +49,7 @@ data class SamRockSetupRequest(
         }
 
         fun sanitizedDescription(raw: String): String? {
-            val trimmed = raw.trim()
+            val trimmed = raw.samRockSetupUrl().trim()
             val uri = runCatching { URI(trimmed) }.getOrNull()
             if (uri?.hasAuthority() == true && uri.isSamRockProtocolPath()) return uri.logDescription()
 
@@ -56,7 +57,8 @@ data class SamRockSetupRequest(
         }
 
         fun sanitizedLaunchKey(raw: String): String? {
-            return sanitizedDescription(raw)?.let { "$it#${raw.sha256Prefix()}" }
+            val setupUrl = raw.samRockSetupUrl()
+            return sanitizedDescription(setupUrl)?.let { "$it#${setupUrl.sha256Prefix()}" }
         }
 
         fun isProtocolUrl(raw: String): Boolean {
@@ -64,13 +66,29 @@ data class SamRockSetupRequest(
         }
 
         fun isPublicHttpProtocolUrl(raw: String): Boolean {
-            val uri = runCatching { URI(raw.trim()) }.getOrNull() ?: return false
+            val uri = runCatching { URI(raw.samRockSetupUrl().trim()) }.getOrNull() ?: return false
             val scheme = uri.scheme?.lowercase(Locale.US) ?: return false
             val host = uri.host ?: return false
 
             return scheme == HTTP_SCHEME &&
                 uri.isSamRockProtocolPath() &&
                 !isLocalOrPrivateHost(host)
+        }
+
+        fun setupUrlFromDeeplink(raw: String): String? {
+            val uri = runCatching { URI(raw.trim()) }.getOrNull()
+            val pathComponents = uri?.decodedPathComponents().orEmpty()
+            val queryItems = uri?.rawQuery
+                ?.let { runCatching { parseQuery(it) }.getOrNull() }
+                .orEmpty()
+            val isSamRockDeeplink = uri?.scheme?.lowercase(Locale.US) == BITKIT_SCHEME &&
+                uri.host.equals(BTCPAY_HOST, ignoreCase = true) &&
+                pathComponents.singleOrNull()?.equals(SAMROCK_PATH_COMPONENT, ignoreCase = true) == true
+
+            return queryItems.firstValue(URL_QUERY_KEY)
+                ?.takeIf { isSamRockDeeplink }
+                ?.takeIf { it.isNotBlank() }
+                ?.takeIf { isProtocolUrl(it) }
         }
 
         private fun parseMethods(setup: String?): ParsedSamRockMethods {
@@ -249,6 +267,12 @@ data class SamRockSetupRequest(
 
         private fun String.isIpv6Literal(): Boolean = ":" in this
 
+        private fun String.samRockSetupUrl(): String {
+            return setupUrlFromDeeplink(this) ?: this
+        }
+
+        private const val BITKIT_SCHEME = "bitkit"
+        private const val BTCPAY_HOST = "btcpay"
         private const val HTTP_SCHEME = "http"
         private const val HTTPS_SCHEME = "https"
         private const val LOCALHOST = "localhost"
@@ -277,6 +301,7 @@ data class SamRockSetupRequest(
         private const val SAMROCK_PROTOCOL_PATH_MARKER = "/samrock/protocol"
         private const val OTP_QUERY_KEY = "otp"
         private const val SETUP_QUERY_KEY = "setup"
+        private const val URL_QUERY_KEY = "url"
         private const val SETUP_METHOD_SEPARATOR = ","
         private const val SHA_256_ALGORITHM = "SHA-256"
         private const val LAUNCH_KEY_HASH_BYTES = 8
