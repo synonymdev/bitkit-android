@@ -71,6 +71,7 @@ class TrezorRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "TrezorRepo"
+        private const val WATCHER_TAG = "WATCHER"
         private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
         private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
         private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
@@ -84,7 +85,7 @@ class TrezorRepo @Inject constructor(
 
     private val eventBridge: EventListener = object : EventListener {
         override fun onEvent(watcherId: String, event: WatcherEvent) {
-            TrezorDebugLog.log("WATCHER", "[$watcherId] ${event::class.simpleName}")
+            TrezorDebugLog.log(WATCHER_TAG, "[$watcherId] ${event::class.simpleName}")
             _watcherEvents.tryEmit(watcherId to event)
         }
     }
@@ -583,7 +584,7 @@ class TrezorRepo @Inject constructor(
                 gapLimit = gapLimit,
             )
             trezorService.startWatcher(params, eventBridge)
-            TrezorDebugLog.log("WATCHER", "Started watcher '$watcherId' for '${extendedKey.take(12)}...'")
+            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId' for '${extendedKey.take(12)}...'")
             Logger.info("Started watcher '$watcherId'", context = TAG)
         }.onFailure {
             Logger.error("Start watcher failed", it, context = TAG)
@@ -593,7 +594,7 @@ class TrezorRepo @Inject constructor(
 
     fun stopWatcher(watcherId: String): Result<Unit> = runCatching {
         trezorService.stopWatcher(watcherId)
-        TrezorDebugLog.log("WATCHER", "Stopped watcher '$watcherId'")
+        TrezorDebugLog.log(WATCHER_TAG, "Stopped watcher '$watcherId'")
         Logger.info("Stopped watcher '$watcherId'", context = TAG)
     }.onFailure {
         Logger.error("Stop watcher failed", it, context = TAG)
@@ -602,7 +603,7 @@ class TrezorRepo @Inject constructor(
 
     fun stopAllWatchers(): Result<Unit> = runCatching {
         trezorService.stopAllWatchers()
-        TrezorDebugLog.log("WATCHER", "Stopped all watchers")
+        TrezorDebugLog.log(WATCHER_TAG, "Stopped all watchers")
     }.onFailure {
         Logger.error("Stop all watchers failed", it, context = TAG)
         _state.update { s -> s.copy(error = it.message) }
