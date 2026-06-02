@@ -27,15 +27,17 @@ class SuggestionsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT), false)
 
-    fun addWidget() {
+    fun addWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.addWidget(WidgetType.SUGGESTIONS)
+            onComplete()
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.SUGGESTIONS)
+            onComplete()
         }
     }
 }

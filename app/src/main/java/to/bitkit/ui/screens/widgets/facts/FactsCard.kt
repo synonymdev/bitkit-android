@@ -33,11 +33,12 @@ import to.bitkit.ui.theme.Colors
 fun FactsCard(
     headline: String,
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Colors.White10,
 ) {
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(backgroundColor)
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -63,12 +64,13 @@ fun FactsCard(
 fun FactsCardSmall(
     headline: String,
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Colors.White10,
 ) {
     Box(
         modifier = modifier
             .size(WidgetCardDimens.COMPACT_CARD_SIZE)
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(backgroundColor)
     ) {
         Column(
             modifier = Modifier
@@ -112,10 +114,10 @@ private fun BitcoinBadge(modifier: Modifier = Modifier) {
 private fun PreviewWide() {
     AppThemeSurface {
         Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
         ) {
             FactsCard(
                 headline = "Bitcoin doesn’t need your personal information",

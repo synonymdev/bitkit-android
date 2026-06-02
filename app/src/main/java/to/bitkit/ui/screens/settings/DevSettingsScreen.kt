@@ -183,6 +183,13 @@ fun DevSettingsScreen(
             SectionHeader("DEBUG")
 
             SettingsTextButtonRow(
+                title = "Reset Widgets Intro Flag",
+                onClick = {
+                    settings.setHasSeenWidgetsIntro(false)
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Widgets intro flag reset")
+                }
+            )
+            SettingsTextButtonRow(
                 title = "Generate Test Activities",
                 onClick = {
                     val count = 100

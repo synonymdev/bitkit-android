@@ -58,11 +58,11 @@ import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
-import to.bitkit.models.widget.limitedToMax
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
+import to.bitkit.models.widget.limitedToMax
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.services.core.Bip39Service
 import to.bitkit.utils.AppError

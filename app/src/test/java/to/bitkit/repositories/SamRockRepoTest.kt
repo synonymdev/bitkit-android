@@ -211,13 +211,23 @@ class SamRockRepoTest : BaseUnitTest() {
             .thenReturn(
                 SamRockHttpResponse(
                     HttpStatusCode.OK,
-                    """{"Success":true,"Result":{"Results":{"BTC":{"Success":false,"Message":"rejected"}}}}"""
+                    """
+                    {
+                      "Success": false,
+                      "Message": "Wallet setup failed.",
+                      "Result": {
+                        "Results": {
+                          "BTC": { "Success": false, "Message": "descriptor rejected" }
+                        }
+                      }
+                    }
+                    """.trimIndent()
                 )
             )
 
         val error = assertNotNull(sut.registerBitcoinOnchain(setupRequest()).exceptionOrNull())
 
-        assertEquals("rejected", error.message)
+        assertEquals("descriptor rejected", error.message)
     }
 
     @Test

@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,20 +31,22 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun HeadlineCard(
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Colors.White10,
     showTime: Boolean = true,
     showSource: Boolean = true,
     time: String,
     headline: String,
     source: String,
     link: String,
+    enabled: Boolean = true,
 ) {
     val context = LocalContext.current
 
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
-            .clickableAlpha {
+            .background(backgroundColor)
+            .clickableAlpha(enabled = enabled) {
                 val uri = safeBrowserUri(link) ?: return@clickableAlpha
                 val intent = Intent(Intent.ACTION_VIEW, uri)
                 context.startActivity(intent)
@@ -93,6 +96,7 @@ fun HeadlineCard(
 @Composable
 fun HeadlineCardSmall(
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Colors.White10,
     showTime: Boolean = true,
     time: String,
     headline: String,
@@ -104,7 +108,7 @@ fun HeadlineCardSmall(
         modifier = modifier
             .size(WidgetCardDimens.COMPACT_CARD_SIZE)
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(Colors.White10)
+            .background(backgroundColor)
             .clickableAlpha {
                 val uri = safeBrowserUri(link) ?: return@clickableAlpha
                 val intent = Intent(Intent.ACTION_VIEW, uri)

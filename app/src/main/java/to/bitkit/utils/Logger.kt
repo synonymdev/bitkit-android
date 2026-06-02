@@ -239,7 +239,11 @@ class LogSaverImpl(
             runCatching {
                 val sanitized = message.replace("\n", " ")
                 val bytes = "$sanitized\n".toByteArray()
-                val file = getWritableLogFile(bytes.size)
+                val file = getWritableLogFile(
+                    sessionFilePath = sessionFilePath,
+                    currentLogFilePath = currentLogFilePath,
+                    nextWriteBytes = bytes.size,
+                )
                 val previousLogFilePath = currentLogFilePath
                 currentLogFilePath = file.absolutePath
 
@@ -256,43 +260,6 @@ class LogSaverImpl(
                 Log.e(APP, "Error writing to log file: '$sessionFilePath'", it)
             }
         }
-    }
-
-    private fun getWritableLogFile(nextWriteBytes: Int): File {
-        val sessionFile = File(sessionFilePath)
-        val sessionDir = sessionFile.parentFile ?: Env.logDir
-        val sessionName = sessionFile.nameWithoutExtension
-
-        sessionDir.mkdirs()
-
-        val currentFile = currentLogFilePath
-            ?.let(::File)
-            ?.takeIf {
-                it.parentFile?.absolutePath == sessionDir.absolutePath &&
-                    it.nameWithoutExtension.startsWith(sessionName)
-            }
-
-        if (currentFile != null && currentFile.hasRoomFor(nextWriteBytes)) {
-            return currentFile
-        }
-
-        var file = currentFile ?: sessionFile
-        var part = file.logPartNumber(sessionFile)
-        while (file.exists() && file.length() + nextWriteBytes > MAX_LOG_FILE_BYTES) {
-            part += 1
-            file = sessionDir.resolve("$sessionName.part_${part.toString().padStart(3, '0')}.$LOG_FILE_EXTENSION")
-        }
-
-        return file
-    }
-
-    private fun File.hasRoomFor(nextWriteBytes: Int): Boolean {
-        return !exists() || length() + nextWriteBytes <= MAX_LOG_FILE_BYTES
-    }
-
-    private fun File.logPartNumber(sessionFile: File): Int {
-        if (absolutePath == sessionFile.absolutePath) return 1
-        return nameWithoutExtension.substringAfter(".part_", "1").toIntOrNull() ?: 1
     }
 
     private fun log(
@@ -313,39 +280,13 @@ class LogSaverImpl(
         log("Enforcing log retention limits…", LogLevel.VERBOSE, Log::v)
         val logDir = runCatching { Env.logDir }.getOrNull() ?: return
 
-        val logFiles = logDir
-            .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
-            ?: return
-
-        val activeLogFilePath = activeLogFile?.absolutePath
-        val removableFiles = logFiles.filterNot { it.absolutePath == activeLogFilePath }
-        val oldestAllowedModifiedAt = System.currentTimeMillis() - maxAgeDays * MILLIS_IN_DAY
-
-        removableFiles
-            .sortedBy { it.lastModified() }
-            .forEach { file ->
-                if (file.lastModified() < oldestAllowedModifiedAt) {
-                    deleteLogFile(file)
-                }
-            }
-
-        var totalSize = logDir
-            .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
-            ?.sumOf { it.length() }
-            ?: return
-
-        logDir
-            .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
-            ?.filterNot { it.absolutePath == activeLogFilePath }
-            ?.sortedBy { it.lastModified() }
-            ?.forEach { file ->
-                if (totalSize <= maxTotalSizeBytes) return@forEach
-
-                val fileSize = file.length()
-                if (deleteLogFile(file)) {
-                    totalSize -= fileSize
-                }
-            }
+        enforceLogRetentionLimits(
+            logDir = logDir,
+            maxTotalSizeBytes = maxTotalSizeBytes,
+            maxAgeDays = maxAgeDays,
+            activeLogFile = activeLogFile,
+            deleteLogFile = ::deleteLogFile,
+        )
 
         log("Enforced log retention limits.", LogLevel.VERBOSE, Log::v)
     }
@@ -362,6 +303,93 @@ class LogSaverImpl(
     companion object {
         private const val TAG = "LogSaver"
     }
+}
+
+internal fun getWritableLogFile(
+    sessionFilePath: String,
+    currentLogFilePath: String?,
+    nextWriteBytes: Int,
+    logDir: File? = null,
+    maxLogFileBytes: Long = MAX_LOG_FILE_BYTES,
+): File {
+    val sessionFile = File(sessionFilePath)
+    val sessionDir = sessionFile.parentFile ?: logDir ?: Env.logDir
+    val sessionName = sessionFile.nameWithoutExtension
+
+    sessionDir.mkdirs()
+
+    val currentFile = currentLogFilePath
+        ?.let(::File)
+        ?.takeIf {
+            it.parentFile?.absolutePath == sessionDir.absolutePath &&
+                it.nameWithoutExtension.startsWith(sessionName)
+        }
+
+    if (currentFile != null && currentFile.hasRoomFor(nextWriteBytes, maxLogFileBytes)) {
+        return currentFile
+    }
+
+    var file = currentFile ?: sessionFile
+    var part = file.logPartNumber(sessionFile)
+    while (file.exists() && file.length() + nextWriteBytes > maxLogFileBytes) {
+        part += 1
+        file = sessionDir.resolve("$sessionName.part_${part.toString().padStart(3, '0')}.$LOG_FILE_EXTENSION")
+    }
+
+    return file
+}
+
+@Suppress("LongParameterList")
+internal fun enforceLogRetentionLimits(
+    logDir: File,
+    maxTotalSizeBytes: Long = MAX_LOG_RETENTION_BYTES,
+    maxAgeDays: Long = MAX_LOG_RETENTION_DAYS,
+    activeLogFile: File? = null,
+    nowMillis: Long = System.currentTimeMillis(),
+    deleteLogFile: (File) -> Boolean = { it.delete() },
+) {
+    val logFiles = logDir
+        .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
+        ?: return
+
+    val activeLogFilePath = activeLogFile?.absolutePath
+    val removableFiles = logFiles.filterNot { it.absolutePath == activeLogFilePath }
+    val oldestAllowedModifiedAt = nowMillis - maxAgeDays * MILLIS_IN_DAY
+
+    removableFiles
+        .sortedBy { it.lastModified() }
+        .forEach { file ->
+            if (file.lastModified() < oldestAllowedModifiedAt) {
+                deleteLogFile(file)
+            }
+        }
+
+    var totalSize = logDir
+        .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
+        ?.sumOf { it.length() }
+        ?: return
+
+    logDir
+        .listFiles { file -> file.extension == LOG_FILE_EXTENSION }
+        ?.filterNot { it.absolutePath == activeLogFilePath }
+        ?.sortedBy { it.lastModified() }
+        ?.forEach { file ->
+            if (totalSize <= maxTotalSizeBytes) return@forEach
+
+            val fileSize = file.length()
+            if (deleteLogFile(file)) {
+                totalSize -= fileSize
+            }
+        }
+}
+
+private fun File.hasRoomFor(nextWriteBytes: Int, maxLogFileBytes: Long): Boolean {
+    return !exists() || length() + nextWriteBytes <= maxLogFileBytes
+}
+
+private fun File.logPartNumber(sessionFile: File): Int {
+    if (absolutePath == sessionFile.absolutePath) return 1
+    return nameWithoutExtension.substringAfter(".part_", "1").toIntOrNull() ?: 1
 }
 
 private fun buildSessionLogFilePath(): String {

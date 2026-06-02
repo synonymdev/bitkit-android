@@ -22,13 +22,14 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardEditor
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardSmall
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun CalculatorPreviewScreen(
@@ -49,12 +50,10 @@ fun CalculatorPreviewScreen(
         onInputSelected = viewModel::onInputSelected,
         onInputDismissed = viewModel::onInputDismissed,
         onClickDelete = {
-            viewModel.removeWidget()
-            onClose()
+            viewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
-            viewModel.saveWidget()
-            onClose()
+            viewModel.saveWidget(onComplete = onClose)
         },
         modifier = modifier
     )
@@ -73,12 +72,14 @@ fun CalculatorPreviewContent(
     onInputSelected: (MoneyType) -> Unit = {},
     onInputDismissed: () -> Unit = {},
 ) {
-    ScreenColumn(
-        modifier = modifier.testTag("calculator_preview_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("calculator_preview_screen")
     ) {
-        AppTopBar(
+        SheetTopBar(
             titleText = stringResource(R.string.widgets__calculator__name),
-            onBackClick = onBack,
+            onBack = onBack,
         )
 
         Column(
@@ -141,7 +142,7 @@ fun CalculatorPreviewContent(
                 .padding(
                     start = 16.dp,
                     end = 16.dp,
-                    bottom = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
                     top = 22.dp,
                 )
                 .fillMaxWidth()

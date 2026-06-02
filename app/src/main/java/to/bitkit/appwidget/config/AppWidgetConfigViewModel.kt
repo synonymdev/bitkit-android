@@ -26,12 +26,12 @@ import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.BlocksWidgetField
-import to.bitkit.models.widget.toggleField
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.models.widget.toArticleModel
+import to.bitkit.models.widget.toggleField
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel

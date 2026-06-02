@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -48,6 +49,13 @@ class PubkyChoiceViewModel @Inject constructor(
                 approvalJob?.cancel()
                 approvalJob = null
                 _uiState.update { it.copy(isWaitingForRing = false, isLoadingAfterAuth = false) }
+            }
+        }
+        viewModelScope.launch {
+            pubkyRepo.isAuthenticated.collectLatest {
+                if (it && approvalJob?.isActive != true && !_uiState.value.isLoadingAfterAuth) {
+                    _uiState.update { state -> state.copy(navigateToProfile = true) }
+                }
             }
         }
     }
@@ -159,6 +167,10 @@ class PubkyChoiceViewModel @Inject constructor(
         _uiState.update { it.copy(showRingNotInstalledDialog = false) }
     }
 
+    fun clearProfileNavigation() {
+        _uiState.update { it.copy(navigateToProfile = false) }
+    }
+
     @VisibleForTesting
     internal fun createRingAuthIntent(authUrl: String): Intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)).apply {
         setPackage(PUBKY_RING_PACKAGE)
@@ -196,6 +208,7 @@ data class PubkyChoiceUiState(
     val isWaitingForRing: Boolean = false,
     val isLoadingAfterAuth: Boolean = false,
     val showRingNotInstalledDialog: Boolean = false,
+    val navigateToProfile: Boolean = false,
 )
 
 sealed interface PubkyChoiceEffect {

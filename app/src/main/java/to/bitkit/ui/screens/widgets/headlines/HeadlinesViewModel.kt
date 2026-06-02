@@ -78,16 +78,18 @@ class HeadlinesViewModel @Inject constructor(
         _customPreferences.value = HeadlinePreferences()
     }
 
-    fun savePreferences() {
+    fun savePreferences(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.updateHeadlinePreferences(_customPreferences.value)
             widgetsRepo.addWidget(WidgetType.NEWS)
+            onComplete()
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.NEWS)
+            onComplete()
         }
     }
 
