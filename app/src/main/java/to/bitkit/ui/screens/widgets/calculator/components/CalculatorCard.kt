@@ -6,6 +6,8 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,7 +120,7 @@ fun CalculatorCardEditor(
     }
 
     Column(modifier = modifier) {
-        Content(
+        CalculatorEditableRows(
             btcPrimaryDisplayUnit = btcPrimaryDisplayUnit,
             btcValue = btcValue,
             fiatSymbol = fiatSymbol,
@@ -342,7 +344,7 @@ private fun ColumnScope.Numpad(
     }
 }
 
-private fun currentInputValue(
+internal fun currentInputValue(
     input: MoneyType,
     btcValue: String,
     fiatValue: String,
@@ -351,7 +353,7 @@ private fun currentInputValue(
     MoneyType.FIAT -> fiatValue
 }
 
-private fun nextInputValue(
+internal fun nextInputValue(
     input: MoneyType,
     key: String,
     btcValue: String,
@@ -381,7 +383,7 @@ private fun nextInputValue(
 }
 
 @Composable
-private fun Content(
+fun CalculatorEditableRows(
     modifier: Modifier = Modifier,
     btcPrimaryDisplayUnit: BitcoinDisplayUnit,
     btcValue: String,
@@ -439,6 +441,8 @@ fun CalculatorCardSmall(
     fiatSymbol: String,
     fiatValue: String,
     modifier: Modifier = Modifier,
+    activeInput: MoneyType? = null,
+    onSelectInput: ((MoneyType) -> Unit)? = null,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
@@ -454,6 +458,8 @@ fun CalculatorCardSmall(
             value = formatBitcoinValue(btcValue, btcPrimaryDisplayUnit),
             iconSize = 24.dp,
             rowPadding = 12.dp,
+            isActive = activeInput == MoneyType.BITCOIN,
+            onClick = onSelectInput?.let { { it(MoneyType.BITCOIN) } },
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("CalculatorSmallBtcRow")
@@ -463,6 +469,8 @@ fun CalculatorCardSmall(
             value = formatFiatValue(fiatValue),
             iconSize = 24.dp,
             rowPadding = 12.dp,
+            isActive = activeInput == MoneyType.FIAT,
+            onClick = onSelectInput?.let { { it(MoneyType.FIAT) } },
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("CalculatorSmallFiatRow")
@@ -477,6 +485,8 @@ private fun ReadOnlyRow(
     iconSize: Dp,
     rowPadding: Dp,
     modifier: Modifier = Modifier,
+    isActive: Boolean = false,
+    onClick: (() -> Unit)? = null,
 ) {
     val displayCurrencySymbol = currencySymbol.toCalculatorDisplaySymbol()
 
@@ -486,6 +496,8 @@ private fun ReadOnlyRow(
         modifier = modifier
             .clip(MaterialTheme.shapes.small)
             .background(Colors.Black)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (isActive) Modifier.border(1.dp, Colors.Brand, MaterialTheme.shapes.small) else Modifier)
             .padding(rowPadding)
     ) {
         Box(

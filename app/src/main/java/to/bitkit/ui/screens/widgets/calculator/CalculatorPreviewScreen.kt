@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.MoneyType
+import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -40,6 +41,7 @@ fun CalculatorPreviewScreen(
 ) {
     val isCalculatorWidgetEnabled by viewModel.isCalculatorWidgetEnabled.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val draftSize by viewModel.draftSize.collectAsStateWithLifecycle()
 
     CalculatorPreviewContent(
         onBack = onBack,
@@ -55,6 +57,8 @@ fun CalculatorPreviewScreen(
         onClickSave = {
             viewModel.saveWidget(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = viewModel::setSize,
         modifier = modifier
     )
 }
@@ -71,6 +75,8 @@ fun CalculatorPreviewContent(
     onFiatChange: (String) -> Unit = {},
     onInputSelected: (MoneyType) -> Unit = {},
     onInputDismissed: () -> Unit = {},
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -130,6 +136,8 @@ fun CalculatorPreviewContent(
                             .testTag("calculator_card_wide")
                     )
                 },
+                initialSize = initialSize,
+                onSizeSelected = onSizeSelected,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("calculator_preview_carousel")
