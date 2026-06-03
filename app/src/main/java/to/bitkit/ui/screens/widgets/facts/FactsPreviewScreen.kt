@@ -16,6 +16,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -36,6 +37,7 @@ fun FactsPreviewScreen(
 ) {
     val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
     val isFactsWidgetEnabled by factsViewModel.isFactsWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by factsViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         factsViewModel.refreshOnDisplay()
@@ -51,6 +53,8 @@ fun FactsPreviewScreen(
         onClickSave = {
             factsViewModel.saveWidget(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = factsViewModel::setSize,
         modifier = modifier
     )
 }
@@ -63,6 +67,8 @@ fun FactsPreviewContent(
     isFactsWidgetEnabled: Boolean,
     fact: String,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -108,6 +114,8 @@ fun FactsPreviewContent(
                             .testTag("facts_card_wide")
                     )
                 },
+                initialSize = initialSize,
+                onSizeSelected = onSizeSelected,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("facts_preview_carousel")

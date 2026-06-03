@@ -8,8 +8,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.WidgetSizeDraft
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,6 +29,11 @@ class FactsViewModel @Inject constructor(
             initialValue = false
         )
 
+    private val sizeDraft = WidgetSizeDraft(viewModelScope, WidgetType.FACTS, widgetsRepo.widgetsDataFlow)
+    val draftSize: StateFlow<WidgetSize> = sizeDraft.size
+
+    fun setSize(size: WidgetSize) = sizeDraft.set(size)
+
     val currentFact: StateFlow<String> =
         widgetsRepo.factsFlow.map { facts -> facts.randomOrNull() ?: DEFAULT_FACT }.stateIn(
             scope = viewModelScope,
@@ -36,7 +43,7 @@ class FactsViewModel @Inject constructor(
 
     fun saveWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            widgetsRepo.addWidget(WidgetType.FACTS)
+            widgetsRepo.addWidget(WidgetType.FACTS, sizeDraft.current)
             onComplete()
         }
     }

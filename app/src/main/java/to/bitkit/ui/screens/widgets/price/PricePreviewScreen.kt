@@ -22,6 +22,7 @@ import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
@@ -51,6 +52,7 @@ fun PricePreviewScreen(
     val previewPrice by priceViewModel.previewPrice.collectAsStateWithLifecycle()
     val isPriceWidgetEnabled by priceViewModel.isPriceWidgetEnabled.collectAsStateWithLifecycle()
     val isLoading by priceViewModel.isLoading.collectAsStateWithLifecycle()
+    val draftSize by priceViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         priceViewModel.refreshOnDisplay()
@@ -77,6 +79,8 @@ fun PricePreviewScreen(
             priceViewModel.savePreferences()
         },
         isLoading = isLoading,
+        initialSize = draftSize,
+        onSizeSelected = priceViewModel::setSize,
         modifier = modifier
     )
 }
@@ -92,6 +96,8 @@ fun PricePreviewContent(
     priceDTO: PriceDTO?,
     isLoading: Boolean,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.WIDE,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -155,6 +161,8 @@ fun PricePreviewContent(
                                 .testTag("price_card_wide")
                         )
                     },
+                    initialSize = initialSize,
+                    onSizeSelected = onSizeSelected,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)

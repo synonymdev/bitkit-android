@@ -16,6 +16,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.components.BodyM
@@ -42,6 +43,7 @@ fun HeadlinesPreviewScreen(
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
     val isHeadlinesImplemented by headlinesViewModel.isNewsWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by headlinesViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         headlinesViewModel.refreshOnDisplay()
@@ -59,6 +61,8 @@ fun HeadlinesPreviewScreen(
         onClickSave = {
             headlinesViewModel.savePreferences(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = headlinesViewModel::setSize,
         modifier = modifier
     )
 }
@@ -73,6 +77,8 @@ fun HeadlinesPreviewContent(
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.WIDE,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -139,6 +145,8 @@ fun HeadlinesPreviewContent(
                             .testTag("headline_card_wide")
                     )
                 },
+                initialSize = initialSize,
+                onSizeSelected = onSizeSelected,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("headlines_preview_carousel")

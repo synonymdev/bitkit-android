@@ -16,6 +16,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.ui.components.BodyM
@@ -42,6 +43,7 @@ fun BlocksPreviewScreen(
     val customBlocksPreferences by blocksViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentBlock by blocksViewModel.currentBlock.collectAsStateWithLifecycle()
     val isBlocksWidgetEnabled by blocksViewModel.isBlocksWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by blocksViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         blocksViewModel.refreshOnDisplay()
@@ -59,6 +61,8 @@ fun BlocksPreviewScreen(
         onClickSave = {
             blocksViewModel.savePreferences(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = blocksViewModel::setSize,
         modifier = modifier
     )
 }
@@ -73,6 +77,8 @@ private fun Content(
     blocksPreferences: BlocksPreferences,
     block: BlockModel?,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -134,6 +140,8 @@ private fun Content(
                                 .testTag("block_card_wide")
                         )
                     },
+                    initialSize = initialSize,
+                    onSizeSelected = onSizeSelected,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("blocks_preview_carousel")

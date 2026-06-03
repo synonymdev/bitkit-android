@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyM
@@ -44,6 +45,7 @@ fun WeatherPreviewScreen(
     val customWeatherPreferences by weatherViewModel.customPreferences.collectAsStateWithLifecycle()
     val weather by weatherViewModel.currentWeather.collectAsStateWithLifecycle()
     val isWeatherWidgetEnabled by weatherViewModel.isWeatherWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by weatherViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         weatherViewModel.refreshOnDisplay()
@@ -61,6 +63,8 @@ fun WeatherPreviewScreen(
         onClickSave = {
             weatherViewModel.savePreferences(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = weatherViewModel::setSize,
         modifier = modifier
     )
 }
@@ -75,6 +79,8 @@ fun WeatherPreviewContent(
     weatherPreferences: WeatherPreferences,
     weatherModel: WeatherModel?,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -136,6 +142,8 @@ fun WeatherPreviewContent(
                                 .testTag("weather_card_wide")
                         )
                     },
+                    initialSize = initialSize,
+                    onSizeSelected = onSizeSelected,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("weather_preview_carousel")
