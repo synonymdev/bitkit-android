@@ -17,15 +17,14 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
-import to.bitkit.models.MoneyType
 import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardEditor
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardSmall
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorEditableRows
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -47,10 +46,6 @@ fun CalculatorPreviewScreen(
         onBack = onBack,
         isCalculatorWidgetEnabled = isCalculatorWidgetEnabled,
         uiState = uiState,
-        onBtcChange = viewModel::onBtcInputChanged,
-        onFiatChange = viewModel::onFiatInputChanged,
-        onInputSelected = viewModel::onInputSelected,
-        onInputDismissed = viewModel::onInputDismissed,
         onClickDelete = {
             viewModel.removeWidget(onComplete = onClose)
         },
@@ -71,10 +66,6 @@ fun CalculatorPreviewContent(
     isCalculatorWidgetEnabled: Boolean,
     modifier: Modifier = Modifier,
     uiState: CalculatorUiState = CalculatorUiState(),
-    onBtcChange: (String) -> Unit = {},
-    onFiatChange: (String) -> Unit = {},
-    onInputSelected: (MoneyType) -> Unit = {},
-    onInputDismissed: () -> Unit = {},
     initialSize: WidgetSize = WidgetSize.SMALL,
     onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
@@ -121,16 +112,12 @@ fun CalculatorPreviewContent(
                     )
                 },
                 wideContent = {
-                    CalculatorCardEditor(
+                    CalculatorEditableRows(
                         btcPrimaryDisplayUnit = uiState.displayUnit,
                         btcValue = uiState.btcValue,
-                        onBtcChange = onBtcChange,
                         fiatSymbol = uiState.currencySymbol,
                         fiatName = uiState.selectedCurrency,
                         fiatValue = uiState.fiatValue,
-                        onFiatChange = onFiatChange,
-                        onInputSelected = onInputSelected,
-                        onInputDismissed = onInputDismissed,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("calculator_card_wide")
