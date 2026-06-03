@@ -75,6 +75,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -698,7 +699,6 @@ private fun BalancesSection(
     }
 }
 
-@Suppress("CyclomaticComplexMethod", "MagicNumber", "LongMethod")
 @Composable
 private fun WidgetsPage(
     homeUiState: HomeUiState,
@@ -711,9 +711,68 @@ private fun WidgetsPage(
     onClickEditWidget: (WidgetType) -> Unit,
     onClickDeleteWidget: (WidgetType) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
-    calculatorViewModel: CalculatorViewModel = hiltViewModel(),
 ) {
+    if (LocalInspectionMode.current) {
+        WidgetsPageContent(
+            homeUiState = homeUiState,
+            calculatorInputDismissKey = calculatorInputDismissKey,
+            calcState = CalculatorUiState(),
+            onDismissCalculatorInput = onDismissCalculatorInput,
+            onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
+            onInputDismissed = {},
+            onInputSelected = {},
+            onBtcInputChanged = {},
+            onFiatInputChanged = {},
+            onRemoveSuggestion = onRemoveSuggestion,
+            onClickSuggestion = onClickSuggestion,
+            onClickAddWidget = onClickAddWidget,
+            onClickEditWidget = onClickEditWidget,
+            onClickDeleteWidget = onClickDeleteWidget,
+            onMoveWidget = onMoveWidget,
+        )
+        return
+    }
+
+    val calculatorViewModel: CalculatorViewModel = hiltViewModel()
     val calcState by calculatorViewModel.uiState.collectAsStateWithLifecycle()
+    WidgetsPageContent(
+        homeUiState = homeUiState,
+        calculatorInputDismissKey = calculatorInputDismissKey,
+        calcState = calcState,
+        onDismissCalculatorInput = onDismissCalculatorInput,
+        onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
+        onInputDismissed = calculatorViewModel::onInputDismissed,
+        onInputSelected = calculatorViewModel::onInputSelected,
+        onBtcInputChanged = calculatorViewModel::onBtcInputChanged,
+        onFiatInputChanged = calculatorViewModel::onFiatInputChanged,
+        onRemoveSuggestion = onRemoveSuggestion,
+        onClickSuggestion = onClickSuggestion,
+        onClickAddWidget = onClickAddWidget,
+        onClickEditWidget = onClickEditWidget,
+        onClickDeleteWidget = onClickDeleteWidget,
+        onMoveWidget = onMoveWidget,
+    )
+}
+
+@Suppress("CyclomaticComplexMethod", "MagicNumber", "LongMethod")
+@Composable
+private fun WidgetsPageContent(
+    homeUiState: HomeUiState,
+    calculatorInputDismissKey: Int,
+    calcState: CalculatorUiState,
+    onDismissCalculatorInput: () -> Unit,
+    onCalculatorInputActiveChanged: (Boolean) -> Unit,
+    onInputDismissed: () -> Unit,
+    onInputSelected: (MoneyType) -> Unit,
+    onBtcInputChanged: (String) -> Unit,
+    onFiatInputChanged: (String) -> Unit,
+    onRemoveSuggestion: (Suggestion) -> Unit,
+    onClickSuggestion: (Suggestion) -> Unit,
+    onClickAddWidget: () -> Unit,
+    onClickEditWidget: (WidgetType) -> Unit,
+    onClickDeleteWidget: (WidgetType) -> Unit,
+    onMoveWidget: (Int, Int) -> Unit,
+) {
     val isCalcActive = calcState.activeInput != null
 
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
@@ -733,14 +792,14 @@ private fun WidgetsPage(
 
     // Honor external dismiss requests (page change, profile/drawer taps, etc.).
     LaunchedEffect(calculatorInputDismissKey) {
-        if (calculatorInputDismissKey != 0) calculatorViewModel.onInputDismissed()
+        if (calculatorInputDismissKey != 0) onInputDismissed()
     }
 
     // Drop the calculator input when editing or when the widget is no longer present.
     LaunchedEffect(homeUiState.widgetsWithPosition, homeUiState.isEditingWidgets) {
         val hasCalculator = homeUiState.widgetsWithPosition.any { it.type == WidgetType.CALCULATOR }
         if (homeUiState.isEditingWidgets || !hasCalculator) {
-            calculatorViewModel.onInputDismissed()
+            onInputDismissed()
             calculatorBounds = null
             numberPadBounds = null
         }
@@ -816,7 +875,7 @@ private fun WidgetsPage(
                             widget = widget,
                             homeUiState = homeUiState,
                             calcState = calcState,
-                            onSelectCalcInput = calculatorViewModel::onInputSelected,
+                            onSelectCalcInput = onInputSelected,
                             onCalculatorBoundsChanged = { calculatorBounds = it },
                             onRemoveSuggestion = onRemoveSuggestion,
                             onClickSuggestion = onClickSuggestion,
@@ -854,8 +913,8 @@ private fun WidgetsPage(
                 btcValue = calcState.btcValue,
                 fiatValue = calcState.fiatValue,
                 btcPrimaryDisplayUnit = calcState.displayUnit,
-                onBtcChange = calculatorViewModel::onBtcInputChanged,
-                onFiatChange = calculatorViewModel::onFiatInputChanged,
+                onBtcChange = onBtcInputChanged,
+                onFiatChange = onFiatInputChanged,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .onGloballyPositioned { numberPadBounds = it.boundsInRoot() }
