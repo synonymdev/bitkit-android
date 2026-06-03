@@ -155,8 +155,8 @@ import to.bitkit.ui.screens.widgets.blocks.BlockCardSmall
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.calculator.CalculatorUiState
 import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardSmall
-import to.bitkit.ui.screens.widgets.calculator.components.CalculatorEditableRows
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorNumberPadBar
 import to.bitkit.ui.screens.widgets.components.EditableWidgetGrid
 import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
@@ -1098,7 +1098,7 @@ private fun WidgetCardContent(
                     modifier = calcModifier
                 )
             } else {
-                CalculatorEditableRows(
+                CalculatorCard(
                     btcPrimaryDisplayUnit = calcState.displayUnit,
                     btcValue = calcState.btcValue,
                     fiatSymbol = calcState.currencySymbol,

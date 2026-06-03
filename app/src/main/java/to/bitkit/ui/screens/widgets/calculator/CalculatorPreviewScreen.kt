@@ -23,8 +23,8 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardSmall
-import to.bitkit.ui.screens.widgets.calculator.components.CalculatorEditableRows
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -112,7 +112,7 @@ fun CalculatorPreviewContent(
                     )
                 },
                 wideContent = {
-                    CalculatorEditableRows(
+                    CalculatorCard(
                         btcPrimaryDisplayUnit = uiState.displayUnit,
                         btcValue = uiState.btcValue,
                         fiatSymbol = uiState.currencySymbol,
