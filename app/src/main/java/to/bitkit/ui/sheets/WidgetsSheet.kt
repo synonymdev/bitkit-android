@@ -131,6 +131,7 @@ private fun WidgetsSheetContent(
                 val article by galleryViewModel.currentArticle.collectAsStateWithLifecycle()
                 val fact by galleryViewModel.currentFact.collectAsStateWithLifecycle()
                 val price by galleryViewModel.currentPrice.collectAsStateWithLifecycle()
+                val calculatorValues by galleryViewModel.currentCalculatorValues.collectAsStateWithLifecycle()
 
                 LaunchedEffect(Unit) {
                     galleryViewModel.refreshOnDisplay()
@@ -149,6 +150,7 @@ private fun WidgetsSheetContent(
                     block = block,
                     fact = fact,
                     price = price,
+                    calculatorValues = calculatorValues,
                     modifier = Modifier
                 )
             }

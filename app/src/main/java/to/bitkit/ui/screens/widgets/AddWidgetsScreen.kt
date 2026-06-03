@@ -42,6 +42,7 @@ import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
@@ -78,6 +79,7 @@ fun AddWidgetsSheetContent(
     block: BlockModel? = null,
     fact: String? = null,
     price: PriceDTO? = PreviewPrice,
+    calculatorValues: CalculatorValues = CalculatorValues(),
 ) {
     Column(
         modifier = modifier
@@ -105,6 +107,7 @@ fun AddWidgetsSheetContent(
                 block = block,
                 fact = fact,
                 price = price,
+                calculatorValues = calculatorValues,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -127,6 +130,7 @@ private fun WidgetsGalleryList(
     block: BlockModel? = null,
     fact: String? = null,
     price: PriceDTO? = PreviewPrice,
+    calculatorValues: CalculatorValues = CalculatorValues(),
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -232,10 +236,10 @@ private fun WidgetsGalleryList(
                 modifier = Modifier.weight(1f)
             ) {
                 CalculatorCardSmall(
-                    btcPrimaryDisplayUnit = BitcoinDisplayUnit.MODERN,
-                    btcValue = PREVIEW_CALCULATOR_BTC_VALUE,
+                    btcPrimaryDisplayUnit = calculatorValues.displayUnit ?: BitcoinDisplayUnit.MODERN,
+                    btcValue = calculatorValues.btcValue,
                     fiatSymbol = fiatSymbol,
-                    fiatValue = PREVIEW_CALCULATOR_FIAT_VALUE,
+                    fiatValue = calculatorValues.fiatValue,
                     modifier = Modifier.smallPreviewCard()
                 )
             }
@@ -488,8 +492,6 @@ private val PreviewBlocksPreferences = BlocksPreferences(
     showFees = false,
 )
 
-private const val PREVIEW_CALCULATOR_BTC_VALUE = "10000"
-private const val PREVIEW_CALCULATOR_FIAT_VALUE = "4.55"
 private const val PREVIEW_FACT = "Bitcoin doesn’t need your personal information"
 private val PreviewArticle = ArticleModel(
     timeAgo = "21 min ago",
