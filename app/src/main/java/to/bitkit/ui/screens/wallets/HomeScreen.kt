@@ -717,8 +717,9 @@ private fun WidgetsPage(
     var pageBounds by remember { mutableStateOf<Rect?>(null) }
     var calculatorBounds by remember { mutableStateOf<Rect?>(null) }
     var numberPadBounds by remember { mutableStateOf<Rect?>(null) }
-    val latestPageBounds by rememberUpdatedState(pageBounds)
+    val latestCalculatorBounds by rememberUpdatedState(calculatorBounds)
     val latestNumberPadBounds by rememberUpdatedState(numberPadBounds)
+    val revealMarginPx = with(density) { 16.dp.toPx() }
 
     // Keep the hoisted state in sync so the pager and page-change handling react to calculator input.
     LaunchedEffect(isCalcActive) { onCalculatorInputActiveChanged(isCalcActive) }
@@ -738,17 +739,18 @@ private fun WidgetsPage(
         }
     }
 
-    // Scroll so the focused calculator sits just above the number pad bar.
+    // Scroll so the focused calculator card sits just above the number pad bar (any position).
     LaunchedEffect(isCalcActive, numberPadBounds != null) {
         if (!isCalcActive || numberPadBounds == null) return@LaunchedEffect
         withFrameNanos { }
-        val page = latestPageBounds ?: return@LaunchedEffect
+        val calculator = latestCalculatorBounds ?: return@LaunchedEffect
         val numberPad = latestNumberPadBounds ?: return@LaunchedEffect
         val targetScroll = calculatorRevealScrollTarget(
             currentScroll = widgetsScrollState.value,
             maxScroll = widgetsScrollState.maxValue,
-            pageBounds = page,
+            calculatorBounds = calculator,
             numberPadBounds = numberPad,
+            marginPx = revealMarginPx,
         )
         if (targetScroll != widgetsScrollState.value) {
             widgetsScrollState.animateScrollTo(targetScroll)
@@ -866,11 +868,14 @@ private fun WidgetsPage(
 private fun calculatorRevealScrollTarget(
     currentScroll: Int,
     maxScroll: Int,
-    pageBounds: Rect,
+    calculatorBounds: Rect,
     numberPadBounds: Rect,
+    marginPx: Float,
 ): Int {
-    val delta = numberPadBounds.bottom - pageBounds.bottom
-    return (currentScroll + delta.roundToInt()).coerceIn(0, maxScroll)
+    // Lift the page so the calculator card's bottom clears the top of the number pad bar.
+    val overlap = calculatorBounds.bottom - (numberPadBounds.top - marginPx)
+    if (overlap <= 0f) return currentScroll
+    return (currentScroll + overlap.roundToInt()).coerceIn(0, maxScroll)
 }
 
 private fun Modifier.dismissCalculatorInputOnOutsideTap(
