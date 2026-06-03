@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.drop
 import to.bitkit.R
 import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.Caption13Up
@@ -44,10 +45,24 @@ fun WidgetSizeCarousel(
     )
     val currentOnSizeSelected by rememberUpdatedState(onSizeSelected)
 
-    LaunchedEffect(pagerState, supportsSmall) {
-        snapshotFlow { pagerState.currentPage }.collect { page ->
-            currentOnSizeSelected(pageToSize(page, supportsSmall))
+    // The persisted size can resolve asynchronously after first composition (DataStore read), so
+    // realign the pager once it arrives instead of leaving it on the placeholder default page.
+    // Guarded so a user swipe (which flows back in via [initialSize]) never fights the gesture.
+    LaunchedEffect(initialSize, supportsSmall) {
+        val targetPage = initialPageFor(initialSize, supportsSmall)
+        if (pagerState.currentPage != targetPage) {
+            pagerState.scrollToPage(targetPage)
         }
+    }
+
+    // Report only genuine page changes; dropping the initial emission keeps opening the sheet from
+    // overwriting the persisted size with the placeholder default before it has resolved.
+    LaunchedEffect(pagerState, supportsSmall) {
+        snapshotFlow { pagerState.currentPage }
+            .drop(1)
+            .collect { page ->
+                currentOnSizeSelected(pageToSize(page, supportsSmall))
+            }
     }
 
     Column(
