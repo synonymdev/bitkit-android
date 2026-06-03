@@ -90,6 +90,8 @@ fun EditableWidgetGrid(
     var gridOrigin by remember { mutableStateOf(Offset.Zero) }
     var draggedType by remember { mutableStateOf<WidgetType?>(null) }
     var dragPointer by remember { mutableStateOf(Offset.Zero) }
+    // The last slot we reordered onto, so we only act when the target changes (mirrors iOS).
+    var lastTarget by remember { mutableStateOf<WidgetType?>(null) }
     val latestItems by rememberUpdatedState(items)
 
     val isWide = items.map { it.effectiveSize() == WidgetSize.WIDE }
@@ -107,21 +109,33 @@ fun EditableWidgetGrid(
                                 onStart = { center ->
                                     draggedType = widget.type
                                     dragPointer = center
+                                    lastTarget = null
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 },
                                 onDrag = { delta ->
                                     dragPointer += delta
+                                    val source = draggedType
                                     val target = nearestWidgetSlot(dragPointer, cellBounds)
-                                    if (target != null && target != draggedType) {
-                                        val from = latestItems.indexOfFirst { it.type == draggedType }
-                                        val to = latestItems.indexOfFirst { it.type == target }
-                                        if (from >= 0 && to >= 0) {
-                                            onMove(from, to)
-                                            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    when {
+                                        source == null || target == null -> Unit
+                                        // back over dragged cell: re-allow visited slots
+                                        target == source -> lastTarget = null
+                                        // act only when target changes (avoid oscillation)
+                                        target != lastTarget -> {
+                                            val from = latestItems.indexOfFirst { it.type == source }
+                                            val to = latestItems.indexOfFirst { it.type == target }
+                                            if (from >= 0 && to >= 0) {
+                                                onMove(from, to)
+                                                lastTarget = target
+                                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                            }
                                         }
                                     }
                                 },
-                                onEnd = { draggedType = null },
+                                onEnd = {
+                                    draggedType = null
+                                    lastTarget = null
+                                },
                             )
                         }
 
