@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
+import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SERVICE
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
@@ -231,7 +232,11 @@ class MainActivity : FragmentActivity() {
     private fun tryStartForegroundService() {
         runCatching {
             Logger.debug("Attempting to start LightningNodeService", context = "MainActivity")
-            startForegroundService(Intent(this, LightningNodeService::class.java))
+            startForegroundService(
+                Intent(this, LightningNodeService::class.java).apply {
+                    action = ACTION_START_SERVICE
+                },
+            )
         }.onFailure { error ->
             Logger.error("Failed to start LightningNodeService", error, context = "MainActivity")
         }
