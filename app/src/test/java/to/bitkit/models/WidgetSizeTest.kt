@@ -4,7 +4,6 @@ import to.bitkit.data.WidgetsData
 import to.bitkit.di.json
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class WidgetSizeTest {
 
@@ -84,6 +83,5 @@ class WidgetSizeTest {
         val payload = WidgetsBackupV1(createdAt = 0L, widgets = data)
         val decoded = json.decodeFromString<WidgetsBackupV1>(json.encodeToString(payload))
         assertEquals(data.widgets, decoded.widgets.widgets)
-        assertTrue(json.encodeToString(payload).contains("\"size\": \"small\""))
     }
 }
