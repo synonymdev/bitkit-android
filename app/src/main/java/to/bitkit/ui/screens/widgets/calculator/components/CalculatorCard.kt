@@ -492,7 +492,7 @@ private fun ReadOnlyRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
-            .clip(MaterialTheme.shapes.small)
+            .clip(inputShape)
             .background(Colors.Black)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(rowPadding)

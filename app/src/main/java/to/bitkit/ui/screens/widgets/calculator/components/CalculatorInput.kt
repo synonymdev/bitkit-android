@@ -36,13 +36,14 @@ import kotlinx.coroutines.delay
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 
-val inputShape @Composable get() = MaterialTheme.shapes.small
+val inputShape = AppShapes.small
 private val CURSOR_WIDTH = 2.dp
 private val CURSOR_HEIGHT = 22.dp
 private val CURSOR_BLINK_INTERVAL = 500.milliseconds
