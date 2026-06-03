@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.wallets
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -40,6 +39,7 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
@@ -110,9 +110,12 @@ import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
+import to.bitkit.models.MoneyType
 import to.bitkit.models.Suggestion
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.effectiveSize
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.ui.LocalBalances
@@ -145,15 +148,25 @@ import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
-import to.bitkit.ui.screens.widgets.DragAndDropWidget
-import to.bitkit.ui.screens.widgets.DragDropColumn
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
+import to.bitkit.ui.screens.widgets.blocks.BlockCardSmall
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
-import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
+import to.bitkit.ui.screens.widgets.calculator.CalculatorUiState
+import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardSmall
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorEditableRows
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorNumberPadBar
+import to.bitkit.ui.screens.widgets.components.EditableWidgetGrid
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
+import to.bitkit.ui.screens.widgets.components.WidgetFlowLayout
 import to.bitkit.ui.screens.widgets.facts.FactsCard
+import to.bitkit.ui.screens.widgets.facts.FactsCardSmall
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
+import to.bitkit.ui.screens.widgets.headlines.HeadlineCardSmall
 import to.bitkit.ui.screens.widgets.price.PriceCard
+import to.bitkit.ui.screens.widgets.price.PriceCardSmall
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
+import to.bitkit.ui.screens.widgets.weather.WeatherCardSmall
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.sheets.BackupRoute
@@ -514,7 +527,6 @@ private fun Content(
                 1 -> WidgetsPage(
                     homeUiState = homeUiState,
                     calculatorInputDismissKey = calculatorInputDismissKey,
-                    isCalculatorInputActive = isCalculatorInputActive,
                     onDismissCalculatorInput = ::dismissKeyboard,
                     onCalculatorInputActiveChanged = onCalculatorInputActiveChange,
                     onRemoveSuggestion = onRemoveSuggestion,
@@ -681,12 +693,11 @@ private fun BalancesSection(
     }
 }
 
-@Suppress("CyclomaticComplexMethod", "MagicNumber")
+@Suppress("CyclomaticComplexMethod", "MagicNumber", "LongMethod")
 @Composable
 private fun WidgetsPage(
     homeUiState: HomeUiState,
     calculatorInputDismissKey: Int,
-    isCalculatorInputActive: Boolean,
     onDismissCalculatorInput: () -> Unit,
     onCalculatorInputActiveChanged: (Boolean) -> Unit,
     onRemoveSuggestion: (Suggestion) -> Unit,
@@ -695,58 +706,50 @@ private fun WidgetsPage(
     onClickEditWidget: (WidgetType) -> Unit,
     onClickDeleteWidget: (WidgetType) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
+    calculatorViewModel: CalculatorViewModel = hiltViewModel(),
 ) {
+    val calcState by calculatorViewModel.uiState.collectAsStateWithLifecycle()
+    val isCalcActive = calcState.activeInput != null
+
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val widgetsScrollState = rememberScrollState()
     val density = LocalDensity.current
     var pageBounds by remember { mutableStateOf<Rect?>(null) }
     var calculatorBounds by remember { mutableStateOf<Rect?>(null) }
     var numberPadBounds by remember { mutableStateOf<Rect?>(null) }
-    var firstCalculatorTopPaddingTarget by remember { mutableStateOf(0.dp) }
-    val firstCalculatorTopPadding by animateDpAsState(
-        targetValue = firstCalculatorTopPaddingTarget,
-        animationSpec = tween(durationMillis = AnimationConstants.DefaultDurationMillis),
-        label = "firstCalculatorTopPadding",
-    )
     val latestPageBounds by rememberUpdatedState(pageBounds)
     val latestNumberPadBounds by rememberUpdatedState(numberPadBounds)
-    val isCalculatorFirst = homeUiState.widgetsWithPosition.firstOrNull()?.type == WidgetType.CALCULATOR
 
+    // Keep the hoisted state in sync so the pager and page-change handling react to calculator input.
+    LaunchedEffect(isCalcActive) { onCalculatorInputActiveChanged(isCalcActive) }
+
+    // Honor external dismiss requests (page change, profile/drawer taps, etc.).
+    LaunchedEffect(calculatorInputDismissKey) {
+        if (calculatorInputDismissKey != 0) calculatorViewModel.onInputDismissed()
+    }
+
+    // Drop the calculator input when editing or when the widget is no longer present.
     LaunchedEffect(homeUiState.widgetsWithPosition, homeUiState.isEditingWidgets) {
         val hasCalculator = homeUiState.widgetsWithPosition.any { it.type == WidgetType.CALCULATOR }
         if (homeUiState.isEditingWidgets || !hasCalculator) {
+            calculatorViewModel.onInputDismissed()
             calculatorBounds = null
             numberPadBounds = null
-            firstCalculatorTopPaddingTarget = 0.dp
         }
     }
 
-    LaunchedEffect(isCalculatorInputActive, numberPadBounds != null, isCalculatorFirst) {
-        if (!isCalculatorInputActive || numberPadBounds == null) {
-            firstCalculatorTopPaddingTarget = 0.dp
-            return@LaunchedEffect
-        }
-        withFrameNanos {
-            // Wait for the focused calculator and number pad bounds to settle before measuring.
-        }
-
+    // Scroll so the focused calculator sits just above the number pad bar.
+    LaunchedEffect(isCalcActive, numberPadBounds != null) {
+        if (!isCalcActive || numberPadBounds == null) return@LaunchedEffect
+        withFrameNanos { }
         val page = latestPageBounds ?: return@LaunchedEffect
         val numberPad = latestNumberPadBounds ?: return@LaunchedEffect
-        val firstCalculatorBottomGap = page.bottom - numberPad.bottom
-
-        if (isCalculatorFirst && widgetsScrollState.value == 0 && firstCalculatorBottomGap > 0f) {
-            firstCalculatorTopPaddingTarget = with(density) { firstCalculatorBottomGap.toDp() }
-            return@LaunchedEffect
-        }
-
-        firstCalculatorTopPaddingTarget = 0.dp
         val targetScroll = calculatorRevealScrollTarget(
             currentScroll = widgetsScrollState.value,
             maxScroll = widgetsScrollState.maxValue,
             pageBounds = page,
             numberPadBounds = numberPad,
         )
-
         if (targetScroll != widgetsScrollState.value) {
             widgetsScrollState.animateScrollTo(targetScroll)
         }
@@ -757,9 +760,10 @@ private fun WidgetsPage(
             .fillMaxSize()
             .onGloballyPositioned { pageBounds = it.boundsInRoot() }
             .dismissCalculatorInputOnOutsideTap(
-                isCalculatorInputActive = isCalculatorInputActive,
+                isCalculatorInputActive = isCalcActive,
                 pageBounds = pageBounds,
                 calculatorBounds = calculatorBounds,
+                numberPadBounds = numberPadBounds,
                 onDismiss = onDismissCalculatorInput,
             )
     ) {
@@ -769,7 +773,7 @@ private fun WidgetsPage(
                 .fillMaxSize()
                 .verticalScroll(
                     state = widgetsScrollState,
-                    enabled = !isCalculatorInputActive,
+                    enabled = !isCalcActive,
                 )
         ) {
             StatusBarSpacer()
@@ -777,45 +781,52 @@ private fun WidgetsPage(
             VerticalSpacer(16.dp)
 
             if (homeUiState.isEditingWidgets) {
-                DragDropColumn(
+                EditableWidgetGrid(
                     items = homeUiState.widgetsWithPosition,
                     onMove = onMoveWidget,
-                    modifier = Modifier.fillMaxWidth()
-                ) { widgetWithPosition, isDragging, dragModifier ->
-                    DragAndDropWidget(
-                        iconRes = widgetWithPosition.type.iconRes,
-                        title = stringResource(widgetWithPosition.type.title),
-                        onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
-                        onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
-                        dragModifier = dragModifier,
-                        modifier = Modifier
-                            .fillMaxWidth()
+                    onDelete = onClickDeleteWidget,
+                    onSettings = onClickEditWidget,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { widget ->
+                    WidgetCardContent(
+                        widget = widget,
+                        homeUiState = homeUiState,
+                        calcState = calcState,
+                        onSelectCalcInput = null,
+                        onCalculatorBoundsChanged = {},
+                        onRemoveSuggestion = onRemoveSuggestion,
+                        onClickSuggestion = onClickSuggestion,
                     )
                 }
             } else {
-                VerticalSpacer(firstCalculatorTopPadding)
-
-                Widgets(
-                    homeUiState = homeUiState,
-                    calculatorInputDismissKey = calculatorInputDismissKey,
-                    showOnlyCalculator = isCalculatorInputActive && isCalculatorFirst,
-                    onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
-                    onCalculatorBoundsChanged = { calculatorBounds = it },
-                    onNumberPadBoundsChanged = { numberPadBounds = it },
-                    onRemoveSuggestion = onRemoveSuggestion,
-                    onClickSuggestion = onClickSuggestion,
+                val visibleWidgets = homeUiState.widgetsWithPosition
+                    .filter { hasWidgetContent(it.type, homeUiState) }
+                WidgetFlowLayout(
+                    isWide = visibleWidgets.map { it.effectiveSize() == WidgetSize.WIDE },
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    visibleWidgets.forEach { widget ->
+                        WidgetCardContent(
+                            widget = widget,
+                            homeUiState = homeUiState,
+                            calcState = calcState,
+                            onSelectCalcInput = calculatorViewModel::onInputSelected,
+                            onCalculatorBoundsChanged = { calculatorBounds = it },
+                            onRemoveSuggestion = onRemoveSuggestion,
+                            onClickSuggestion = onClickSuggestion,
+                        )
+                    }
+                }
             }
 
-            val footerAlpha = if (isCalculatorInputActive) 0f else 1f
+            val footerAlpha = if (isCalcActive) 0f else 1f
 
             VerticalSpacer(16.dp)
 
             TertiaryButton(
                 text = stringResource(R.string.widgets__add),
                 onClick = onClickAddWidget,
-                enabled = !isCalculatorInputActive,
+                enabled = !isCalcActive,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_plus),
@@ -828,7 +839,26 @@ private fun WidgetsPage(
                     .testTag("WidgetsAdd")
             )
 
-            VerticalSpacer(150.dp + imeBottomPadding)
+            val calcReserve = if (isCalcActive) {
+                numberPadBounds?.height?.let { with(density) { it.toDp() } } ?: 320.dp
+            } else {
+                0.dp
+            }
+            VerticalSpacer(150.dp + imeBottomPadding + calcReserve)
+        }
+
+        calcState.activeInput?.let { activeInput ->
+            CalculatorNumberPadBar(
+                activeInput = activeInput,
+                btcValue = calcState.btcValue,
+                fiatValue = calcState.fiatValue,
+                btcPrimaryDisplayUnit = calcState.displayUnit,
+                onBtcChange = calculatorViewModel::onBtcInputChanged,
+                onFiatChange = calculatorViewModel::onFiatInputChanged,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onGloballyPositioned { numberPadBounds = it.boundsInRoot() }
+            )
         }
     }
 }
@@ -847,8 +877,9 @@ private fun Modifier.dismissCalculatorInputOnOutsideTap(
     isCalculatorInputActive: Boolean,
     pageBounds: Rect?,
     calculatorBounds: Rect?,
+    numberPadBounds: Rect?,
     onDismiss: () -> Unit,
-): Modifier = pointerInput(isCalculatorInputActive, pageBounds, calculatorBounds) {
+): Modifier = pointerInput(isCalculatorInputActive, pageBounds, calculatorBounds, numberPadBounds) {
     if (!isCalculatorInputActive) return@pointerInput
 
     awaitEachGesture {
@@ -867,7 +898,8 @@ private fun Modifier.dismissCalculatorInputOnOutsideTap(
             }
             if (pointer.changedToUpIgnoreConsumed()) {
                 isPointerUp = true
-                if (isTap && !calculator.contains(tapPositionInRoot)) {
+                val onNumberPad = numberPadBounds?.contains(tapPositionInRoot) == true
+                if (isTap && !calculator.contains(tapPositionInRoot) && !onNumberPad) {
                     pointer.consume()
                     onDismiss()
                 }
@@ -943,115 +975,178 @@ private fun WidgetsOnboardingHint(modifier: Modifier = Modifier) {
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
+private fun hasWidgetContent(type: WidgetType, state: HomeUiState): Boolean = when (type) {
+    WidgetType.BLOCK -> state.currentBlock != null
+    WidgetType.NEWS -> state.currentArticle != null
+    WidgetType.PRICE -> state.currentPrice != null
+    WidgetType.WEATHER -> state.currentWeather != null
+    WidgetType.FACTS -> state.currentFact != null
+    WidgetType.CALCULATOR -> true
+    WidgetType.SUGGESTIONS -> state.suggestions.isNotEmpty()
+}
+
+@Suppress("CyclomaticComplexMethod", "LongMethod")
 @Composable
-private fun Widgets(
+private fun WidgetCardContent(
+    widget: WidgetWithPosition,
     homeUiState: HomeUiState,
-    calculatorInputDismissKey: Int,
-    showOnlyCalculator: Boolean,
-    onCalculatorInputActiveChanged: (Boolean) -> Unit,
+    calcState: CalculatorUiState,
+    onSelectCalcInput: ((MoneyType) -> Unit)?,
     onCalculatorBoundsChanged: (Rect) -> Unit,
-    onNumberPadBoundsChanged: (Rect?) -> Unit,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    val widgets = if (showOnlyCalculator) {
-        homeUiState.widgetsWithPosition.take(1)
-    } else {
-        homeUiState.widgetsWithPosition
-    }
+    val small = widget.effectiveSize() == WidgetSize.SMALL
+    when (widget.type) {
+        WidgetType.BLOCK -> {
+            val block = homeUiState.currentBlock
+            when {
+                block == null -> WidgetEditPlaceholder(small = small)
+                small -> BlockCardSmall(
+                    preferences = homeUiState.blocksPreferences,
+                    block = block,
+                    modifier = Modifier.testTag("BlocksWidget")
+                )
 
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        widgets.forEach { widgetsWithPosition ->
-            when (widgetsWithPosition.type) {
-                WidgetType.BLOCK -> {
-                    homeUiState.currentBlock?.let { block ->
-                        BlockCard(
-                            preferences = homeUiState.blocksPreferences,
-                            block = block,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("BlocksWidget")
-                        )
-                    }
-                }
+                else -> BlockCard(
+                    preferences = homeUiState.blocksPreferences,
+                    block = block,
+                    modifier = Modifier.fillMaxWidth().testTag("BlocksWidget")
+                )
+            }
+        }
 
-                WidgetType.CALCULATOR -> {
-                    CalculatorCard(
-                        dismissNumberPadKey = calculatorInputDismissKey,
-                        onInputActiveChange = onCalculatorInputActiveChanged,
-                        onNumberPadBoundsChanged = onNumberPadBoundsChanged,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onGloballyPositioned {
-                                onCalculatorBoundsChanged(it.boundsInRoot())
-                            }
-                    )
-                }
+        WidgetType.NEWS -> {
+            val article = homeUiState.currentArticle
+            when {
+                article == null -> WidgetEditPlaceholder(small = small)
+                small -> HeadlineCardSmall(
+                    showTime = homeUiState.headlinePreferences.showTime,
+                    time = article.timeAgo,
+                    headline = article.title,
+                    link = article.link,
+                    modifier = Modifier.testTag("NewsWidget")
+                )
 
-                WidgetType.FACTS -> {
-                    homeUiState.currentFact?.run {
-                        FactsCard(
-                            headline = homeUiState.currentFact,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+                else -> HeadlineCard(
+                    showTime = homeUiState.headlinePreferences.showTime,
+                    showSource = homeUiState.headlinePreferences.showSource,
+                    headline = article.title,
+                    time = article.timeAgo,
+                    source = article.publisher,
+                    link = article.link,
+                    modifier = Modifier.fillMaxWidth().testTag("NewsWidget")
+                )
+            }
+        }
 
-                WidgetType.NEWS -> {
-                    homeUiState.currentArticle?.run {
-                        HeadlineCard(
-                            showTime = homeUiState.headlinePreferences.showTime,
-                            showSource = homeUiState.headlinePreferences.showSource,
-                            headline = title,
-                            time = timeAgo,
-                            source = publisher,
-                            link = link,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("NewsWidget")
-                        )
-                    }
-                }
+        WidgetType.PRICE -> {
+            val price = homeUiState.currentPrice
+            when {
+                price == null -> WidgetEditPlaceholder(small = small)
+                small -> PriceCardSmall(
+                    pricePreferences = homeUiState.pricePreferences,
+                    priceDTO = price,
+                    modifier = Modifier.testTag("PriceWidget")
+                )
 
-                WidgetType.PRICE -> {
-                    homeUiState.currentPrice?.run {
-                        PriceCard(
-                            pricePreferences = homeUiState.pricePreferences,
-                            priceDTO = homeUiState.currentPrice,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("PriceWidget")
-                        )
-                    }
-                }
+                else -> PriceCard(
+                    pricePreferences = homeUiState.pricePreferences,
+                    priceDTO = price,
+                    modifier = Modifier.fillMaxWidth().testTag("PriceWidget")
+                )
+            }
+        }
 
-                WidgetType.WEATHER -> {
-                    homeUiState.currentWeather?.run {
-                        WeatherCard(
-                            weatherModel = this,
-                            preferences = homeUiState.weatherPreferences,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+        WidgetType.WEATHER -> {
+            val weather = homeUiState.currentWeather
+            when {
+                weather == null -> WidgetEditPlaceholder(small = small)
+                small -> WeatherCardSmall(
+                    weatherModel = weather,
+                    preferences = homeUiState.weatherPreferences,
+                    modifier = Modifier.testTag("WeatherWidget")
+                )
 
-                WidgetType.SUGGESTIONS -> {
-                    if (homeUiState.suggestions.isNotEmpty()) {
-                        SuggestionsSection(
-                            suggestions = homeUiState.suggestions,
-                            onRemoveSuggestion = onRemoveSuggestion,
-                            onClickSuggestion = onClickSuggestion,
-                        )
-                    }
-                }
+                else -> WeatherCard(
+                    weatherModel = weather,
+                    preferences = homeUiState.weatherPreferences,
+                    modifier = Modifier.fillMaxWidth().testTag("WeatherWidget")
+                )
+            }
+        }
+
+        WidgetType.FACTS -> {
+            val fact = homeUiState.currentFact
+            when {
+                fact == null -> WidgetEditPlaceholder(small = small)
+                small -> FactsCardSmall(
+                    headline = fact,
+                    modifier = Modifier.testTag("FactsWidget")
+                )
+
+                else -> FactsCard(
+                    headline = fact,
+                    modifier = Modifier.fillMaxWidth().testTag("FactsWidget")
+                )
+            }
+        }
+
+        WidgetType.CALCULATOR -> {
+            val calcModifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { onCalculatorBoundsChanged(it.boundsInRoot()) }
+            if (small) {
+                CalculatorCardSmall(
+                    btcPrimaryDisplayUnit = calcState.displayUnit,
+                    btcValue = calcState.btcValue,
+                    fiatSymbol = calcState.currencySymbol,
+                    fiatValue = calcState.fiatValue,
+                    activeInput = calcState.activeInput,
+                    onSelectInput = onSelectCalcInput,
+                    modifier = calcModifier
+                )
+            } else {
+                CalculatorEditableRows(
+                    btcPrimaryDisplayUnit = calcState.displayUnit,
+                    btcValue = calcState.btcValue,
+                    fiatSymbol = calcState.currencySymbol,
+                    fiatName = calcState.selectedCurrency,
+                    fiatValue = calcState.fiatValue,
+                    activeInput = calcState.activeInput,
+                    onSelectInput = onSelectCalcInput ?: {},
+                    modifier = calcModifier
+                )
+            }
+        }
+
+        WidgetType.SUGGESTIONS -> {
+            if (homeUiState.suggestions.isEmpty()) {
+                WidgetEditPlaceholder(small = false)
+            } else {
+                SuggestionsSection(
+                    suggestions = homeUiState.suggestions,
+                    onRemoveSuggestion = onRemoveSuggestion,
+                    onClickSuggestion = onClickSuggestion,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
+}
+
+@Composable
+private fun WidgetEditPlaceholder(
+    small: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (small) Modifier else Modifier.height(WidgetCardDimens.COMPACT_CARD_SIZE.height))
+            .clip(MaterialTheme.shapes.medium)
+            .background(Colors.Gray6)
+    )
 }
 
 @Composable
