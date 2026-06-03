@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.exponentialDecay
@@ -65,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -181,11 +183,14 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
-import kotlin.math.roundToInt
 
 private const val SMALL_SCREEN_HEIGHT_DP = 800
 private const val SMALL_SCREEN_SLOT_CAPACITY = 3
 private const val LARGE_SCREEN_SLOT_CAPACITY = 4
+private val CALCULATOR_LIFT_SPEC = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
 @Suppress("CyclomaticComplexMethod")
@@ -720,6 +725,8 @@ private fun WidgetsPage(
     val latestCalculatorBounds by rememberUpdatedState(calculatorBounds)
     val latestNumberPadBounds by rememberUpdatedState(numberPadBounds)
     val revealMarginPx = with(density) { 16.dp.toPx() }
+    // Lifts the page so the focused calculator clears the number pad, snapping back when it closes.
+    val focusedOffsetY = remember { Animatable(0f) }
 
     // Keep the hoisted state in sync so the pager and page-change handling react to calculator input.
     LaunchedEffect(isCalcActive) { onCalculatorInputActiveChanged(isCalcActive) }
@@ -739,22 +746,18 @@ private fun WidgetsPage(
         }
     }
 
-    // Scroll so the focused calculator card sits just above the number pad bar (any position).
+    // Lift the page so the focused calculator card sits above the number pad bar (any position),
+    // and snap it back when the input closes — matching iOS's content offset.
     LaunchedEffect(isCalcActive, numberPadBounds != null) {
-        if (!isCalcActive || numberPadBounds == null) return@LaunchedEffect
+        if (!isCalcActive || numberPadBounds == null) {
+            focusedOffsetY.animateTo(0f, CALCULATOR_LIFT_SPEC)
+            return@LaunchedEffect
+        }
         withFrameNanos { }
         val calculator = latestCalculatorBounds ?: return@LaunchedEffect
         val numberPad = latestNumberPadBounds ?: return@LaunchedEffect
-        val targetScroll = calculatorRevealScrollTarget(
-            currentScroll = widgetsScrollState.value,
-            maxScroll = widgetsScrollState.maxValue,
-            calculatorBounds = calculator,
-            numberPadBounds = numberPad,
-            marginPx = revealMarginPx,
-        )
-        if (targetScroll != widgetsScrollState.value) {
-            widgetsScrollState.animateScrollTo(targetScroll)
-        }
+        val overlap = calculator.bottom - (numberPad.top - revealMarginPx)
+        focusedOffsetY.animateTo(if (overlap > 0f) -overlap else 0f, CALCULATOR_LIFT_SPEC)
     }
 
     Box(
@@ -773,6 +776,7 @@ private fun WidgetsPage(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
+                .graphicsLayer { translationY = focusedOffsetY.value }
                 .verticalScroll(
                     state = widgetsScrollState,
                     enabled = !isCalcActive,
@@ -841,12 +845,7 @@ private fun WidgetsPage(
                     .testTag("WidgetsAdd")
             )
 
-            val calcReserve = if (isCalcActive) {
-                numberPadBounds?.height?.let { with(density) { it.toDp() } } ?: 320.dp
-            } else {
-                0.dp
-            }
-            VerticalSpacer(150.dp + imeBottomPadding + calcReserve)
+            VerticalSpacer(150.dp + imeBottomPadding)
         }
 
         calcState.activeInput?.let { activeInput ->
@@ -863,19 +862,6 @@ private fun WidgetsPage(
             )
         }
     }
-}
-
-private fun calculatorRevealScrollTarget(
-    currentScroll: Int,
-    maxScroll: Int,
-    calculatorBounds: Rect,
-    numberPadBounds: Rect,
-    marginPx: Float,
-): Int {
-    // Lift the page so the calculator card's bottom clears the top of the number pad bar.
-    val overlap = calculatorBounds.bottom - (numberPadBounds.top - marginPx)
-    if (overlap <= 0f) return currentScroll
-    return (currentScroll + overlap.roundToInt()).coerceIn(0, maxScroll)
 }
 
 private fun Modifier.dismissCalculatorInputOnOutsideTap(
