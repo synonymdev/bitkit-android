@@ -4,10 +4,12 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
@@ -59,13 +61,16 @@ class LightningNodeService : Service() {
     @Inject
     lateinit var cacheStore: CacheStore
 
+    private var hasStartedNode = false
+
     override fun onCreate() {
         super.onCreate()
-        startForeground(ID_NOTIFICATION_NODE, createNotification())
-        setupService()
     }
 
     private fun setupService() {
+        if (hasStartedNode) return
+        hasStartedNode = true
+
         serviceScope.launch {
             lightningRepo.start(
                 eventHandler = { event ->
@@ -149,19 +154,49 @@ class LightningNodeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Logger.debug("onStartCommand", context = TAG)
-        when (intent?.action) {
+        val action = intent?.action
+        Logger.debug("Received start command action '$action'", context = TAG)
+        when (action) {
+            ACTION_START_SERVICE -> {
+                if (promoteToForeground(startId)) setupService()
+            }
             ACTION_STOP_SERVICE_AND_APP -> {
-                Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
-                serviceScope.launch {
-                    lightningRepo.stop()
-                    activityManager.appTasks.forEach { it.finishAndRemoveTask() }
-                    stopSelf()
-                }
-                return START_NOT_STICKY
+                Logger.debug("Received stop service action", context = TAG)
+                stopForegroundService(startId)
+                activityManager.appTasks.forEach { it.finishAndRemoveTask() }
+                serviceScope.launch { lightningRepo.stop() }
+            }
+            else -> {
+                Logger.warn("Stopped service for unsupported action '$action'", context = TAG)
+                stopSelf(startId)
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    private fun promoteToForeground(startId: Int): Boolean {
+        return runCatching {
+            ServiceCompat.startForeground(
+                this,
+                ID_NOTIFICATION_NODE,
+                createNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        }.fold(
+            onSuccess = { true },
+            onFailure = {
+                if (it !is RuntimeException) throw it
+
+                Logger.error("Failed to promote foreground service", it, context = TAG)
+                stopSelf(startId)
+                false
+            }
+        )
+    }
+
+    private fun stopForegroundService(startId: Int) {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf(startId)
     }
 
     override fun onDestroy() {
@@ -173,11 +208,9 @@ class LightningNodeService : Service() {
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     override fun onTimeout(startId: Int, fgsType: Int) {
-        Logger.warn("Foreground service timeout reached", context = TAG)
-        serviceScope.launch {
-            lightningRepo.stop()
-            stopSelf()
-        }
+        Logger.warn("Reached foreground service timeout for type '$fgsType'", context = TAG)
+        stopForegroundService(startId)
+        serviceScope.launch { lightningRepo.stop() }
         super.onTimeout(startId, fgsType)
     }
 
@@ -186,6 +219,7 @@ class LightningNodeService : Service() {
     companion object {
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
+        const val ACTION_START_SERVICE = "to.bitkit.androidServices.action.START_SERVICE"
         const val ACTION_STOP_SERVICE_AND_APP = "to.bitkit.androidServices.action.STOP_SERVICE_AND_APP"
     }
 }
