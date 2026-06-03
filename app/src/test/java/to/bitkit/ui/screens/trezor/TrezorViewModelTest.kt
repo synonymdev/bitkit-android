@@ -372,18 +372,28 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `startWatcher should keep status starting until watcher event arrives`() = test {
+    fun `startWatcher should not expose active watcher until start completes`() = test {
+        val startResult = CompletableDeferred<Result<Unit>>()
         whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
-            .thenReturn(Result.success(Unit))
+            .doSuspendableAnswer { startResult.await() }
         sut.setWatcherExtendedKey("xpub6test123")
 
         sut.startWatcher()
         advanceUntilIdle()
 
-        val state = sut.uiState.value
-        assertFalse(state.isStartingWatcher)
-        assertNotNull(state.activeWatcherId)
-        assertEquals(WatcherConnectionStatus.STARTING, state.watcherConnectionStatus)
+        val startingState = sut.uiState.value
+        val watcherId = assertNotNull(startingState.watcherId)
+        assertTrue(startingState.isStartingWatcher)
+        assertNull(startingState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.STARTING, startingState.watcherConnectionStatus)
+
+        startResult.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        val startedState = sut.uiState.value
+        assertFalse(startedState.isStartingWatcher)
+        assertEquals(watcherId, startedState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.STARTING, startedState.watcherConnectionStatus)
     }
 
     @Test
@@ -422,6 +432,41 @@ class TrezorViewModelTest : BaseUnitTest() {
         assertEquals(WatcherConnectionStatus.CONNECTED, state.watcherConnectionStatus)
         assertEquals(TrezorPreviewData.sampleWalletBalance, state.watcherBalance)
         assertEquals(3u, state.watcherTransactionCount)
+    }
+
+    @Test
+    fun `watcher event should be handled while start is in flight`() = test {
+        val startResult = CompletableDeferred<Result<Unit>>()
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+            .doSuspendableAnswer { startResult.await() }
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.startWatcher()
+        advanceUntilIdle()
+        val watcherId = assertNotNull(sut.uiState.value.watcherId)
+
+        watcherEventsFlow.emit(
+            watcherId to WatcherEvent.TransactionsChanged(
+                transactions = TrezorPreviewData.sampleHistoryTransactions,
+                balance = TrezorPreviewData.sampleWalletBalance,
+                txCount = 3u,
+                blockHeight = 850_000u,
+                accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
+            ),
+        )
+        advanceUntilIdle()
+
+        val startingState = sut.uiState.value
+        assertTrue(startingState.isStartingWatcher)
+        assertNull(startingState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.CONNECTED, startingState.watcherConnectionStatus)
+
+        startResult.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        val startedState = sut.uiState.value
+        assertFalse(startedState.isStartingWatcher)
+        assertEquals(watcherId, startedState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.CONNECTED, startedState.watcherConnectionStatus)
     }
 
     @Test

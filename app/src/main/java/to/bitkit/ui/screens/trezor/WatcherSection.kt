@@ -122,7 +122,7 @@ internal fun WatcherSection(
         }
 
         AnimatedVisibility(
-            visible = uiState.activeWatcherId != null,
+            visible = uiState.isStartingWatcher || uiState.activeWatcherId != null,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically(),
         ) {

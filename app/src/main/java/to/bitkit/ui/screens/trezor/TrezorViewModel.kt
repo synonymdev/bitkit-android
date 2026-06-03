@@ -21,6 +21,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,6 +50,11 @@ class TrezorViewModel @Inject constructor(
     private val trezorRepo: TrezorRepo,
 ) : ViewModel() {
 
+    @Volatile
+    private var isCleared = false
+
+    private val watcherStartScope = CoroutineScope(SupervisorJob() + bgDispatcher)
+
     init {
         trezorRepo.observeExternalDisconnects(viewModelScope)
         observeWatcherEvents()
@@ -56,7 +63,7 @@ class TrezorViewModel @Inject constructor(
     private fun observeWatcherEvents() {
         viewModelScope.launch(bgDispatcher) {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
-                if (watcherId != _uiState.value.activeWatcherId) return@collect
+                if (watcherId != _uiState.value.watcherId) return@collect
                 when (event) {
                     is WatcherEvent.TransactionsChanged -> _uiState.update {
                         it.copy(
@@ -684,7 +691,7 @@ class TrezorViewModel @Inject constructor(
     }
 
     fun startWatcher() {
-        viewModelScope.launch(bgDispatcher) {
+        watcherStartScope.launch {
             val state = _uiState.value
             val key = state.watcherExtendedKey.trim()
             if (key.isBlank()) {
@@ -702,42 +709,63 @@ class TrezorViewModel @Inject constructor(
                 it.copy(
                     watcher = it.watcher.copy(
                         isStarting = true,
-                        activeWatcherId = watcherId,
+                        activeWatcherId = null,
+                        startingWatcherId = watcherId,
                         connectionStatus = WatcherConnectionStatus.STARTING,
                         events = persistentListOf("Watcher starting: $watcherId"),
                     )
                 )
             }
-            trezorRepo.startWatcher(
+            val result = trezorRepo.startWatcher(
                 watcherId = watcherId,
                 extendedKey = key,
                 network = state.selectedNetwork,
                 gapLimit = gapLimit,
             )
-                .onSuccess {
-                    _uiState.update {
-                        it.copy(
-                            watcher = it.watcher.copy(
-                                isStarting = false,
-                            )
-                        )
-                    }
-                    ToastEventBus.send(type = Toast.ToastType.INFO, title = "Watcher started")
-                }
-                .onFailure {
-                    _uiState.update {
-                        it.copy(
-                            watcher = it.watcher.copy(
-                                isStarting = false,
-                                activeWatcherId = null,
-                                connectionStatus = WatcherConnectionStatus.IDLE,
-                                events = persistentListOf(),
-                            )
-                        )
-                    }
-                    ToastEventBus.send(it)
-                }
+
+            if (result.isSuccess) {
+                handleWatcherStartSuccess(watcherId)
+            } else {
+                handleWatcherStartFailure(watcherId, result)
+            }
         }
+    }
+
+    private suspend fun handleWatcherStartSuccess(watcherId: String) {
+        if (isCleared) {
+            trezorRepo.stopWatcher(watcherId)
+            return
+        }
+
+        _uiState.update {
+            if (it.watcher.startingWatcherId != watcherId) return@update it
+            it.copy(
+                watcher = it.watcher.copy(
+                    isStarting = false,
+                    startingWatcherId = null,
+                    activeWatcherId = watcherId,
+                )
+            )
+        }
+        ToastEventBus.send(type = Toast.ToastType.INFO, title = "Watcher started")
+    }
+
+    private suspend fun handleWatcherStartFailure(watcherId: String, result: Result<Unit>) {
+        if (isCleared) return
+
+        _uiState.update {
+            if (it.watcher.startingWatcherId != watcherId) return@update it
+            it.copy(
+                watcher = it.watcher.copy(
+                    isStarting = false,
+                    startingWatcherId = null,
+                    activeWatcherId = null,
+                    connectionStatus = WatcherConnectionStatus.IDLE,
+                    events = persistentListOf(),
+                )
+            )
+        }
+        result.exceptionOrNull()?.let { ToastEventBus.send(it) }
     }
 
     fun stopWatcher() {
@@ -766,6 +794,7 @@ class TrezorViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        isCleared = true
         _uiState.value.activeWatcherId?.let { trezorRepo.stopWatcherOnCleared(it) }
         super.onCleared()
     }
@@ -929,6 +958,9 @@ data class TrezorUiState(
     val activeWatcherId: String?
         get() = watcher.activeWatcherId
 
+    val watcherId: String?
+        get() = watcher.activeWatcherId ?: watcher.startingWatcherId
+
     val watcherConnectionStatus: WatcherConnectionStatus
         get() = watcher.connectionStatus
 
@@ -1005,6 +1037,7 @@ data class TrezorWatcherState(
     val extendedKey: String = "",
     val gapLimit: String = "20",
     val isStarting: Boolean = false,
+    val startingWatcherId: String? = null,
     val activeWatcherId: String? = null,
     val connectionStatus: WatcherConnectionStatus = WatcherConnectionStatus.IDLE,
     val balance: WalletBalance? = null,
