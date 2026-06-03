@@ -278,11 +278,15 @@ class TrezorService @Inject constructor(
         }
     }
 
-    fun stopWatcher(watcherId: String) {
-        onchainStopWatcher(watcherId = watcherId)
+    suspend fun stopWatcher(watcherId: String) {
+        ServiceQueue.CORE.background {
+            onchainStopWatcher(watcherId = watcherId)
+        }
     }
 
-    fun stopAllWatchers() {
-        onchainStopAllWatchers()
+    suspend fun stopAllWatchers() {
+        ServiceQueue.CORE.background {
+            onchainStopAllWatchers()
+        }
     }
 }

@@ -24,6 +24,7 @@ import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
@@ -368,6 +369,80 @@ class TrezorViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
+    fun `startWatcher should keep status starting until watcher event arrives`() = test {
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+            .thenReturn(Result.success(Unit))
+        sut.setWatcherExtendedKey("xpub6test123")
+
+        sut.startWatcher()
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertFalse(state.isStartingWatcher)
+        assertNotNull(state.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.STARTING, state.watcherConnectionStatus)
+    }
+
+    @Test
+    fun `startWatcher should reject zero gap limit`() = test {
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.setWatcherGapLimit("0")
+
+        sut.startWatcher()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).startWatcher(any(), any(), any(), any())
+        assertNull(sut.uiState.value.activeWatcherId)
+    }
+
+    @Test
+    fun `watcher transaction event should mark watcher connected`() = test {
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+            .thenReturn(Result.success(Unit))
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.startWatcher()
+        advanceUntilIdle()
+        val watcherId = assertNotNull(sut.uiState.value.activeWatcherId)
+
+        watcherEventsFlow.emit(
+            watcherId to WatcherEvent.TransactionsChanged(
+                transactions = TrezorPreviewData.sampleHistoryTransactions,
+                balance = TrezorPreviewData.sampleWalletBalance,
+                txCount = 3u,
+                blockHeight = 850_000u,
+                accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
+            ),
+        )
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertEquals(WatcherConnectionStatus.CONNECTED, state.watcherConnectionStatus)
+        assertEquals(TrezorPreviewData.sampleWalletBalance, state.watcherBalance)
+        assertEquals(3u, state.watcherTransactionCount)
+    }
+
+    @Test
+    fun `stopWatcher should stop repo watcher and clear watcher state`() = test {
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+            .thenReturn(Result.success(Unit))
+        whenever(trezorRepo.stopWatcher(any())).thenReturn(Result.success(Unit))
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.startWatcher()
+        advanceUntilIdle()
+        val watcherId = assertNotNull(sut.uiState.value.activeWatcherId)
+
+        sut.stopWatcher()
+        advanceUntilIdle()
+
+        verify(trezorRepo).stopWatcher(watcherId)
+        val state = sut.uiState.value
+        assertNull(state.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.IDLE, state.watcherConnectionStatus)
+        assertNull(state.watcherBalance)
+        assertTrue(state.watcherTransactions.isEmpty())
     }
 
     @Test

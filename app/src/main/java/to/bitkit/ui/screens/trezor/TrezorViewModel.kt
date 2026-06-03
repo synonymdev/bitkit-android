@@ -692,7 +692,7 @@ class TrezorViewModel @Inject constructor(
                 return@launch
             }
             val gapLimit = state.watcherGapLimit.toUIntOrNull()
-            if (gapLimit == null) {
+            if (gapLimit == null || gapLimit == 0u) {
                 ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Gap limit must be a positive integer")
                 return@launch
             }
@@ -719,7 +719,6 @@ class TrezorViewModel @Inject constructor(
                         it.copy(
                             watcher = it.watcher.copy(
                                 isStarting = false,
-                                connectionStatus = WatcherConnectionStatus.CONNECTED,
                             )
                         )
                     }
@@ -743,31 +742,31 @@ class TrezorViewModel @Inject constructor(
 
     fun stopWatcher() {
         val watcherId = _uiState.value.activeWatcherId ?: return
-        trezorRepo.stopWatcher(watcherId)
-            .onSuccess {
-                _uiState.update {
-                    it.copy(
-                        watcher = it.watcher.copy(
-                            activeWatcherId = null,
-                            connectionStatus = WatcherConnectionStatus.IDLE,
-                            balance = null,
-                            transactions = persistentListOf(),
-                            transactionCount = 0u,
-                            blockHeight = 0u,
-                            accountType = null,
-                            events = persistentListOf(),
+        viewModelScope.launch(bgDispatcher) {
+            trezorRepo.stopWatcher(watcherId)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            watcher = it.watcher.copy(
+                                activeWatcherId = null,
+                                connectionStatus = WatcherConnectionStatus.IDLE,
+                                balance = null,
+                                transactions = persistentListOf(),
+                                transactionCount = 0u,
+                                blockHeight = 0u,
+                                accountType = null,
+                                events = persistentListOf(),
+                            )
                         )
-                    )
-                }
-                viewModelScope.launch {
+                    }
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Watcher stopped")
                 }
-            }
-            .onFailure { viewModelScope.launch { ToastEventBus.send(it) } }
+                .onFailure { ToastEventBus.send(it) }
+        }
     }
 
     override fun onCleared() {
-        _uiState.value.activeWatcherId?.let { trezorRepo.stopWatcher(it) }
+        _uiState.value.activeWatcherId?.let { trezorRepo.stopWatcherOnCleared(it) }
         super.onCleared()
     }
 

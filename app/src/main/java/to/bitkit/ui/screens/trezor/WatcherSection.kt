@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.TxDirection
+import to.bitkit.models.safe
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
@@ -151,8 +152,9 @@ private fun WatcherStatusContent(uiState: TrezorUiState) {
     uiState.watcherBalance?.let { balance ->
         VerticalSpacer(12.dp)
         ResultCard {
+            val pending = balance.trustedPending.safe() + balance.untrustedPending.safe()
             InfoRow("Confirmed", "${balance.confirmed} sats")
-            InfoRow("Pending", "${balance.trustedPending + balance.untrustedPending} sats")
+            InfoRow("Pending", "$pending sats")
             InfoRow("Total", "${balance.total} sats")
             InfoRow("Block Height", "${uiState.watcherBlockHeight}")
             InfoRow("Account Type", uiState.watcherAccountType?.name ?: "-")
@@ -213,7 +215,7 @@ private fun WatcherStatusContent(uiState: TrezorUiState) {
             color = Colors.White64,
         )
         VerticalSpacer(4.dp)
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 150.dp)
@@ -221,7 +223,7 @@ private fun WatcherStatusContent(uiState: TrezorUiState) {
                 .background(Colors.Black.copy(alpha = 0.5f))
                 .padding(8.dp),
         ) {
-            uiState.watcherEvents.forEach { event ->
+            items(uiState.watcherEvents.asReversed()) { event ->
                 Footnote(
                     text = event,
                     color = Colors.White80,

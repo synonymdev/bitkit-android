@@ -31,6 +31,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -79,6 +81,8 @@ class TrezorRepo @Inject constructor(
 
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
+
+    private val watcherCleanupScope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val _watcherEvents = MutableSharedFlow<Pair<String, WatcherEvent>>(extraBufferCapacity = 64)
     val watcherEvents: SharedFlow<Pair<String, WatcherEvent>> = _watcherEvents.asSharedFlow()
@@ -592,21 +596,29 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    fun stopWatcher(watcherId: String): Result<Unit> = runCatching {
-        trezorService.stopWatcher(watcherId)
-        TrezorDebugLog.log(WATCHER_TAG, "Stopped watcher '$watcherId'")
-        Logger.info("Stopped watcher '$watcherId'", context = TAG)
-    }.onFailure {
-        Logger.error("Stop watcher failed", it, context = TAG)
-        _state.update { s -> s.copy(error = it.message) }
+    suspend fun stopWatcher(watcherId: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            trezorService.stopWatcher(watcherId)
+            TrezorDebugLog.log(WATCHER_TAG, "Stopped watcher '$watcherId'")
+            Logger.info("Stopped watcher '$watcherId'", context = TAG)
+        }.onFailure {
+            Logger.error("Stop watcher failed", it, context = TAG)
+            _state.update { s -> s.copy(error = it.message) }
+        }
     }
 
-    fun stopAllWatchers(): Result<Unit> = runCatching {
-        trezorService.stopAllWatchers()
-        TrezorDebugLog.log(WATCHER_TAG, "Stopped all watchers")
-    }.onFailure {
-        Logger.error("Stop all watchers failed", it, context = TAG)
-        _state.update { s -> s.copy(error = it.message) }
+    fun stopWatcherOnCleared(watcherId: String) {
+        watcherCleanupScope.launch { stopWatcher(watcherId) }
+    }
+
+    suspend fun stopAllWatchers(): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            trezorService.stopAllWatchers()
+            TrezorDebugLog.log(WATCHER_TAG, "Stopped all watchers")
+        }.onFailure {
+            Logger.error("Stop all watchers failed", it, context = TAG)
+            _state.update { s -> s.copy(error = it.message) }
+        }
     }
 
     fun clearError() {
