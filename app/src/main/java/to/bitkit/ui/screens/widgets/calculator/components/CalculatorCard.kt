@@ -6,7 +6,6 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +37,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -497,7 +495,6 @@ private fun ReadOnlyRow(
             .clip(MaterialTheme.shapes.small)
             .background(Colors.Black)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .then(if (isActive) Modifier.border(1.dp, Colors.Brand, MaterialTheme.shapes.small) else Modifier)
             .padding(rowPadding)
     ) {
         Box(
@@ -513,10 +510,10 @@ private fun ReadOnlyRow(
                 maxLines = 1,
             )
         }
-        BodyMSB(
-            text = value,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        InputValue(
+            value = value,
+            placeholder = "",
+            isActive = isActive,
             modifier = Modifier.weight(1f)
         )
     }

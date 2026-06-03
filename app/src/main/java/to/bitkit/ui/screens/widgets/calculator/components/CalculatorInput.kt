@@ -96,7 +96,7 @@ fun CalculatorInput(
 }
 
 @Composable
-private fun InputValue(
+internal fun InputValue(
     value: String,
     placeholder: String,
     isActive: Boolean,
