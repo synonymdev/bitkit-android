@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -30,6 +31,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
 @Singleton
@@ -195,6 +197,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
         OneTimeWorkRequestBuilder<AppWidgetRefreshWorker>()
             .apply {
                 if (requiresNetwork) setConstraints(networkConstraints())
+                setBackoffCriteria(BackoffPolicy.LINEAR, CATCH_UP_RETRY_BACKOFF.toJavaDuration())
                 setInputData(workDataOf(WORK_INPUT_REASON to reason.name))
             }
             .build()
@@ -214,6 +217,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
         private const val TAG = "AppWidgetRefreshScheduler"
         private const val CATCH_UP_ALARM_REQUEST_CODE = 0
         val REFRESH_INTERVAL = 15.minutes
+        private val CATCH_UP_RETRY_BACKOFF = 10.seconds
     }
 }
 

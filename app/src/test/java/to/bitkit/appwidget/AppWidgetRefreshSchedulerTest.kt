@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.BackoffPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
@@ -17,6 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.appwidget.model.AppWidgetType
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.seconds
 
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
@@ -96,6 +98,8 @@ class AppWidgetRefreshSchedulerTest {
 
         assertEquals(listOf(AppWidgetRefreshScheduler.CATCH_UP_WORK_NAME), workClient.oneTimeNames)
         assertEquals(listOf(ExistingWorkPolicy.KEEP), workClient.oneTimePolicies)
+        assertEquals(BackoffPolicy.LINEAR, workClient.oneTimeRequests.single().workSpec.backoffPolicy)
+        assertEquals(10.seconds.inWholeMilliseconds, workClient.oneTimeRequests.single().workSpec.backoffDelayDuration)
     }
 
     @Test
