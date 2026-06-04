@@ -188,7 +188,7 @@ Release artifacts:
 - AAB: `app/build/outputs/bundle/mainnetRelease/`
 - Native debug symbols: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols.zip`
 
-The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the filename `native-debug-symbols.zip`.
+The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the filename `native-debug-symbols.zip`. If Android Gradle Plugin cannot emit this archive because native dependency metadata is already stripped, `just release` creates it from the exact merged release `.so` files.
 
 For Play Store releases, upload the AAB as usual and verify Play Console shows native debug symbols for that exact version/build in App bundle explorer. If Play did not pick them up from the AAB, manually upload `native-debug-symbols.zip`.
 

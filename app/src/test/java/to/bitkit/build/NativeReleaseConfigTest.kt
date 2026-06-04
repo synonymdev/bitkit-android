@@ -14,12 +14,12 @@ class NativeReleaseConfigTest {
         .first { it.resolve("gradle/libs.versions.toml").exists() }
 
     @Test
-    fun `release build keeps full native debug symbols`() {
+    fun `release build requests full native debug symbols`() {
         val buildFile = repoRoot.resolve("app/build.gradle.kts").readText()
 
         assertTrue(
             buildFile.contains("""debugSymbolLevel = "FULL""""),
-            "Release builds must keep full native debug symbols for Play crash symbolication.",
+            "Release builds must request full native debug symbols for Play crash symbolication.",
         )
     }
 
@@ -29,9 +29,13 @@ class NativeReleaseConfigTest {
 
         assertTrue(
             justfile.contains(
-                """symbols="app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols.zip"""",
+                """rm -f "${'$'}symbols"""",
             ),
-            "Release builds must verify the native debug symbols archive before publishing.",
+            "Release builds must remove stale native debug symbols before rebuilding.",
+        )
+        assertTrue(
+            justfile.contains("scripts/create-native-debug-symbols.sh"),
+            "Release builds must create the native debug symbols archive before publishing.",
         )
         assertTrue(
             justfile.contains("Attach this exact file to GitHub releases"),
@@ -52,6 +56,26 @@ class NativeReleaseConfigTest {
         assertTrue(
             releaseCommand.contains("Native debug symbols uploaded: native-debug-symbols.zip"),
             "Release command summary must report the native debug symbols archive.",
+        )
+    }
+
+    @Test
+    fun `native debug symbols script archives release libraries`() {
+        val symbolsScript = repoRoot.resolve("scripts/create-native-debug-symbols.sh").readText()
+
+        assertTrue(
+            symbolsScript.contains(
+                "app/build/outputs/native-debug-symbols/${'$'}variant/native-debug-symbols.zip",
+            ),
+            "Native debug symbols script must write the canonical archive path.",
+        )
+        assertTrue(
+            symbolsScript.contains("arm64-v8a armeabi-v7a"),
+            "Native debug symbols script must archive Play release ABIs.",
+        )
+        assertTrue(
+            symbolsScript.contains("zip -qr"),
+            "Native debug symbols script must create a zip archive.",
         )
     }
 }
