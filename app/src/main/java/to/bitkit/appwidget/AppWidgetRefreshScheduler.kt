@@ -106,10 +106,17 @@ class AppWidgetRefreshScheduler @Inject constructor(
 
         workClient.enqueueUniqueWork(
             CATCH_UP_WORK_NAME,
-            ExistingWorkPolicy.KEEP,
+            catchUpWorkPolicy(reason),
             oneTimeRequest(reason, requiresNetwork = true),
         )
     }
+
+    private fun catchUpWorkPolicy(reason: AppWidgetRefreshReason): ExistingWorkPolicy =
+        when (reason) {
+            AppWidgetRefreshReason.APP_START,
+            AppWidgetRefreshReason.APP_FOREGROUND -> ExistingWorkPolicy.REPLACE
+            else -> ExistingWorkPolicy.KEEP
+        }
 
     private fun requestFactsCatchUp() {
         if (!activeWidgets.hasActiveWidgets(AppWidgetType.FACTS)) {

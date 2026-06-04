@@ -91,15 +91,35 @@ class AppWidgetRefreshSchedulerTest {
     }
 
     @Test
-    fun `request catch up enqueues one-time work with exponential backoff`() {
+    fun `request catch up replaces remote retry work when app foregrounds`() {
         activeWidgets.activeTypes = setOf(AppWidgetType.PRICE)
 
         scheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
 
         assertEquals(listOf(AppWidgetRefreshScheduler.CATCH_UP_WORK_NAME), workClient.oneTimeNames)
-        assertEquals(listOf(ExistingWorkPolicy.KEEP), workClient.oneTimePolicies)
+        assertEquals(listOf(ExistingWorkPolicy.REPLACE), workClient.oneTimePolicies)
         assertEquals(BackoffPolicy.EXPONENTIAL, workClient.oneTimeRequests.single().workSpec.backoffPolicy)
         assertEquals(10.seconds.inWholeMilliseconds, workClient.oneTimeRequests.single().workSpec.backoffDelayDuration)
+    }
+
+    @Test
+    fun `request catch up replaces remote retry work when app starts`() {
+        activeWidgets.activeTypes = setOf(AppWidgetType.PRICE)
+
+        scheduler.requestCatchUp(AppWidgetRefreshReason.APP_START)
+
+        assertEquals(listOf(AppWidgetRefreshScheduler.CATCH_UP_WORK_NAME), workClient.oneTimeNames)
+        assertEquals(listOf(ExistingWorkPolicy.REPLACE), workClient.oneTimePolicies)
+    }
+
+    @Test
+    fun `request catch up keeps remote retry work for alarm refresh`() {
+        activeWidgets.activeTypes = setOf(AppWidgetType.PRICE)
+
+        scheduler.requestCatchUp(AppWidgetRefreshReason.CATCH_UP_ALARM)
+
+        assertEquals(listOf(AppWidgetRefreshScheduler.CATCH_UP_WORK_NAME), workClient.oneTimeNames)
+        assertEquals(listOf(ExistingWorkPolicy.KEEP), workClient.oneTimePolicies)
     }
 
     @Test
@@ -186,6 +206,7 @@ class AppWidgetRefreshSchedulerTest {
         scheduler.handleCatchUpAlarm(AppWidgetRefreshReason.CATCH_UP_ALARM)
 
         assertEquals(listOf(AppWidgetRefreshScheduler.CATCH_UP_WORK_NAME), workClient.oneTimeNames)
+        assertEquals(listOf(ExistingWorkPolicy.KEEP), workClient.oneTimePolicies)
         assertEquals(1, alarmClient.setCount)
     }
 }
