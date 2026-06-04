@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -36,6 +37,8 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.Colors
 
+private val SETTINGS_DISABLED_TYPES = setOf(WidgetType.SUGGESTIONS)
+
 /**
  * Editing chrome for a home widget cell: blurs the underlying card, lays a gray scrim and dashed
  * brand border over it, and centers the widget name with delete / settings / reorder actions.
@@ -52,6 +55,7 @@ fun EditWidgetOverlay(
     content: @Composable () -> Unit,
 ) {
     val name = stringResource(type.title)
+    val settingsEnabled = type !in SETTINGS_DISABLED_TYPES
 
     Box(
         modifier = modifier
@@ -77,6 +81,7 @@ fun EditWidgetOverlay(
 
         EditActions(
             name = name,
+            settingsEnabled = settingsEnabled,
             onDelete = onDelete,
             onSettings = onSettings,
             dragHandleModifier = dragHandleModifier,
@@ -90,6 +95,7 @@ private val CARD_CORNER_RADIUS = 16.dp
 @Composable
 private fun EditActions(
     name: String,
+    settingsEnabled: Boolean,
     onDelete: () -> Unit,
     onSettings: () -> Unit,
     dragHandleModifier: Modifier,
@@ -122,6 +128,7 @@ private fun EditActions(
                     iconRes = R.drawable.ic_settings,
                     contentDescription = stringResource(R.string.common__edit),
                     onClick = onSettings,
+                    enabled = settingsEnabled,
                     modifier = Modifier.testTag("${name}_WidgetActionEdit")
                 )
 
@@ -142,20 +149,25 @@ private fun EditActionIcon(
     contentDescription: String?,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(32.dp)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier)
     ) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier
+                .size(24.dp)
+                .alpha(if (enabled) 1f else DISABLED_ALPHA)
         )
     }
 }
+
+private const val DISABLED_ALPHA = 0.3f
 
 private fun Modifier.editBlur(): Modifier =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
