@@ -38,20 +38,20 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         val nowMs = clock.nowMs()
         Logger.debug("Refreshing widget types '$activeTypes' for '$reason'", context = TAG)
 
-        var shouldRetry = false
         for (type in activeTypes) {
-            runCatching { refresh(type, nowMs) }
-                .onSuccess {
-                    if (it == RefreshResult.ConnectivityFailure) shouldRetry = true
-                }
-                .onFailure {
+            val result = runCatching { refresh(type, nowMs) }
+                .getOrElse {
                     if (it is CancellationException) throw it
-                    if (it.isConnectivityFailure()) shouldRetry = true
                     Logger.warn("Failed to refresh widget type '$type'", it, context = TAG)
+                    it.toRefreshResult()
                 }
+            if (result == RefreshResult.ConnectivityFailure) {
+                Logger.debug("Stopped widget refresh after connectivity failure for '$type'", context = TAG)
+                return Result.retry()
+            }
         }
 
-        return if (shouldRetry) Result.retry() else Result.success()
+        return Result.success()
     }
 
     private suspend fun activeWidgetTypesFor(reason: String): List<AppWidgetType> {
@@ -116,12 +116,14 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
 
         var refreshResult: RefreshResult = RefreshResult.Success
 
-        periods.forEach { period ->
+        for (period in periods) {
             dataRepository.fetchPriceData(period)
                 .onSuccess { preferencesStore.cachePriceData(period, it) }
                 .onFailure {
-                    refreshResult = refreshResult.merge(it.toRefreshResult())
+                    val periodResult = it.toRefreshResult()
+                    refreshResult = refreshResult.merge(periodResult)
                     Logger.warn("Failed to refresh price for '$period'", it, context = TAG)
+                    if (periodResult == RefreshResult.ConnectivityFailure) return refreshResult
                 }
         }
 

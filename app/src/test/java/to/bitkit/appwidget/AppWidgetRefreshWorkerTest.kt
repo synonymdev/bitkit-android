@@ -159,6 +159,39 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connectivity failure stops remaining remote refreshes`() = test {
+        val firstPeriod = GraphPeriod.ONE_DAY
+        val secondPeriod = GraphPeriod.ONE_WEEK
+        whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(AppWidgetType.entries.toSet())
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.PRICE)).thenReturn(
+            AppWidgetRefreshMetadata(
+                lastAttemptAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+                lastSuccessAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+            ),
+        )
+        whenever(preferencesStore.getUncachedActivePricePeriods()).thenReturn(emptySet())
+        whenever(preferencesStore.getActivePricePeriods()).thenReturn(linkedSetOf(firstPeriod, secondPeriod))
+        whenever(dataRepository.fetchPriceData(firstPeriod)).thenReturn(Result.failure(UnknownHostException("dns")))
+
+        val result = worker().doWork()
+
+        assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
+        verify(dataRepository).fetchPriceData(firstPeriod)
+        verify(dataRepository, never()).fetchPriceData(secondPeriod)
+        verify(dataRepository, never()).fetchArticles()
+        verify(dataRepository, never()).fetchBlock()
+        verify(dataRepository, never()).fetchWeather()
+        verify(dataRepository, never()).fetchFacts()
+        verify(preferencesStore).markRefreshAttempt(AppWidgetType.PRICE, NOW_MS)
+        verify(preferencesStore, never()).markRefreshSuccess(any(), any())
+        verify(appWidgetUpdater).update(AppWidgetType.PRICE, context)
+        verify(appWidgetUpdater, never()).update(AppWidgetType.HEADLINES, context)
+        verify(appWidgetUpdater, never()).update(AppWidgetType.BLOCKS, context)
+        verify(appWidgetUpdater, never()).update(AppWidgetType.WEATHER, context)
+        verify(appWidgetUpdater, never()).update(AppWidgetType.FACTS, context)
+    }
+
+    @Test
     fun `remote refresh cancellation is rethrown`() = test {
         whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.HEADLINES))
         whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(
