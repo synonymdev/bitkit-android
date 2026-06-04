@@ -33,5 +33,25 @@ class NativeReleaseConfigTest {
             ),
             "Release builds must verify the native debug symbols archive before publishing.",
         )
+        assertTrue(
+            justfile.contains("Attach this exact file to GitHub releases"),
+            "Release builds must tell the releaser to attach native debug symbols.",
+        )
+    }
+
+    @Test
+    fun `release command uploads native debug symbols archive`() {
+        val releaseCommand = repoRoot.resolve(".agents/commands/release.md").readText()
+
+        assertTrue(
+            releaseCommand.contains(
+                "app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols.zip",
+            ),
+            "Release command must include the native debug symbols archive path.",
+        )
+        assertTrue(
+            releaseCommand.contains("Native debug symbols uploaded: native-debug-symbols.zip"),
+            "Release command summary must report the native debug symbols archive.",
+        )
     }
 }

@@ -180,6 +180,20 @@ To build the mainnet flavor for release run:
 just release
 ```
 
+`just release` builds the mainnet APK, Play Store AAB, and the native debug symbols archive.
+
+Release artifacts:
+
+- APK: `app/build/outputs/apk/mainnet/release/`
+- AAB: `app/build/outputs/bundle/mainnetRelease/`
+- Native debug symbols: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols.zip`
+
+The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the filename `native-debug-symbols.zip`.
+
+For Play Store releases, upload the AAB as usual and verify Play Console shows native debug symbols for that exact version/build in App bundle explorer. If Play did not pick them up from the AAB, manually upload `native-debug-symbols.zip`.
+
+For GitHub releases, attach `native-debug-symbols.zip` alongside the APK so native crashes from GitHub-distributed builds can be symbolicated later.
+
 #### Android App Bundle (AAB)
 
 `just release` builds both the mainnet APK and Play Store AAB. AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
