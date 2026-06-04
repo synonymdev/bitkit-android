@@ -192,7 +192,7 @@ The native debug symbols archive must come from the same `just release` build as
 
 For Play Store releases, upload the AAB as usual, then upload `native-debug-symbols.zip` for that exact version/build in Play Console: App bundle explorer → Downloads → Assets. Verify Play lists the native debug symbols after upload.
 
-Do not rely on Play Console to download or recover `native-debug-symbols.zip` later. If Play only shows delete/replace controls for an uploaded symbol file, that is enough for release verification. Keep the release-built archive in GitHub releases or internal release storage.
+Keep the release-built `native-debug-symbols.zip` in GitHub releases or internal release storage. Play Console may only show delete/replace controls after upload, which is enough for release verification.
 
 For GitHub releases, attach `native-debug-symbols.zip` alongside the APK so native crashes from GitHub-distributed builds can be symbolicated later.
 

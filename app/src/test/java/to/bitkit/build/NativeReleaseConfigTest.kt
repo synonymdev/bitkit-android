@@ -48,7 +48,7 @@ class NativeReleaseConfigTest {
         )
         assertFalse(
             justfile.contains("download"),
-            "Release builds must not imply Play is the source of native debug symbols.",
+            "Release builds should keep native debug symbols in release storage.",
         )
     }
 
@@ -68,14 +68,14 @@ class NativeReleaseConfigTest {
         )
         assertFalse(
             releaseCommand.contains("Play " + "did not"),
-            "Release command must not use stale Play native symbol wording.",
+            "Release command should use current Play native symbol wording.",
         )
         assertTrue(
             releaseCommand.contains("fails instead of creating a placeholder zip from stripped `.so` files"),
             "Release command must fail instead of publishing fake native debug symbols.",
         )
         assertTrue(
-            releaseCommand.contains("If Play only shows delete/replace controls"),
+            releaseCommand.contains("Play Console may only show delete/replace controls"),
             "Release command must document the verified Play Console behavior.",
         )
     }
