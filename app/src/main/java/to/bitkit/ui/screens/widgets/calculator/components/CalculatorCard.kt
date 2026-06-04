@@ -151,6 +151,7 @@ fun CalculatorCardSmall(
         ReadOnlyRow(
             currencySymbol = BITCOIN_SYMBOL,
             value = formatBitcoinValue(btcValue, btcPrimaryDisplayUnit),
+            placeholder = formatBitcoinPlaceholder(btcValue, btcPrimaryDisplayUnit),
             iconSize = 24.dp,
             rowPadding = 12.dp,
             isActive = activeInput == MoneyType.BITCOIN,
@@ -162,6 +163,7 @@ fun CalculatorCardSmall(
         ReadOnlyRow(
             currencySymbol = fiatSymbol,
             value = formatFiatValue(fiatValue),
+            placeholder = formatFiatPlaceholder(fiatValue),
             iconSize = 24.dp,
             rowPadding = 12.dp,
             isActive = activeInput == MoneyType.FIAT,
@@ -180,6 +182,7 @@ private fun ReadOnlyRow(
     iconSize: Dp,
     rowPadding: Dp,
     modifier: Modifier = Modifier,
+    placeholder: String = "",
     isActive: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
@@ -209,7 +212,7 @@ private fun ReadOnlyRow(
         }
         InputValue(
             value = value,
-            placeholder = "",
+            placeholder = placeholder,
             isActive = isActive,
             modifier = Modifier.weight(1f)
         )
