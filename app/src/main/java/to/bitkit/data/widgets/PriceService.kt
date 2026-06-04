@@ -21,6 +21,7 @@ import to.bitkit.env.Env
 import to.bitkit.models.WidgetType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.isConnectivityFailure
 import java.text.NumberFormat
 import java.util.Locale
 import javax.inject.Inject
@@ -50,15 +51,25 @@ class PriceService @Inject constructor(
         pairs: List<TradingPair>,
         period: GraphPeriod,
     ): Result<PriceDTO> = runCatching {
+        val failures = mutableListOf<Throwable>()
         val widgets = pairs.mapNotNull { pair ->
             runCatching { fetchPairData(pair = pair, period = period) }
-                .onFailure { Logger.warn(e = it, msg = "Failed to fetch ${pair.ticker}", context = TAG) }
+                .onFailure {
+                    failures.add(it)
+                    Logger.warn("Failed to fetch '${pair.ticker}'", it, context = TAG)
+                }
                 .getOrNull()
         }
-        if (widgets.isEmpty()) throw PriceError.InvalidResponse("No price data available")
+        if (widgets.isEmpty()) {
+            val connectivityFailure = failures.firstOrNull { it.isConnectivityFailure() }
+            if (connectivityFailure != null) {
+                throw PriceError.NetworkError("Failed to fetch price data", connectivityFailure)
+            }
+            throw PriceError.InvalidResponse("No price data available")
+        }
         PriceDTO(widgets = widgets)
     }.onFailure {
-        Logger.warn(e = it, msg = "Failed to fetch price data", context = TAG)
+        Logger.warn("Failed to fetch price data", it, context = TAG)
     }
 
     suspend fun fetchAllPeriods(): Result<List<PriceDTO>> = runCatching {
@@ -174,9 +185,12 @@ class PriceService @Inject constructor(
 /**
  * Price-specific error types
  */
-sealed class PriceError(message: String) : AppError(message) {
+sealed class PriceError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     class InvalidResponse(override val message: String) : PriceError(message)
-    class NetworkError(override val message: String) : PriceError(message)
+    class NetworkError(
+        override val message: String,
+        cause: Throwable? = null,
+    ) : PriceError(message, cause)
 }
 
 private const val GROUPED_PRICE_THRESHOLD = 1_000.0

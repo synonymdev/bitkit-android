@@ -10,6 +10,7 @@ import to.bitkit.appwidget.model.AppWidgetRefreshMetadata
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.ext.nowMs
 import to.bitkit.utils.Logger
+import to.bitkit.utils.isConnectivityFailure
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -41,11 +42,11 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         for (type in activeTypes) {
             runCatching { refresh(type, nowMs) }
                 .onSuccess {
-                    if (!it) shouldRetry = true
+                    if (it == RefreshResult.ConnectivityFailure) shouldRetry = true
                 }
                 .onFailure {
                     if (it is CancellationException) throw it
-                    shouldRetry = true
+                    if (it.isConnectivityFailure()) shouldRetry = true
                     Logger.warn("Failed to refresh widget type '$type'", it, context = TAG)
                 }
         }
@@ -65,26 +66,26 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         return if (isFactsLocalRefresh) type == AppWidgetType.FACTS else type != AppWidgetType.FACTS
     }
 
-    private suspend fun refresh(type: AppWidgetType, nowMs: Long): Boolean {
+    private suspend fun refresh(type: AppWidgetType, nowMs: Long): RefreshResult {
         if (type == AppWidgetType.FACTS) {
             refreshFacts()
-            return true
+            return RefreshResult.Success
         }
 
         val metadata = preferencesStore.getRefreshMetadata(type)
         if (!shouldRefreshRemote(type = type, metadata = metadata, nowMs = nowMs)) {
             Logger.debug("Skipped fresh widget type '$type'", context = TAG)
             appWidgetUpdater.update(type, appContext)
-            return true
+            return RefreshResult.Success
         }
 
         preferencesStore.markRefreshAttempt(type, nowMs)
-        val didSucceed = refreshRemote(type)
-        if (didSucceed) {
+        val refreshResult = refreshRemote(type)
+        if (refreshResult == RefreshResult.Success) {
             preferencesStore.markRefreshSuccess(type, nowMs)
         }
         appWidgetUpdater.update(type, appContext)
-        return didSucceed
+        return refreshResult
     }
 
     private suspend fun shouldRefreshRemote(
@@ -101,41 +102,57 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         return AppWidgetRefreshPolicy.shouldRefreshRemote(type, metadata, nowMs)
     }
 
-    private suspend fun refreshRemote(type: AppWidgetType): Boolean = when (type) {
+    private suspend fun refreshRemote(type: AppWidgetType): RefreshResult = when (type) {
         AppWidgetType.PRICE -> refreshPrice()
         AppWidgetType.HEADLINES -> refreshHeadlines()
         AppWidgetType.BLOCKS -> refreshBlocks()
         AppWidgetType.WEATHER -> refreshWeather()
-        AppWidgetType.FACTS -> false
+        AppWidgetType.FACTS -> RefreshResult.Failure
     }
 
-    private suspend fun refreshPrice(): Boolean {
+    private suspend fun refreshPrice(): RefreshResult {
         val periods = preferencesStore.getActivePricePeriods()
-        var didSucceed = periods.isNotEmpty()
+        if (periods.isEmpty()) return RefreshResult.Failure
+
+        var refreshResult: RefreshResult = RefreshResult.Success
 
         periods.forEach { period ->
             dataRepository.fetchPriceData(period)
                 .onSuccess { preferencesStore.cachePriceData(period, it) }
                 .onFailure {
-                    didSucceed = false
+                    refreshResult = refreshResult.merge(it.toRefreshResult())
                     Logger.warn("Failed to refresh price for '$period'", it, context = TAG)
                 }
         }
 
-        return didSucceed
+        return refreshResult
     }
 
-    private suspend fun refreshHeadlines(): Boolean =
+    private suspend fun refreshHeadlines(): RefreshResult =
         dataRepository.fetchArticles()
-            .onSuccess { preferencesStore.cacheArticlesAndRotate(it) }
-            .onFailure { Logger.warn("Failed to refresh headlines", it, context = TAG) }
-            .isSuccess
+            .fold(
+                onSuccess = {
+                    preferencesStore.cacheArticlesAndRotate(it)
+                    RefreshResult.Success
+                },
+                onFailure = {
+                    Logger.warn("Failed to refresh headlines", it, context = TAG)
+                    it.toRefreshResult()
+                },
+            )
 
-    private suspend fun refreshBlocks(): Boolean =
+    private suspend fun refreshBlocks(): RefreshResult =
         dataRepository.fetchBlock()
-            .onSuccess { preferencesStore.cacheBlock(it) }
-            .onFailure { Logger.warn("Failed to refresh block", it, context = TAG) }
-            .isSuccess
+            .fold(
+                onSuccess = {
+                    preferencesStore.cacheBlock(it)
+                    RefreshResult.Success
+                },
+                onFailure = {
+                    Logger.warn("Failed to refresh block", it, context = TAG)
+                    it.toRefreshResult()
+                },
+            )
 
     private suspend fun refreshFacts() {
         dataRepository.fetchFacts()
@@ -145,9 +162,31 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         appWidgetUpdater.update(AppWidgetType.FACTS, appContext)
     }
 
-    private suspend fun refreshWeather(): Boolean =
+    private suspend fun refreshWeather(): RefreshResult =
         dataRepository.fetchWeather()
-            .onSuccess { preferencesStore.cacheWeather(it) }
-            .onFailure { Logger.warn("Failed to refresh weather", it, context = TAG) }
-            .isSuccess
+            .fold(
+                onSuccess = {
+                    preferencesStore.cacheWeather(it)
+                    RefreshResult.Success
+                },
+                onFailure = {
+                    Logger.warn("Failed to refresh weather", it, context = TAG)
+                    it.toRefreshResult()
+                },
+            )
+}
+
+private sealed interface RefreshResult {
+    object Success : RefreshResult
+    object ConnectivityFailure : RefreshResult
+    object Failure : RefreshResult
+}
+
+private fun Throwable.toRefreshResult(): RefreshResult =
+    if (isConnectivityFailure()) RefreshResult.ConnectivityFailure else RefreshResult.Failure
+
+private fun RefreshResult.merge(other: RefreshResult): RefreshResult = when (this) {
+    RefreshResult.ConnectivityFailure -> this
+    RefreshResult.Failure -> if (other == RefreshResult.ConnectivityFailure) other else this
+    RefreshResult.Success -> other
 }

@@ -23,6 +23,7 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.net.UnknownHostException
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -95,7 +96,27 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed remote refresh retries and updates cached widget`() = test {
+    fun `connectivity remote refresh failure retries and updates cached widget`() = test {
+        whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.HEADLINES))
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(
+            AppWidgetRefreshMetadata(
+                lastAttemptAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+                lastSuccessAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+            ),
+        )
+        whenever(dataRepository.fetchArticles()).thenReturn(Result.failure(UnknownHostException("dns")))
+
+        val result = worker().doWork()
+
+        assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
+        verify(preferencesStore).markRefreshAttempt(AppWidgetType.HEADLINES, NOW_MS)
+        verify(dataRepository).fetchArticles()
+        verify(preferencesStore, never()).markRefreshSuccess(any(), any())
+        verify(appWidgetUpdater).update(AppWidgetType.HEADLINES, context)
+    }
+
+    @Test
+    fun `non-connectivity remote refresh failure updates cached widget without retry`() = test {
         whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.HEADLINES))
         whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(
             AppWidgetRefreshMetadata(
@@ -107,11 +128,34 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
 
         val result = worker().doWork()
 
-        assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
+        assertEquals(androidx.work.ListenableWorker.Result.success(), result)
         verify(preferencesStore).markRefreshAttempt(AppWidgetType.HEADLINES, NOW_MS)
         verify(dataRepository).fetchArticles()
         verify(preferencesStore, never()).markRefreshSuccess(any(), any())
         verify(appWidgetUpdater).update(AppWidgetType.HEADLINES, context)
+    }
+
+    @Test
+    fun `price connectivity refresh failure retries and updates cached widget`() = test {
+        val period = GraphPeriod.ONE_DAY
+        whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.PRICE))
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.PRICE)).thenReturn(
+            AppWidgetRefreshMetadata(
+                lastAttemptAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+                lastSuccessAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+            ),
+        )
+        whenever(preferencesStore.getUncachedActivePricePeriods()).thenReturn(emptySet())
+        whenever(preferencesStore.getActivePricePeriods()).thenReturn(setOf(period))
+        whenever(dataRepository.fetchPriceData(period)).thenReturn(Result.failure(UnknownHostException("dns")))
+
+        val result = worker().doWork()
+
+        assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
+        verify(preferencesStore).markRefreshAttempt(AppWidgetType.PRICE, NOW_MS)
+        verify(dataRepository).fetchPriceData(period)
+        verify(preferencesStore, never()).markRefreshSuccess(any(), any())
+        verify(appWidgetUpdater).update(AppWidgetType.PRICE, context)
     }
 
     @Test
