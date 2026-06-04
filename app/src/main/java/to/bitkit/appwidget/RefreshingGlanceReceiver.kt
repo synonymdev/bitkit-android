@@ -27,6 +27,6 @@ abstract class RefreshingGlanceReceiver(
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        context.appWidgetRefreshScheduler.cancelIfNoWidgets(disabledReason)
+        context.appWidgetRefreshScheduler.ensureScheduled(disabledReason)
     }
 }

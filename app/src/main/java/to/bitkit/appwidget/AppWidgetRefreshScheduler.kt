@@ -65,11 +65,6 @@ class AppWidgetRefreshScheduler @Inject constructor(
         Logger.debug("Requested widget catch-up refresh for '${reason.name}'", context = TAG)
     }
 
-    fun cancelIfNoWidgets(reason: AppWidgetRefreshReason) {
-        if (activeWidgets.hasActiveWidgets()) return
-        cancelAll(reason)
-    }
-
     fun handleCatchUpAlarm(reason: AppWidgetRefreshReason) {
         requestCatchUp(reason)
         scheduleCatchUpAlarm(reason)
@@ -78,6 +73,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
     private fun ensureRemotePeriodicWork(reason: AppWidgetRefreshReason) {
         if (!activeWidgets.hasRemoteBackedWidgets()) {
             workClient.cancelUniqueWork(PERIODIC_WORK_NAME)
+            workClient.cancelUniqueWork(CATCH_UP_WORK_NAME)
             return
         }
 
@@ -91,6 +87,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
     private fun ensureFactsPeriodicWork() {
         if (!activeWidgets.hasActiveWidgets(AppWidgetType.FACTS)) {
             workClient.cancelUniqueWork(FACTS_PERIODIC_WORK_NAME)
+            workClient.cancelUniqueWork(FACTS_CATCH_UP_WORK_NAME)
             return
         }
 

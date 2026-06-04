@@ -120,12 +120,12 @@ class AppWidgetRefreshSchedulerTest {
     }
 
     @Test
-    fun `cancel if no widgets cancels all work and alarm`() {
+    fun `ensure scheduled cancels all work and alarm when no widgets remain`() {
         activeWidgets.activeTypes = setOf(AppWidgetType.PRICE, AppWidgetType.FACTS)
         scheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
 
         activeWidgets.activeTypes = emptySet()
-        scheduler.cancelIfNoWidgets(AppWidgetRefreshReason.PRICE_WIDGET_DISABLED)
+        scheduler.ensureScheduled(AppWidgetRefreshReason.PRICE_WIDGET_DISABLED)
 
         assertEquals(
             listOf(
@@ -137,6 +137,46 @@ class AppWidgetRefreshSchedulerTest {
             workClient.canceledNames,
         )
         assertEquals(1, alarmClient.cancelCount)
+    }
+
+    @Test
+    fun `ensure scheduled cancels facts work when facts widget is removed`() {
+        activeWidgets.activeTypes = setOf(AppWidgetType.PRICE, AppWidgetType.FACTS)
+        scheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
+        scheduler.requestCatchUp(AppWidgetRefreshReason.APP_START)
+        workClient.reset()
+
+        activeWidgets.activeTypes = setOf(AppWidgetType.PRICE)
+        scheduler.ensureScheduled(AppWidgetRefreshReason.FACTS_WIDGET_DISABLED)
+
+        assertEquals(
+            listOf(
+                AppWidgetRefreshScheduler.FACTS_PERIODIC_WORK_NAME,
+                AppWidgetRefreshScheduler.FACTS_CATCH_UP_WORK_NAME,
+            ),
+            workClient.canceledNames,
+        )
+        assertEquals(listOf(AppWidgetRefreshScheduler.PERIODIC_WORK_NAME), workClient.periodicNames)
+    }
+
+    @Test
+    fun `ensure scheduled cancels remote work when last remote widget is removed`() {
+        activeWidgets.activeTypes = setOf(AppWidgetType.PRICE, AppWidgetType.FACTS)
+        scheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
+        scheduler.requestCatchUp(AppWidgetRefreshReason.APP_START)
+        workClient.reset()
+
+        activeWidgets.activeTypes = setOf(AppWidgetType.FACTS)
+        scheduler.ensureScheduled(AppWidgetRefreshReason.PRICE_WIDGET_DISABLED)
+
+        assertEquals(
+            listOf(
+                AppWidgetRefreshScheduler.PERIODIC_WORK_NAME,
+                AppWidgetRefreshScheduler.CATCH_UP_WORK_NAME,
+            ),
+            workClient.canceledNames,
+        )
+        assertEquals(listOf(AppWidgetRefreshScheduler.FACTS_PERIODIC_WORK_NAME), workClient.periodicNames)
     }
 
     @Test
@@ -189,6 +229,16 @@ private class FakeWorkClient : AppWidgetWorkClient {
 
     override fun cancelUniqueWork(uniqueWorkName: String) {
         canceledNames += uniqueWorkName
+    }
+
+    fun reset() {
+        periodicNames.clear()
+        periodicPolicies.clear()
+        periodicRequests.clear()
+        oneTimeNames.clear()
+        oneTimePolicies.clear()
+        oneTimeRequests.clear()
+        canceledNames.clear()
     }
 }
 
