@@ -103,6 +103,10 @@ class NativeReleaseConfigTest {
             "Native debug symbols script must validate crash-relevant native libraries.",
         )
         assertTrue(
+            symbolsScript.contains("""archive_symbol_suffixes=".dbg .sym""""),
+            "Native debug symbols script must accept AGP native debug symbol entry suffixes.",
+        )
+        assertTrue(
             symbolsScript.contains("""grep -Eq '\.(symtab|debug_|gnu_debugdata)'"""),
             "Native debug symbols script must validate usable debug metadata before zipping.",
         )

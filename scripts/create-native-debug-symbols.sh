@@ -9,6 +9,7 @@ variant="mainnetRelease"
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols.zip"
 output_dir=$(dirname "$output")
 required_libs="libbitkitcore.so libldk_node.so"
+archive_symbol_suffixes=".dbg .sym"
 
 tmp_dirs=""
 cleanup() {
@@ -81,6 +82,29 @@ validate_symbol_tree() {
     done
 }
 
+extract_archive_lib() {
+    archive="$1"
+    tmp_dir="$2"
+    abi="$3"
+    lib_name="$4"
+
+    entry="$abi/$lib_name"
+    if unzip -q "$archive" "$entry" -d "$tmp_dir" 2>/dev/null; then
+        return
+    fi
+
+    for suffix in $archive_symbol_suffixes; do
+        entry="$abi/$lib_name$suffix"
+        if unzip -q "$archive" "$entry" -d "$tmp_dir" 2>/dev/null; then
+            mv "$tmp_dir/$entry" "$tmp_dir/$abi/$lib_name"
+            return
+        fi
+    done
+
+    echo "Native debug symbols archive is missing '$abi/$lib_name' or accepted AGP variants '$abi/$lib_name.dbg' / '$abi/$lib_name.sym'." >&2
+    exit 1
+}
+
 validate_output_zip() {
     archive="$1"
     zip -T "$archive" >/dev/null
@@ -88,11 +112,7 @@ validate_output_zip() {
     tmp_dir=$(make_tmp_dir)
     for abi in arm64-v8a armeabi-v7a; do
         for lib_name in $required_libs; do
-            entry="$abi/$lib_name"
-            if ! unzip -q "$archive" "$entry" -d "$tmp_dir"; then
-                echo "Native debug symbols archive is missing '$entry'." >&2
-                exit 1
-            fi
+            extract_archive_lib "$archive" "$tmp_dir" "$abi" "$lib_name"
         done
     done
 
