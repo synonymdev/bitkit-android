@@ -328,6 +328,17 @@ fun WidgetType.toWidgetsPreviewRoute(): WidgetsRoute = when (this) {
     WidgetType.SUGGESTIONS -> WidgetsRoute.SuggestionsPreview
 }
 
+fun WidgetType.toWidgetsEditRoute(): WidgetsRoute = when (this) {
+    WidgetType.BLOCK -> WidgetsRoute.BlocksEdit
+    WidgetType.NEWS -> WidgetsRoute.HeadlinesEdit
+    WidgetType.PRICE -> WidgetsRoute.PriceEdit
+    WidgetType.WEATHER -> WidgetsRoute.WeatherEdit
+    WidgetType.CALCULATOR,
+    WidgetType.FACTS,
+    WidgetType.SUGGESTIONS,
+    -> toWidgetsPreviewRoute()
+}
+
 private fun WidgetsRoute.widgetFlowKey(): WidgetFlowKey? = when (this) {
     WidgetsRoute.PricePreview,
     WidgetsRoute.PriceEdit,

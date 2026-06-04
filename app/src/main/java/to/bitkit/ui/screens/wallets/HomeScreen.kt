@@ -158,7 +158,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
-import to.bitkit.ui.sheets.toWidgetsPreviewRoute
+import to.bitkit.ui.sheets.toWidgetsEditRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
@@ -326,7 +326,7 @@ fun HomeScreen(
         onClickEditWidgetList = homeViewModel::onClickEditWidgetList,
         onClickEditWidget = { widgetType ->
             homeViewModel.disableEditMode()
-            appViewModel.showSheet(Sheet.Widgets(widgetType.toWidgetsPreviewRoute()))
+            appViewModel.showSheet(Sheet.Widgets(widgetType.toWidgetsEditRoute()))
         },
         onClickDeleteWidget = { widgetType ->
             homeViewModel.displayAlertDeleteWidget(widgetType)
@@ -987,6 +987,7 @@ private fun Widgets(
                         onNumberPadBoundsChanged = onNumberPadBoundsChanged,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .testTag("CalculatorWidget")
                             .onGloballyPositioned {
                                 onCalculatorBoundsChanged(it.boundsInRoot())
                             }
@@ -1190,10 +1191,13 @@ private val previewBalances = BalanceState(
 )
 
 private val previewWidgets = persistentListOf(
-    WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 0),
-    WidgetWithPosition(type = WidgetType.PRICE, position = 1),
-    WidgetWithPosition(type = WidgetType.BLOCK, position = 2),
-    WidgetWithPosition(type = WidgetType.NEWS, position = 3),
+    WidgetWithPosition(type = WidgetType.NEWS, position = 0),
+    WidgetWithPosition(type = WidgetType.FACTS, position = 1),
+    WidgetWithPosition(type = WidgetType.PRICE, position = 2),
+    WidgetWithPosition(type = WidgetType.BLOCK, position = 3),
+    WidgetWithPosition(type = WidgetType.WEATHER, position = 4),
+    WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 5),
+    WidgetWithPosition(type = WidgetType.CALCULATOR, position = 6),
 )
 
 private val previewBlock = BlockModel(
