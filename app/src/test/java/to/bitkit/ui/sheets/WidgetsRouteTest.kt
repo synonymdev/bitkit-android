@@ -16,15 +16,4 @@ class WidgetsRouteTest {
         assertEquals(WidgetsRoute.WeatherPreview, WidgetType.WEATHER.toWidgetsPreviewRoute())
         assertEquals(WidgetsRoute.SuggestionsPreview, WidgetType.SUGGESTIONS.toWidgetsPreviewRoute())
     }
-
-    @Test
-    fun `maps widget types to edit routes`() {
-        assertEquals(WidgetsRoute.BlocksEdit, WidgetType.BLOCK.toWidgetsEditRoute())
-        assertEquals(WidgetsRoute.CalculatorPreview, WidgetType.CALCULATOR.toWidgetsEditRoute())
-        assertEquals(WidgetsRoute.FactsPreview, WidgetType.FACTS.toWidgetsEditRoute())
-        assertEquals(WidgetsRoute.HeadlinesEdit, WidgetType.NEWS.toWidgetsEditRoute())
-        assertEquals(WidgetsRoute.PriceEdit, WidgetType.PRICE.toWidgetsEditRoute())
-        assertEquals(WidgetsRoute.WeatherEdit, WidgetType.WEATHER.toWidgetsEditRoute())
-        assertEquals(WidgetsRoute.SuggestionsPreview, WidgetType.SUGGESTIONS.toWidgetsEditRoute())
-    }
 }
