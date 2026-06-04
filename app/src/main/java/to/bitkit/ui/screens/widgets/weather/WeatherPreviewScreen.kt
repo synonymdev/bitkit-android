@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyM
@@ -27,6 +29,7 @@ import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -44,6 +47,7 @@ fun WeatherPreviewScreen(
     val customWeatherPreferences by weatherViewModel.customPreferences.collectAsStateWithLifecycle()
     val weather by weatherViewModel.currentWeather.collectAsStateWithLifecycle()
     val isWeatherWidgetEnabled by weatherViewModel.isWeatherWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by weatherViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         weatherViewModel.refreshOnDisplay()
@@ -61,6 +65,8 @@ fun WeatherPreviewScreen(
         onClickSave = {
             weatherViewModel.savePreferences(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = weatherViewModel::setSize,
         modifier = modifier
     )
 }
@@ -75,6 +81,8 @@ fun WeatherPreviewContent(
     weatherPreferences: WeatherPreferences,
     weatherModel: WeatherModel?,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -124,7 +132,9 @@ fun WeatherPreviewContent(
                         WeatherCardSmall(
                             weatherModel = model,
                             preferences = weatherPreferences,
-                            modifier = Modifier.testTag("weather_card_small")
+                            modifier = Modifier
+                                .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                                .testTag("weather_card_small")
                         )
                     },
                     wideContent = {
@@ -136,6 +146,8 @@ fun WeatherPreviewContent(
                                 .testTag("weather_card_wide")
                         )
                     },
+                    initialSize = initialSize,
+                    onSizeSelected = onSizeSelected,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("weather_preview_carousel")
@@ -150,7 +162,7 @@ fun WeatherPreviewContent(
                     start = 16.dp,
                     end = 16.dp,
                     bottom = Insets.Bottom + 16.dp,
-                    top = 22.dp,
+                    top = 16.dp,
                 )
                 .fillMaxWidth()
                 .testTag("buttons_row")

@@ -12,11 +12,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.WidgetSizeDraft
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import javax.inject.Inject
@@ -74,6 +76,11 @@ class WeatherViewModel @Inject constructor(
     private val _customPreferences = MutableStateFlow(WeatherPreferences())
     val customPreferences: StateFlow<WeatherPreferences> = _customPreferences.asStateFlow()
 
+    private val sizeDraft = WidgetSizeDraft(viewModelScope, WidgetType.WEATHER, widgetsRepo.widgetsDataFlow)
+    val draftSize: StateFlow<WidgetSize> = sizeDraft.size
+
+    fun setSize(size: WidgetSize) = sizeDraft.set(size)
+
     init {
         initializeCustomPreferences()
     }
@@ -94,7 +101,7 @@ class WeatherViewModel @Inject constructor(
     fun savePreferences(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.updateWeatherPreferences(_customPreferences.value)
-            widgetsRepo.addWidget(WidgetType.WEATHER)
+            widgetsRepo.addWidget(WidgetType.WEATHER, sizeDraft.current)
             onComplete()
         }
     }

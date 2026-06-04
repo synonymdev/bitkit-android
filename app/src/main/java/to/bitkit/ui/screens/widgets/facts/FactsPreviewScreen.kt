@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,11 +17,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -36,6 +39,7 @@ fun FactsPreviewScreen(
 ) {
     val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
     val isFactsWidgetEnabled by factsViewModel.isFactsWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by factsViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         factsViewModel.refreshOnDisplay()
@@ -51,6 +55,8 @@ fun FactsPreviewScreen(
         onClickSave = {
             factsViewModel.saveWidget(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = factsViewModel::setSize,
         modifier = modifier
     )
 }
@@ -63,6 +69,8 @@ fun FactsPreviewContent(
     isFactsWidgetEnabled: Boolean,
     fact: String,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -97,7 +105,9 @@ fun FactsPreviewContent(
                 smallContent = {
                     FactsCardSmall(
                         headline = fact,
-                        modifier = Modifier.testTag("facts_card_small")
+                        modifier = Modifier
+                            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                            .testTag("facts_card_small")
                     )
                 },
                 wideContent = {
@@ -108,6 +118,8 @@ fun FactsPreviewContent(
                             .testTag("facts_card_wide")
                     )
                 },
+                initialSize = initialSize,
+                onSizeSelected = onSizeSelected,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("facts_preview_carousel")
@@ -121,7 +133,7 @@ fun FactsPreviewContent(
                     start = 16.dp,
                     end = 16.dp,
                     bottom = Insets.Bottom + 16.dp,
-                    top = 22.dp,
+                    top = 16.dp,
                 )
                 .fillMaxWidth()
                 .testTag("buttons_row")
