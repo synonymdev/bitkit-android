@@ -115,6 +115,7 @@ fun WidgetSizeCarousel(
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(vertical = 6.dp)
                     .testTag("page_indicator")
             ) {
                 repeat(pageCount) { index ->
