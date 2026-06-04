@@ -153,7 +153,6 @@ private fun WidgetsGalleryList(
                     PriceCardSmall(
                         pricePreferences = PreviewPricePreferences,
                         priceDTO = price,
-                        backgroundColor = Colors.Gray6,
                         modifier = Modifier.smallPreviewCard()
                     )
                 }
@@ -188,7 +187,6 @@ private fun WidgetsGalleryList(
                 source = previewArticle.publisher,
                 link = previewArticle.link,
                 enabled = showWidgets,
-                backgroundColor = Colors.Gray6,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("headline_card_wide")
@@ -205,7 +203,6 @@ private fun WidgetsGalleryList(
             BlockCard(
                 preferences = PreviewBlocksPreferences,
                 block = block ?: PreviewBlock,
-                backgroundColor = Colors.Gray6,
             )
         }
 
@@ -221,7 +218,6 @@ private fun WidgetsGalleryList(
             ) {
                 FactsCardSmall(
                     headline = fact ?: PREVIEW_FACT,
-                    backgroundColor = Colors.Gray6,
                     modifier = Modifier.smallPreviewCard()
                 )
             }

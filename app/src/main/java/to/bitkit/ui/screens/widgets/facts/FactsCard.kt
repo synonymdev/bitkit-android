@@ -34,12 +34,11 @@ import to.bitkit.ui.theme.Colors
 fun FactsCard(
     headline: String,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
 ) {
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -65,14 +64,13 @@ fun FactsCard(
 fun FactsCardSmall(
     headline: String,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(WidgetCardDimens.COMPACT_CARD_SIZE.height)
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Column(
             modifier = Modifier
