@@ -8,6 +8,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
 
 /** A placed widget in the home grid: the child's index and its frame within the grid bounds (px). */
 data class WidgetSlot(
@@ -111,7 +112,7 @@ private fun axisDistance(value: Float, min: Float, max: Float): Float = when {
  */
 @Composable
 fun WidgetFlowLayout(
-    isWide: List<Boolean>,
+    isWide: ImmutableList<Boolean>,
     modifier: Modifier = Modifier,
     spacing: Dp = 16.dp,
     smallHeight: Dp = WidgetCardDimens.COMPACT_CARD_SIZE.height,

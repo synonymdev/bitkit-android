@@ -867,7 +867,7 @@ private fun WidgetsPageContent(
                 val visibleWidgets = homeUiState.widgetsWithPosition
                     .filter { hasWidgetContent(it.type, homeUiState) }
                 WidgetFlowLayout(
-                    isWide = visibleWidgets.map { it.effectiveSize() == WidgetSize.WIDE },
+                    isWide = visibleWidgets.map { it.effectiveSize() == WidgetSize.WIDE }.toImmutableList(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     visibleWidgets.forEach { widget ->

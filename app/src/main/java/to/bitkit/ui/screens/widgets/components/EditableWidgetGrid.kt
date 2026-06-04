@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
@@ -94,7 +95,7 @@ fun EditableWidgetGrid(
     var lastTarget by remember { mutableStateOf<WidgetType?>(null) }
     val latestItems by rememberUpdatedState(items)
 
-    val isWide = items.map { it.effectiveSize() == WidgetSize.WIDE }
+    val isWide = items.map { it.effectiveSize() == WidgetSize.WIDE }.toImmutableList()
 
     Box(modifier = modifier.onGloballyPositioned { gridOrigin = it.positionInRoot() }) {
         LookaheadScope {
