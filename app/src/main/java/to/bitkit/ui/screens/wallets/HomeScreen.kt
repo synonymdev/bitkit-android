@@ -175,6 +175,7 @@ import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.sheets.toWidgetsEditRoute
+import to.bitkit.ui.sheets.toWidgetsPreviewRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
@@ -345,7 +346,8 @@ fun HomeScreen(
         onClickEditWidgetList = homeViewModel::onClickEditWidgetList,
         onClickEditWidget = { widgetType ->
             homeViewModel.disableEditMode()
-            widgetType.toWidgetsEditRoute()?.let { appViewModel.showSheet(Sheet.Widgets(it)) }
+            val route = widgetType.toWidgetsEditRoute() ?: widgetType.toWidgetsPreviewRoute()
+            appViewModel.showSheet(Sheet.Widgets(route))
         },
         onClickDeleteWidget = { widgetType ->
             homeViewModel.displayAlertDeleteWidget(widgetType)
