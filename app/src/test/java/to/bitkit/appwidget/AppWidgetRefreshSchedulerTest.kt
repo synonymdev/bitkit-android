@@ -91,14 +91,14 @@ class AppWidgetRefreshSchedulerTest {
     }
 
     @Test
-    fun `request catch up enqueues one-time work`() {
+    fun `request catch up enqueues one-time work with exponential backoff`() {
         activeWidgets.activeTypes = setOf(AppWidgetType.PRICE)
 
         scheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
 
         assertEquals(listOf(AppWidgetRefreshScheduler.CATCH_UP_WORK_NAME), workClient.oneTimeNames)
         assertEquals(listOf(ExistingWorkPolicy.KEEP), workClient.oneTimePolicies)
-        assertEquals(BackoffPolicy.LINEAR, workClient.oneTimeRequests.single().workSpec.backoffPolicy)
+        assertEquals(BackoffPolicy.EXPONENTIAL, workClient.oneTimeRequests.single().workSpec.backoffPolicy)
         assertEquals(10.seconds.inWholeMilliseconds, workClient.oneTimeRequests.single().workSpec.backoffDelayDuration)
     }
 

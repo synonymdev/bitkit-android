@@ -197,7 +197,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
         OneTimeWorkRequestBuilder<AppWidgetRefreshWorker>()
             .apply {
                 if (requiresNetwork) setConstraints(networkConstraints())
-                setBackoffCriteria(BackoffPolicy.LINEAR, CATCH_UP_RETRY_BACKOFF.toJavaDuration())
+                setBackoffCriteria(BackoffPolicy.EXPONENTIAL, CATCH_UP_RETRY_BACKOFF.toJavaDuration())
                 setInputData(workDataOf(WORK_INPUT_REASON to reason.name))
             }
             .build()
