@@ -5,7 +5,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Build
+import android.os.Build.VERSION
+import android.os.Build.VERSION_CODES
 import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
@@ -37,6 +38,8 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import javax.inject.Inject
 
+typealias Hook = (() -> Unit)?
+
 @AndroidEntryPoint
 class LightningNodeService : Service() {
 
@@ -62,10 +65,6 @@ class LightningNodeService : Service() {
     lateinit var cacheStore: CacheStore
 
     private var hasStartedNode = false
-
-    override fun onCreate() {
-        super.onCreate()
-    }
 
     private fun setupService() {
         if (hasStartedNode) return
@@ -157,19 +156,14 @@ class LightningNodeService : Service() {
         val action = intent?.action
         Logger.debug("Received start command action '$action'", context = TAG)
         when (action) {
-            ACTION_START_SERVICE -> {
-                if (promoteToForeground(startId)) setupService()
-            }
             ACTION_STOP_SERVICE_AND_APP -> {
-                Logger.debug("Received stop service action", context = TAG)
-                stopForegroundService(startId)
+                stopForegroundService(startId) { Logger.debug("Received stop service action", context = TAG) }
                 activityManager.appTasks.forEach { it.finishAndRemoveTask() }
                 serviceScope.launch { lightningRepo.stop() }
             }
-            else -> {
-                Logger.warn("Stopped service for unsupported action '$action'", context = TAG)
-                stopSelf(startId)
-            }
+
+            ACTION_START_SERVICE -> if (promoteToForeground(startId)) setupService()
+            else -> stop(startId) { Logger.warn("Stopped service for unsupported action '$action'", context = TAG) }
         }
         return START_NOT_STICKY
     }
@@ -180,22 +174,29 @@ class LightningNodeService : Service() {
                 this,
                 ID_NOTIFICATION_NODE,
                 createNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                foregroundServiceTypeDataSync(),
             )
         }.fold(
             onSuccess = { true },
             onFailure = {
                 if (it !is RuntimeException) throw it
-
-                Logger.error("Failed to promote foreground service", it, context = TAG)
-                stopSelf(startId)
+                stop(startId) { Logger.error("Failed to promote foreground service", it, context = TAG) }
                 false
             }
         )
     }
 
-    private fun stopForegroundService(startId: Int) {
+    private fun foregroundServiceTypeDataSync(): Int {
+        return if (VERSION.SDK_INT >= VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+    }
+
+    private fun stopForegroundService(startId: Int, hook: Hook = null) {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stop(startId, hook)
+    }
+
+    private fun stop(startId: Int, hook: Hook = null) {
+        hook?.invoke()
         stopSelf(startId)
     }
 
@@ -206,7 +207,7 @@ class LightningNodeService : Service() {
         super.onDestroy()
     }
 
-    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    @RequiresApi(VERSION_CODES.VANILLA_ICE_CREAM)
     override fun onTimeout(startId: Int, fgsType: Int) {
         Logger.warn("Reached foreground service timeout for type '$fgsType'", context = TAG)
         stopForegroundService(startId)
