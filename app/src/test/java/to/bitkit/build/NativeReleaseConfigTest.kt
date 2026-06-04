@@ -4,6 +4,7 @@ import kotlin.io.path.Path
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NativeReleaseConfigTest {
@@ -41,6 +42,14 @@ class NativeReleaseConfigTest {
             justfile.contains("Attach this exact file to GitHub releases"),
             "Release builds must tell the releaser to attach native debug symbols.",
         )
+        assertTrue(
+            justfile.contains("upload it to Play Console for this release"),
+            "Release builds must tell the releaser to upload native debug symbols to Play.",
+        )
+        assertFalse(
+            justfile.contains("verify Play Console"),
+            "Release builds must not imply Play is the source of native debug symbols.",
+        )
     }
 
     @Test
@@ -56,6 +65,10 @@ class NativeReleaseConfigTest {
         assertTrue(
             releaseCommand.contains("Native debug symbols uploaded: native-debug-symbols.zip"),
             "Release command summary must report the native debug symbols archive.",
+        )
+        assertFalse(
+            releaseCommand.contains("Play " + "did not"),
+            "Release command must not use stale Play native symbol wording.",
         )
     }
 
