@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,9 +19,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.drop
 import to.bitkit.R
@@ -71,9 +74,11 @@ fun WidgetSizeCarousel(
     ) {
         HorizontalPager(
             state = pagerState,
+            contentPadding = PaddingValues(horizontal = PAGER_HORIZONTAL_PADDING),
             modifier = Modifier
-                .fillMaxWidth()
                 .weight(1f)
+                .bleedHorizontal(PAGER_HORIZONTAL_PADDING)
+                .fillMaxWidth()
                 .testTag("widget_size_pager")
         ) { page ->
             Box(
@@ -128,6 +133,14 @@ fun WidgetSizeCarousel(
     }
 }
 
+private fun Modifier.bleedHorizontal(padding: Dp): Modifier = layout { measurable, constraints ->
+    val bleed = padding.roundToPx()
+    val placeable = measurable.measure(constraints.copy(maxWidth = constraints.maxWidth + bleed * 2))
+    layout(constraints.maxWidth, placeable.height) {
+        placeable.place(-bleed, 0)
+    }
+}
+
 private fun pageToSize(page: Int, supportsSmall: Boolean): WidgetSize {
     if (!supportsSmall) return WidgetSize.WIDE
     return if (page == PAGE_SMALL) WidgetSize.SMALL else WidgetSize.WIDE
@@ -140,3 +153,5 @@ private fun initialPageFor(size: WidgetSize, supportsSmall: Boolean): Int {
 
 private const val PAGE_SMALL = 0
 private const val PAGE_WIDE = 1
+
+private val PAGER_HORIZONTAL_PADDING = 16.dp
