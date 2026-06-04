@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -74,7 +73,6 @@ fun WidgetSizeCarousel(
     ) {
         HorizontalPager(
             state = pagerState,
-            contentPadding = PaddingValues(horizontal = PAGER_HORIZONTAL_PADDING),
             modifier = Modifier
                 .weight(1f)
                 .bleedHorizontal(PAGER_HORIZONTAL_PADDING)
@@ -83,7 +81,9 @@ fun WidgetSizeCarousel(
         ) { page ->
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = PAGER_HORIZONTAL_PADDING)
             ) {
                 when (pageToSize(page, supportsSmall)) {
                     WidgetSize.SMALL -> smallContent()
