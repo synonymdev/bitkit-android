@@ -95,7 +95,7 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed remote refresh marks attempt but not success`() = test {
+    fun `failed remote refresh retries and updates cached widget`() = test {
         whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.HEADLINES))
         whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(
             AppWidgetRefreshMetadata(
@@ -107,7 +107,7 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
 
         val result = worker().doWork()
 
-        assertEquals(androidx.work.ListenableWorker.Result.success(), result)
+        assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
         verify(preferencesStore).markRefreshAttempt(AppWidgetType.HEADLINES, NOW_MS)
         verify(dataRepository).fetchArticles()
         verify(preferencesStore, never()).markRefreshSuccess(any(), any())

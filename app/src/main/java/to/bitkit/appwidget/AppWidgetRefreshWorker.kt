@@ -37,14 +37,20 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         val nowMs = clock.nowMs()
         Logger.debug("Refreshing widget types '$activeTypes' for '$reason'", context = TAG)
 
+        var shouldRetry = false
         for (type in activeTypes) {
-            runCatching { refresh(type, nowMs) }.onFailure {
-                if (it is CancellationException) throw it
-                Logger.warn("Failed to refresh widget type '$type'", it, context = TAG)
-            }
+            runCatching { refresh(type, nowMs) }
+                .onSuccess {
+                    if (!it) shouldRetry = true
+                }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    shouldRetry = true
+                    Logger.warn("Failed to refresh widget type '$type'", it, context = TAG)
+                }
         }
 
-        return Result.success()
+        return if (shouldRetry) Result.retry() else Result.success()
     }
 
     private suspend fun activeWidgetTypesFor(reason: String): List<AppWidgetType> {
@@ -59,24 +65,26 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         return if (isFactsLocalRefresh) type == AppWidgetType.FACTS else type != AppWidgetType.FACTS
     }
 
-    private suspend fun refresh(type: AppWidgetType, nowMs: Long) {
+    private suspend fun refresh(type: AppWidgetType, nowMs: Long): Boolean {
         if (type == AppWidgetType.FACTS) {
             refreshFacts()
-            return
+            return true
         }
 
         val metadata = preferencesStore.getRefreshMetadata(type)
         if (!shouldRefreshRemote(type = type, metadata = metadata, nowMs = nowMs)) {
             Logger.debug("Skipped fresh widget type '$type'", context = TAG)
             appWidgetUpdater.update(type, appContext)
-            return
+            return true
         }
 
         preferencesStore.markRefreshAttempt(type, nowMs)
-        if (refreshRemote(type)) {
+        val didSucceed = refreshRemote(type)
+        if (didSucceed) {
             preferencesStore.markRefreshSuccess(type, nowMs)
         }
         appWidgetUpdater.update(type, appContext)
+        return didSucceed
     }
 
     private suspend fun shouldRefreshRemote(
