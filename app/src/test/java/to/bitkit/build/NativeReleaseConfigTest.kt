@@ -99,8 +99,8 @@ class NativeReleaseConfigTest {
             "Native debug symbols script must create a zip archive.",
         )
         assertTrue(
-            symbolsScript.contains("""required_libs="libbitkitcore.so libldk_node.so""""),
-            "Native debug symbols script must validate crash-relevant native libraries.",
+            symbolsScript.contains("""required_libs="libbitkitcore.so libldk_node.so libvss_rust_client_ffi.so""""),
+            "Native debug symbols script must validate Rust native libraries.",
         )
         assertTrue(
             symbolsScript.contains("""archive_symbol_suffixes=".dbg .sym""""),

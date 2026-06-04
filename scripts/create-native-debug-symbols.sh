@@ -8,7 +8,7 @@ cd "$repo_root"
 variant="mainnetRelease"
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols.zip"
 output_dir=$(dirname "$output")
-required_libs="libbitkitcore.so libldk_node.so"
+required_libs="libbitkitcore.so libldk_node.so libvss_rust_client_ffi.so"
 archive_symbol_suffixes=".dbg .sym"
 
 tmp_dirs=""
