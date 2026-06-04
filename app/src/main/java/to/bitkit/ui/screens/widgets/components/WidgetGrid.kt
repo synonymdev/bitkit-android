@@ -44,25 +44,24 @@ fun widgetGridSlots(
     while (i < isWide.size) {
         when {
             isWide[i] -> {
-                val h = heights.getOrElse(i) { smallHeightPx }
-                slots.add(WidgetSlot(index = i, x = 0, y = y, width = totalWidth, height = h))
-                y += h + spacingPx
+                val height = heightAt(heights, i, smallHeightPx)
+                slots.add(fullWidthSlot(index = i, y = y, totalWidth = totalWidth, height = height))
+                y += height + spacingPx
                 i += 1
             }
 
-            i + 1 < isWide.size && !isWide[i + 1] -> {
+            canPairWithNext(isWide, i) -> {
                 val rowHeight = maxOf(
-                    heights.getOrElse(i) { smallHeightPx },
-                    heights.getOrElse(i + 1) { smallHeightPx },
+                    heightAt(heights, i, smallHeightPx),
+                    heightAt(heights, i + 1, smallHeightPx),
                 )
-                slots.add(WidgetSlot(index = i, x = 0, y = y, width = columnWidth, height = rowHeight))
-                slots.add(
-                    WidgetSlot(
-                        index = i + 1,
-                        x = columnWidth + spacingPx,
+                slots.addAll(
+                    pairedRowSlots(
+                        index = i,
                         y = y,
-                        width = columnWidth,
-                        height = rowHeight,
+                        columnWidth = columnWidth,
+                        spacingPx = spacingPx,
+                        rowHeight = rowHeight,
                     )
                 )
                 y += rowHeight + spacingPx
@@ -70,9 +69,9 @@ fun widgetGridSlots(
             }
 
             else -> {
-                val h = heights.getOrElse(i) { smallHeightPx }
-                slots.add(WidgetSlot(index = i, x = 0, y = y, width = columnWidth, height = h))
-                y += h + spacingPx
+                val height = heightAt(heights, i, smallHeightPx)
+                slots.add(leftColumnSlot(index = i, y = y, columnWidth = columnWidth, height = height))
+                y += height + spacingPx
                 i += 1
             }
         }
@@ -80,6 +79,33 @@ fun widgetGridSlots(
 
     return WidgetGridResult(slots = slots, totalHeight = maxOf(0, y - spacingPx))
 }
+
+private fun heightAt(heights: List<Int>, index: Int, fallback: Int): Int =
+    heights.getOrElse(index) { fallback }
+
+private fun canPairWithNext(isWide: List<Boolean>, index: Int): Boolean {
+    val next = index + 1
+    val nextExists = next < isWide.size
+    return nextExists && !isWide[next]
+}
+
+private fun fullWidthSlot(index: Int, y: Int, totalWidth: Int, height: Int): WidgetSlot =
+    WidgetSlot(index = index, x = 0, y = y, width = totalWidth, height = height)
+
+private fun leftColumnSlot(index: Int, y: Int, columnWidth: Int, height: Int): WidgetSlot =
+    WidgetSlot(index = index, x = 0, y = y, width = columnWidth, height = height)
+
+private fun pairedRowSlots(index: Int, y: Int, columnWidth: Int, spacingPx: Int, rowHeight: Int): List<WidgetSlot> =
+    listOf(
+        WidgetSlot(index = index, x = 0, y = y, width = columnWidth, height = rowHeight),
+        WidgetSlot(
+            index = index + 1,
+            x = columnWidth + spacingPx,
+            y = y,
+            width = columnWidth,
+            height = rowHeight,
+        ),
+    )
 
 /**
  * Resolves which widget cell a drag point targets, given each cell's frame (grid coords). Picks the
