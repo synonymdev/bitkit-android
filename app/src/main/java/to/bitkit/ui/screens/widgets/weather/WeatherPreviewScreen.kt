@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +29,7 @@ import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -130,7 +132,9 @@ fun WeatherPreviewContent(
                         WeatherCardSmall(
                             weatherModel = model,
                             preferences = weatherPreferences,
-                            modifier = Modifier.testTag("weather_card_small")
+                            modifier = Modifier
+                                .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                                .testTag("weather_card_small")
                         )
                     },
                     wideContent = {

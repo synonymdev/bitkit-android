@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -140,7 +141,8 @@ fun CalculatorCardSmall(
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         modifier = modifier
-            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .fillMaxWidth()
+            .height(WidgetCardDimens.COMPACT_CARD_SIZE.height)
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.Gray6)
             .padding(16.dp)

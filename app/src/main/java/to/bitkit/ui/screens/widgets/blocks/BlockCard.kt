@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -80,7 +81,8 @@ fun BlockCardSmall(
 
     Box(
         modifier = modifier
-            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .fillMaxWidth()
+            .height(WidgetCardDimens.COMPACT_CARD_SIZE.height)
             .clip(shape = MaterialTheme.shapes.medium)
             .background(backgroundColor)
     ) {
