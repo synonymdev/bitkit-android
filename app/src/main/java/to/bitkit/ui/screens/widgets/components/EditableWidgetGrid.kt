@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -225,7 +226,7 @@ private fun DragPreviewCard(
             .padding(8.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            BodyMSB(text = name)
+            BodyMSB(text = name, textAlign = TextAlign.Center)
             VerticalSpacer(12.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(

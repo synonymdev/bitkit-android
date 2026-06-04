@@ -29,6 +29,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.WidgetType
@@ -109,6 +110,7 @@ private fun EditActions(
         ) {
             BodyMSB(
                 text = name,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.testTag("${name}_drag_and_drop_title")
             )
 
