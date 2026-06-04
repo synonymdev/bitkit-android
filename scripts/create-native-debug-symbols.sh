@@ -8,9 +8,99 @@ cd "$repo_root"
 variant="mainnetRelease"
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols.zip"
 output_dir=$(dirname "$output")
+required_libs="libbitkitcore.so libldk_node.so"
+
+tmp_dirs=""
+cleanup() {
+    for dir in $tmp_dirs; do
+        rm -rf "$dir"
+    done
+}
+trap cleanup EXIT
+
+make_tmp_dir() {
+    dir=$(mktemp -d)
+    tmp_dirs="$tmp_dirs $dir"
+    echo "$dir"
+}
+
+find_readelf() {
+    for sdk_dir in "${ANDROID_NDK_HOME:-}" "${ANDROID_HOME:-}/ndk" "${ANDROID_SDK_ROOT:-}/ndk"; do
+        if [ -z "$sdk_dir" ]; then
+            continue
+        fi
+
+        for candidate in \
+            "$sdk_dir"/toolchains/llvm/prebuilt/*/bin/llvm-readelf \
+            "$sdk_dir"/*/toolchains/llvm/prebuilt/*/bin/llvm-readelf; do
+            if [ -x "$candidate" ]; then
+                echo "$candidate"
+                return
+            fi
+        done
+    done
+
+    if command -v llvm-readelf >/dev/null 2>&1; then
+        command -v llvm-readelf
+        return
+    fi
+
+    if command -v readelf >/dev/null 2>&1; then
+        command -v readelf
+        return
+    fi
+
+    echo "llvm-readelf or readelf is required to validate native debug symbols." >&2
+    exit 1
+}
+
+readelf_bin=$(find_readelf)
+
+has_debug_metadata() {
+    "$readelf_bin" -S "$1" | grep -Eq '\.(symtab|debug_|gnu_debugdata)'
+}
+
+validate_symbol_tree() {
+    root="$1"
+
+    for abi in arm64-v8a armeabi-v7a; do
+        for lib_name in $required_libs; do
+            lib="$root/$abi/$lib_name"
+            if [ ! -f "$lib" ]; then
+                echo "Missing required native symbol library '$abi/$lib_name'." >&2
+                exit 1
+            fi
+
+            if ! has_debug_metadata "$lib"; then
+                echo "Native debug symbols unavailable: '$abi/$lib_name' has no .symtab, .debug_*, or .gnu_debugdata sections." >&2
+                echo "Refusing to create '$output' from stripped native libraries." >&2
+                echo "Publish or consume native dependencies with usable debug metadata before releasing." >&2
+                exit 1
+            fi
+        done
+    done
+}
+
+validate_output_zip() {
+    archive="$1"
+    zip -T "$archive" >/dev/null
+
+    tmp_dir=$(make_tmp_dir)
+    for abi in arm64-v8a armeabi-v7a; do
+        for lib_name in $required_libs; do
+            entry="$abi/$lib_name"
+            if ! unzip -q "$archive" "$entry" -d "$tmp_dir"; then
+                echo "Native debug symbols archive is missing '$entry'." >&2
+                exit 1
+            fi
+        done
+    done
+
+    validate_symbol_tree "$tmp_dir"
+}
 
 if [ -f "$output" ]; then
-    zip -T "$output" >/dev/null
+    validate_output_zip "$output"
     echo "Native debug symbols: $output"
     ls -lh "$output"
     exit 0
@@ -29,8 +119,7 @@ if [ -z "$native_lib_dir" ]; then
     exit 1
 fi
 
-tmp_dir=$(mktemp -d)
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=$(make_tmp_dir)
 
 for abi in arm64-v8a armeabi-v7a; do
     source_dir="$native_lib_dir/$abi"
@@ -53,6 +142,8 @@ for abi in arm64-v8a armeabi-v7a; do
         exit 1
     fi
 done
+
+validate_symbol_tree "$tmp_dir"
 
 mkdir -p "$output_dir"
 rm -f "$output"

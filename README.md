@@ -180,7 +180,7 @@ To build the mainnet flavor for release run:
 just release
 ```
 
-`just release` builds the mainnet APK, Play Store AAB, and the native debug symbols archive.
+`just release` builds the mainnet APK, Play Store AAB, and validates the native debug symbols archive.
 
 Release artifacts:
 
@@ -188,11 +188,11 @@ Release artifacts:
 - AAB: `app/build/outputs/bundle/mainnetRelease/`
 - Native debug symbols: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols.zip`
 
-The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the filename `native-debug-symbols.zip`. If Android Gradle Plugin cannot emit this archive because native dependency metadata is already stripped, `just release` creates it from the exact merged release `.so` files.
+The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the filename `native-debug-symbols.zip`. If Android Gradle Plugin cannot emit a usable archive because native dependency metadata is already stripped, `just release` fails instead of creating a placeholder zip from stripped `.so` files. Stop the release and publish or consume native dependencies with usable debug metadata first.
 
-For Play Store releases, upload the AAB as usual, then upload `native-debug-symbols.zip` for that exact version/build in Play Console: App bundle explorer → Downloads → Assets. Verify Play Console lists the native debug symbols after upload.
+For Play Store releases, upload the AAB as usual, then upload `native-debug-symbols.zip` for that exact version/build in Play Console: App bundle explorer → Downloads → Assets. Verify Play lists the native debug symbols after upload.
 
-Do not rely on Play Console to download or recover `native-debug-symbols.zip` later. Keep the release-built archive in GitHub releases or internal release storage.
+Do not rely on Play Console to download or recover `native-debug-symbols.zip` later. If Play only shows delete/replace controls for an uploaded symbol file, that is enough for release verification. Keep the release-built archive in GitHub releases or internal release storage.
 
 For GitHub releases, attach `native-debug-symbols.zip` alongside the APK so native crashes from GitHub-distributed builds can be symbolicated later.
 

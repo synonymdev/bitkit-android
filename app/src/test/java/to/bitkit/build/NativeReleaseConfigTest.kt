@@ -47,7 +47,7 @@ class NativeReleaseConfigTest {
             "Release builds must tell the releaser to upload native debug symbols to Play.",
         )
         assertFalse(
-            justfile.contains("verify Play Console"),
+            justfile.contains("download"),
             "Release builds must not imply Play is the source of native debug symbols.",
         )
     }
@@ -70,10 +70,18 @@ class NativeReleaseConfigTest {
             releaseCommand.contains("Play " + "did not"),
             "Release command must not use stale Play native symbol wording.",
         )
+        assertTrue(
+            releaseCommand.contains("fails instead of creating a placeholder zip from stripped `.so` files"),
+            "Release command must fail instead of publishing fake native debug symbols.",
+        )
+        assertTrue(
+            releaseCommand.contains("If Play only shows delete/replace controls"),
+            "Release command must document the verified Play Console behavior.",
+        )
     }
 
     @Test
-    fun `native debug symbols script archives release libraries`() {
+    fun `native debug symbols script rejects stripped release libraries`() {
         val symbolsScript = repoRoot.resolve("scripts/create-native-debug-symbols.sh").readText()
 
         assertTrue(
@@ -89,6 +97,18 @@ class NativeReleaseConfigTest {
         assertTrue(
             symbolsScript.contains("zip -qr"),
             "Native debug symbols script must create a zip archive.",
+        )
+        assertTrue(
+            symbolsScript.contains("""required_libs="libbitkitcore.so libldk_node.so""""),
+            "Native debug symbols script must validate crash-relevant native libraries.",
+        )
+        assertTrue(
+            symbolsScript.contains("""grep -Eq '\.(symtab|debug_|gnu_debugdata)'"""),
+            "Native debug symbols script must validate usable debug metadata before zipping.",
+        )
+        assertTrue(
+            symbolsScript.contains("Refusing to create '${'$'}output' from stripped native libraries."),
+            "Native debug symbols script must refuse placeholder archives.",
         )
     }
 }
