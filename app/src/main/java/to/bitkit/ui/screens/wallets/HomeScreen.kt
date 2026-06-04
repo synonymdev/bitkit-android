@@ -1148,6 +1148,7 @@ private fun WidgetCardContent(
             val calcModifier = Modifier
                 .fillMaxWidth()
                 .onGloballyPositioned { onCalculatorBoundsChanged(it.boundsInRoot()) }
+                .testTag("CalculatorWidget")
             if (small) {
                 CalculatorCardSmall(
                     btcPrimaryDisplayUnit = calcState.displayUnit,
