@@ -64,6 +64,7 @@ import to.bitkit.ui.theme.Colors
 import kotlin.math.roundToInt
 
 private const val DRAGGED_ALPHA = 0.3f
+private const val DRAG_PREVIEW_ALPHA = 0.8f
 private const val REORDER_DAMPING = 0.85f
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -177,6 +178,7 @@ fun EditableWidgetGrid(
                         width = with(density) { bounds.width.toDp() },
                         height = with(density) { bounds.height.toDp() },
                     )
+                    .alpha(DRAG_PREVIEW_ALPHA)
             ) {
                 DragPreviewCard(type = type, modifier = Modifier.fillMaxSize())
             }
