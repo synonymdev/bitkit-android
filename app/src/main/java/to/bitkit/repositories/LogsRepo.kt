@@ -19,8 +19,10 @@ import to.bitkit.ext.toBase64
 import to.bitkit.ext.utcDateFormatterOf
 import to.bitkit.models.ChatwootMessage
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.utils.BatterySettingsSnapshot
 import to.bitkit.utils.LogSource
 import to.bitkit.utils.Logger
+import to.bitkit.utils.batterySettingsSnapshot
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -160,6 +162,7 @@ class LogsRepo @Inject constructor(
             lifecycle = state.nodeLifecycleState.supportName(),
             isSyncingWallet = state.isSyncingWallet,
             isGeoBlocked = state.isGeoBlocked,
+            batterySettings = context.batterySettingsSnapshot(),
             lastSuccessfulSyncAt = state.lastSuccessfulSyncAt?.toString(),
             lastSyncError = state.lastSyncError?.javaClass?.simpleName,
             blockHeight = state.nodeStatus?.currentBestBlock?.height?.toString(),
@@ -324,6 +327,7 @@ private data class SupportSnapshot(
     val lifecycle: String,
     val isSyncingWallet: Boolean,
     val isGeoBlocked: Boolean,
+    val batterySettings: BatterySettingsSnapshot,
     val lastSuccessfulSyncAt: String?,
     val lastSyncError: String?,
     val blockHeight: String?,
