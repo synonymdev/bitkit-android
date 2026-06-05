@@ -28,12 +28,14 @@ class AppWidgetRefreshSchedulerTest {
     private val workClient = FakeWorkClient()
     private val alarmClient = FakeAlarmClient()
     private val elapsedRealtimeProvider = FakeElapsedRealtimeProvider()
+    private val unlockRegistrar = FakeUnlockRegistrar()
     private val scheduler = AppWidgetRefreshScheduler(
         context = context,
         activeWidgets = activeWidgets,
         workClient = workClient,
         alarmClient = alarmClient,
         elapsedRealtimeProvider = elapsedRealtimeProvider,
+        unlockRegistrar = unlockRegistrar,
     )
 
     @After
@@ -287,4 +289,16 @@ private class FakeElapsedRealtimeProvider : ElapsedRealtimeProvider {
     val nowMs = 10_000L
 
     override fun elapsedRealtime(): Long = nowMs
+}
+
+private class FakeUnlockRegistrar : AppWidgetUnlockRegistrar {
+    var registered = false
+
+    override fun register() {
+        registered = true
+    }
+
+    override fun unregister() {
+        registered = false
+    }
 }

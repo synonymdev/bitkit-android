@@ -41,6 +41,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
     private val workClient: AppWidgetWorkClient,
     private val alarmClient: AppWidgetAlarmClient,
     private val elapsedRealtimeProvider: ElapsedRealtimeProvider,
+    private val unlockRegistrar: AppWidgetUnlockRegistrar,
 ) {
     fun ensureScheduled(reason: AppWidgetRefreshReason) {
         if (!activeWidgets.hasActiveWidgets()) {
@@ -50,6 +51,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
 
         ensureRemotePeriodicWork(reason)
         ensureFactsPeriodicWork()
+        unlockRegistrar.register()
         scheduleCatchUpAlarm(reason)
         Logger.debug("Ensured widget refresh schedule for '${reason.name}'", context = TAG)
     }
@@ -68,6 +70,25 @@ class AppWidgetRefreshScheduler @Inject constructor(
     fun handleCatchUpAlarm(reason: AppWidgetRefreshReason) {
         requestCatchUp(reason)
         scheduleCatchUpAlarm(reason)
+    }
+
+    fun scheduleSoonCatchUp(reason: AppWidgetRefreshReason = AppWidgetRefreshReason.CATCH_UP_ALARM) {
+        if (!activeWidgets.hasActiveWidgets()) return
+
+        val triggerAt = elapsedRealtimeProvider.elapsedRealtime() + NETWORK_RETRY_DELAY.inWholeMilliseconds
+        runCatching {
+            alarmClient.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerAt,
+                checkNotNull(
+                    catchUpAlarmPendingIntent(PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE),
+                ) { "Expected catch-up alarm PendingIntent" },
+            )
+        }.onSuccess {
+            Logger.debug("Scheduled soon widget catch-up for '${reason.name}'", context = TAG)
+        }.onFailure {
+            Logger.error("Failed to schedule soon widget catch-up for '${reason.name}'", it, context = TAG)
+        }
     }
 
     private fun ensureRemotePeriodicWork(reason: AppWidgetRefreshReason) {
@@ -159,6 +180,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
         workClient.cancelUniqueWork(FACTS_PERIODIC_WORK_NAME)
         workClient.cancelUniqueWork(FACTS_CATCH_UP_WORK_NAME)
         cancelCatchUpAlarm()
+        unlockRegistrar.unregister()
         Logger.debug("Canceled widget refresh schedule for '${reason.name}'", context = TAG)
     }
 
@@ -222,6 +244,7 @@ class AppWidgetRefreshScheduler @Inject constructor(
         private const val CATCH_UP_ALARM_REQUEST_CODE = 0
         val REFRESH_INTERVAL = 15.minutes
         private val CATCH_UP_RETRY_BACKOFF = 10.seconds
+        private val NETWORK_RETRY_DELAY = 15.seconds
     }
 }
 

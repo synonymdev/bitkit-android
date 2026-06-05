@@ -11,7 +11,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -42,13 +41,14 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     private val preferencesStore = mock<AppWidgetPreferencesStore>()
     private val appWidgetUpdater = mock<AppWidgetUpdater>()
     private val validatedNetworkGate = mock<ValidatedNetworkGate>()
+    private val appWidgetRefreshScheduler = mock<AppWidgetRefreshScheduler>()
     private val clock = mock<Clock>()
     private val workerParameters = mock<WorkerParameters>()
 
     @Before
     fun setUp() {
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MS))
-        whenever { validatedNetworkGate.awaitValidated(any()) }.thenReturn(true)
+        whenever { validatedNetworkGate.awaitReady(any()) }.thenReturn(true)
         whenever(workerParameters.inputData).thenReturn(
             workDataOf(AppWidgetRefreshScheduler.WORK_INPUT_REASON to AppWidgetRefreshReason.APP_START.name),
         )
@@ -196,8 +196,8 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `validated network timeout retries without fetching remote widgets`() = test {
-        whenever(validatedNetworkGate.awaitValidated(any())).thenReturn(false)
+    fun `readiness timeout still attempts remote refresh`() = test {
+        whenever(validatedNetworkGate.awaitReady(any())).thenReturn(false)
         whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.HEADLINES))
         whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(
             AppWidgetRefreshMetadata(
@@ -205,13 +205,13 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
                 lastSuccessAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
             ),
         )
+        whenever(dataRepository.fetchArticles()).thenReturn(Result.failure(UnknownHostException("dns")))
 
         val result = worker().doWork()
 
         assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
-        verifyNoInteractions(dataRepository)
-        verify(preferencesStore, never()).markRefreshAttempt(any(), any())
-        verify(appWidgetUpdater, never()).update(any(), any())
+        verify(dataRepository).fetchArticles()
+        verify(appWidgetRefreshScheduler).scheduleSoonCatchUp()
     }
 
     @Test
@@ -276,6 +276,7 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
             preferencesStore = preferencesStore,
             appWidgetUpdater = appWidgetUpdater,
             validatedNetworkGate = validatedNetworkGate,
+            appWidgetRefreshScheduler = appWidgetRefreshScheduler,
             clock = clock,
         )
 

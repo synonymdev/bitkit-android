@@ -25,12 +25,13 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
     private val preferencesStore: AppWidgetPreferencesStore,
     private val appWidgetUpdater: AppWidgetUpdater,
     private val validatedNetworkGate: ValidatedNetworkGate,
+    private val appWidgetRefreshScheduler: AppWidgetRefreshScheduler,
     private val clock: Clock,
 ) : CoroutineWorker(appContext, workerParams) {
 
     private companion object {
         private const val TAG = "AppWidgetRefreshWorker"
-        private val VALIDATED_NETWORK_TIMEOUT = 30.seconds
+        private val NETWORK_READY_TIMEOUT = 15.seconds
     }
 
     override suspend fun doWork(): Result {
@@ -39,9 +40,8 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         if (activeTypes.isEmpty()) return Result.success()
 
         if (needsValidatedNetwork(activeTypes)) {
-            if (!validatedNetworkGate.awaitValidated(VALIDATED_NETWORK_TIMEOUT)) {
-                Logger.debug("Validated network not ready for '$reason', retrying later", context = TAG)
-                return Result.retry()
+            if (!validatedNetworkGate.awaitReady(NETWORK_READY_TIMEOUT)) {
+                Logger.debug("Network readiness probe timed out for '$reason', attempting refresh anyway", context = TAG)
             }
         }
 
@@ -61,7 +61,11 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
             }
         }
 
-        return if (hadConnectivityFailure) Result.retry() else Result.success()
+        if (hadConnectivityFailure) {
+            appWidgetRefreshScheduler.scheduleSoonCatchUp()
+            return Result.retry()
+        }
+        return Result.success()
     }
 
     private fun needsValidatedNetwork(activeTypes: List<AppWidgetType>): Boolean =
