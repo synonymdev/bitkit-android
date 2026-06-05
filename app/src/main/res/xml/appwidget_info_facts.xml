@@ -12,5 +12,5 @@
     android:initialLayout="@layout/glance_default_loading_layout"
     android:previewLayout="@layout/appwidget_preview_facts"
     android:description="@string/widgets__facts__description"
-    android:updatePeriodMillis="0"
+    android:updatePeriodMillis="1800000"
     tools:targetApi="31" />

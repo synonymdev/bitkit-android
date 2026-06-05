@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
@@ -63,6 +65,9 @@ class LightningNodeService : Service() {
 
     @Inject
     lateinit var cacheStore: CacheStore
+
+    @Inject
+    lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
 
     private var hasStartedNode = false
 
@@ -157,6 +162,8 @@ class LightningNodeService : Service() {
         Logger.debug("Received start command action '$action'", context = TAG)
         when (action) {
             ACTION_STOP_SERVICE_AND_APP -> {
+                appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+                appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
                 stopForegroundService(startId) { Logger.debug("Received stop service action", context = TAG) }
                 activityManager.appTasks.forEach { it.finishAndRemoveTask() }
                 serviceScope.launch { lightningRepo.stop() }

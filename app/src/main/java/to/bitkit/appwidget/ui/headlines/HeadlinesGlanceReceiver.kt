@@ -1,20 +1,13 @@
 package to.bitkit.appwidget.ui.headlines
 
-import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import to.bitkit.appwidget.AppWidgetRefreshWorker
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.RefreshingGlanceReceiver
 
-class HeadlinesGlanceReceiver : GlanceAppWidgetReceiver() {
+class HeadlinesGlanceReceiver : RefreshingGlanceReceiver(
+    enabledReason = AppWidgetRefreshReason.HEADLINES_WIDGET_ENABLED,
+    updateReason = AppWidgetRefreshReason.HEADLINES_WIDGET_UPDATE,
+    disabledReason = AppWidgetRefreshReason.HEADLINES_WIDGET_DISABLED,
+) {
     override val glanceAppWidget: GlanceAppWidget = HeadlinesGlanceWidget()
-
-    override fun onEnabled(context: Context) {
-        super.onEnabled(context)
-        AppWidgetRefreshWorker.enqueue(context)
-    }
-
-    override fun onDisabled(context: Context) {
-        super.onDisabled(context)
-        AppWidgetRefreshWorker.cancelIfNoWidgets(context)
-    }
 }

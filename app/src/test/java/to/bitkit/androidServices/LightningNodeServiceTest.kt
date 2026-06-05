@@ -29,6 +29,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.stub
@@ -42,6 +43,8 @@ import org.robolectric.annotation.Config
 import to.bitkit.App
 import to.bitkit.CurrentActivity
 import to.bitkit.R
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.di.DbModule
@@ -100,6 +103,9 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
     @BindValue
     val cacheStore = mock<CacheStore>()
+
+    @BindValue
+    val appWidgetRefreshScheduler = mock<AppWidgetRefreshScheduler>()
 
     private var capturedHandler: NodeEventHandler? = null
     private val cacheData = MutableSharedFlow<AppCacheData>(replay = 1)
@@ -483,6 +489,24 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
         }
         assertNull(notification, "Non-pending payment should NOT trigger notification")
+    }
+
+    @Test
+    fun `stop service action schedules widget catch-up before shutdown`() = test {
+        val service = createService()
+
+        service.onStartCommand(
+            serviceIntent(LightningNodeService.ACTION_STOP_SERVICE_AND_APP),
+            0,
+            STOP_START_ID,
+        )
+        testScheduler.advanceUntilIdle()
+
+        inOrder(appWidgetRefreshScheduler, lightningRepo) {
+            verify(appWidgetRefreshScheduler).ensureScheduled(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+            verify(appWidgetRefreshScheduler).requestCatchUp(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+            verify(lightningRepo).stop()
+        }
     }
 
     private fun createService(): LightningNodeService {
