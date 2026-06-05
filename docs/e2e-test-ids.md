@@ -667,6 +667,7 @@ Legend:
 | RN testID                  | Android testTag              |
 | -------------------------- | ---------------------------- |
 | HomeScrollView             | ✅                           |
+| CalculatorWidget           | ✅                           |
 | PriceWidget                | ✅                           |
 | PriceWidgetRow-BTC/EUR     | ✅                           |
 | PriceWidgetSource          | ✅                           |

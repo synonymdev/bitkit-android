@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,7 +90,8 @@ fun WeatherCardSmall(
 ) {
     Box(
         modifier = modifier
-            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .fillMaxWidth()
+            .height(WidgetCardDimens.COMPACT_CARD_SIZE.height)
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.Gray6)
             .testTag("weather_card_small")
@@ -303,6 +304,7 @@ private fun PreviewSmall() {
                     icon = FeeCondition.GOOD.icon,
                 ),
                 preferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_FIAT),
+                modifier = Modifier.weight(1f)
             )
             WeatherCardSmall(
                 weatherModel = WeatherModel(
@@ -317,6 +319,7 @@ private fun PreviewSmall() {
                     icon = FeeCondition.AVERAGE.icon,
                 ),
                 preferences = WeatherPreferences(selectedOption = WeatherDataOption.CURRENT_FEE_FIAT),
+                modifier = Modifier.weight(1f)
             )
         }
     }

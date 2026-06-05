@@ -8,13 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,7 +30,6 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun HeadlineCard(
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
     showTime: Boolean = true,
     showSource: Boolean = true,
     time: String,
@@ -45,7 +43,7 @@ fun HeadlineCard(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
             .clickableAlpha(enabled = enabled) {
                 val uri = safeBrowserUri(link) ?: return@clickableAlpha
                 val intent = Intent(Intent.ACTION_VIEW, uri)
@@ -96,7 +94,6 @@ fun HeadlineCard(
 @Composable
 fun HeadlineCardSmall(
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
     showTime: Boolean = true,
     time: String,
     headline: String,
@@ -106,9 +103,10 @@ fun HeadlineCardSmall(
 
     Box(
         modifier = modifier
-            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .fillMaxWidth()
+            .height(WidgetCardDimens.COMPACT_CARD_SIZE.height)
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
             .clickableAlpha {
                 val uri = safeBrowserUri(link) ?: return@clickableAlpha
                 val intent = Intent(Intent.ACTION_VIEW, uri)
@@ -202,13 +200,15 @@ private fun PreviewSmall() {
             HeadlineCardSmall(
                 time = "21 min ago",
                 headline = "How Bitcoin changed El Salvador in more ways",
-                link = ""
+                link = "",
+                modifier = Modifier.weight(1f)
             )
             HeadlineCardSmall(
                 showTime = false,
                 time = "21 min ago",
                 headline = "How Bitcoin changed El Salvador",
-                link = ""
+                link = "",
+                modifier = Modifier.weight(1f)
             )
         }
     }

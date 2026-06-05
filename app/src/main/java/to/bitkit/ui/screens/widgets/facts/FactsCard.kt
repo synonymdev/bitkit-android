@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -33,12 +34,11 @@ import to.bitkit.ui.theme.Colors
 fun FactsCard(
     headline: String,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
 ) {
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -64,13 +64,13 @@ fun FactsCard(
 fun FactsCardSmall(
     headline: String,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
 ) {
     Box(
         modifier = modifier
-            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .fillMaxWidth()
+            .height(WidgetCardDimens.COMPACT_CARD_SIZE.height)
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Column(
             modifier = Modifier
@@ -141,9 +141,11 @@ private fun PreviewSmall() {
         ) {
             FactsCardSmall(
                 headline = "Bitcoin doesn’t need your personal information",
+                modifier = Modifier.weight(1f)
             )
             FactsCardSmall(
                 headline = "Priced in Bitcoin",
+                modifier = Modifier.weight(1f)
             )
         }
     }

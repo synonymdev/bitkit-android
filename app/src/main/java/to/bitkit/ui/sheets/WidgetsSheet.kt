@@ -131,6 +131,7 @@ private fun WidgetsSheetContent(
                 val article by galleryViewModel.currentArticle.collectAsStateWithLifecycle()
                 val fact by galleryViewModel.currentFact.collectAsStateWithLifecycle()
                 val price by galleryViewModel.currentPrice.collectAsStateWithLifecycle()
+                val calculatorValues by galleryViewModel.currentCalculatorValues.collectAsStateWithLifecycle()
 
                 LaunchedEffect(Unit) {
                     galleryViewModel.refreshOnDisplay()
@@ -149,6 +150,7 @@ private fun WidgetsSheetContent(
                     block = block,
                     fact = fact,
                     price = price,
+                    calculatorValues = calculatorValues,
                     modifier = Modifier
                 )
             }
@@ -169,7 +171,13 @@ private fun WidgetsSheetContent(
                 PriceEditScreen(
                     viewModel = priceViewModel,
                     onBack = { navController.popOrDismiss(onDismiss) },
-                    navigatePreview = { navController.popBackStack() },
+                    navigatePreview = {
+                        if (navController.previousBackStackEntry == null) {
+                            navController.navigateTo(WidgetsRoute.PricePreview)
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
                     modifier = Modifier.widgetSheetPage()
                 )
             }
@@ -190,7 +198,13 @@ private fun WidgetsSheetContent(
                 WeatherEditScreen(
                     weatherViewModel = weatherViewModel,
                     onBack = { navController.popOrDismiss(onDismiss) },
-                    navigatePreview = { navController.popBackStack() },
+                    navigatePreview = {
+                        if (navController.previousBackStackEntry == null) {
+                            navController.navigateTo(WidgetsRoute.WeatherPreview)
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
                     modifier = Modifier.widgetSheetPage()
                 )
             }
@@ -211,7 +225,13 @@ private fun WidgetsSheetContent(
                 BlocksEditScreen(
                     blocksViewModel = blocksViewModel,
                     onBack = { navController.popOrDismiss(onDismiss) },
-                    navigatePreview = { navController.popBackStack() },
+                    navigatePreview = {
+                        if (navController.previousBackStackEntry == null) {
+                            navController.navigateTo(WidgetsRoute.BlocksPreview)
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
                     modifier = Modifier.widgetSheetPage()
                 )
             }
@@ -236,7 +256,13 @@ private fun WidgetsSheetContent(
                 HeadlinesEditScreen(
                     headlinesViewModel = headlinesViewModel,
                     onBack = { navController.popOrDismiss(onDismiss) },
-                    navigatePreview = { navController.popBackStack() },
+                    navigatePreview = {
+                        if (navController.previousBackStackEntry == null) {
+                            navController.navigateTo(WidgetsRoute.HeadlinesPreview)
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
                     modifier = Modifier.widgetSheetPage()
                 )
             }
@@ -326,6 +352,17 @@ fun WidgetType.toWidgetsPreviewRoute(): WidgetsRoute = when (this) {
     WidgetType.PRICE -> WidgetsRoute.PricePreview
     WidgetType.WEATHER -> WidgetsRoute.WeatherPreview
     WidgetType.SUGGESTIONS -> WidgetsRoute.SuggestionsPreview
+}
+
+fun WidgetType.toWidgetsEditRoute(): WidgetsRoute? = when (this) {
+    WidgetType.BLOCK -> WidgetsRoute.BlocksEdit
+    WidgetType.NEWS -> WidgetsRoute.HeadlinesEdit
+    WidgetType.PRICE -> WidgetsRoute.PriceEdit
+    WidgetType.WEATHER -> WidgetsRoute.WeatherEdit
+    WidgetType.CALCULATOR,
+    WidgetType.FACTS,
+    WidgetType.SUGGESTIONS,
+    -> null
 }
 
 private fun WidgetsRoute.widgetFlowKey(): WidgetFlowKey? = when (this) {

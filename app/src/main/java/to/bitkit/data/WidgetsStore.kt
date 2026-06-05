@@ -13,6 +13,7 @@ import to.bitkit.data.dto.BlockDTO
 import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.WidgetsSerializer
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.WidgetsBackupV1
@@ -123,15 +124,28 @@ class WidgetsStore @Inject constructor(
         Logger.info("Deleted all widgets data.")
     }
 
-    suspend fun addWidget(type: WidgetType) {
-        if (store.data.first().widgets.map { it.type }.contains(type)) return
-
+    suspend fun addWidget(type: WidgetType, size: WidgetSize = WidgetSize.default(type)) {
         store.updateData { data ->
-            val nextPosition = (data.widgets.maxOfOrNull { it.position } ?: -1) + 1
-            data.copy(
-                widgets = (data.widgets + WidgetWithPosition(type = type, position = nextPosition))
-                    .sortedBy { it.position }
-            )
+            val existing = data.widgets.firstOrNull { it.type == type }
+            if (existing != null) {
+                data.copy(
+                    widgets = data.widgets
+                        .map { if (it.type == type) it.copy(size = size) else it }
+                        .sortedBy { it.position }
+                )
+            } else {
+                val nextPosition = (data.widgets.maxOfOrNull { it.position } ?: -1) + 1
+                data.copy(
+                    widgets = (data.widgets + WidgetWithPosition(type = type, position = nextPosition, size = size))
+                        .sortedBy { it.position }
+                )
+            }
+        }
+    }
+
+    suspend fun updateWidgetSize(type: WidgetType, size: WidgetSize) {
+        store.updateData { data ->
+            data.copy(widgets = data.widgets.map { if (it.type == type) it.copy(size = size) else it })
         }
     }
 
@@ -161,9 +175,13 @@ class WidgetsStore @Inject constructor(
 @Serializable
 data class WidgetsData(
     val widgets: List<WidgetWithPosition> = listOf(
-        WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 0),
-        WidgetWithPosition(type = WidgetType.PRICE, position = 1),
-        WidgetWithPosition(type = WidgetType.BLOCK, position = 2),
+        WidgetWithPosition(type = WidgetType.SUGGESTIONS, position = 0, size = WidgetSize.WIDE),
+        WidgetWithPosition(type = WidgetType.PRICE, position = 1, size = WidgetSize.WIDE),
+        WidgetWithPosition(type = WidgetType.BLOCK, position = 2, size = WidgetSize.SMALL),
+        WidgetWithPosition(type = WidgetType.FACTS, position = 3, size = WidgetSize.SMALL),
+        WidgetWithPosition(type = WidgetType.WEATHER, position = 4, size = WidgetSize.SMALL),
+        WidgetWithPosition(type = WidgetType.CALCULATOR, position = 5, size = WidgetSize.SMALL),
+        WidgetWithPosition(type = WidgetType.NEWS, position = 6, size = WidgetSize.WIDE),
     ),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
