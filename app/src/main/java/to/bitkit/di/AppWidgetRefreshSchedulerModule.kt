@@ -11,11 +11,16 @@ import to.bitkit.appwidget.AndroidElapsedRealtimeProvider
 import to.bitkit.appwidget.AppWidgetActiveWidgets
 import to.bitkit.appwidget.AppWidgetAlarmClient
 import to.bitkit.appwidget.AppWidgetWorkClient
+import to.bitkit.appwidget.AndroidValidatedNetworkGate
 import to.bitkit.appwidget.ElapsedRealtimeProvider
+import to.bitkit.appwidget.ValidatedNetworkGate
 
 @Module
 @InstallIn(SingletonComponent::class)
 interface AppWidgetRefreshSchedulerModule {
+    @Binds
+    fun bindValidatedNetworkGate(impl: AndroidValidatedNetworkGate): ValidatedNetworkGate
+
     @Binds
     fun bindActiveWidgets(impl: AndroidAppWidgetActiveWidgets): AppWidgetActiveWidgets
 

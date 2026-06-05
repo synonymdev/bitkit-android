@@ -22,6 +22,11 @@ class AppWidgetRefreshReceiver : BroadcastReceiver() {
                 Logger.debug("Received widget refresh alarm", context = TAG)
                 context.appWidgetRefreshScheduler.handleCatchUpAlarm(AppWidgetRefreshReason.CATCH_UP_ALARM)
             }
+
+            Intent.ACTION_USER_PRESENT -> scheduleAfterSystemEvent(
+                context,
+                AppWidgetRefreshReason.USER_PRESENT,
+            )
         }
     }
 

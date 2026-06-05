@@ -57,4 +57,12 @@ class AppWidgetRefreshReceiverTest : BaseUnitTest() {
 
         verify(appWidgetRefreshScheduler).handleCatchUpAlarm(AppWidgetRefreshReason.CATCH_UP_ALARM)
     }
+
+    @Test
+    fun `user present delegates to scheduler`() {
+        receiver.onReceive(context, Intent(Intent.ACTION_USER_PRESENT))
+
+        verify(appWidgetRefreshScheduler).ensureScheduled(AppWidgetRefreshReason.USER_PRESENT)
+        verify(appWidgetRefreshScheduler).requestCatchUp(AppWidgetRefreshReason.USER_PRESENT)
+    }
 }

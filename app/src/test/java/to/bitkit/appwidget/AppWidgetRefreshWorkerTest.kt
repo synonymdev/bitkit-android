@@ -11,6 +11,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -40,12 +41,14 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     private val dataRepository = mock<AppWidgetDataRepository>()
     private val preferencesStore = mock<AppWidgetPreferencesStore>()
     private val appWidgetUpdater = mock<AppWidgetUpdater>()
+    private val validatedNetworkGate = mock<ValidatedNetworkGate>()
     private val clock = mock<Clock>()
     private val workerParameters = mock<WorkerParameters>()
 
     @Before
     fun setUp() {
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MS))
+        whenever { validatedNetworkGate.awaitValidated(any()) }.thenReturn(true)
         whenever(workerParameters.inputData).thenReturn(
             workDataOf(AppWidgetRefreshScheduler.WORK_INPUT_REASON to AppWidgetRefreshReason.APP_START.name),
         )
@@ -159,36 +162,56 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `connectivity failure stops remaining remote refreshes`() = test {
-        val firstPeriod = GraphPeriod.ONE_DAY
-        val secondPeriod = GraphPeriod.ONE_WEEK
-        whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(AppWidgetType.entries.toSet())
-        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.PRICE)).thenReturn(
+    fun `connectivity failure continues remaining remote refreshes`() = test {
+        val period = GraphPeriod.ONE_DAY
+        whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(
+            setOf(AppWidgetType.PRICE, AppWidgetType.HEADLINES, AppWidgetType.BLOCKS, AppWidgetType.WEATHER),
+        )
+        val staleMetadata = AppWidgetRefreshMetadata(
+            lastAttemptAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+            lastSuccessAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+        )
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.PRICE)).thenReturn(staleMetadata)
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(staleMetadata)
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.BLOCKS)).thenReturn(staleMetadata)
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.WEATHER)).thenReturn(staleMetadata)
+        whenever(preferencesStore.getUncachedActivePricePeriods()).thenReturn(emptySet())
+        whenever(preferencesStore.getActivePricePeriods()).thenReturn(setOf(period))
+        whenever(dataRepository.fetchPriceData(period)).thenReturn(Result.failure(UnknownHostException("dns")))
+        whenever(dataRepository.fetchArticles()).thenReturn(Result.failure(UnknownHostException("dns")))
+        whenever(dataRepository.fetchBlock()).thenReturn(Result.failure(UnknownHostException("dns")))
+        whenever(dataRepository.fetchWeather()).thenReturn(Result.failure(UnknownHostException("dns")))
+
+        val result = worker().doWork()
+
+        assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
+        verify(dataRepository).fetchPriceData(period)
+        verify(dataRepository).fetchArticles()
+        verify(dataRepository).fetchBlock()
+        verify(dataRepository).fetchWeather()
+        verify(appWidgetUpdater).update(AppWidgetType.PRICE, context)
+        verify(appWidgetUpdater).update(AppWidgetType.HEADLINES, context)
+        verify(appWidgetUpdater).update(AppWidgetType.BLOCKS, context)
+        verify(appWidgetUpdater).update(AppWidgetType.WEATHER, context)
+    }
+
+    @Test
+    fun `validated network timeout retries without fetching remote widgets`() = test {
+        whenever(validatedNetworkGate.awaitValidated(any())).thenReturn(false)
+        whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.HEADLINES))
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(
             AppWidgetRefreshMetadata(
                 lastAttemptAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
                 lastSuccessAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
             ),
         )
-        whenever(preferencesStore.getUncachedActivePricePeriods()).thenReturn(emptySet())
-        whenever(preferencesStore.getActivePricePeriods()).thenReturn(linkedSetOf(firstPeriod, secondPeriod))
-        whenever(dataRepository.fetchPriceData(firstPeriod)).thenReturn(Result.failure(UnknownHostException("dns")))
 
         val result = worker().doWork()
 
         assertEquals(androidx.work.ListenableWorker.Result.retry(), result)
-        verify(dataRepository).fetchPriceData(firstPeriod)
-        verify(dataRepository, never()).fetchPriceData(secondPeriod)
-        verify(dataRepository, never()).fetchArticles()
-        verify(dataRepository, never()).fetchBlock()
-        verify(dataRepository, never()).fetchWeather()
-        verify(dataRepository, never()).fetchFacts()
-        verify(preferencesStore).markRefreshAttempt(AppWidgetType.PRICE, NOW_MS)
-        verify(preferencesStore, never()).markRefreshSuccess(any(), any())
-        verify(appWidgetUpdater).update(AppWidgetType.PRICE, context)
-        verify(appWidgetUpdater, never()).update(AppWidgetType.HEADLINES, context)
-        verify(appWidgetUpdater, never()).update(AppWidgetType.BLOCKS, context)
-        verify(appWidgetUpdater, never()).update(AppWidgetType.WEATHER, context)
-        verify(appWidgetUpdater, never()).update(AppWidgetType.FACTS, context)
+        verifyNoInteractions(dataRepository)
+        verify(preferencesStore, never()).markRefreshAttempt(any(), any())
+        verify(appWidgetUpdater, never()).update(any(), any())
     }
 
     @Test
@@ -252,6 +275,7 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
             dataRepository = dataRepository,
             preferencesStore = preferencesStore,
             appWidgetUpdater = appWidgetUpdater,
+            validatedNetworkGate = validatedNetworkGate,
             clock = clock,
         )
 

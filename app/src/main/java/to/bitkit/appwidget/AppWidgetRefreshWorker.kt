@@ -13,6 +13,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.isConnectivityFailure
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
@@ -23,11 +24,13 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
     private val dataRepository: AppWidgetDataRepository,
     private val preferencesStore: AppWidgetPreferencesStore,
     private val appWidgetUpdater: AppWidgetUpdater,
+    private val validatedNetworkGate: ValidatedNetworkGate,
     private val clock: Clock,
 ) : CoroutineWorker(appContext, workerParams) {
 
     private companion object {
         private const val TAG = "AppWidgetRefreshWorker"
+        private val VALIDATED_NETWORK_TIMEOUT = 30.seconds
     }
 
     override suspend fun doWork(): Result {
@@ -35,9 +38,17 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         val activeTypes = activeWidgetTypesFor(reason)
         if (activeTypes.isEmpty()) return Result.success()
 
+        if (needsValidatedNetwork(activeTypes)) {
+            if (!validatedNetworkGate.awaitValidated(VALIDATED_NETWORK_TIMEOUT)) {
+                Logger.debug("Validated network not ready for '$reason', retrying later", context = TAG)
+                return Result.retry()
+            }
+        }
+
         val nowMs = clock.nowMs()
         Logger.debug("Refreshing widget types '$activeTypes' for '$reason'", context = TAG)
 
+        var hadConnectivityFailure = false
         for (type in activeTypes) {
             val result = runCatching { refresh(type, nowMs) }
                 .getOrElse {
@@ -46,13 +57,15 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
                     it.toRefreshResult()
                 }
             if (result == RefreshResult.ConnectivityFailure) {
-                Logger.debug("Stopped widget refresh after connectivity failure for '$type'", context = TAG)
-                return Result.retry()
+                hadConnectivityFailure = true
             }
         }
 
-        return Result.success()
+        return if (hadConnectivityFailure) Result.retry() else Result.success()
     }
+
+    private fun needsValidatedNetwork(activeTypes: List<AppWidgetType>): Boolean =
+        activeTypes.any { it != AppWidgetType.FACTS }
 
     private suspend fun activeWidgetTypesFor(reason: String): List<AppWidgetType> {
         val activeTypes = preferencesStore.getActiveWidgetTypes()
