@@ -26,6 +26,8 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
     private val appWidgetUpdater: AppWidgetUpdater,
     private val validatedNetworkGate: ValidatedNetworkGate,
     private val appWidgetRefreshScheduler: AppWidgetRefreshScheduler,
+    private val appWidgetRefreshForeground: AppWidgetRefreshForeground,
+    private val foregroundPromoter: AppWidgetForegroundPromoter,
     private val clock: Clock,
 ) : CoroutineWorker(appContext, workerParams) {
 
@@ -39,13 +41,23 @@ class AppWidgetRefreshWorker @AssistedInject constructor(
         val activeTypes = activeWidgetTypesFor(reason)
         if (activeTypes.isEmpty()) return Result.success()
 
+        val nowMs = clock.nowMs()
+        promoteWidgetRefreshIfNeeded(
+            reason = reason,
+            activeTypes = activeTypes,
+            nowMs = nowMs,
+            preferencesStore = preferencesStore,
+            foreground = appWidgetRefreshForeground,
+            foregroundPromoter = foregroundPromoter,
+            tag = TAG,
+            worker = this,
+        )
+
         if (needsValidatedNetwork(activeTypes)) {
             if (!validatedNetworkGate.awaitReady(NETWORK_READY_TIMEOUT)) {
                 Logger.debug("Network readiness probe timed out for '$reason', attempting refresh anyway", context = TAG)
             }
         }
-
-        val nowMs = clock.nowMs()
         Logger.debug("Refreshing widget types '$activeTypes' for '$reason'", context = TAG)
 
         var hadConnectivityFailure = false

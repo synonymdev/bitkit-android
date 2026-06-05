@@ -1,9 +1,12 @@
 package to.bitkit.appwidget
 
 import android.content.Context
+import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import to.bitkit.R
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,6 +45,8 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     private val appWidgetUpdater = mock<AppWidgetUpdater>()
     private val validatedNetworkGate = mock<ValidatedNetworkGate>()
     private val appWidgetRefreshScheduler = mock<AppWidgetRefreshScheduler>()
+    private val appWidgetRefreshForeground = mock<AppWidgetRefreshForeground>()
+    private val foregroundPromoter = mock<AppWidgetForegroundPromoter>()
     private val clock = mock<Clock>()
     private val workerParameters = mock<WorkerParameters>()
 
@@ -257,6 +262,51 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `stale catch up promotes widget refresh to foreground`() = test {
+        whenever(workerParameters.inputData).thenReturn(
+            workDataOf(AppWidgetRefreshScheduler.WORK_INPUT_REASON to AppWidgetRefreshReason.CATCH_UP_ALARM.name),
+        )
+        whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.HEADLINES))
+        whenever(preferencesStore.getRefreshMetadata(AppWidgetType.HEADLINES)).thenReturn(
+            AppWidgetRefreshMetadata(
+                lastAttemptAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+                lastSuccessAtMs = NOW_MS - 16.minutes.inWholeMilliseconds,
+            ),
+        )
+        whenever(dataRepository.fetchArticles()).thenReturn(Result.success(emptyList()))
+
+        whenever(appWidgetRefreshForeground.foregroundInfo()).thenReturn(
+            ForegroundInfo(
+                2,
+                NotificationCompat.Builder(context, "test")
+                    .setSmallIcon(R.drawable.ic_bitkit_outlined)
+                    .setContentTitle("test")
+                    .build(),
+            ),
+        )
+
+        worker().doWork()
+
+        verify(foregroundPromoter).promote(any(), any())
+    }
+
+    @Test
+    fun `foreground promotion skipped for app foreground reason`() {
+        assertEquals(
+            false,
+            shouldPromoteWidgetRefreshToForeground(AppWidgetRefreshReason.APP_FOREGROUND.name, hasRemoteTypes = true),
+        )
+        assertEquals(
+            true,
+            shouldPromoteWidgetRefreshToForeground(AppWidgetRefreshReason.CATCH_UP_ALARM.name, hasRemoteTypes = true),
+        )
+        assertEquals(
+            false,
+            shouldPromoteWidgetRefreshToForeground(AppWidgetRefreshReason.CATCH_UP_ALARM.name, hasRemoteTypes = false),
+        )
+    }
+
+    @Test
     fun `remote refresh reason skips facts because local work handles it`() = test {
         whenever(preferencesStore.getActiveWidgetTypes()).thenReturn(setOf(AppWidgetType.FACTS))
 
@@ -277,6 +327,8 @@ class AppWidgetRefreshWorkerTest : BaseUnitTest() {
             appWidgetUpdater = appWidgetUpdater,
             validatedNetworkGate = validatedNetworkGate,
             appWidgetRefreshScheduler = appWidgetRefreshScheduler,
+            appWidgetRefreshForeground = appWidgetRefreshForeground,
+            foregroundPromoter = foregroundPromoter,
             clock = clock,
         )
 

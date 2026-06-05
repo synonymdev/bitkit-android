@@ -12,10 +12,12 @@ import to.bitkit.appwidget.AppWidgetActiveWidgets
 import to.bitkit.appwidget.AppWidgetAlarmClient
 import to.bitkit.appwidget.AppWidgetWorkClient
 import to.bitkit.appwidget.AndroidValidatedNetworkGate
+import to.bitkit.appwidget.AppWidgetForegroundPromoter
 import to.bitkit.appwidget.AppWidgetUnlockReceiver
 import to.bitkit.appwidget.AppWidgetUnlockRegistrar
 import to.bitkit.appwidget.ElapsedRealtimeProvider
 import to.bitkit.appwidget.ValidatedNetworkGate
+import to.bitkit.appwidget.WorkManagerAppWidgetForegroundPromoter
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -37,4 +39,7 @@ interface AppWidgetRefreshSchedulerModule {
 
     @Binds
     fun bindElapsedRealtimeProvider(impl: AndroidElapsedRealtimeProvider): ElapsedRealtimeProvider
+
+    @Binds
+    fun bindForegroundPromoter(impl: WorkManagerAppWidgetForegroundPromoter): AppWidgetForegroundPromoter
 }
