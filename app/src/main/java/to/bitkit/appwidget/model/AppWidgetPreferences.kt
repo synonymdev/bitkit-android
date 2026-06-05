@@ -65,10 +65,18 @@ data class HomeWeatherPreferences(
 data class AppWidgetData(
     val entries: List<AppWidgetEntry> = emptyList(),
     val cachedPrices: Map<GraphPeriod, PriceDTO> = emptyMap(),
+    val refreshMetadata: Map<AppWidgetType, AppWidgetRefreshMetadata> = emptyMap(),
     val cachedArticles: List<ArticleDTO> = emptyList(),
     val articleRotationTick: Int = 0,
     val cachedBlock: BlockDTO? = null,
     val cachedFacts: List<String> = emptyList(),
     val factsRotationTick: Int = 0,
     val cachedWeather: WeatherDTO? = null,
+)
+
+@Stable
+@Serializable
+data class AppWidgetRefreshMetadata(
+    val lastAttemptAtMs: Long = 0L,
+    val lastSuccessAtMs: Long = 0L,
 )
