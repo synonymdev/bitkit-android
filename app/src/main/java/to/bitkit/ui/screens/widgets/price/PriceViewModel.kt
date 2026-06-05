@@ -20,9 +20,11 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.WidgetSizeDraft
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -59,6 +61,11 @@ class PriceViewModel @Inject constructor(
 
     private val _customPreferences = MutableStateFlow(PricePreferences())
     val customPreferences: StateFlow<PricePreferences> = _customPreferences.asStateFlow()
+
+    private val sizeDraft = WidgetSizeDraft(viewModelScope, WidgetType.PRICE, widgetsRepo.widgetsDataFlow)
+    val draftSize: StateFlow<WidgetSize> = sizeDraft.size
+
+    fun setSize(size: WidgetSize) = sizeDraft.set(size)
 
     private val _allPrices = MutableStateFlow<ImmutableList<PriceDTO>>(persistentListOf())
 
@@ -99,7 +106,7 @@ class PriceViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.update { true }
             widgetsRepo.updatePricePreferences(_customPreferences.value)
-            widgetsRepo.addWidget(WidgetType.PRICE)
+            widgetsRepo.addWidget(WidgetType.PRICE, sizeDraft.current)
             widgetsRepo.refreshWidget(WidgetType.PRICE)
             _previewPrice.update { null }
             setPriceEffect(PriceEffect.NavigateHome)

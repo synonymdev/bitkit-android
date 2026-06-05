@@ -1,20 +1,13 @@
 package to.bitkit.appwidget.ui.blocks
 
-import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import to.bitkit.appwidget.AppWidgetRefreshWorker
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.RefreshingGlanceReceiver
 
-class BlocksGlanceReceiver : GlanceAppWidgetReceiver() {
+class BlocksGlanceReceiver : RefreshingGlanceReceiver(
+    enabledReason = AppWidgetRefreshReason.BLOCKS_WIDGET_ENABLED,
+    updateReason = AppWidgetRefreshReason.BLOCKS_WIDGET_UPDATE,
+    disabledReason = AppWidgetRefreshReason.BLOCKS_WIDGET_DISABLED,
+) {
     override val glanceAppWidget: GlanceAppWidget = BlocksGlanceWidget()
-
-    override fun onEnabled(context: Context) {
-        super.onEnabled(context)
-        AppWidgetRefreshWorker.enqueue(context)
-    }
-
-    override fun onDisabled(context: Context) {
-        super.onDisabled(context)
-        AppWidgetRefreshWorker.cancelIfNoWidgets(context)
-    }
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -16,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -36,7 +36,6 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun BlockCard(
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
     preferences: BlocksPreferences,
     block: BlockModel,
 ) {
@@ -47,7 +46,7 @@ fun BlockCard(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -70,7 +69,6 @@ fun BlockCard(
 @Composable
 fun BlockCardSmall(
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
     preferences: BlocksPreferences,
     block: BlockModel,
 ) {
@@ -80,9 +78,10 @@ fun BlockCardSmall(
 
     Box(
         modifier = modifier
-            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+            .fillMaxWidth()
+            .height(WidgetCardDimens.COMPACT_CARD_SIZE.height)
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),

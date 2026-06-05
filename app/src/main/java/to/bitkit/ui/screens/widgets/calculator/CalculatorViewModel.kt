@@ -18,12 +18,14 @@ import kotlinx.coroutines.launch
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.FxRate
 import to.bitkit.models.MoneyType
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.models.widget.resolveCalculatorSatsValue
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.WidgetSizeDraft
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormatSymbols
@@ -59,6 +61,11 @@ class CalculatorViewModel @Inject constructor(
             initialValue = false
         )
 
+    private val sizeDraft = WidgetSizeDraft(viewModelScope, WidgetType.CALCULATOR, widgetsRepo.widgetsDataFlow)
+    val draftSize: StateFlow<WidgetSize> = sizeDraft.size
+
+    fun setSize(size: WidgetSize) = sizeDraft.set(size)
+
     init {
         observeCalculatorState()
     }
@@ -72,17 +79,19 @@ class CalculatorViewModel @Inject constructor(
 
     fun saveWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            widgetsRepo.addWidget(WidgetType.CALCULATOR)
+            widgetsRepo.addWidget(WidgetType.CALCULATOR, sizeDraft.current)
             onComplete()
         }
     }
 
     fun onInputSelected(input: MoneyType) {
         activeInput = input
+        _uiState.update { it.copy(activeInput = input) }
     }
 
     fun onInputDismissed() {
         activeInput = null
+        _uiState.update { it.copy(activeInput = null) }
     }
 
     fun onBtcInputChanged(rawValue: String) {
@@ -382,6 +391,7 @@ data class CalculatorUiState(
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val currencySymbol: String = "$",
     val selectedCurrency: String = "USD",
+    val activeInput: MoneyType? = null,
 )
 
 private data class CalculatorCurrencyKey(

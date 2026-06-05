@@ -14,5 +14,5 @@
     android:description="@string/appwidget__price__description"
     android:configure="to.bitkit.appwidget.config.AppWidgetConfigActivity"
     android:widgetFeatures="reconfigurable"
-    android:updatePeriodMillis="0"
+    android:updatePeriodMillis="1800000"
     tools:targetApi="31" />

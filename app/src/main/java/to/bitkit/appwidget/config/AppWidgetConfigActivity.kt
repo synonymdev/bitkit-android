@@ -8,7 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.glance.appwidget.updateAll
 import dagger.hilt.android.AndroidEntryPoint
-import to.bitkit.appwidget.AppWidgetRefreshWorker
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceReceiver
 import to.bitkit.appwidget.ui.blocks.BlocksGlanceWidget
@@ -21,6 +22,7 @@ import to.bitkit.appwidget.ui.weather.WeatherGlanceWidget
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.enableAppEdgeToEdge
 import to.bitkit.utils.Logger
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class AppWidgetConfigActivity : ComponentActivity() {
@@ -31,6 +33,9 @@ class AppWidgetConfigActivity : ComponentActivity() {
     }
 
     private val viewModel: AppWidgetConfigViewModel by viewModels()
+
+    @Inject
+    lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,7 +71,8 @@ class AppWidgetConfigActivity : ComponentActivity() {
                             AppWidgetType.FACTS -> Unit
                             AppWidgetType.WEATHER -> WeatherGlanceWidget().updateAll(this@AppWidgetConfigActivity)
                         }
-                        AppWidgetRefreshWorker.enqueue(this@AppWidgetConfigActivity)
+                        appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.WIDGET_CONFIG_CONFIRM)
+                        appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.WIDGET_CONFIG_CONFIRM)
                         val result = Intent().putExtra(
                             AppWidgetManager.EXTRA_APPWIDGET_ID,
                             appWidgetId,

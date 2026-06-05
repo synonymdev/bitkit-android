@@ -1,16 +1,16 @@
 package to.bitkit.ui.screens.widgets.calculator
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performTextClearance
-import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.printToString
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -50,6 +50,7 @@ import to.bitkit.test.annotations.CalculatorWidget
 import to.bitkit.test.annotations.DeviceIntegration
 import to.bitkit.test.annotations.DeviceUiIntegration
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorNumberPadBar
 import to.bitkit.ui.theme.AppThemeSurface
 import java.util.Locale
 import javax.inject.Inject
@@ -62,7 +63,7 @@ import kotlin.test.assertEquals
 @CalculatorWidget
 @DeviceIntegration
 @DeviceUiIntegration
-class CalculatorCardIntegrationTest {
+class CalculatorWidgetInputTest {
 
     @get:Rule
     val hiltRule = HiltAndroidRule(this)
@@ -154,41 +155,27 @@ class CalculatorCardIntegrationTest {
     }
 
     @Test
-    fun btcInputUpdatesFiatValueAndPersistsWidgetState() {
-        setCalculatorCard()
+    fun btcInputViaNumberPadUpdatesFiatAndPersistsWidgetState() {
+        setCalculatorWidget()
 
-        replaceInput(BTC_INPUT_INDEX, "12340")
+        composeTestRule.onNodeWithTag(BTC_INPUT_TAG).performClick()
+        awaitNumberPad()
+        tapKeys("N1", "N2", "N3", "N4", "N0")
 
-        waitForValues(
-            btcValue = "12340",
-            fiatValue = "12.34",
-        )
-
-        assertInputText(BTC_INPUT_INDEX, "12 340")
-        assertInputText(FIAT_INPUT_INDEX, "12.34")
-        assertPersistedValues(
-            btcValue = "12340",
-            fiatValue = "12.34",
-        )
+        waitForValues(btcValue = "12340", fiatValue = "12.34")
+        assertPersistedValues(btcValue = "12340", fiatValue = "12.34")
     }
 
     @Test
-    fun fiatInputUpdatesBtcValueAndPersistsWidgetState() {
-        setCalculatorCard()
+    fun fiatInputViaNumberPadUpdatesBtcAndPersistsWidgetState() {
+        setCalculatorWidget()
 
-        replaceInput(FIAT_INPUT_INDEX, "10.00")
+        composeTestRule.onNodeWithTag(FIAT_INPUT_TAG).performClick()
+        awaitNumberPad()
+        tapKeys("N1", "N0", "NDecimal", "N0", "N0")
 
-        waitForValues(
-            btcValue = "10000",
-            fiatValue = "10.00",
-        )
-
-        assertInputText(BTC_INPUT_INDEX, "10 000")
-        assertInputText(FIAT_INPUT_INDEX, "10.00")
-        assertPersistedValues(
-            btcValue = "10000",
-            fiatValue = "10.00",
-        )
+        waitForValues(btcValue = "10000", fiatValue = "10.00")
+        assertPersistedValues(btcValue = "10000", fiatValue = "10.00")
     }
 
     private fun createCalculatorViewModel(): CalculatorViewModel {
@@ -206,78 +193,68 @@ class CalculatorCardIntegrationTest {
         )[CalculatorViewModel::class.java]
     }
 
-    private fun setCalculatorCard() {
+    private fun setCalculatorWidget() {
         composeTestRule.setContent {
             AppThemeSurface {
-                CalculatorCard(
-                    calculatorViewModel = calculatorViewModel,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                val state by calculatorViewModel.uiState.collectAsState()
+                Box(modifier = Modifier.fillMaxSize()) {
+                    CalculatorCard(
+                        btcPrimaryDisplayUnit = state.displayUnit,
+                        btcValue = state.btcValue,
+                        fiatSymbol = state.currencySymbol,
+                        fiatName = state.selectedCurrency,
+                        fiatValue = state.fiatValue,
+                        activeInput = state.activeInput,
+                        onSelectInput = calculatorViewModel::onInputSelected,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    state.activeInput?.let { active ->
+                        CalculatorNumberPadBar(
+                            activeInput = active,
+                            btcValue = state.btcValue,
+                            fiatValue = state.fiatValue,
+                            btcPrimaryDisplayUnit = state.displayUnit,
+                            onBtcChange = calculatorViewModel::onBtcInputChanged,
+                            onFiatChange = calculatorViewModel::onFiatInputChanged,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
+                }
             }
         }
         composeTestRule.waitForIdle()
+    }
+
+    private fun awaitNumberPad() {
         composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
-            composeTestRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size == INPUT_COUNT
+            composeTestRule.onAllNodesWithTag(NUMBER_PAD_TAG).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
-    private fun inputAt(index: Int) = composeTestRule.onAllNodes(hasSetTextAction())[index]
-
-    private fun replaceInput(
-        index: Int,
-        text: String,
-    ) {
-        inputAt(index).performTextClearance()
-        inputAt(index).performTextInput(text)
+    private fun tapKeys(vararg keys: String) {
+        keys.forEach { key ->
+            composeTestRule.onNodeWithTag(key).performClick()
+            composeTestRule.waitForIdle()
+        }
     }
 
     private fun waitForValues(
         btcValue: String,
         fiatValue: String,
     ) {
-        runCatching {
-            composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
-                calculatorViewModel.uiState.value.btcValue == btcValue &&
-                    calculatorViewModel.uiState.value.fiatValue == fiatValue
-            }
-        }.onFailure {
-            throw AssertionError(
-                buildString {
-                    append("Expected calculatorValues btcValue='$btcValue', fiatValue='$fiatValue', ")
-                    append("but was '${calculatorViewModel.uiState.value}'. Persisted values were ")
-                    append("'${widgetsRepo.widgetsDataFlow.value.calculatorValues}'. Semantics tree:\n")
-                    append(composeTestRule.onRoot(useUnmergedTree = true).printToString())
-                },
-                it,
-            )
+        composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
+            calculatorViewModel.uiState.value.btcValue == btcValue &&
+                calculatorViewModel.uiState.value.fiatValue == fiatValue
         }
-
         val expectedValues = CalculatorValues(
             btcValue = btcValue,
             fiatValue = fiatValue,
             satsValue = btcValue.toLong(),
             displayUnit = BitcoinDisplayUnit.MODERN,
         )
-        runCatching {
-            composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
-                widgetsRepo.widgetsDataFlow.value.calculatorValues == expectedValues
-            }
-        }.onFailure {
-            throw AssertionError(
-                "Expected persisted values '$expectedValues', but was " +
-                    "'${widgetsRepo.widgetsDataFlow.value.calculatorValues}'",
-                it,
-            )
+        composeTestRule.waitUntil(timeoutMillis = TIMEOUT_MS) {
+            widgetsRepo.widgetsDataFlow.value.calculatorValues == expectedValues
         }
-    }
-
-    private fun assertInputText(
-        inputIndex: Int,
-        text: String,
-    ) {
-        inputAt(inputIndex).assertTextContains(text, substring = true)
-        composeTestRule.onNode(hasText(text, substring = true), useUnmergedTree = true)
-            .assertIsDisplayed()
     }
 
     private fun assertPersistedValues(
@@ -296,9 +273,9 @@ class CalculatorCardIntegrationTest {
     }
 
     companion object {
-        private const val BTC_INPUT_INDEX = 0
-        private const val FIAT_INPUT_INDEX = 1
-        private const val INPUT_COUNT = 2
+        private const val BTC_INPUT_TAG = "CalculatorBtcInput"
+        private const val FIAT_INPUT_TAG = "CalculatorFiatInput"
+        private const val NUMBER_PAD_TAG = "CalculatorNumberPad"
         private const val TIMEOUT_MS = 5_000L
         private const val TEST_CREATED_AT = 0L
         private const val TEST_USD_RATE = "100000"
@@ -330,6 +307,7 @@ class CalculatorCardIntegrationTest {
 
         @Provides
         @Named("enablePolling")
+        @Suppress("FunctionOnlyReturningConstant")
         fun provideEnablePolling(): Boolean = false
     }
 }

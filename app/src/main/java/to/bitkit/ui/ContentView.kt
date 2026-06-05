@@ -45,6 +45,8 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
@@ -224,6 +226,7 @@ fun ContentView(
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
+    val appWidgetRefreshScheduler = remember(context) { context.appWidgetRefreshScheduler }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     val walletUiState by walletViewModel.walletState.collectAsStateWithLifecycle()
@@ -245,6 +248,8 @@ fun ContentView(
 
                     appViewModel.consumePaymentReceivedInBackground()
 
+                    appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_FOREGROUND)
+                    appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
                     appViewModel.refreshPublicPaykitEndpoints()

@@ -33,6 +33,7 @@ import to.bitkit.data.widgets.PriceService
 import to.bitkit.data.widgets.WeatherService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
@@ -173,7 +174,11 @@ class WidgetsRepo @Inject constructor(
         Logger.verbose("Stopped refresh coroutine for $widgetType", context = TAG)
     }
 
-    suspend fun addWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.addWidget(type) }
+    suspend fun addWidget(type: WidgetType, size: WidgetSize = WidgetSize.default(type)) =
+        withContext(bgDispatcher) { widgetsStore.addWidget(type, size) }
+
+    suspend fun updateWidgetSize(type: WidgetType, size: WidgetSize) =
+        withContext(bgDispatcher) { widgetsStore.updateWidgetSize(type, size) }
 
     suspend fun deleteWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.deleteWidget(type) }
 

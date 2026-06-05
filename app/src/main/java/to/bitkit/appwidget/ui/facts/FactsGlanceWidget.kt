@@ -11,7 +11,7 @@ import androidx.glance.appwidget.provideContent
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.flow.first
 import to.bitkit.appwidget.AppWidgetEntryPoint
-import to.bitkit.appwidget.AppWidgetRefreshWorker
+import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetType
 
@@ -24,6 +24,7 @@ class FactsGlanceWidget : GlanceAppWidget() {
             .fromApplication(context, AppWidgetEntryPoint::class.java)
         val store = accessor.appWidgetPreferencesStore()
         val repo = accessor.appWidgetDataRepository()
+        val appWidgetRefreshScheduler = accessor.appWidgetRefreshScheduler()
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
 
         val current = store.data.first()
@@ -33,7 +34,8 @@ class FactsGlanceWidget : GlanceAppWidget() {
             if (current.cachedFacts.isEmpty()) {
                 repo.fetchFacts().onSuccess { store.cacheFacts(it) }
             }
-            AppWidgetRefreshWorker.enqueue(context)
+            appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.FACTS_WIDGET_REGISTERED)
+            appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.FACTS_WIDGET_REGISTERED)
         }
 
         provideContent {

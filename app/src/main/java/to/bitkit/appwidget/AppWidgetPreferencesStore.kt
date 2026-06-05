@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import to.bitkit.appwidget.model.AppWidgetData
 import to.bitkit.appwidget.model.AppWidgetEntry
+import to.bitkit.appwidget.model.AppWidgetRefreshMetadata
 import to.bitkit.appwidget.model.AppWidgetType
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.BlockDTO
@@ -33,8 +35,14 @@ private val Context.appWidgetDataStore: DataStore<AppWidgetData> by dataStore(
 interface AppWidgetEntryPoint {
     fun appWidgetPreferencesStore(): AppWidgetPreferencesStore
     fun appWidgetDataRepository(): AppWidgetDataRepository
+    fun appWidgetRefreshScheduler(): AppWidgetRefreshScheduler
     fun currencyRepo(): CurrencyRepo
 }
+
+val Context.appWidgetRefreshScheduler: AppWidgetRefreshScheduler
+    get() = EntryPointAccessors
+        .fromApplication(applicationContext, AppWidgetEntryPoint::class.java)
+        .appWidgetRefreshScheduler()
 
 @Singleton
 @Suppress("TooManyFunctions")
@@ -80,6 +88,26 @@ class AppWidgetPreferencesStore @Inject constructor(
             .map { it.pricePreferences.period }
             .toSet()
 
+    suspend fun getUncachedActivePricePeriods(): Set<GraphPeriod> {
+        val data = store.data.first()
+        return data.entries
+            .filter { it.type == AppWidgetType.PRICE }
+            .map { it.pricePreferences.period }
+            .filterNot { it in data.cachedPrices }
+            .toSet()
+    }
+
+    suspend fun getRefreshMetadata(type: AppWidgetType): AppWidgetRefreshMetadata =
+        store.data.first().refreshMetadata[type] ?: AppWidgetRefreshMetadata()
+
+    suspend fun markRefreshAttempt(type: AppWidgetType, timestampMs: Long) {
+        updateRefreshMetadata(type) { it.copy(lastAttemptAtMs = timestampMs) }
+    }
+
+    suspend fun markRefreshSuccess(type: AppWidgetType, timestampMs: Long) {
+        updateRefreshMetadata(type) { it.copy(lastSuccessAtMs = timestampMs) }
+    }
+
     fun hasWidgetsOfType(type: AppWidgetType): Flow<Boolean> =
         data.map { it.entries.any { entry -> entry.type == type } }
 
@@ -111,5 +139,15 @@ class AppWidgetPreferencesStore @Inject constructor(
 
     suspend fun cacheWeather(weather: WeatherDTO) {
         store.updateData { it.copy(cachedWeather = weather) }
+    }
+
+    private suspend fun updateRefreshMetadata(
+        type: AppWidgetType,
+        transform: (AppWidgetRefreshMetadata) -> AppWidgetRefreshMetadata,
+    ) {
+        store.updateData {
+            val current = it.refreshMetadata[type] ?: AppWidgetRefreshMetadata()
+            it.copy(refreshMetadata = it.refreshMetadata + (type to transform(current)))
+        }
     }
 }
