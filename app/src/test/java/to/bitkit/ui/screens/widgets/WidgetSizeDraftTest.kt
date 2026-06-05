@@ -5,11 +5,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
+import org.junit.Before
 import to.bitkit.data.WidgetsData
 import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
-import org.junit.Before
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
