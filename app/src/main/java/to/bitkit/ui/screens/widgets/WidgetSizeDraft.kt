@@ -14,8 +14,8 @@ import to.bitkit.models.WidgetType
 
 /**
  * Tracks the widget size chosen in a preview sheet's size carousel. Before the user picks a size it
- * reflects the persisted size (or the type default for a not-yet-saved widget); once the user swipes
- * the carousel the draft takes over. [current] is read by the widget's save action.
+ * reflects the persisted size (or small for a not-yet-saved widget, matching iOS); once the user
+ * swipes the carousel the draft takes over. [current] is read by the widget's save action.
  */
 class WidgetSizeDraft(
     scope: CoroutineScope,
@@ -23,16 +23,14 @@ class WidgetSizeDraft(
     widgetsDataFlow: StateFlow<WidgetsData>,
     subscriptionTimeoutMs: Long = SUBSCRIPTION_TIMEOUT,
 ) {
-    private val default = WidgetSize.default(type)
-
     private val savedSize: StateFlow<WidgetSize> = widgetsDataFlow
-        .map { data -> data.widgets.firstOrNull { it.type == type }?.size ?: default }
-        .stateIn(scope, SharingStarted.WhileSubscribed(subscriptionTimeoutMs), default)
+        .map { data -> data.widgets.firstOrNull { it.type == type }?.size ?: WidgetSize.SMALL }
+        .stateIn(scope, SharingStarted.WhileSubscribed(subscriptionTimeoutMs), WidgetSize.SMALL)
 
     private val _draft = MutableStateFlow<WidgetSize?>(null)
 
     val size: StateFlow<WidgetSize> = combine(_draft, savedSize) { draft, saved -> draft ?: saved }
-        .stateIn(scope, SharingStarted.WhileSubscribed(subscriptionTimeoutMs), default)
+        .stateIn(scope, SharingStarted.WhileSubscribed(subscriptionTimeoutMs), WidgetSize.SMALL)
 
     val current: WidgetSize get() = size.value
 

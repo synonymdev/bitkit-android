@@ -101,14 +101,9 @@ private fun WidgetsSheetContent(
     val galleryViewModelStoreOwner = rememberSheetViewModelStoreOwner()
     val galleryScrollState = rememberScrollState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val isGalleryRoute = navBackStackEntry?.destination?.hasRoute<WidgetsRoute.Gallery>() == true
     val widgetFlowKey = navBackStackEntry?.destination?.widgetFlowKey()
         ?: startRoute.widgetFlowKey().takeIf { navBackStackEntry == null }
     val widgetViewModelStoreOwner = rememberWidgetFlowViewModelStoreOwner(widgetFlowKey)
-
-    LaunchedEffect(isGalleryRoute) {
-        galleryScrollState.scrollTo(0)
-    }
 
     Column(
         modifier = Modifier

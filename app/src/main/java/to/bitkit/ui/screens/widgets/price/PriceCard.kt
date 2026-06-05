@@ -138,7 +138,7 @@ fun PriceCardSmall(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("price_card_small_pair_row_${widgetData.pair.displayName}")
+                        .testTag("PriceWidgetRow-${widgetData.pair.displayName}")
                 ) {
                     Caption13Up(
                         text = widgetData.pair.displayName,
