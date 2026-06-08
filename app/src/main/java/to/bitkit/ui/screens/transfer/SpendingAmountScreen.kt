@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -92,7 +93,7 @@ fun SpendingAmountScreen(
                 AmountInputEffect.MaxExceeded -> toast(
                     context.getString(R.string.lightning__spending_amount__error_max__title),
                     context.getString(R.string.lightning__spending_amount__error_max__description)
-                        .replace("{amount}", "${uiState.maxAllowedToSend}"),
+                        .replace("{amount}", uiState.maxAllowedToSend.formatToModernDisplay()),
                 )
             }
         }
@@ -112,7 +113,7 @@ fun SpendingAmountScreen(
                     toast(
                         context.getString(R.string.lightning__spending_amount__error_max__title),
                         context.getString(R.string.lightning__spending_amount__error_max__description)
-                            .replace("{amount}", "$max"),
+                            .replace("{amount}", max.formatToModernDisplay()),
                     )
                 }
                 val cappedQuarter = min(quarter, max)

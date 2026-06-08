@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.mockOrder
 import to.bitkit.models.Toast
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
@@ -114,7 +115,7 @@ fun SpendingAdvancedScreen(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.lightning__spending_advanced__error_max__title),
                     description = context.getString(R.string.lightning__spending_advanced__error_max__description)
-                        .replace("{amount}", "${transferValues.maxLspBalance}"),
+                        .replace("{amount}", transferValues.maxLspBalance.formatToModernDisplay()),
                     visibilityTime = Toast.VISIBILITY_TIME_SHORT,
                 )
             }
