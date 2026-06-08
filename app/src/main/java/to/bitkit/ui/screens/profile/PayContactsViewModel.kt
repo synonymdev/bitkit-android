@@ -153,19 +153,27 @@ class PayContactsViewModel @Inject constructor(
                 error.addSuppressed(rollbackError)
             }
         }
+        privateCleanupError?.let { error ->
+            runCatching {
+                settingsStore.update { settings ->
+                    settings.copy(sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints)
+                }
+            }.onFailure { rollbackError ->
+                error.addSuppressed(rollbackError)
+            }
+            if (previous.sharesPrivatePaykitEndpoints) {
+                privatePaykitRepo.setContactSharingCleanupPending(false)
+                    .onFailure(error::addSuppressed)
+                privatePaykitRepo.prepareSavedContacts(contacts)
+                    .onFailure(error::addSuppressed)
+            }
+        }
 
         val cleanupError = publicCleanupError ?: privateCleanupError
         publicCleanupError?.let { publicError ->
             privateCleanupError?.let { privateError -> publicError.addSuppressed(privateError) }
         }
         cleanupError?.let {
-            if (privateCleanupError != null) {
-                privatePaykitRepo.setContactSharingCleanupPending(true)
-                    .onFailure { markerError ->
-                        it.addSuppressed(markerError)
-                        return Result.failure(it)
-                    }
-            }
             return Result.failure(it)
         }
 

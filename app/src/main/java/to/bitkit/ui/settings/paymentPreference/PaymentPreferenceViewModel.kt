@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -33,26 +34,27 @@ class PaymentPreferenceViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PaymentPreferenceUiState())
     val uiState: StateFlow<PaymentPreferenceUiState> = _uiState.asStateFlow()
+    private val privateContactsPendingValue = MutableStateFlow<Boolean?>(null)
 
     init {
         viewModelScope.launch {
-            combine(settingsStore.data, pubkyRepo.isAuthenticated) { settings, isAuthenticated ->
-                settings to isAuthenticated
-            }.collect { (settings, isAuthenticated) ->
+            combine(
+                settingsStore.data,
+                pubkyRepo.isAuthenticated,
+                privateContactsPendingValue,
+            ) { settings, isAuthenticated, pendingPrivateContactsEnabled ->
                 val canUsePrivateContacts = isAuthenticated && pubkyRepo.hasSecretKey()
                 if (!canUsePrivateContacts && settings.sharesPrivatePaykitEndpoints) {
                     settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
                 }
-                _uiState.update {
-                    it.copy(
-                        lightningEnabled = settings.publicPaykitLightningEnabled,
-                        onchainEnabled = settings.publicPaykitOnchainEnabled,
-                        privateContactsEnabled = settings.sharesPrivatePaykitEndpoints && canUsePrivateContacts,
-                        publicContactsEnabled = settings.sharesPublicPaykitEndpoints,
-                        hasPubkyProfile = isAuthenticated,
-                        canUsePrivateContacts = canUsePrivateContacts,
-                    )
-                }
+                PaymentPreferenceStateSource(
+                    settings = settings,
+                    isAuthenticated = isAuthenticated,
+                    canUsePrivateContacts = canUsePrivateContacts,
+                    pendingPrivateContactsEnabled = pendingPrivateContactsEnabled,
+                )
+            }.collect { stateSource ->
+                _uiState.update { it.from(stateSource) }
             }
         }
     }
@@ -76,32 +78,36 @@ class PaymentPreferenceViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _uiState.update { it.copy(isUpdatingPrivateContacts = true) }
             val previous = settingsStore.data.first()
-            settingsStore.update {
-                it.copy(
-                    hasConfirmedPublicPaykitEndpoints = true,
-                    sharesPrivatePaykitEndpoints = isEnabled,
-                )
-            }
-
-            val result = if (isEnabled) {
-                privatePaykitRepo.enableSharingAndPrepareSavedContacts(contactPublicKeys())
-            } else {
-                privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contactPublicKeys())
+            privateContactsPendingValue.update { _uiState.value.privateContactsEnabled }
+            _uiState.update { it.copy(isUpdatingPrivateContacts = true) }
+            val result = runCatching {
+                settingsStore.update {
+                    it.copy(
+                        hasConfirmedPublicPaykitEndpoints = true,
+                        sharesPrivatePaykitEndpoints = isEnabled,
+                    )
+                }
+            }.mapCatching {
+                if (isEnabled) {
+                    privatePaykitRepo.enableSharingAndPrepareSavedContacts(
+                        publicKeys = contactPublicKeys(),
+                        requireImmediatePublication = true,
+                    ).getOrThrow()
+                } else {
+                    privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contactPublicKeys()).getOrThrow()
+                }
             }
 
             result.exceptionOrNull()?.let {
-                if (!isEnabled) {
-                    privatePaykitRepo.setContactSharingCleanupPending(true)
-                }
-                if (isEnabled) {
-                    settingsStore.update { settings ->
-                        settings.copy(sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints)
-                    }
-                }
+                rollbackPrivateContactsPreference(
+                    requestedEnabled = isEnabled,
+                    previous = previous,
+                    error = it,
+                )
                 showSyncError(it)
             }
+            privateContactsPendingValue.update { null }
             _uiState.update { it.copy(isUpdatingPrivateContacts = false) }
         }
     }
@@ -196,6 +202,28 @@ class PaymentPreferenceViewModel @Inject constructor(
     private fun contactPublicKeys(): List<String> =
         pubkyRepo.contacts.value.map { it.publicKey }
 
+    private suspend fun rollbackPrivateContactsPreference(
+        requestedEnabled: Boolean,
+        previous: SettingsData,
+        error: Throwable,
+    ) {
+        val contacts = contactPublicKeys()
+        runCatching {
+            settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints) }
+        }.onFailure(error::addSuppressed)
+
+        if (requestedEnabled && !previous.sharesPrivatePaykitEndpoints) {
+            privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+                .onFailure(error::addSuppressed)
+        }
+        if (!requestedEnabled && previous.sharesPrivatePaykitEndpoints) {
+            privatePaykitRepo.setContactSharingCleanupPending(false)
+                .onFailure(error::addSuppressed)
+            privatePaykitRepo.prepareSavedContacts(contacts)
+                .onFailure(error::addSuppressed)
+        }
+    }
+
     private suspend fun showSyncError(error: Throwable) {
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
@@ -226,4 +254,21 @@ data class PaymentPreferenceUiState(
     val isUpdatingPaymentOptions: Boolean = false,
     val isUpdatingPrivateContacts: Boolean = false,
     val isUpdatingPublicContacts: Boolean = false,
+)
+
+private data class PaymentPreferenceStateSource(
+    val settings: SettingsData,
+    val isAuthenticated: Boolean,
+    val canUsePrivateContacts: Boolean,
+    val pendingPrivateContactsEnabled: Boolean?,
+)
+
+private fun PaymentPreferenceUiState.from(source: PaymentPreferenceStateSource) = copy(
+    lightningEnabled = source.settings.publicPaykitLightningEnabled,
+    onchainEnabled = source.settings.publicPaykitOnchainEnabled,
+    privateContactsEnabled = source.pendingPrivateContactsEnabled
+        ?: (source.settings.sharesPrivatePaykitEndpoints && source.canUsePrivateContacts),
+    publicContactsEnabled = source.settings.sharesPublicPaykitEndpoints,
+    hasPubkyProfile = source.isAuthenticated,
+    canUsePrivateContacts = source.canUsePrivateContacts,
 )

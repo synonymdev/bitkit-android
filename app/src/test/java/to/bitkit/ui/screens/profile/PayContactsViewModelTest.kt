@@ -198,7 +198,34 @@ class PayContactsViewModelTest : BaseUnitTest() {
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(sut.uiState.value.isLoading)
         assertFalse(sut.uiState.value.isPaymentSharingEnabled)
-        verify(privatePaykitRepo).setContactSharingCleanupPending(true)
+        verify(privatePaykitRepo, never()).setContactSharingCleanupPending(true)
+    }
+
+    @Test
+    fun `continueToProfile restores private sharing when private cleanup fails`() = test {
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
+        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
+            .thenReturn(Result.failure(PayContactsTestAppError("cleanup failed")))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.setPaymentSharingEnabled(false)
+            sut.continueToProfile()
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(sut.uiState.value.isLoading)
+        assertTrue(sut.uiState.value.isPaymentSharingEnabled)
+        verify(privatePaykitRepo).setContactSharingCleanupPending(false)
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), false)
     }
 
     @Test
