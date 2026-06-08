@@ -77,6 +77,7 @@ class WeatherService @Inject constructor(
             condition = condition,
             currentFee = currentFee,
             nextBlockFee = feeEstimates.fast,
+            avgFeeSats = avgFeeSats,
         )
     }.onFailure {
         Logger.warn("Failed to fetch weather data", it, context = TAG)
@@ -139,8 +140,7 @@ class WeatherService @Inject constructor(
     }
 
     private fun formatFeeForDisplay(sats: Long): String {
-        val selectedFiatValue = currencyRepo.convertSatsToFiat(sats).getOrNull()
-        return selectedFiatValue?.formattedWithSymbol(withSpace = true).orEmpty()
+        return currencyRepo.formatSatsAsFiatWithSymbol(sats, withSpace = true).orEmpty()
     }
 }
 

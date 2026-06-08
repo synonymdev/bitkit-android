@@ -10,7 +10,10 @@ import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
+import to.bitkit.services.BluetoothInit
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -21,6 +24,9 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var imageLoader: ImageLoader
 
+    @Inject
+    lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
+
     override val workManagerConfiguration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -28,9 +34,12 @@ internal open class App : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        Env.initAppStoragePath(filesDir.absolutePath)
         SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
-        Env.initAppStoragePath(filesDir.absolutePath)
+        appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
+        // Initialize btleplug for Bluetooth support (required before any BLE usage)
+        BluetoothInit.ensureInitialized()
     }
 
     companion object {

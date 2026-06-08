@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -34,17 +35,21 @@ fun SettingsSwitchRow(
     isChecked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     subtitle: String? = null,
     iconRes: Int? = null,
     iconTint: Color = Color.Unspecified,
+    switchTestTag: String? = null,
     colors: SwitchColors = AppSwitchDefaults.colors
 ) {
     SettingsSwitchRowCore(
         title = title,
         isChecked = isChecked,
         onClick = onClick,
+        enabled = enabled,
         subtitle = subtitle,
         colors = colors,
+        switchTestTag = switchTestTag,
         icon = if (iconRes != null) {
             {
                 Icon(
@@ -69,15 +74,19 @@ fun SettingsSwitchRow(
     icon: @Composable () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     subtitle: String? = null,
+    switchTestTag: String? = null,
     colors: SwitchColors = AppSwitchDefaults.colors
 ) {
     SettingsSwitchRowCore(
         title = title,
         isChecked = isChecked,
         onClick = onClick,
+        enabled = enabled,
         subtitle = subtitle,
         colors = colors,
+        switchTestTag = switchTestTag,
         icon = {
             icon()
             HorizontalSpacer(8.dp)
@@ -92,8 +101,10 @@ private fun SettingsSwitchRowCore(
     isChecked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     subtitle: String? = null,
     icon: (@Composable () -> Unit)? = null,
+    switchTestTag: String? = null,
     colors: SwitchColors = AppSwitchDefaults.colors
 ) {
     Column(modifier = modifier) {
@@ -103,7 +114,7 @@ private fun SettingsSwitchRowCore(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
-                .clickableAlpha { onClick() }
+                .clickableAlpha(enabled = enabled) { onClick() }
         ) {
             if (icon != null) {
                 icon()
@@ -124,7 +135,9 @@ private fun SettingsSwitchRowCore(
             Switch(
                 checked = isChecked,
                 onCheckedChange = null, // handled by parent
+                enabled = enabled,
                 colors = colors,
+                modifier = switchTestTag?.let { Modifier.testTag(it) } ?: Modifier
             )
         }
         HorizontalDivider(color = Colors.White10)

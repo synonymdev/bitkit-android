@@ -21,6 +21,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     class CurrencyRateUnavailable : ServiceError("Currency rate unavailable")
     class BlocktankInfoUnavailable : ServiceError("Blocktank info not available")
     class GeoBlocked : ServiceError("Geo blocked user")
+    class GiftClaimPaymentNotReceived : ServiceError("Gift claim payment not received")
 }
 
 class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)

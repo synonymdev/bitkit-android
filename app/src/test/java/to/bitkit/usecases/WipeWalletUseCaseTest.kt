@@ -4,6 +4,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -17,10 +18,13 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
+import javax.inject.Provider
 import kotlin.test.assertTrue
 
 class WipeWalletUseCaseTest : BaseUnitTest() {
@@ -36,8 +40,11 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val privatePaykitRepo = mock<PrivatePaykitRepo>()
+    private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
     private val migrationService = mock<MigrationService>()
+    private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
 
     private lateinit var sut: WipeWalletUseCase
 
@@ -48,6 +55,9 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     fun setUp() {
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitAddressReservationRepo.clear() }.thenReturn(Unit)
         onWipeCalled = false
         onSetWalletExistsStateCalled = false
 
@@ -63,6 +73,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             activityRepo = activityRepo,
             lightningRepo = lightningRepo,
             pubkyRepo = pubkyRepo,
+            privatePaykitRepo = privatePaykitRepoProvider,
+            privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
             firebaseMessaging = firebaseMessaging,
             migrationService = migrationService,
         )
@@ -88,9 +100,14 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             activityRepo,
             lightningRepo,
             pubkyRepo,
+            privatePaykitRepo,
+            privatePaykitAddressReservationRepo,
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
+        inOrder.verify(privatePaykitRepo).removePublishedEndpointsBestEffort(any())
+        inOrder.verify(privatePaykitRepo).closeAndClear()
+        inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(pubkyRepo).wipeLocalState()
         inOrder.verify(keychain).wipe()

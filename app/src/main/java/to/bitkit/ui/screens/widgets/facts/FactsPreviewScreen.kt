@@ -3,53 +3,43 @@ package to.bitkit.ui.screens.widgets.facts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ext.spaceToNewline
-import to.bitkit.models.widget.FactsPreferences
+import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
-import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
+import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun FactsPreviewScreen(
     factsViewModel: FactsViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
-    navigateEditWidget: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val showWidgetTitles by factsViewModel.showWidgetTitles.collectAsStateWithLifecycle()
-    val customFactsPreferences by factsViewModel.customPreferences.collectAsStateWithLifecycle()
     val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
     val isFactsWidgetEnabled by factsViewModel.isFactsWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by factsViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         factsViewModel.refreshOnDisplay()
@@ -58,140 +48,115 @@ fun FactsPreviewScreen(
     FactsPreviewContent(
         onBack = onBack,
         isFactsWidgetEnabled = isFactsWidgetEnabled,
-        factsPreferences = customFactsPreferences,
-        showWidgetTitles = showWidgetTitles,
         fact = fact,
-        onClickEdit = navigateEditWidget,
         onClickDelete = {
-            factsViewModel.removeWidget()
-            onClose()
+            factsViewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
-            factsViewModel.savePreferences()
-            onClose()
+            factsViewModel.saveWidget(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = factsViewModel::setSize,
+        modifier = modifier
     )
 }
 
 @Composable
 fun FactsPreviewContent(
     onBack: () -> Unit,
-    onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
     isFactsWidgetEnabled: Boolean,
-    factsPreferences: FactsPreferences,
     fact: String,
+    modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
-    ScreenColumn(
-        modifier = Modifier.testTag("facts_preview_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("facts_preview_screen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__nav_title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__facts__name),
+            onBack = onBack,
         )
 
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .testTag("main_content")
+                .weight(1f)
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("header_row"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__facts__name).spaceToNewline()),
-                    modifier = Modifier.testTag("widget_title"),
-                )
-                Icon(
-                    painter = painterResource(R.drawable.widget_lightbulb),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .testTag("widget_icon")
-                )
-            }
+            VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.widgets__facts__description),
                 color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("widget_description")
+                modifier = Modifier.testTag("widget_description")
             )
+
+            VerticalSpacer(16.dp)
 
             HorizontalDivider(
                 modifier = Modifier.testTag("divider")
             )
 
-            SettingsButtonRow(
-                title = stringResource(R.string.widgets__widget__edit),
-                value = SettingsButtonValue.StringValue(
-                    if (factsPreferences == FactsPreferences()) {
-                        stringResource(R.string.widgets__widget__edit_default)
-                    } else {
-                        stringResource(R.string.widgets__widget__edit_custom)
-                    }
-                ),
-                onClick = onClickEdit,
-                modifier = Modifier.testTag("WidgetEdit")
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Text13Up(
-                stringResource(R.string.common__preview),
-                color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("preview_label")
-            )
-
-            FactsCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("fact_card"),
-                showWidgetTitle = showWidgetTitles,
-                showSource = factsPreferences.showSource,
-                headline = fact,
-            )
-
-            Row(
-                modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("buttons_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                if (isFactsWidgetEnabled) {
-                    SecondaryButton(
-                        text = stringResource(R.string.common__delete),
+            WidgetSizeCarousel(
+                smallContent = {
+                    FactsCardSmall(
+                        headline = fact,
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("WidgetDelete"),
-                        fullWidth = false,
-                        onClick = onClickDelete
+                            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                            .testTag("facts_card_small")
                     )
-                }
+                },
+                wideContent = {
+                    FactsCard(
+                        headline = fact,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("facts_card_wide")
+                    )
+                },
+                initialSize = initialSize,
+                onSizeSelected = onSizeSelected,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("facts_preview_carousel")
+            )
+        }
 
-                PrimaryButton(
-                    text = stringResource(R.string.common__save),
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
+                    top = 16.dp,
+                )
+                .fillMaxWidth()
+                .testTag("buttons_row")
+        ) {
+            if (isFactsWidgetEnabled) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__delete),
+                    fullWidth = false,
+                    onClick = onClickDelete,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetSave"),
-                    fullWidth = false,
-                    onClick = onClickSave
+                        .testTag("WidgetDelete")
                 )
             }
+
+            PrimaryButton(
+                text = stringResource(R.string.widgets__widget__save),
+                fullWidth = false,
+                onClick = onClickSave,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("WidgetSave")
+            )
         }
     }
 }
@@ -202,13 +167,10 @@ private fun Preview() {
     AppThemeSurface {
         FactsPreviewContent(
             onBack = {},
-            showWidgetTitles = true,
-            onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
-            factsPreferences = FactsPreferences(),
             fact = "Bitcoin doesn’t need your personal information",
-            isFactsWidgetEnabled = false
+            isFactsWidgetEnabled = false,
         )
     }
 }
@@ -219,13 +181,10 @@ private fun Preview2() {
     AppThemeSurface {
         FactsPreviewContent(
             onBack = {},
-            showWidgetTitles = false,
-            onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
-            factsPreferences = FactsPreferences(showSource = true),
             fact = "Bitcoin doesn’t need your personal information",
-            isFactsWidgetEnabled = true
+            isFactsWidgetEnabled = true,
         )
     }
 }

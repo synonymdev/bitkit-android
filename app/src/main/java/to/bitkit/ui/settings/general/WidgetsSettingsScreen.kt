@@ -37,14 +37,11 @@ fun WidgetsSettingsScreen(
     val settings = settingsViewModel ?: return
 
     val showWidgets by settings.showWidgets.collectAsStateWithLifecycle()
-    val showWidgetTitles by settings.showWidgetTitles.collectAsStateWithLifecycle()
 
     WidgetsSettingsContent(
         onBackClick = { navController.popBackStack() },
         showWidgets = showWidgets,
-        showWidgetTitles = showWidgetTitles,
         onShowWidgetsClick = { settings.setShowWidgets(!showWidgets) },
-        onShowWidgetTitlesClick = { settings.setShowWidgetTitles(!showWidgetTitles) },
         onResetWidgetsClick = {
             settings.resetWidgets()
             navController.navigateToHome()
@@ -59,10 +56,8 @@ fun WidgetsSettingsScreen(
 @Composable
 private fun WidgetsSettingsContent(
     showWidgets: Boolean,
-    showWidgetTitles: Boolean,
     onBackClick: () -> Unit = {},
     onShowWidgetsClick: () -> Unit = {},
-    onShowWidgetTitlesClick: () -> Unit = {},
     onResetWidgetsClick: () -> Unit = {},
     onResetSuggestionsClick: () -> Unit = {},
 ) {
@@ -88,12 +83,6 @@ private fun WidgetsSettingsContent(
                 isChecked = showWidgets,
                 onClick = onShowWidgetsClick,
                 modifier = Modifier.testTag("ShowWidgets"),
-            )
-            SettingsSwitchRow(
-                title = stringResource(R.string.settings__widgets__showWidgetTitles),
-                isChecked = showWidgetTitles,
-                onClick = onShowWidgetTitlesClick,
-                modifier = Modifier.testTag("ShowWidgetTitles"),
             )
 
             // Reset section
@@ -152,7 +141,6 @@ private fun Preview() {
     AppThemeSurface {
         WidgetsSettingsContent(
             showWidgets = true,
-            showWidgetTitles = false,
         )
     }
 }

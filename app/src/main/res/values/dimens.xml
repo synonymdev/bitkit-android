@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="appwidget_min_width">250dp</dimen>
+    <!-- Pre-31 height floor: API < 31 ignores targetCellHeight/maxResizeHeight and derives the
+         home-screen container height from minHeight, so it is kept below the 2-cell boundary
+         (70n-30 => 110dp) to avoid rounding up to 3 cells. API 31+ overrides via values-v31. -->
+    <dimen name="appwidget_min_height">90dp</dimen>
+    <dimen name="appwidget_min_resize_width">110dp</dimen>
+    <dimen name="appwidget_min_resize_height">90dp</dimen>
+</resources>

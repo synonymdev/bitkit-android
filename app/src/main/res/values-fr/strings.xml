@@ -562,7 +562,6 @@
     <string name="settings__general__section_payments">Paiements</string>
     <string name="settings__widgets__nav_title">Widgets</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Afficher les titres des widgets</string>
     <string name="settings__widgets__reset_suggestions">Réinitialiser les cartes de suggestions</string>
     <string name="settings__widgets__reset_widgets">Réinitialiser les widgets</string>
     <string name="settings__widgets__reset_widgets_dialog_description">Êtes-vous sûr de vouloir réinitialiser les widgets ? L\'ensemble de widgets par défaut avec les configurations par défaut sera affiché.</string>
@@ -978,7 +977,6 @@
     <string name="widgets__widget__edit_default">Défaut</string>
     <string name="widgets__widget__edit_custom">Personnalisé</string>
     <string name="widgets__widget__edit_description">Veuillez sélectionner les champs que vous souhaitez afficher dans le widget {name}.</string>
-    <string name="widgets__widget__source">Source</string>
     <string name="widgets__add">Ajouter un widget</string>
     <string name="widgets__delete__title">Supprimer le widget ?</string>
     <string name="widgets__delete__description">Êtes-vous sûr de vouloir supprimer \'{name}\' de vos widgets ?</string>

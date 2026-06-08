@@ -4,10 +4,13 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.os.Build
+import android.content.pm.ServiceInfo
+import android.os.Build.VERSION
+import android.os.Build.VERSION_CODES
 import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
@@ -17,6 +20,8 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyPaymentReceived
@@ -34,6 +39,8 @@ import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import javax.inject.Inject
+
+typealias Hook = (() -> Unit)?
 
 @AndroidEntryPoint
 class LightningNodeService : Service() {
@@ -59,13 +66,15 @@ class LightningNodeService : Service() {
     @Inject
     lateinit var cacheStore: CacheStore
 
-    override fun onCreate() {
-        super.onCreate()
-        startForeground(ID_NOTIFICATION_NODE, createNotification())
-        setupService()
-    }
+    @Inject
+    lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
+
+    private var hasStartedNode = false
 
     private fun setupService() {
+        if (hasStartedNode) return
+        hasStartedNode = true
+
         serviceScope.launch {
             lightningRepo.start(
                 eventHandler = { event ->
@@ -149,19 +158,53 @@ class LightningNodeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Logger.debug("onStartCommand", context = TAG)
-        when (intent?.action) {
+        val action = intent?.action
+        Logger.debug("Received start command action '$action'", context = TAG)
+        when (action) {
             ACTION_STOP_SERVICE_AND_APP -> {
-                Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
-                serviceScope.launch {
-                    lightningRepo.stop()
-                    activityManager.appTasks.forEach { it.finishAndRemoveTask() }
-                    stopSelf()
-                }
-                return START_NOT_STICKY
+                appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+                appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+                stopForegroundService(startId) { Logger.debug("Received stop service action", context = TAG) }
+                activityManager.appTasks.forEach { it.finishAndRemoveTask() }
+                serviceScope.launch { lightningRepo.stop() }
             }
+
+            ACTION_START_SERVICE -> if (promoteToForeground(startId)) setupService()
+            else -> stop(startId) { Logger.warn("Stopped service for unsupported action '$action'", context = TAG) }
         }
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    private fun promoteToForeground(startId: Int): Boolean {
+        return runCatching {
+            ServiceCompat.startForeground(
+                this,
+                ID_NOTIFICATION_NODE,
+                createNotification(),
+                foregroundServiceTypeDataSync(),
+            )
+        }.fold(
+            onSuccess = { true },
+            onFailure = {
+                if (it !is RuntimeException) throw it
+                stop(startId) { Logger.error("Failed to promote foreground service", it, context = TAG) }
+                false
+            }
+        )
+    }
+
+    private fun foregroundServiceTypeDataSync(): Int {
+        return if (VERSION.SDK_INT >= VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+    }
+
+    private fun stopForegroundService(startId: Int, hook: Hook = null) {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stop(startId, hook)
+    }
+
+    private fun stop(startId: Int, hook: Hook = null) {
+        hook?.invoke()
+        stopSelf(startId)
     }
 
     override fun onDestroy() {
@@ -171,13 +214,11 @@ class LightningNodeService : Service() {
         super.onDestroy()
     }
 
-    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    @RequiresApi(VERSION_CODES.VANILLA_ICE_CREAM)
     override fun onTimeout(startId: Int, fgsType: Int) {
-        Logger.warn("Foreground service timeout reached", context = TAG)
-        serviceScope.launch {
-            lightningRepo.stop()
-            stopSelf()
-        }
+        Logger.warn("Reached foreground service timeout for type '$fgsType'", context = TAG)
+        stopForegroundService(startId)
+        serviceScope.launch { lightningRepo.stop() }
         super.onTimeout(startId, fgsType)
     }
 
@@ -186,6 +227,7 @@ class LightningNodeService : Service() {
     companion object {
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
+        const val ACTION_START_SERVICE = "to.bitkit.androidServices.action.START_SERVICE"
         const val ACTION_STOP_SERVICE_AND_APP = "to.bitkit.androidServices.action.STOP_SERVICE_AND_APP"
     }
 }

@@ -47,6 +47,7 @@ fun ActivityListSimple(
                 onClick = onActivityItemClick,
                 testTag = "ActivityShort-$index",
                 title = contactActivityTitle(item, contacts),
+                contact = contactForActivity(item, contacts),
             )
             if (index < items.lastIndex) {
                 VerticalSpacer(16.dp)

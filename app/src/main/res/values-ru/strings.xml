@@ -744,7 +744,6 @@
     <string name="settings__support__copyright">Bitkit создан компанией Synonym Software, S.A. DE C.V. ©2025. Все права защищены.</string>
     <string name="settings__support_title">Поддержка</string>
     <string name="settings__widgets__nav_title">Виджеты</string>
-    <string name="settings__widgets__showWidgetTitles">Показывать Заголовки Виджетов</string>
     <string name="settings__widgets__showWidgets">Виджеты</string>
     <string name="settings__widgets__reset_suggestions">Сбросить карточки предложений</string>
     <string name="settings__widgets__reset_widgets">Сбросить виджеты</string>
@@ -1037,6 +1036,5 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="widgets__widget__edit_default">По умолчанию</string>
     <string name="widgets__widget__edit_description">Пожалуйста, выберите, какие поля вы хотите отображать в виджете {name}.</string>
     <string name="widgets__widget__nav_title">Виджет</string>
-    <string name="widgets__widget__source">Источник</string>
     <string name="widgets__widgets">Виджеты</string>
 </resources>

@@ -21,8 +21,8 @@ import to.bitkit.env.Env
 import to.bitkit.models.WidgetType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.isConnectivityFailure
 import java.text.NumberFormat
-import java.util.Currency
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,20 +36,40 @@ class PriceService @Inject constructor(
 
     override val widgetType = WidgetType.PRICE
     override val refreshInterval = 1.minutes
-    private val sourceLabel = "Bitfinex.com"
 
     override suspend fun fetchData(): Result<PriceDTO> = runCatching {
         val period = widgetsStore.data.first().pricePreferences.period ?: GraphPeriod.ONE_DAY
+        fetchData(period).getOrThrow()
+    }
 
-        val widgets = TradingPair.entries.mapNotNull { pair ->
+    suspend fun fetchData(period: GraphPeriod): Result<PriceDTO> = fetchData(
+        pairs = TradingPair.entries.toList(),
+        period = period,
+    )
+
+    suspend fun fetchData(
+        pairs: List<TradingPair>,
+        period: GraphPeriod,
+    ): Result<PriceDTO> = runCatching {
+        val failures = mutableListOf<Throwable>()
+        val widgets = pairs.mapNotNull { pair ->
             runCatching { fetchPairData(pair = pair, period = period) }
-                .onFailure { Logger.warn(e = it, msg = "Failed to fetch ${pair.ticker}", context = TAG) }
+                .onFailure {
+                    failures.add(it)
+                    Logger.warn("Failed to fetch '${pair.ticker}'", it, context = TAG)
+                }
                 .getOrNull()
         }
-        if (widgets.isEmpty()) throw PriceError.InvalidResponse("No price data available")
-        PriceDTO(widgets = widgets, source = sourceLabel)
+        if (widgets.isEmpty()) {
+            val connectivityFailure = failures.firstOrNull { it.isConnectivityFailure() }
+            if (connectivityFailure != null) {
+                throw PriceError.NetworkError("Failed to fetch price data", connectivityFailure)
+            }
+            throw PriceError.InvalidResponse("No price data available")
+        }
+        PriceDTO(widgets = widgets)
     }.onFailure {
-        Logger.warn(e = it, msg = "Failed to fetch price data", context = TAG)
+        Logger.warn("Failed to fetch price data", it, context = TAG)
     }
 
     suspend fun fetchAllPeriods(): Result<List<PriceDTO>> = runCatching {
@@ -59,7 +79,7 @@ class PriceService @Inject constructor(
                     val widgets = TradingPair.entries.mapNotNull { pair ->
                         runCatching { fetchPairData(pair = pair, period = period) }.getOrNull()
                     }
-                    PriceDTO(widgets = widgets, source = sourceLabel)
+                    PriceDTO(widgets = widgets)
                 }
             }.awaitAll().filter { it.widgets.isNotEmpty() }
         }
@@ -145,24 +165,15 @@ class PriceService @Inject constructor(
         )
     }
 
-    private fun formatPrice(pair: TradingPair, price: Double): String {
+    private fun formatPrice(
+        pair: TradingPair,
+        price: Double,
+        locale: Locale = Locale.getDefault(),
+    ): String {
         return runCatching {
-            val currency = Currency.getInstance(pair.quote)
-            val numberFormat = NumberFormat.getCurrencyInstance(Locale.US).apply {
-                this.currency = currency
-                maximumFractionDigits = when {
-                    price >= 1000 -> 0
-                    price >= 1 -> 2
-                    else -> 6
-                }
-            }
-
-            // Format and remove currency symbol, keeping only the number with formatting
-            val formatted = numberFormat.format(price)
-            val currencySymbol = currency.symbol
-            formatted.replace(currencySymbol, "").trim()
+            formatPriceValue(price = price, locale = locale)
         }.onFailure {
-            Logger.warn("Error formatting price for ${pair.displayName}", e = it, context = TAG)
+            Logger.warn("Failed to format price for '${pair.displayName}'", it, context = TAG)
         }.getOrDefault(String.format(Locale.US, "%.2f", price))
     }
 
@@ -174,7 +185,32 @@ class PriceService @Inject constructor(
 /**
  * Price-specific error types
  */
-sealed class PriceError(message: String) : AppError(message) {
+sealed class PriceError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     class InvalidResponse(override val message: String) : PriceError(message)
-    class NetworkError(override val message: String) : PriceError(message)
+    class NetworkError(
+        override val message: String,
+        cause: Throwable? = null,
+    ) : PriceError(message, cause)
+}
+
+private const val GROUPED_PRICE_THRESHOLD = 1_000.0
+private const val STANDARD_PRICE_THRESHOLD = 1.0
+private const val GROUPED_PRICE_DECIMALS = 0
+private const val STANDARD_PRICE_DECIMALS = 2
+private const val SMALL_PRICE_DECIMALS = 6
+private const val MIN_PRICE_DECIMALS = 0
+
+internal fun formatPriceValue(
+    price: Double,
+    locale: Locale = Locale.getDefault(),
+): String {
+    return NumberFormat.getNumberInstance(locale).apply {
+        maximumFractionDigits = when {
+            price >= GROUPED_PRICE_THRESHOLD -> GROUPED_PRICE_DECIMALS
+            price >= STANDARD_PRICE_THRESHOLD -> STANDARD_PRICE_DECIMALS
+            else -> SMALL_PRICE_DECIMALS
+        }
+        minimumFractionDigits = MIN_PRICE_DECIMALS
+        isGroupingUsed = true
+    }.format(price)
 }

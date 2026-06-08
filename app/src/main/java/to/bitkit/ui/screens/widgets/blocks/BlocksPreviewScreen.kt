@@ -3,42 +3,36 @@ package to.bitkit.ui.screens.widgets.blocks
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ext.spaceToNewline
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
+import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun BlocksPreviewScreen(
@@ -46,165 +40,150 @@ fun BlocksPreviewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val showWidgetTitles by blocksViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customBlocksPreferences by blocksViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentBlock by blocksViewModel.currentBlock.collectAsStateWithLifecycle()
     val isBlocksWidgetEnabled by blocksViewModel.isBlocksWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by blocksViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         blocksViewModel.refreshOnDisplay()
     }
 
-    BlocksPreviewContent(
+    Content(
         onBack = onBack,
         isBlocksWidgetEnabled = isBlocksWidgetEnabled,
         blocksPreferences = customBlocksPreferences,
-        showWidgetTitles = showWidgetTitles,
         block = currentBlock,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
-            blocksViewModel.removeWidget()
-            onClose()
+            blocksViewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
-            blocksViewModel.savePreferences()
-            onClose()
+            blocksViewModel.savePreferences(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = blocksViewModel::setSize,
+        modifier = modifier
     )
 }
 
 @Composable
-fun BlocksPreviewContent(
+private fun Content(
     onBack: () -> Unit,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
     isBlocksWidgetEnabled: Boolean,
     blocksPreferences: BlocksPreferences,
     block: BlockModel?,
+    modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
-    ScreenColumn(
-        modifier = Modifier.testTag("blocks_preview_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("blocks_preview_screen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__nav_title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__blocks__name),
+            onBack = onBack,
         )
 
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .testTag("main_content")
+                .weight(1f)
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("header_row"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__blocks__name).spaceToNewline()),
-                    modifier = Modifier.testTag("widget_title"),
-                )
-                Icon(
-                    painter = painterResource(R.drawable.widget_cube),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .testTag("widget_icon")
-                )
-            }
+            VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.widgets__blocks__description),
                 color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("widget_description")
+                modifier = Modifier.testTag("widget_description")
             )
+
+            VerticalSpacer(16.dp)
 
             HorizontalDivider(
                 modifier = Modifier.testTag("divider")
             )
 
             SettingsButtonRow(
-                title = stringResource(R.string.widgets__widget__edit),
+                title = stringResource(R.string.widgets__widget__settings),
                 value = SettingsButtonValue.StringValue(
                     if (blocksPreferences == BlocksPreferences()) {
                         stringResource(R.string.widgets__widget__edit_default)
                     } else {
                         stringResource(R.string.widgets__widget__edit_custom)
-                    }
+                    },
                 ),
                 onClick = onClickEdit,
                 modifier = Modifier.testTag("WidgetEdit")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            Text13Up(
-                stringResource(R.string.common__preview),
-                color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("preview_label")
-            )
-
             block?.let {
-                BlockCard(
+                WidgetSizeCarousel(
+                    smallContent = {
+                        BlockCardSmall(
+                            preferences = blocksPreferences,
+                            block = it,
+                            modifier = Modifier
+                                .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                                .testTag("block_card_small")
+                        )
+                    },
+                    wideContent = {
+                        BlockCard(
+                            preferences = blocksPreferences,
+                            block = it,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("block_card_wide")
+                        )
+                    },
+                    initialSize = initialSize,
+                    onSizeSelected = onSizeSelected,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("block_card"),
-                    showWidgetTitle = showWidgetTitles,
-                    showBlock = blocksPreferences.showBlock,
-                    showTime = blocksPreferences.showTime,
-                    showDate = blocksPreferences.showDate,
-                    showTransactions = blocksPreferences.showTransactions,
-                    showSize = blocksPreferences.showSize,
-                    showSource = blocksPreferences.showSource,
-                    block = block.height,
-                    time = block.time,
-                    date = block.date,
-                    transactions = block.transactionCount,
-                    size = block.size,
-                    source = block.source,
+                        .testTag("blocks_preview_carousel")
                 )
             }
+        }
 
-            Row(
-                modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("buttons_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                if (isBlocksWidgetEnabled) {
-                    SecondaryButton(
-                        text = stringResource(R.string.common__delete),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("WidgetDelete"),
-                        fullWidth = false,
-                        onClick = onClickDelete
-                    )
-                }
-
-                PrimaryButton(
-                    text = stringResource(R.string.common__save),
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
+                    top = 16.dp,
+                )
+                .fillMaxWidth()
+                .testTag("buttons_row")
+        ) {
+            if (isBlocksWidgetEnabled) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__delete),
+                    fullWidth = false,
+                    onClick = onClickDelete,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetSave"),
-                    fullWidth = false,
-                    onClick = onClickSave
+                        .testTag("WidgetDelete")
                 )
             }
+
+            PrimaryButton(
+                text = stringResource(R.string.widgets__widget__save),
+                fullWidth = false,
+                onClick = onClickSave,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("WidgetSave")
+            )
         }
     }
 }
@@ -213,9 +192,8 @@ fun BlocksPreviewContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        BlocksPreviewContent(
+        Content(
             onBack = {},
-            showWidgetTitles = true,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
@@ -226,9 +204,9 @@ private fun Preview() {
                 date = "2023-01-01",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                source = "mempool.space"
+                fees = "25 059 357",
             ),
-            isBlocksWidgetEnabled = false
+            isBlocksWidgetEnabled = false,
         )
     }
 }
@@ -237,9 +215,8 @@ private fun Preview() {
 @Composable
 private fun Preview2() {
     AppThemeSurface {
-        BlocksPreviewContent(
+        Content(
             onBack = {},
-            showWidgetTitles = false,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
@@ -249,7 +226,6 @@ private fun Preview2() {
                 showDate = false,
                 showTransactions = true,
                 showSize = false,
-                showSource = true
             ),
             block = BlockModel(
                 height = "123456",
@@ -257,9 +233,9 @@ private fun Preview2() {
                 date = "2023-01-01",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                source = "mempool.space"
+                fees = "25 059 357",
             ),
-            isBlocksWidgetEnabled = true
+            isBlocksWidgetEnabled = true,
         )
     }
 }

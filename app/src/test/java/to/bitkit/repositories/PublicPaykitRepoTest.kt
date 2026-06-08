@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.FfiPaymentEntry
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
@@ -65,6 +66,12 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             settingsFlow.value = transform(settingsFlow.value)
             Unit
         }
+        PublicPaykitRepo.lightningRouteHintsValidator = { true }
+    }
+
+    @After
+    fun tearDown() {
+        PublicPaykitRepo.lightningRouteHintsValidator = null
     }
 
     @Test
@@ -107,6 +114,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
                 publicPaykitBolt11 = "lnbc1old",
                 publicPaykitBolt11PaymentHash = "010203",
                 publicPaykitBolt11ExpiresAtMillis = freshExpiryMillis(),
+                publicPaykitCleanupPending = true,
             ),
         )
 
@@ -124,6 +132,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
+        assertEquals(false, settingsFlow.value.publicPaykitCleanupPending)
         verify(pubkyRepo).removePaymentEndpoint(MethodId.Bolt11.rawValue)
         verify(pubkyRepo).removePaymentEndpoint(MethodId.P2tr.rawValue)
         verify(pubkyRepo, never()).removePaymentEndpoint(MethodId.Lnurl.rawValue)
@@ -152,6 +161,18 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         )
         verify(coreService, never()).decode(any())
         verify(pubkyRepo).setPaymentEndpoint(MethodId.Bolt11.rawValue, """{"value":"lnbc1cached"}""")
+    }
+
+    @Test
+    fun `syncCurrentPublishedEndpoints returns NoSupportedEndpoint when endpoint is required`() = test {
+        setSettings(SettingsData(publicPaykitOnchainEnabled = false))
+        whenever(lightningRepo.canReceive()).thenReturn(false)
+
+        val error = sut.syncCurrentPublishedEndpoints(requireEndpoint = true).exceptionOrNull()
+
+        assertEquals(PublicPaykitError.NoSupportedEndpoint, error)
+        verify(pubkyRepo, never()).setPaymentEndpoint(any(), any())
+        verify(pubkyRepo, never()).removePaymentEndpoint(any())
     }
 
     @Test

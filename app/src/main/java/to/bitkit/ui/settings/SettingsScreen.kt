@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,6 +47,7 @@ import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToLanguageSettings
 import to.bitkit.ui.navigateToLocalCurrencySettings
+import to.bitkit.ui.navigateToPaymentPreferenceSettings
 import to.bitkit.ui.navigateToPinManagement
 import to.bitkit.ui.navigateToQuickPaySettings
 import to.bitkit.ui.navigateToTagsSettings
@@ -53,6 +55,7 @@ import to.bitkit.ui.navigateToTransactionSpeedSettings
 import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
@@ -89,6 +92,8 @@ fun SettingsScreen(
     val quickPayIntroSeen by settings.quickPayIntroSeen.collectAsStateWithLifecycle()
     val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
+    val isPubkyAuthenticated by settings.isPubkyAuthenticated.collectAsStateWithLifecycle()
+    val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val languageUiState by languageViewModel.uiState.collectAsStateWithLifecycle()
 
     // Security tab state
@@ -123,6 +128,8 @@ fun SettingsScreen(
             tagCount = lastUsedTags.size,
             isQuickPayEnabled = isQuickPayEnabled,
             notificationsGranted = notificationsGranted,
+            isPubkyAuthenticated = isPubkyAuthenticated,
+            isPaykitEnabled = isPaykitEnabled,
         ),
         securityState = SecurityTabState(
             isPinEnabled = isPinEnabled,
@@ -150,6 +157,7 @@ fun SettingsScreen(
                 SettingsEvent.WidgetsClick -> navController.navigateToWidgetsSettings()
                 SettingsEvent.TagsClick -> navController.navigateToTagsSettings()
                 SettingsEvent.TransactionSpeedClick -> navController.navigateToTransactionSpeedSettings()
+                SettingsEvent.PaymentPreferenceClick -> navController.navigateToPaymentPreferenceSettings()
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
                 SettingsEvent.BgPaymentsClick -> {
                     if (bgPaymentsIntroSeen || notificationsGranted) {
@@ -214,30 +222,37 @@ private fun SettingsContent(
             actions = { DrawerNavIcon() },
         )
 
-        CustomTabRowWithSpacing(
-            tabs = tabs,
-            currentTabIndex = pagerState.currentPage,
-            selectedColor = Colors.White,
-            onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
-        HorizontalPager(state = pagerState) { page ->
-            when (tabs[page]) {
-                SettingsTab.General -> GeneralTabContent(
-                    state = generalState,
-                    onEvent = onEvent,
+        PinnedTabsScaffold(
+            header = {
+                CustomTabRowWithSpacing(
+                    tabs = tabs,
+                    currentTabIndex = pagerState.currentPage,
+                    selectedColor = Colors.White,
+                    onTabChange = { scope.launch { pagerState.animateScrollToPage(tabs.indexOf(it)) } },
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
+            }
+        ) { topPadding ->
+            HorizontalPager(state = pagerState) { page ->
+                when (tabs[page]) {
+                    SettingsTab.General -> GeneralTabContent(
+                        state = generalState,
+                        onEvent = onEvent,
+                        topPadding = topPadding,
+                    )
 
-                SettingsTab.Security -> SecurityTabContent(
-                    state = securityState,
-                    onEvent = onEvent,
-                )
+                    SettingsTab.Security -> SecurityTabContent(
+                        state = securityState,
+                        onEvent = onEvent,
+                        topPadding = topPadding,
+                    )
 
-                SettingsTab.Advanced -> AdvancedTabContent(
-                    state = advancedState,
-                    onEvent = onEvent,
-                )
+                    SettingsTab.Advanced -> AdvancedTabContent(
+                        state = advancedState,
+                        onEvent = onEvent,
+                        topPadding = topPadding,
+                    )
+                }
             }
         }
     }
@@ -247,12 +262,13 @@ private fun SettingsContent(
 private fun GeneralTabContent(
     state: GeneralTabState,
     onEvent: OnSettingsEvent,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(top = topPadding, start = 16.dp, end = 16.dp)
     ) {
         SectionHeader(title = stringResource(R.string.settings__general__section_interface))
 
@@ -321,6 +337,14 @@ private fun GeneralTabContent(
             onClick = { onEvent(SettingsEvent.TransactionSpeedClick) },
             modifier = Modifier.testTag("TransactionSpeedSettings")
         )
+        if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__payment_pref_title),
+                icon = { SettingsIcon(R.drawable.ic_coins) },
+                onClick = { onEvent(SettingsEvent.PaymentPreferenceClick) },
+                modifier = Modifier.testTag("PaymentPreferenceSettings")
+            )
+        }
         SettingsButtonRow(
             title = stringResource(R.string.settings__quickpay__nav_title),
             icon = { SettingsIcon(R.drawable.ic_caret_double_right) },
@@ -350,12 +374,13 @@ private fun GeneralTabContent(
 private fun SecurityTabContent(
     state: SecurityTabState,
     onEvent: OnSettingsEvent,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(top = topPadding, start = 16.dp, end = 16.dp)
     ) {
         SectionHeader(title = stringResource(R.string.settings__security__section_backup))
 
@@ -466,12 +491,13 @@ private fun SecurityTabContent(
 private fun AdvancedTabContent(
     state: AdvancedTabState,
     onEvent: OnSettingsEvent,
+    topPadding: Dp,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(top = topPadding, start = 16.dp, end = 16.dp)
             .testTag("advanced_settings_screen")
     ) {
         if (state.isDevModeEnabled) {
@@ -618,6 +644,7 @@ sealed interface SettingsEvent {
     data object WidgetsClick : SettingsEvent
     data object TagsClick : SettingsEvent
     data object TransactionSpeedClick : SettingsEvent
+    data object PaymentPreferenceClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
 
@@ -660,6 +687,8 @@ data class GeneralTabState(
     val tagCount: Int = 0,
     val isQuickPayEnabled: Boolean = false,
     val notificationsGranted: Boolean = false,
+    val isPubkyAuthenticated: Boolean = false,
+    val isPaykitEnabled: Boolean = false,
 )
 
 @Immutable

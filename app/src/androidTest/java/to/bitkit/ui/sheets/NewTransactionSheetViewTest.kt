@@ -11,8 +11,10 @@ import org.junit.Test
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.test.annotations.ComposeUi
 
 @HiltAndroidTest
+@ComposeUi
 class NewTransactionSheetViewTest {
 
     @get:Rule

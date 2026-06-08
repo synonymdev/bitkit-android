@@ -52,23 +52,32 @@ class AddressViewerViewModel @Inject constructor(
 
     fun loadAddresses() {
         viewModelScope.launch(bgDispatcher) {
-            runCatching {
-                _uiState.update { it.copy(isLoading = true) }
+            _uiState.update {
+                it.copy(
+                    addresses = persistentListOf(),
+                    selectedAddress = null,
+                    balances = persistentMapOf(),
+                    isLoading = true,
+                    loadError = false,
+                )
+            }
 
-                delay(300) // wait for screen transition
+            delay(300) // wait for screen transition
 
-                val addresses = walletRepo.getAddresses(
-                    isChange = !_uiState.value.showReceiveAddresses,
-                    addressType = _uiState.value.selectedAddressType,
-                ).getOrThrow()
-
+            walletRepo.getAddresses(
+                isChange = !_uiState.value.showReceiveAddresses,
+                addressType = _uiState.value.selectedAddressType,
+            ).onSuccess { addresses ->
                 _uiState.update { currentState ->
                     currentState.copy(
                         addresses = addresses.toImmutableList(),
                         selectedAddress = addresses.firstOrNull(),
+                        loadError = false,
                     )
                 }
                 loadBalancesForAddresses(addresses)
+            }.onFailure {
+                _uiState.update { it.copy(loadError = true) }
             }
 
             _uiState.update { it.copy(isLoading = false) }
@@ -79,22 +88,25 @@ class AddressViewerViewModel @Inject constructor(
         if (_uiState.value.isLoading) return
 
         viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, loadError = false) }
 
-            runCatching {
-                val currentState = _uiState.value
-                val nextStartIndex = currentState.addresses.size
+            val currentState = _uiState.value
+            val nextStartIndex = currentState.addresses.size
 
-                val newAddresses = walletRepo.getAddresses(
-                    startIndex = nextStartIndex,
-                    isChange = !currentState.showReceiveAddresses,
-                    addressType = currentState.selectedAddressType,
-                ).getOrThrow()
-
+            walletRepo.getAddresses(
+                startIndex = nextStartIndex,
+                isChange = !currentState.showReceiveAddresses,
+                addressType = currentState.selectedAddressType,
+            ).onSuccess { newAddresses ->
                 _uiState.update { currentState ->
-                    currentState.copy(addresses = (currentState.addresses + newAddresses).toImmutableList())
+                    currentState.copy(
+                        addresses = (currentState.addresses + newAddresses).toImmutableList(),
+                        loadError = false,
+                    )
                 }
                 loadBalancesForAddresses(newAddresses)
+            }.onFailure {
+                _uiState.update { it.copy(loadError = true) }
             }
 
             _uiState.update { it.copy(isLoading = false) }
@@ -122,23 +134,33 @@ class AddressViewerViewModel @Inject constructor(
         if (_uiState.value.showReceiveAddresses == isReceiving) return
 
         viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(showReceiveAddresses = isReceiving, isLoading = true) }
+            _uiState.update {
+                it.copy(
+                    showReceiveAddresses = isReceiving,
+                    addresses = persistentListOf(),
+                    selectedAddress = null,
+                    balances = persistentMapOf(),
+                    isLoading = true,
+                    loadError = false,
+                )
+            }
 
-            runCatching {
-                val addresses = walletRepo.getAddresses(
-                    isChange = !isReceiving,
-                    addressType = _uiState.value.selectedAddressType,
-                ).getOrThrow()
-
+            walletRepo.getAddresses(
+                isChange = !isReceiving,
+                addressType = _uiState.value.selectedAddressType,
+            ).onSuccess { addresses ->
                 _uiState.update { currentState ->
                     currentState.copy(
                         addresses = addresses.toImmutableList(),
                         selectedAddress = addresses.firstOrNull(),
-                        balances = persistentMapOf(), // Clear balances for new address type
+                        balances = persistentMapOf(),
+                        loadError = false,
                     )
                 }
 
                 loadBalancesForAddresses(addresses)
+            }.onFailure {
+                _uiState.update { it.copy(loadError = true) }
             }
 
             _uiState.update { it.copy(isLoading = false) }
@@ -153,22 +175,32 @@ class AddressViewerViewModel @Inject constructor(
         if (_uiState.value.selectedAddressType == addressType) return
 
         viewModelScope.launch(bgDispatcher) {
-            _uiState.update { it.copy(selectedAddressType = addressType, isLoading = true) }
+            _uiState.update {
+                it.copy(
+                    selectedAddressType = addressType,
+                    addresses = persistentListOf(),
+                    selectedAddress = null,
+                    balances = persistentMapOf(),
+                    isLoading = true,
+                    loadError = false,
+                )
+            }
 
-            runCatching {
-                val addresses = walletRepo.getAddresses(
-                    isChange = !_uiState.value.showReceiveAddresses,
-                    addressType = addressType,
-                ).getOrThrow()
-
+            walletRepo.getAddresses(
+                isChange = !_uiState.value.showReceiveAddresses,
+                addressType = addressType,
+            ).onSuccess { addresses ->
                 _uiState.update { currentState ->
                     currentState.copy(
                         addresses = addresses.toImmutableList(),
                         selectedAddress = addresses.firstOrNull(),
                         balances = persistentMapOf(),
+                        loadError = false,
                     )
                 }
                 loadBalancesForAddresses(addresses)
+            }.onFailure {
+                _uiState.update { it.copy(loadError = true) }
             }
 
             _uiState.update { it.copy(isLoading = false) }
@@ -223,6 +255,7 @@ data class UiState(
     val selectedAddress: AddressModel? = null,
     val isLoading: Boolean = false,
     val isLoadingBalances: Boolean = false,
+    val loadError: Boolean = false,
     val showReceiveAddresses: Boolean = true,
     val selectedAddressType: AddressType = AddressType.P2WPKH,
 )

@@ -14,6 +14,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,14 +45,18 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.models.WidgetType
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
+import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.SheetHandlePlacement
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TimedSheetType
@@ -59,6 +64,7 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
+import to.bitkit.ui.screens.common.ComingSoonScreen
 import to.bitkit.ui.screens.contacts.AddContactScreen
 import to.bitkit.ui.screens.contacts.AddContactViewModel
 import to.bitkit.ui.screens.contacts.ContactActivityScreen
@@ -92,6 +98,7 @@ import to.bitkit.ui.screens.recovery.RecoveryModeScreen
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.settings.LdkDebugScreen
+import to.bitkit.ui.screens.settings.LegacyRnRecoveryScreen
 import to.bitkit.ui.screens.settings.ProbingToolScreen
 import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
@@ -117,9 +124,11 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.SavingsWalletScreen
 import to.bitkit.ui.screens.wallets.SpendingWalletScreen
+import to.bitkit.ui.screens.wallets.activity.ActivityAssignContactScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
@@ -128,26 +137,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
-import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
-import to.bitkit.ui.screens.widgets.calculator.CalculatorPreviewScreen
-import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
-import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
-import to.bitkit.ui.screens.widgets.facts.FactsViewModel
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
-import to.bitkit.ui.screens.widgets.price.PriceEditScreen
-import to.bitkit.ui.screens.widgets.price.PricePreviewScreen
-import to.bitkit.ui.screens.widgets.price.PriceViewModel
-import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewScreen
-import to.bitkit.ui.screens.widgets.suggestions.SuggestionsViewModel
-import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
-import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
-import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.CJitDetailScreen
@@ -174,6 +164,7 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
+import to.bitkit.ui.settings.paymentPreference.PaymentPreferenceScreen
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
@@ -182,6 +173,7 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
@@ -195,8 +187,11 @@ import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
+import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
+import to.bitkit.ui.sheets.WidgetsSheet
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
@@ -231,6 +226,7 @@ fun ContentView(
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
+    val appWidgetRefreshScheduler = remember(context) { context.appWidgetRefreshScheduler }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     val walletUiState by walletViewModel.walletState.collectAsStateWithLifecycle()
@@ -252,9 +248,12 @@ fun ContentView(
 
                     appViewModel.consumePaymentReceivedInBackground()
 
+                    appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_FOREGROUND)
+                    appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
                     appViewModel.refreshPublicPaykitEndpoints()
+                    appViewModel.refreshPrivatePaykitEndpoints()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
@@ -390,7 +389,25 @@ fun ContentView(
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
+        val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
+        val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        var homeWalletPageRequest by remember { mutableIntStateOf(0) }
+        var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
+        val navigateToHomeWallet = {
+            homeWalletPageRequest++
+            navController.navigateToHome()
+        }
+        val navigateToHomeWidgets = {
+            homeWidgetsPageRequest++
+            navController.navigateToHome()
+        }
+        val onConsumeHomeWalletPageRequest = {
+            homeWalletPageRequest = 0
+        }
+        val onConsumeHomeWidgetsPageRequest = {
+            homeWidgetsPageRequest = 0
+        }
 
         Box(
             modifier = modifier.fillMaxSize()
@@ -398,6 +415,14 @@ fun ContentView(
             SheetHost(
                 shouldExpand = currentSheet != null,
                 onDismiss = { appViewModel.hideSheet() },
+                sheetHandlePlacement = when (currentSheet) {
+                    is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
+                    else -> SheetHandlePlacement.ScaffoldSlot
+                },
+                sheetContainerColor = when (currentSheet) {
+                    is Sheet.Widgets -> Colors.Gray7
+                    else -> DefaultSheetContainerColor
+                },
                 sheets = {
                     when (val sheet = currentSheet) {
                         null -> Unit
@@ -411,13 +436,15 @@ fun ContentView(
 
                         is Sheet.Receive -> {
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
+                            val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                             ReceiveSheet(
                                 startRoute = sheet.route,
                                 walletState = walletState,
+                                isOffline = connectivityState != ConnectivityState.CONNECTED,
                                 navigateToExternalConnection = {
                                     navController.navigateTo(ExternalConnection())
                                     appViewModel.hideSheet()
-                                }
+                                },
                             )
                         }
 
@@ -427,12 +454,25 @@ fun ContentView(
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
+                        is Sheet.Widgets -> {
+                            WidgetsSheet(
+                                sheet = sheet,
+                                app = appViewModel,
+                                fiatSymbol = LocalCurrencies.current.currencySymbol,
+                                showWidgets = showWidgets,
+                                onNavigateHomeWidgets = navigateToHomeWidgets,
+                                onOpenWidgetsSettings = {
+                                    navController.navigateTo(Routes.WidgetsSettings)
+                                },
+                            )
+                        }
                         is Sheet.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
                         Sheet.ForceTransfer -> ForceTransferSheet(appViewModel, transferViewModel)
                         Sheet.ConnectionClosed -> ConnectionClosedSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
 
+                        is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         Sheet.QrScanner -> QrScanningSheet(appViewModel)
                         is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(
@@ -493,6 +533,8 @@ fun ContentView(
                 }
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
+
                     RootNavHost(
                         navController = navController,
                         drawerState = drawerState,
@@ -502,6 +544,12 @@ fun ContentView(
                         settingsViewModel = settingsViewModel,
                         currencyViewModel = currencyViewModel,
                         transferViewModel = transferViewModel,
+                        homeWalletPageRequest = homeWalletPageRequest,
+                        homeWidgetsPageRequest = homeWidgetsPageRequest,
+                        onConsumeHomeWalletPageRequest = onConsumeHomeWalletPageRequest,
+                        onConsumeHomeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
+                        onNavigateHomeWidgets = navigateToHomeWidgets,
+                        onHomeCalculatorInputActiveChanged = { isHomeCalculatorInputActive = it },
                     )
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -512,12 +560,21 @@ fun ContentView(
                         Routes.Savings::class.qualifiedName,
                         Routes.Spending::class.qualifiedName,
                     )
+                    val hideTabBarForCalculator =
+                        currentRoute == Routes.Home::class.qualifiedName && isHomeCalculatorInputActive
+
+                    LaunchedEffect(currentRoute) {
+                        if (currentRoute != Routes.Home::class.qualifiedName) {
+                            isHomeCalculatorInputActive = false
+                        }
+                    }
 
                     if (showTabBar) {
                         TabBar(
+                            isVisible = !hideTabBarForCalculator,
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
-                            onScanClick = { appViewModel.showScannerSheet() },
+                            onScanClick = { appViewModel.showSheet(Sheet.Send(SendRoute.QrScanner)) },
                         )
                     }
                 }
@@ -537,6 +594,11 @@ fun ContentView(
                 hasSeenContactsIntro = hasSeenContactsIntro,
                 hasContacts = hasPubkyContacts,
                 isProfileAuthenticated = isProfileAuthenticated,
+                isPaykitEnabled = isPaykitEnabled,
+                showWidgets = showWidgets,
+                onOpenWalletHome = navigateToHomeWallet,
+                onOpenWidgetsHome = navigateToHomeWidgets,
+                onOpenWidgetsSheet = { appViewModel.showSheet(Sheet.Widgets()) },
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }
@@ -553,6 +615,12 @@ private fun RootNavHost(
     settingsViewModel: SettingsViewModel,
     currencyViewModel: CurrencyViewModel,
     transferViewModel: TransferViewModel,
+    homeWalletPageRequest: Int,
+    homeWidgetsPageRequest: Int,
+    onConsumeHomeWalletPageRequest: () -> Unit,
+    onConsumeHomeWidgetsPageRequest: () -> Unit,
+    onNavigateHomeWidgets: () -> Unit,
+    onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -564,6 +632,11 @@ private fun RootNavHost(
             settingsViewModel = settingsViewModel,
             navController = navController,
             drawerState = drawerState,
+            homeWalletPageRequest = homeWalletPageRequest,
+            homeWidgetsPageRequest = homeWidgetsPageRequest,
+            onConsumeHomeWalletPageRequest = onConsumeHomeWalletPageRequest,
+            onConsumeHomeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
+            onCalculatorInputActiveChanged = onHomeCalculatorInputActiveChanged,
         )
         allActivity(
             activityListViewModel = activityListViewModel,
@@ -573,7 +646,7 @@ private fun RootNavHost(
         contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
-        generalSettingsSubScreens(navController)
+        generalSettingsSubScreens(navController, settingsViewModel)
         advancedSettingsSubScreens(navController)
         transactionSpeedSettings(navController)
         pinManagement(navController)
@@ -585,12 +658,17 @@ private fun RootNavHost(
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
         lightningConnections(navController)
-        activityItem(activityListViewModel, navController)
+        activityItem(activityListViewModel, navController, settingsViewModel)
         authCheck(navController)
         logs(navController)
         suggestions(navController)
         support(navController)
-        widgets(navController, settingsViewModel, currencyViewModel)
+        widgets(
+            navController = navController,
+            settingsViewModel = settingsViewModel,
+            appViewModel = appViewModel,
+            onNavigateHomeWidgets = onNavigateHomeWidgets,
+        )
         update()
         recoveryMode(navController, appViewModel)
 
@@ -624,7 +702,9 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SavingsConfirmScreen(
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onConfirm = { navController.navigateTo(Routes.SavingsProgress) },
                     onAdvancedClick = { navController.navigateTo(Routes.SavingsAdvanced) },
                     onBackClick = { navController.popBackStack() },
@@ -655,8 +735,10 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingAmount> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
@@ -664,14 +746,16 @@ private fun RootNavHost(
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
                             title = title,
-                            description = description
+                            description = description,
                         )
                     },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingConfirmScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                     onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
@@ -801,6 +885,11 @@ private fun NavGraphBuilder.home(
     settingsViewModel: SettingsViewModel,
     navController: NavHostController,
     drawerState: DrawerState,
+    homeWalletPageRequest: Int,
+    homeWidgetsPageRequest: Int,
+    onConsumeHomeWalletPageRequest: () -> Unit,
+    onConsumeHomeWidgetsPageRequest: () -> Unit,
+    onCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     composable<Routes.Home> {
         val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -827,6 +916,11 @@ private fun NavGraphBuilder.home(
                 walletViewModel = walletViewModel,
                 appViewModel = appViewModel,
                 activityListViewModel = activityListViewModel,
+                walletPageRequest = homeWalletPageRequest,
+                widgetsPageRequest = homeWidgetsPageRequest,
+                onConsumeWalletPageRequest = onConsumeHomeWalletPageRequest,
+                onConsumeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
+                onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
             )
         }
     }
@@ -855,6 +949,7 @@ private fun NavGraphBuilder.home(
     }
     composableWithDefaultTransitions<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
@@ -869,6 +964,13 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsIntro()
                 } else {
                     navController.navigateToTransferSavingsAvailability()
+                }
+            },
+            onTransferFromSavingsClick = {
+                if (!hasSeenSpendingIntro) {
+                    navController.navigateToTransferSpendingIntro()
+                } else {
+                    navController.navigateToTransferSpendingAmount()
                 }
             },
             onBackClick = { navController.popBackStack() },
@@ -915,6 +1017,12 @@ private fun NavGraphBuilder.settings(
     composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(navController)
     }
+    composableWithDefaultTransitions<Routes.LegacyRnRecovery> {
+        LegacyRnRecoveryScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.Trezor> {
+        TrezorScreen(navController)
+    }
     composableWithDefaultTransitions<Routes.LdkDebug> {
         LdkDebugScreen(navController)
     }
@@ -937,6 +1045,30 @@ private fun NavGraphBuilder.settings(
     }
 }
 
+@Composable
+private fun PaykitRouteGuard(
+    settingsViewModel: SettingsViewModel,
+    navController: NavHostController,
+    redirectWhenDisabled: Boolean = true,
+    disabledContent: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
+    val isPaykitStateLoaded by settingsViewModel.isPaykitStateLoaded.collectAsStateWithLifecycle()
+
+    if (!isPaykitStateLoaded) return
+
+    if (isPaykitEnabled) {
+        content()
+    } else if (redirectWhenDisabled) {
+        LaunchedEffect(Unit) {
+            navController.navigateToHome()
+        }
+    } else {
+        disabledContent()
+    }
+}
+
 @Suppress("LongMethod")
 private fun NavGraphBuilder.contacts(
     navController: NavHostController,
@@ -944,102 +1076,128 @@ private fun NavGraphBuilder.contacts(
     appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Contacts> { backStackEntry ->
-        val route = backStackEntry.toRoute<Routes.Contacts>()
-        val viewModel: ContactsViewModel = hiltViewModel()
-        ContactsScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onClickMyProfile = { navController.navigateTo(Routes.Profile) },
-            onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
-            onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
-            onScanQr = {
-                appViewModel.showScannerSheet { scannedData ->
-                    navController.navigateTo(Routes.AddContact(scannedData))
-                }
+        PaykitRouteGuard(
+            settingsViewModel = settingsViewModel,
+            navController = navController,
+            redirectWhenDisabled = false,
+            disabledContent = {
+                ComingSoonScreen(
+                    onWalletOverviewClick = { navController.navigateToHome() },
+                    onBackClick = { navController.popBackStack() }
+                )
             },
-            openAddContactSheet = route.showAddContactSheet,
-        )
+        ) {
+            val route = backStackEntry.toRoute<Routes.Contacts>()
+            val viewModel: ContactsViewModel = hiltViewModel()
+            ContactsScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onClickMyProfile = { navController.navigateTo(Routes.Profile) },
+                onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
+                onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
+                onScanQr = {
+                    appViewModel.showScannerSheet { scannedData ->
+                        navController.navigateTo(Routes.AddContact(scannedData))
+                    }
+                },
+                openAddContactSheet = route.showAddContactSheet,
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactsIntro> {
-        val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
-        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-        ContactsIntroScreen(
-            onContinue = {
-                settingsViewModel.setHasSeenContactsIntro(true)
-                when {
-                    isAuthenticated -> navController.navigateTo(
-                        Routes.Contacts(showAddContactSheet = true)
-                    ) { popUpTo(Routes.Home) }
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+            val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            ContactsIntroScreen(
+                onContinue = {
+                    settingsViewModel.setHasSeenContactsIntro(true)
+                    when {
+                        isAuthenticated -> navController.navigateTo(
+                            Routes.Contacts(showAddContactSheet = true)
+                        ) { popUpTo(Routes.Home) }
 
-                    hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
-                    else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
-                }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+                        hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+                        else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
+                    }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactDetail> {
-        val viewModel: ContactDetailViewModel = hiltViewModel()
-        ContactDetailScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onPayContact = { paymentRequest, publicKey ->
-                appViewModel.openContactPayment(paymentRequest, publicKey)
-            },
-            onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
-            onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactDetailViewModel = hiltViewModel()
+            ContactDetailScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onPayContact = { paymentRequest, publicKey ->
+                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                },
+                onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
+                onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactActivity> {
-        val viewModel: ContactActivityViewModel = hiltViewModel()
-        ContactActivityScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactActivityViewModel = hiltViewModel()
+            ContactActivityScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onActivityItemClick = { navController.navigateToActivityItem(it) },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.AddContact> {
-        val viewModel: AddContactViewModel = hiltViewModel()
-        AddContactScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onContactSaved = { navController.popBackStack() },
-            onPayContact = { paymentRequest, publicKey ->
-                navController.popBackStack()
-                appViewModel.openContactPayment(paymentRequest, publicKey)
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: AddContactViewModel = hiltViewModel()
+            AddContactScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onContactSaved = { navController.popBackStack() },
+                onPayContact = { paymentRequest, publicKey ->
+                    navController.popBackStack()
+                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.EditContact> {
-        val viewModel: EditContactViewModel = hiltViewModel()
-        EditContactScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onContactDeleted = {
-                navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: EditContactViewModel = hiltViewModel()
+            EditContactScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onContactDeleted = {
+                    navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactImportOverview> {
-        val viewModel: ContactImportOverviewViewModel = hiltViewModel()
-        ContactImportOverviewScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onNavigateToSelect = { navController.navigateTo(Routes.ContactImportSelect) },
-            onImportComplete = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactImportOverviewViewModel = hiltViewModel()
+            ContactImportOverviewScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onNavigateToSelect = { navController.navigateTo(Routes.ContactImportSelect) },
+                onImportComplete = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ContactImportSelect> {
-        val viewModel: ContactImportSelectViewModel = hiltViewModel()
-        ContactImportSelectScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onImportComplete = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactImportSelectViewModel = hiltViewModel()
+            ContactImportSelectScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onImportComplete = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
 }
 
@@ -1049,71 +1207,96 @@ private fun NavGraphBuilder.profile(
     settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Profile> {
-        val viewModel: ProfileViewModel = hiltViewModel()
-        ProfileScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onEditProfile = { navController.navigateTo(Routes.EditProfile) },
-        )
+        PaykitRouteGuard(
+            settingsViewModel = settingsViewModel,
+            navController = navController,
+            redirectWhenDisabled = false,
+            disabledContent = {
+                ComingSoonScreen(
+                    onWalletOverviewClick = { navController.navigateToHome() },
+                    onBackClick = { navController.popBackStack() }
+                )
+            },
+        ) {
+            val viewModel: ProfileViewModel = hiltViewModel()
+            ProfileScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onEditProfile = { navController.navigateTo(Routes.EditProfile) },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ProfileIntro> {
-        ProfileIntroScreen(
-            onContinue = {
-                settingsViewModel.setHasSeenProfileIntro(true)
-                navController.navigateTo(Routes.PubkyChoice)
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            ProfileIntroScreen(
+                onContinue = {
+                    settingsViewModel.setHasSeenProfileIntro(true)
+                    navController.navigateTo(Routes.PubkyChoice)
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.PubkyChoice> {
-        val viewModel: PubkyChoiceViewModel = hiltViewModel()
-        PubkyChoiceScreen(
-            viewModel = viewModel,
-            onNavigateToCreateProfile = { navController.navigateTo(Routes.CreateProfile) },
-            onNavigateToContactImportOverview = {
-                navController.navigateTo(Routes.ContactImportOverview) { popUpTo(Routes.Home) }
-            },
-            onNavigateToPayContacts = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: PubkyChoiceViewModel = hiltViewModel()
+            PubkyChoiceScreen(
+                viewModel = viewModel,
+                onNavigateToCreateProfile = { navController.navigateTo(Routes.CreateProfile) },
+                onNavigateToContactImportOverview = {
+                    navController.navigateTo(Routes.ContactImportOverview) { popUpTo(Routes.Home) }
+                },
+                onNavigateToPayContacts = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+                onNavigateToProfile = {
+                    navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.CreateProfile> {
-        val viewModel: CreateProfileViewModel = hiltViewModel()
-        CreateProfileScreen(
-            viewModel = viewModel,
-            onNavigateToPayContacts = {
-                navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: CreateProfileViewModel = hiltViewModel()
+            CreateProfileScreen(
+                viewModel = viewModel,
+                onNavigateToPayContacts = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.EditProfile> {
-        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-        val viewModel: EditProfileViewModel = hiltViewModel()
-        EditProfileScreen(
-            viewModel = viewModel,
-            onBackClick = { navController.popBackStack() },
-            onExitProfile = {
-                val nextRoute = if (hasSeenProfileIntro) {
-                    Routes.PubkyChoice
-                } else {
-                    Routes.ProfileIntro
-                }
-                navController.navigateTo(nextRoute) { popUpTo(Routes.Home) }
-            },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            val viewModel: EditProfileViewModel = hiltViewModel()
+            EditProfileScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onExitProfile = {
+                    val nextRoute = if (hasSeenProfileIntro) {
+                        Routes.PubkyChoice
+                    } else {
+                        Routes.ProfileIntro
+                    }
+                    navController.navigateTo(nextRoute) { popUpTo(Routes.Home) }
+                },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.PayContacts> {
-        val viewModel: PayContactsViewModel = hiltViewModel()
-        PayContactsScreen(
-            viewModel = viewModel,
-            onContinue = {
-                navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
-            },
-            onBackClick = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: PayContactsViewModel = hiltViewModel()
+            PayContactsScreen(
+                viewModel = viewModel,
+                onContinue = {
+                    navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
 }
 
@@ -1154,7 +1337,10 @@ private fun NavGraphBuilder.shop(
     }
 }
 
-private fun NavGraphBuilder.generalSettingsSubScreens(navController: NavHostController) {
+private fun NavGraphBuilder.generalSettingsSubScreens(
+    navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
+) {
     composableWithDefaultTransitions<Routes.WidgetsSettings> {
         WidgetsSettingsScreen(navController)
     }
@@ -1166,6 +1352,13 @@ private fun NavGraphBuilder.generalSettingsSubScreens(navController: NavHostCont
         BackgroundPaymentsSettings(
             onBack = { navController.popBackStack() },
         )
+    }
+    composableWithDefaultTransitions<Routes.PaymentPreferenceSettings> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            PaymentPreferenceScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
     }
 
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
@@ -1314,18 +1507,29 @@ private fun NavGraphBuilder.lightningConnections(
 private fun NavGraphBuilder.activityItem(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.ActivityDetail> {
         ActivityDetailScreen(
             listViewModel = activityListViewModel,
             route = it.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
+            onAssignContactClick = { id -> navController.navigateTo(Routes.ActivityAssignContact(id)) },
             onChannelClick = { channelId ->
                 navController.navigateTo(Routes.ChannelDetail(channelId))
             },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
+    }
+    composableWithDefaultTransitions<Routes.ActivityAssignContact> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val route = it.toRoute<Routes.ActivityAssignContact>()
+            ActivityAssignContactScreen(
+                activityId = route.id,
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ActivityExplore> {
         ActivityExploreScreen(
@@ -1440,181 +1644,30 @@ private fun NavGraphBuilder.support(
     }
 }
 
-@Suppress("LongMethod")
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
-    currencyViewModel: CurrencyViewModel,
+    appViewModel: AppViewModel,
+    onNavigateHomeWidgets: () -> Unit,
 ) {
     composableWithDefaultTransitions<Routes.WidgetsIntro> {
-        WidgetsIntroScreen(
-            onContinue = {
-                settingsViewModel.setHasSeenWidgetsIntro(true)
-                navController.navigateTo(Routes.AddWidget)
-            },
-            onBackClick = { navController.popBackStack() },
-        )
-    }
-    composableWithDefaultTransitions<Routes.AddWidget> {
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
-        AddWidgetsScreen(
-            onWidgetSelected = { widgetType ->
-                when (widgetType) {
-                    WidgetType.BLOCK -> navController.navigateTo(Routes.BlocksPreview)
-                    WidgetType.CALCULATOR -> navController.navigateTo(Routes.CalculatorPreview)
-                    WidgetType.FACTS -> navController.navigateTo(Routes.FactsPreview)
-                    WidgetType.NEWS -> navController.navigateTo(Routes.HeadlinesPreview)
-                    WidgetType.PRICE -> navController.navigateTo(Routes.PricePreview)
-                    WidgetType.WEATHER -> navController.navigateTo(Routes.WeatherPreview)
-                    WidgetType.SUGGESTIONS -> navController.navigateTo(Routes.SuggestionsPreview)
+
+        WidgetsIntroScreen(
+            onViewOrganize = {
+                settingsViewModel.setHasSeenWidgetsIntro(true)
+                if (showWidgets) {
+                    onNavigateHomeWidgets()
+                } else {
+                    appViewModel.showSheet(Sheet.Widgets())
                 }
             },
-            fiatSymbol = LocalCurrencies.current.currencySymbol,
+            onAddWidget = {
+                settingsViewModel.setHasSeenWidgetsIntro(true)
+                appViewModel.showSheet(Sheet.Widgets())
+            },
             onBackClick = { navController.popBackStack() },
-            showWidgets = showWidgets,
-            onEnableInSettingsClick = { navController.navigateTo(Routes.WidgetsSettings) },
         )
-    }
-    composableWithDefaultTransitions<Routes.SuggestionsPreview> {
-        val viewModel = hiltViewModel<SuggestionsViewModel>()
-        SuggestionsPreviewScreen(
-            suggestionsViewModel = viewModel,
-            onClose = { navController.navigateToHome() },
-            onBack = { navController.popBackStack() },
-        )
-    }
-    composableWithDefaultTransitions<Routes.CalculatorPreview> {
-        CalculatorPreviewScreen(
-            onClose = { navController.navigateToHome() },
-            onBack = { navController.popBackStack() },
-            currencyViewModel = currencyViewModel
-        )
-    }
-    navigationWithDefaultTransitions<Routes.Headlines>(
-        startDestination = Routes.HeadlinesPreview
-    ) {
-        composableWithDefaultTransitions<Routes.HeadlinesPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
-            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
-
-            HeadlinesPreviewScreen(
-                headlinesViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.HeadlinesEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.HeadlinesEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
-            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
-
-            HeadlinesEditScreen(
-                headlinesViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = {
-                    navController.navigateTo(Routes.HeadlinesPreview)
-                }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Facts>(
-        startDestination = Routes.FactsPreview
-    ) {
-        composableWithDefaultTransitions<Routes.FactsPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Facts) }
-            val viewModel = hiltViewModel<FactsViewModel>(parentEntry)
-
-            FactsPreviewScreen(
-                factsViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.FactsEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.FactsEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Facts) }
-            val viewModel = hiltViewModel<FactsViewModel>(parentEntry)
-
-            FactsEditScreen(
-                factsViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.FactsPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Blocks>(
-        startDestination = Routes.BlocksPreview
-    ) {
-        composableWithDefaultTransitions<Routes.BlocksPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
-            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
-
-            BlocksPreviewScreen(
-                blocksViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.BlocksEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.BlocksEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
-            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
-
-            BlocksEditScreen(
-                blocksViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.BlocksPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Weather>(
-        startDestination = Routes.WeatherPreview
-    ) {
-        composableWithDefaultTransitions<Routes.WeatherPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
-            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
-
-            WeatherPreviewScreen(
-                weatherViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.WeatherEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.WeatherEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
-            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
-
-            WeatherEditScreen(
-                weatherViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.WeatherPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Price>(
-        startDestination = Routes.PricePreview
-    ) {
-        composableWithDefaultTransitions<Routes.PricePreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
-            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
-
-            PricePreviewScreen(
-                priceViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigateTo(Routes.PriceEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.PriceEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
-            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
-            PriceEditScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigateTo(Routes.PricePreview) }
-            )
-        }
     }
 }
 
@@ -1708,6 +1761,8 @@ fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogD
 
 fun NavController.navigateToTransactionSpeedSettings() = navigateTo(Routes.TransactionSpeedSettings)
 
+fun NavController.navigateToPaymentPreferenceSettings() = navigateTo(Routes.PaymentPreferenceSettings)
+
 fun NavController.navigateToCustomFeeSettings() = navigateTo(Routes.CustomFeeSettings)
 
 fun NavController.navigateToWidgetsSettings() = navigateTo(Routes.WidgetsSettings)
@@ -1740,6 +1795,9 @@ sealed interface Routes {
 
     @Serializable
     data object TransactionSpeedSettings : Routes
+
+    @Serializable
+    data object PaymentPreferenceSettings : Routes
 
     @Serializable
     data object WidgetsSettings : Routes
@@ -1817,6 +1875,9 @@ sealed interface Routes {
 
     @Serializable
     data object DevSettings : Routes
+
+    @Serializable
+    data object LegacyRnRecovery : Routes
 
     @Serializable
     data object LdkDebug : Routes
@@ -1900,6 +1961,9 @@ sealed interface Routes {
     data class ActivityDetail(val id: String) : Routes
 
     @Serializable
+    data class ActivityAssignContact(val id: String) : Routes
+
+    @Serializable
     data class ActivityExplore(val id: String) : Routes
 
     @Serializable
@@ -1981,60 +2045,6 @@ sealed interface Routes {
     data object WidgetsIntro : Routes
 
     @Serializable
-    data object AddWidget : Routes
-
-    @Serializable
-    data object SuggestionsPreview : Routes
-
-    @Serializable
-    data object Headlines : Routes
-
-    @Serializable
-    data object HeadlinesPreview : Routes
-
-    @Serializable
-    data object HeadlinesEdit : Routes
-
-    @Serializable
-    data object Facts : Routes
-
-    @Serializable
-    data object FactsPreview : Routes
-
-    @Serializable
-    data object FactsEdit : Routes
-
-    @Serializable
-    data object Blocks : Routes
-
-    @Serializable
-    data object BlocksPreview : Routes
-
-    @Serializable
-    data object BlocksEdit : Routes
-
-    @Serializable
-    data object Weather : Routes
-
-    @Serializable
-    data object WeatherPreview : Routes
-
-    @Serializable
-    data object WeatherEdit : Routes
-
-    @Serializable
-    data object Price : Routes
-
-    @Serializable
-    data object PricePreview : Routes
-
-    @Serializable
-    data object PriceEdit : Routes
-
-    @Serializable
-    data object CalculatorPreview : Routes
-
-    @Serializable
     data object AppStatus : Routes
 
     @Serializable
@@ -2054,4 +2064,7 @@ sealed interface Routes {
 
     @Serializable
     data object AllActivity : Routes
+
+    @Serializable
+    data object Trezor : Routes
 }

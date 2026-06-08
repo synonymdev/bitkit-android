@@ -12,5 +12,5 @@ data class BlockDTO(
     val weight: String,
     val difficulty: String,
     val merkleRoot: String,
-    val source: String,
+    val fees: String = "",
 )

@@ -30,6 +30,7 @@ import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
+import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -48,7 +49,6 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
-import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
@@ -70,6 +70,11 @@ import kotlin.time.Duration
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
+
+data class AddressDerivationInfo(
+    val address: String,
+    val index: Int,
+)
 
 @Suppress("LargeClass", "TooManyFunctions")
 @Singleton
@@ -417,6 +422,62 @@ class LightningService @Inject constructor(
         }
     }
 
+    suspend fun newAddressForType(addressType: AddressType): String {
+        val addressInfo = newAddressInfoForType(addressType)
+        return addressInfo.address
+    }
+
+    suspend fun newAddressInfoForType(addressType: AddressType): AddressDerivationInfo {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            val addressInfo = node.onchainPayment().newAddressInfoForType(addressType.toLdkAddressType())
+            AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
+        }
+    }
+
+    suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): AddressDerivationInfo {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            val addressInfo = node.onchainPayment().addressInfoForTypeAtIndex(
+                addressType.toLdkAddressType(),
+                KeychainKind.EXTERNAL,
+                receiveIndex.toUInt(),
+            )
+            AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
+        }
+    }
+
+    suspend fun addressInfosForType(
+        addressType: AddressType,
+        isChange: Boolean,
+        startIndex: Int,
+        count: Int,
+    ): List<AddressDerivationInfo> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        val keychain = if (isChange) KeychainKind.INTERNAL else KeychainKind.EXTERNAL
+
+        return ServiceQueue.LDK.background {
+            node.onchainPayment()
+                .addressInfosForType(
+                    addressType.toLdkAddressType(),
+                    keychain,
+                    startIndex.toUInt(),
+                    count.toUInt(),
+                )
+                .map { AddressDerivationInfo(address = it.address, index = it.index.toInt()) }
+        }
+    }
+
+    suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        ServiceQueue.LDK.background {
+            node.onchainPayment().revealReceiveAddressesTo(forType.toLdkAddressType(), toReceiveIndex.toUInt())
+        }
+    }
+
     // region peers
     suspend fun connectToTrustedPeers() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
@@ -571,8 +632,26 @@ class LightningService @Inject constructor(
             Logger.info("Channel close initiated (force=$force): '$channelId'", context = TAG)
         } catch (e: NodeException) {
             val error = LdkError(e)
-            Logger.error("Error initiating channel close (force=$force): '$channelId'", error, context = TAG)
+            Logger.error("Failed to initiate channel close for '$channelId' with force '$force'", error, context = TAG)
+            logCloseChannelPeerState(node, channel)
             throw LdkError(e)
+        }
+    }
+
+    private fun logCloseChannelPeerState(node: Node, channel: ChannelDetails) {
+        runCatching {
+            val peer = node.listPeers().firstOrNull { it.nodeId == channel.counterpartyNodeId }
+            Logger.info(
+                "Collected close peer state for channel '${channel.channelId}': " +
+                    "counterparty='${channel.counterpartyNodeId}', " +
+                    "peerFound='${peer != null}', " +
+                    "peerAddress='${peer?.address}', " +
+                    "peerConnected='${peer?.isConnected}', " +
+                    "peerPersisted='${peer?.isPersisted}'",
+                context = TAG,
+            )
+        }.onFailure {
+            Logger.warn("Failed to collect close peer state for channel '${channel.channelId}'", it, context = TAG)
         }
     }
     // endregion
@@ -585,8 +664,8 @@ class LightningService @Inject constructor(
             return false
         }
 
-        if (channels.none { it.isChannelReady }) {
-            Logger.warn("canReceive = false: Found no LN channel ready to enable receive: '$channels'", context = TAG)
+        if (channels.none { it.isUsable }) {
+            Logger.warn("canReceive = false: Found no LN channel usable to enable receive: '$channels'", context = TAG)
             return false
         }
 
@@ -596,7 +675,7 @@ class LightningService @Inject constructor(
     suspend fun receive(
         sat: ULong? = null,
         description: String,
-        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
     ): String {
         return receiveMsats(amountMsat = sat?.let { it * 1000u }, description = description, expirySecs = expirySecs)
     }
@@ -604,7 +683,7 @@ class LightningService @Inject constructor(
     suspend fun receiveMsats(
         amountMsat: ULong? = null,
         description: String,
-        expirySecs: UInt = Defaults.bolt11InvoiceExpirySeconds,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
     ): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
@@ -628,23 +707,6 @@ class LightningService @Inject constructor(
 
             return@background bolt11Invoice.toString()
         }
-    }
-
-    fun canSend(amountSats: ULong): Boolean {
-        val channels = this.channels
-        if (channels == null) {
-            Logger.warn("Channels not available", context = TAG)
-            return false
-        }
-
-        val totalNextOutboundHtlcLimitSats = channels.totalNextOutboundHtlcLimitSats()
-
-        if (totalNextOutboundHtlcLimitSats < amountSats) {
-            Logger.warn("Insufficient outbound capacity: $totalNextOutboundHtlcLimitSats < $amountSats", context = TAG)
-            return false
-        }
-
-        return true
     }
 
     suspend fun send(
@@ -1046,7 +1108,13 @@ class LightningService @Inject constructor(
     val config: Config? get() = node?.config()
     val peers: List<PeerDetails>? get() = node?.listPeers()
     val channels: List<ChannelDetails>? get() = node?.listChannels()
-    val payments: List<PaymentDetails>? get() = node?.listPayments()
+
+    suspend fun listPayments(): List<PaymentDetails>? {
+        val node = this.node ?: return null
+        return ServiceQueue.LDK.background {
+            node.listPayments()
+        }
+    }
     // endregion
 
     // region debug

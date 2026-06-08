@@ -728,7 +728,6 @@
     <string name="settings__support__copyright">Bitkit ha estat creat per Synonym Software, S.A. DE C.V. ©2025. Tots els drets reservats.</string>
     <string name="settings__support_title">Suport</string>
     <string name="settings__widgets__nav_title">Ginys</string>
-    <string name="settings__widgets__showWidgetTitles">Mostrar títols de ginys</string>
     <string name="settings__widgets__showWidgets">Ginys</string>
     <string name="settings__widgets__reset_suggestions">Restablir targetes de suggeriments</string>
     <string name="settings__widgets__reset_widgets">Restablir widgets</string>
@@ -1009,6 +1008,5 @@
     <string name="widgets__widget__edit_default">Predeterminat</string>
     <string name="widgets__widget__edit_description">Si us plau, selecciona quins camps vols mostrar al giny {name}.</string>
     <string name="widgets__widget__nav_title">Giny</string>
-    <string name="widgets__widget__source">Origen</string>
     <string name="widgets__widgets">Ginys</string>
 </resources>

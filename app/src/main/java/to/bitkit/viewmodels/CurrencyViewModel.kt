@@ -1,10 +1,15 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
+import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import to.bitkit.appwidget.ui.weather.WeatherGlanceWidget
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
@@ -14,6 +19,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CurrencyViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val currencyRepo: CurrencyRepo,
 ) : ViewModel() {
 
@@ -46,6 +52,8 @@ class CurrencyViewModel @Inject constructor(
     fun setSelectedCurrency(currency: String) {
         viewModelScope.launch {
             currencyRepo.setSelectedCurrency(currency)
+            currencyRepo.currencyState.first { it.selectedCurrency == currency }
+            WeatherGlanceWidget().updateAll(context)
         }
     }
 

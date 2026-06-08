@@ -1,15 +1,12 @@
 package to.bitkit.ui.screens.widgets.blocks
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,21 +23,26 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
-import to.bitkit.ui.components.BodyM
+import to.bitkit.models.widget.BlocksWidgetField
+import to.bitkit.models.widget.enabledFields
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun BlocksEditScreen(
     blocksViewModel: BlocksViewModel,
     onBack: () -> Unit,
     navigatePreview: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customPreference by blocksViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentBlock by blocksViewModel.currentBlock.collectAsStateWithLifecycle()
@@ -51,156 +53,105 @@ fun BlocksEditScreen(
         date = "",
         transactionCount = "",
         size = "",
-        source = ""
+        fees = "",
     )
 
-    BlocksEditContent(
+    Content(
         onBack = onBack,
         blocksPreferences = customPreference,
         block = currentBlock ?: blockPlaceholder,
-        onClickShowBlock = { blocksViewModel.toggleShowBlock() },
-        onClickShowTime = { blocksViewModel.toggleShowTime() },
-        onClickShowDate = { blocksViewModel.toggleShowDate() },
-        onClickShowTransactions = { blocksViewModel.toggleShowTransactions() },
-        onClickShowSize = { blocksViewModel.toggleShowSize() },
-        onClickShowSource = { blocksViewModel.toggleShowSource() },
+        onToggleField = { blocksViewModel.toggleField(it) },
         onClickReset = { blocksViewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
+        modifier = modifier
     )
 }
 
 @Composable
-fun BlocksEditContent(
+private fun Content(
     onBack: () -> Unit,
-    onClickShowBlock: () -> Unit,
-    onClickShowTime: () -> Unit,
-    onClickShowDate: () -> Unit,
-    onClickShowTransactions: () -> Unit,
-    onClickShowSize: () -> Unit,
-    onClickShowSource: () -> Unit,
+    onToggleField: (BlocksWidgetField) -> Unit,
     onClickReset: () -> Unit,
     onClickPreview: () -> Unit,
     blocksPreferences: BlocksPreferences,
     block: BlockModel,
+    modifier: Modifier = Modifier,
 ) {
-    ScreenColumn(
-        modifier = Modifier.testTag("blocks_edit_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("blocks_edit_screen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__edit),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__blocks__name),
+            onBack = onBack,
         )
 
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
                 .testTag("WidgetEditScrollView")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            VerticalSpacer(16.dp)
 
-            BodyM(
-                text = stringResource(R.string.widgets__widget__edit_description).replace(
-                    "{name}",
-                    stringResource(R.string.widgets__blocks__name)
-                ),
+            Caption13Up(
+                text = stringResource(R.string.widgets__blocks__data_header),
                 color = Colors.White64,
-                modifier = Modifier.testTag("edit_description")
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Block number toggle
-            BlockEditOptionRow(
-                label = stringResource(R.string.widgets__blocks__field__block),
-                value = block.height,
-                isEnabled = blocksPreferences.showBlock,
-                onClick = onClickShowBlock,
-                testTagPrefix = "block"
-            )
-
-            // Time toggle
-            BlockEditOptionRow(
-                label = stringResource(R.string.widgets__blocks__field__time),
-                value = block.time,
-                isEnabled = blocksPreferences.showTime,
-                onClick = onClickShowTime,
-                testTagPrefix = "time"
-            )
-
-            // Date toggle
-            BlockEditOptionRow(
-                label = stringResource(R.string.widgets__blocks__field__date),
-                value = block.date,
-                isEnabled = blocksPreferences.showDate,
-                onClick = onClickShowDate,
-                testTagPrefix = "date"
-            )
-
-            // Transactions toggle
-            BlockEditOptionRow(
-                label = stringResource(R.string.widgets__blocks__field__transactions),
-                value = block.transactionCount,
-                isEnabled = blocksPreferences.showTransactions,
-                onClick = onClickShowTransactions,
-                testTagPrefix = "transactions"
-            )
-
-            // Size toggle
-            BlockEditOptionRow(
-                label = stringResource(R.string.widgets__blocks__field__size),
-                value = block.size,
-                isEnabled = blocksPreferences.showSize,
-                onClick = onClickShowSize,
-                testTagPrefix = "size"
-            )
-
-            // Source toggle
-            BlockEditOptionRow(
-                label = stringResource(R.string.widgets__widget__source),
-                value = block.source,
-                isEnabled = blocksPreferences.showSource,
-                onClick = onClickShowSource,
-                testTagPrefix = "source"
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .padding(vertical = 21.dp, horizontal = 16.dp)
-                .fillMaxWidth()
-                .testTag("buttons_row"),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            SecondaryButton(
-                text = stringResource(R.string.common__reset),
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("WidgetEditReset"),
-                enabled = blocksPreferences != BlocksPreferences(),
-                fullWidth = false,
-                onClick = onClickReset
+                    .padding(bottom = 16.dp)
+                    .testTag("data_section_header")
             )
 
-            PrimaryButton(
-                text = stringResource(R.string.common__preview),
-                enabled = blocksPreferences.run {
-                    showBlock || showTime || showDate || showTransactions || showSize || showSource
-                },
+            BlocksWidgetField.entries.forEach { field ->
+                BlockEditOptionRow(
+                    leadingIcon = field.icon,
+                    label = stringResource(field.labelRes),
+                    value = field.value(block),
+                    isEnabled = field.isEnabled(blocksPreferences),
+                    onClick = { onToggleField(field) },
+                    testTagPrefix = field.testTag,
+                )
+            }
+
+            FillHeight()
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("WidgetEditPreview"),
-                fullWidth = false,
-                onClick = onClickPreview
-            )
+                    .padding(
+                        top = 21.dp,
+                        bottom = Insets.Bottom + 21.dp,
+                    )
+                    .fillMaxWidth()
+                    .testTag("buttons_row")
+            ) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__reset),
+                    enabled = blocksPreferences != BlocksPreferences(),
+                    fullWidth = false,
+                    onClick = onClickReset,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("WidgetEditReset")
+                )
+
+                PrimaryButton(
+                    text = stringResource(R.string.common__preview),
+                    enabled = blocksPreferences.enabledFields().isNotEmpty(),
+                    fullWidth = false,
+                    onClick = onClickPreview,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("WidgetEditPreview")
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun BlockEditOptionRow(
+    @DrawableRes leadingIcon: Int,
     label: String,
     value: String,
     isEnabled: Boolean,
@@ -212,13 +163,21 @@ private fun BlockEditOptionRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(vertical = 21.dp)
                 .fillMaxWidth()
                 .testTag("${testTagPrefix}_setting_row")
         ) {
+            Icon(
+                painter = painterResource(leadingIcon),
+                contentDescription = null,
+                tint = Colors.Brand,
+                modifier = Modifier
+                    .size(20.dp)
+                    .testTag("${testTagPrefix}_leading_icon")
+            )
+
             BodySSB(
                 text = label,
-                color = Colors.White64,
+                color = Colors.White80,
                 modifier = Modifier
                     .weight(1f)
                     .testTag("${testTagPrefix}_label")
@@ -239,10 +198,10 @@ private fun BlockEditOptionRow(
                 Icon(
                     painter = painterResource(R.drawable.ic_checkmark),
                     contentDescription = null,
-                    tint = if (isEnabled) Colors.Brand else Colors.White50,
+                    tint = if (isEnabled) Colors.Brand else Colors.Gray3,
                     modifier = Modifier
                         .size(32.dp)
-                        .testTag("${testTagPrefix}_toggle_icon"),
+                        .testTag("${testTagPrefix}_toggle_icon")
                 )
             }
         }
@@ -257,14 +216,9 @@ private fun BlockEditOptionRow(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        BlocksEditContent(
+        Content(
             onBack = {},
-            onClickShowBlock = {},
-            onClickShowTime = {},
-            onClickShowDate = {},
-            onClickShowTransactions = {},
-            onClickShowSize = {},
-            onClickShowSource = {},
+            onToggleField = {},
             onClickReset = {},
             onClickPreview = {},
             blocksPreferences = BlocksPreferences(),
@@ -274,7 +228,7 @@ private fun Preview() {
                 date = "01/2/2022",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                source = "mempool.io"
+                fees = "25 059 357",
             ),
         )
     }
@@ -284,14 +238,9 @@ private fun Preview() {
 @Composable
 private fun PreviewWithSomeOptionsEnabled() {
     AppThemeSurface {
-        BlocksEditContent(
+        Content(
             onBack = {},
-            onClickShowBlock = {},
-            onClickShowTime = {},
-            onClickShowDate = {},
-            onClickShowTransactions = {},
-            onClickShowSize = {},
-            onClickShowSource = {},
+            onToggleField = {},
             onClickReset = {},
             onClickPreview = {},
             blocksPreferences = BlocksPreferences(
@@ -300,7 +249,7 @@ private fun PreviewWithSomeOptionsEnabled() {
                 showDate = false,
                 showTransactions = true,
                 showSize = false,
-                showSource = true
+                showFees = false,
             ),
             block = BlockModel(
                 height = "",
@@ -308,7 +257,7 @@ private fun PreviewWithSomeOptionsEnabled() {
                 date = "",
                 transactionCount = "",
                 size = "",
-                source = ""
+                fees = "",
             ),
         )
     }
@@ -318,14 +267,9 @@ private fun PreviewWithSomeOptionsEnabled() {
 @Composable
 private fun PreviewWithAllDisabled() {
     AppThemeSurface {
-        BlocksEditContent(
+        Content(
             onBack = {},
-            onClickShowBlock = {},
-            onClickShowTime = {},
-            onClickShowDate = {},
-            onClickShowTransactions = {},
-            onClickShowSize = {},
-            onClickShowSource = {},
+            onToggleField = {},
             onClickReset = {},
             onClickPreview = {},
             blocksPreferences = BlocksPreferences(
@@ -334,7 +278,7 @@ private fun PreviewWithAllDisabled() {
                 showDate = false,
                 showTransactions = false,
                 showSize = false,
-                showSource = false
+                showFees = false,
             ),
             block = BlockModel(
                 height = "",
@@ -342,7 +286,7 @@ private fun PreviewWithAllDisabled() {
                 date = "",
                 transactionCount = "",
                 size = "",
-                source = ""
+                fees = "",
             ),
         )
     }

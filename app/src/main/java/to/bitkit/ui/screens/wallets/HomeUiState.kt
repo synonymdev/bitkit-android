@@ -11,7 +11,6 @@ import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
-import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
@@ -22,12 +21,10 @@ data class HomeUiState(
     val suggestions: ImmutableList<Suggestion> = persistentListOf(),
     val banners: ImmutableList<BannerItem> = persistentListOf(),
     val showWidgets: Boolean = false,
-    val showWidgetTitles: Boolean = false,
     val widgetsWithPosition: ImmutableList<WidgetWithPosition> = persistentListOf(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val currentArticle: ArticleModel? = null,
     val currentFact: String? = null,
-    val factsPreferences: FactsPreferences = FactsPreferences(),
     val facts: ImmutableList<String> = persistentListOf(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
     val currentBlock: BlockModel? = null,

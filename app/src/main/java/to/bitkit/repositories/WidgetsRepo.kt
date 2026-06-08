@@ -18,13 +18,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.BlockDTO
 import to.bitkit.data.dto.WeatherDTO
+import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
+import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.data.widgets.BlocksService
 import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
@@ -32,11 +33,11 @@ import to.bitkit.data.widgets.PriceService
 import to.bitkit.data.widgets.WeatherService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.CalculatorValues
-import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
@@ -55,15 +56,12 @@ class WidgetsRepo @Inject constructor(
     private val weatherService: WeatherService,
     private val priceService: PriceService,
     private val widgetsStore: WidgetsStore,
-    private val settingsStore: SettingsStore,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val widgetJobs = ConcurrentHashMap<WidgetType, Job>()
 
     val widgetsDataFlow: StateFlow<WidgetsData> = widgetsStore.data
         .stateIn(repoScope, SharingStarted.Eagerly, WidgetsData())
-
-    val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
 
     val articlesFlow: StateFlow<List<ArticleDTO>> = widgetsDataFlow
         .map { it.articles }
@@ -176,7 +174,11 @@ class WidgetsRepo @Inject constructor(
         Logger.verbose("Stopped refresh coroutine for $widgetType", context = TAG)
     }
 
-    suspend fun addWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.addWidget(type) }
+    suspend fun addWidget(type: WidgetType, size: WidgetSize = WidgetSize.default(type)) =
+        withContext(bgDispatcher) { widgetsStore.addWidget(type, size) }
+
+    suspend fun updateWidgetSize(type: WidgetType, size: WidgetSize) =
+        withContext(bgDispatcher) { widgetsStore.updateWidgetSize(type, size) }
 
     suspend fun deleteWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.deleteWidget(type) }
 
@@ -186,10 +188,6 @@ class WidgetsRepo @Inject constructor(
 
     suspend fun updateHeadlinePreferences(preferences: HeadlinePreferences) = withContext(bgDispatcher) {
         widgetsStore.updateHeadlinePreferences(preferences)
-    }
-
-    suspend fun updateFactsPreferences(preferences: FactsPreferences) = withContext(bgDispatcher) {
-        widgetsStore.updateFactsPreferences(preferences)
     }
 
     suspend fun updateBlocksPreferences(preferences: BlocksPreferences) = withContext(bgDispatcher) {
@@ -205,6 +203,13 @@ class WidgetsRepo @Inject constructor(
     }
 
     suspend fun fetchAllPeriods() = withContext(bgDispatcher) { priceService.fetchAllPeriods() }
+
+    suspend fun fetchPriceData(
+        pairs: List<TradingPair>,
+        period: GraphPeriod,
+    ) = withContext(bgDispatcher) {
+        priceService.fetchData(pairs = pairs, period = period)
+    }
 
     private suspend fun <T> updateWidget(
         service: WidgetService<T>,

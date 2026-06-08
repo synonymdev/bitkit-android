@@ -1,7 +1,11 @@
 package to.bitkit.ui.sheets
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -18,8 +22,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -39,15 +45,28 @@ fun ForceTransferSheet(
     transferViewModel: TransferViewModel,
 ) {
     val isLoading by transferViewModel.isForceTransferLoading.collectAsStateWithLifecycle()
-    Content(
-        isLoading = isLoading,
-        onForceTransfer = {
-            transferViewModel.forceTransfer {
-                appViewModel.hideSheet()
-            }
-        },
-        onCancel = { appViewModel.hideSheet() },
-    )
+    val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
+    val isOffline = connectivityState != ConnectivityState.CONNECTED
+
+    Box {
+        Content(
+            isLoading = isLoading,
+            onForceTransfer = {
+                transferViewModel.forceTransfer {
+                    appViewModel.hideSheet()
+                }
+            },
+            onCancel = { appViewModel.hideSheet() },
+        )
+
+        AnimatedVisibility(
+            visible = isOffline,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            ConnectionIssuesView(titleText = stringResource(R.string.lightning__transfer__nav_title))
+        }
+    }
 }
 
 @Composable

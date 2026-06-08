@@ -6,16 +6,18 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.env.Env
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
+import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Suppress("LongParameterList")
@@ -32,6 +34,8 @@ class WipeWalletUseCase @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val lightningRepo: LightningRepo,
     private val pubkyRepo: PubkyRepo,
+    private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
+    private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
 ) {
@@ -44,6 +48,9 @@ class WipeWalletUseCase @Inject constructor(
             backupRepo.setWiping(true)
             backupRepo.reset()
 
+            privatePaykitRepo.get().removePublishedEndpointsBestEffort(TAG)
+            privatePaykitRepo.get().closeAndClear()
+            privatePaykitAddressReservationRepo.clear()
             pubkyRepo.removeBitkitPaymentEndpoints()
                 .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
             pubkyRepo.wipeLocalState()
@@ -64,10 +71,7 @@ class WipeWalletUseCase @Inject constructor(
             migrationService.markMigrationChecked()
 
             lightningRepo.wipeStorage(walletIndex)
-                .onSuccess {
-                    onSuccess()
-                    if (Env.isDebug) Logger.reset()
-                }
+                .onSuccess { onSuccess() }
                 .getOrThrow()
         }.onFailure {
             Logger.error("Wipe wallet error", it, context = TAG)

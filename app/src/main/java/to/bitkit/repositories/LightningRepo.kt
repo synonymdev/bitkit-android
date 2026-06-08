@@ -58,10 +58,12 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toPeerDetailsList
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NATIVE_WITNESS_TYPES
@@ -74,6 +76,7 @@ import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
@@ -93,6 +96,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -149,6 +153,10 @@ class LightningRepo @Inject constructor(
                         // Cancel any pending retry when disconnected
                         syncRetryJob.getAndSet(null)?.cancel()
                         return@collect
+                    }
+
+                    if (_lightningState.value.nodeLifecycleState.isRunning()) {
+                        connectToTrustedPeers()
                     }
 
                     // Start retry loop if sync is failing
@@ -343,6 +351,7 @@ class LightningRepo @Inject constructor(
 
                 // Initial state sync
                 syncState()
+                logNodeSupportSummary("node started")
                 updateGeoBlockState()
                 refreshChannelCache()
 
@@ -369,6 +378,7 @@ class LightningRepo @Inject constructor(
                 connectToTrustedPeers().onFailure {
                     Logger.error("Failed to connect to trusted peers", it, context = TAG)
                 }
+                logNodeSupportSummary("trusted peers connected")
 
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
@@ -533,7 +543,11 @@ class LightningRepo @Inject constructor(
 
     private fun handleLdkEvent(event: Event) {
         when (event) {
-            is Event.ChannelPending, is Event.ChannelReady -> scope.launch { refreshChannelCache() }
+            is Event.ChannelPending, is Event.ChannelReady -> scope.launch {
+                refreshChannelCache()
+                syncState()
+            }
+
             is Event.ChannelClosed -> scope.launch { registerClosedChannel(event.channelId, event.reason) }
             else -> Unit
         }
@@ -914,10 +928,40 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.newAddress() }
     }
 
+    suspend fun newAddressForType(addressType: AddressType): Result<String> =
+        executeWhenNodeRunning("newAddressForType") {
+            runCatching { lightningService.newAddressForType(addressType) }
+        }
+
+    suspend fun newAddressInfoForType(addressType: AddressType): Result<AddressDerivationInfo> =
+        executeWhenNodeRunning("newAddressInfoForType") {
+            runCatching { lightningService.newAddressInfoForType(addressType) }
+        }
+
+    suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): Result<AddressDerivationInfo> =
+        executeWhenNodeRunning("addressInfoForType") {
+            runCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
+        }
+
+    suspend fun addressInfosForType(
+        addressType: AddressType,
+        isChange: Boolean,
+        startIndex: Int,
+        count: Int,
+    ): Result<List<AddressDerivationInfo>> =
+        executeWhenNodeRunning("addressInfosForType") {
+            runCatching { lightningService.addressInfosForType(addressType, isChange, startIndex, count) }
+        }
+
+    suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType): Result<Unit> =
+        executeWhenNodeRunning("revealReceiveAddresses") {
+            runCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
+        }
+
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
-        expirySeconds: UInt = 86_400u,
+        expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
         updateGeoBlockState()
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
@@ -926,7 +970,7 @@ class LightningRepo @Inject constructor(
     suspend fun createInvoiceMsats(
         amountMsats: ULong,
         description: String,
-        expirySeconds: UInt = 86_400u,
+        expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
         updateGeoBlockState()
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
@@ -1009,15 +1053,69 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun waitForUsableChannels() {
-        if (lightningService.channels?.any { it.isUsable } == true) return
+    suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
+        var state = _lightningState.value
+        if (!state.nodeLifecycleState.canRun()) {
+            delayNoUsableChannelsFeedback()
+            return@withContext
+        }
+        if (state.hasUsableChannels()) return@withContext
+
+        state = waitForChannelsToLoadIfNeeded(state) ?: return@withContext
+        if (!state.nodeLifecycleState.canRun()) {
+            delayNoUsableChannelsFeedback()
+            return@withContext
+        }
+
+        if (state.channels.isEmpty()) {
+            if (state.nodeLifecycleState.isRunning()) {
+                syncState()
+                state = _lightningState.value
+            }
+
+            if (state.channels.isEmpty()) {
+                delayNoUsableChannelsFeedback()
+                return@withContext
+            }
+            if (state.hasUsableChannels()) return@withContext
+        }
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
-        syncState()
 
-        withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT_MS) {
-            _lightningState.first { state -> state.channels.any { it.isUsable } }
-        } ?: Logger.warn("Timeout waiting for usable channels", context = TAG)
+        val finalState = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
+            _lightningState.first { it.shouldStopWaitingForUsableChannels() }
+        } ?: run {
+            Logger.warn("Timed out waiting for usable channels", context = TAG)
+            return@withContext
+        }
+
+        if (!finalState.nodeLifecycleState.canRun() || finalState.channels.isEmpty()) {
+            delayNoUsableChannelsFeedback()
+        }
+    }
+
+    private suspend fun waitForChannelsToLoadIfNeeded(state: LightningState): LightningState? {
+        if (state.channels.isNotEmpty() || state.nodeLifecycleState.isRunning()) return state
+
+        Logger.info("Waiting for node to load channels before sending payment", context = TAG)
+        return withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
+            _lightningState.first { it.shouldStopWaitingForLoadedChannels() }
+        } ?: run {
+            Logger.warn("Timed out waiting for node to load channels", context = TAG)
+            null
+        }
+    }
+
+    private fun LightningState.hasUsableChannels() = channels.any { it.isUsable }
+
+    private fun LightningState.shouldStopWaitingForLoadedChannels() =
+        !nodeLifecycleState.canRun() || nodeLifecycleState.isRunning() || channels.isNotEmpty()
+
+    private fun LightningState.shouldStopWaitingForUsableChannels() =
+        !nodeLifecycleState.canRun() || channels.isEmpty() || hasUsableChannels()
+
+    private suspend fun delayNoUsableChannelsFeedback() {
+        delay(NO_USABLE_CHANNELS_FEEDBACK_DELAY)
     }
 
     @Suppress("LongParameterList")
@@ -1120,7 +1218,8 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("getPayments") {
-        val payments = lightningService.payments ?: return@executeWhenNodeRunning Result.failure(GetPaymentsError())
+        val payments = lightningService.listPayments()
+            ?: return@executeWhenNodeRunning Result.failure(GetPaymentsError())
         Result.success(payments)
     }
 
@@ -1156,7 +1255,7 @@ class LightningRepo @Inject constructor(
         }.recoverCatching {
             if (it is CancellationException) throw it
             val fallbackFee = 1000uL
-            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", e = it, context = TAG)
+            Logger.warn("calculateTotalFee error, using fallback of '$fallbackFee'", it, context = TAG)
             return@recoverCatching fallbackFee
         }
     }
@@ -1229,19 +1328,66 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun canSend(amountSats: ULong, fallbackToCachedBalance: Boolean = true) = withContext(bgDispatcher) {
-        if (!_lightningState.value.nodeLifecycleState.canRun()) {
-            return@withContext false
+    private fun logNodeSupportSummary(reason: String) {
+        val state = _lightningState.value
+        val connectedPeers = state.peers.count { it.isConnected }
+        val persistedPeers = state.peers.count { it.isPersisted }
+        val readyChannels = state.channels.count { it.isChannelReady }
+        val usableChannels = state.channels.count { it.isUsable }
+
+        Logger.info(
+            "Collected node support summary for '$reason': " +
+                "nodeId='${state.nodeId}', " +
+                "lifecycle='${state.nodeLifecycleState}', " +
+                "peers='${state.peers.size}', " +
+                "connectedPeers='$connectedPeers', " +
+                "persistedPeers='$persistedPeers', " +
+                "channels='${state.channels.size}', " +
+                "readyChannels='$readyChannels', " +
+                "usableChannels='$usableChannels'",
+            context = TAG,
+        )
+
+        state.peers.forEach {
+            Logger.info(
+                "Collected peer support summary for '$reason': " +
+                    "nodeId='${it.nodeId}', " +
+                    "address='${it.address}', " +
+                    "connected='${it.isConnected}', " +
+                    "persisted='${it.isPersisted}'",
+                context = TAG,
+            )
         }
-        if (_lightningState.value.nodeLifecycleState.isStarting() && fallbackToCachedBalance) {
-            return@withContext amountSats <= (cacheStore.data.first().balance?.maxSendLightningSats ?: 0u)
+
+        state.channels.forEach {
+            Logger.info(
+                "Collected channel support summary for '$reason': " +
+                    "channelId='${it.channelId}', " +
+                    "counterparty='${it.counterpartyNodeId}', " +
+                    "ready='${it.isChannelReady}', " +
+                    "usable='${it.isUsable}', " +
+                    "announced='${it.isAnnounced}', " +
+                    "outboundMsat='${it.outboundCapacityMsat}', " +
+                    "inboundMsat='${it.inboundCapacityMsat}'",
+                context = TAG,
+            )
         }
-        if (lightningService.channels == null) {
-            withTimeoutOrNull(CHANNELS_READY_TIMEOUT_MS) {
-                _lightningState.first { lightningService.channels != null }
+    }
+
+    suspend fun awaitPeerConnected(timeout: Duration = 30.seconds) = withContext(bgDispatcher) {
+        if (lightningService.peers?.any { it.isConnected } == true) return@withContext
+        Logger.debug("Waiting for peer to reconnect (timeout='$timeout')...", context = TAG)
+        withTimeoutOrNull(timeout) {
+            while (lightningService.peers?.any { it.isConnected } != true) {
+                delay(1.seconds)
             }
         }
-        return@withContext lightningService.canSend(amountSats)
+    }
+
+    fun canSend(amountSats: ULong): Boolean {
+        val state = _lightningState.value
+        if (!state.nodeLifecycleState.canRun()) return false
+        return state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
     }
 
     fun getNodeId(): String? =
@@ -1457,6 +1603,26 @@ class LightningRepo @Inject constructor(
         outcome?.let { Result.success(it) }
             ?: Result.failure(ProbeError.TimedOut())
     }
+
+    fun probeReadiness(): ProbeReadiness {
+        val state = _lightningState.value
+        val graph = getNetworkGraphInfo()
+        return ProbeReadiness(
+            nodeRunning = state.nodeLifecycleState.isRunning(),
+            nodeId = state.nodeId.takeIf { it.isNotBlank() },
+            lifecycle = state.nodeLifecycleState.toString(),
+            peers = state.peers.size,
+            connectedPeers = state.peers.count { it.isConnected },
+            channels = state.channels.size,
+            readyChannels = state.channels.count { it.isChannelReady },
+            usableChannels = state.channels.count { it.isUsable },
+            outboundCapacitySats = state.channels.totalNextOutboundHtlcLimitSats(),
+            graphNodeCount = graph?.nodeCount,
+            graphChannelCount = graph?.channelCount,
+            latestRgsSyncTimestamp = graph?.latestRgsSyncTimestamp,
+            syncHealthy = state.isSyncHealthy,
+        )
+    }
     // endregion
 
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
@@ -1478,8 +1644,8 @@ class LightningRepo @Inject constructor(
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
-        private const val CHANNELS_READY_TIMEOUT_MS = 15_000L
-        private const val CHANNELS_USABLE_TIMEOUT_MS = 15_000L
+        private val CHANNELS_USABLE_TIMEOUT = 15.seconds
+        private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
         val SEND_LN_TIMEOUT = 10.seconds
         private val PROBE_TIMEOUT = 60.seconds
     }
@@ -1522,6 +1688,30 @@ data class LightningState(
 data class ProbeDispatch(
     val paymentIds: Set<PaymentId>,
 )
+
+data class ProbeReadiness(
+    val nodeRunning: Boolean,
+    val nodeId: String?,
+    val lifecycle: String,
+    val peers: Int,
+    val connectedPeers: Int,
+    val channels: Int,
+    val readyChannels: Int,
+    val usableChannels: Int,
+    val outboundCapacitySats: ULong,
+    val graphNodeCount: Int?,
+    val graphChannelCount: Int?,
+    val latestRgsSyncTimestamp: ULong?,
+    val syncHealthy: Boolean,
+) {
+    val ready: Boolean
+        get() = nodeRunning &&
+            connectedPeers > 0 &&
+            usableChannels > 0 &&
+            outboundCapacitySats > 0u &&
+            (graphChannelCount ?: 0) > 0 &&
+            syncHealthy
+}
 
 sealed interface ProbeOutcome {
     val paymentId: PaymentId

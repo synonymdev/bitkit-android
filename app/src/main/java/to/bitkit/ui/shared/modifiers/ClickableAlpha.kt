@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.ui.semantics.onLongClick as semanticsOnLongClick
 
 private val CLICK_DEBOUNCE = 500.milliseconds
 
@@ -69,27 +71,30 @@ fun Modifier.clickableAlpha(
     enabled: Boolean = true,
     ripple: Boolean = false,
     debounce: Duration = CLICK_DEBOUNCE,
+    onLongClick: (() -> Unit)? = null,
     onClick: (() -> Unit)?,
 ): Modifier = when {
     onClick == null || !enabled -> this
-    ripple ->
+    ripple && onLongClick == null ->
         this
             .alphaFeedback(pressedAlpha)
             .clickable(onClick = rememberDebouncedClick(debounce, onClick))
 
-    else -> this.then(ClickableAlphaElement(pressedAlpha, debounce, onClick))
+    else -> this.then(ClickableAlphaElement(pressedAlpha, debounce, onLongClick, onClick))
 }
 
 private data class ClickableAlphaElement(
     val pressedAlpha: Float,
     val debounce: Duration,
+    val onLongClick: (() -> Unit)?,
     val onClick: () -> Unit,
 ) : ModifierNodeElement<ClickableAlphaNode>() {
-    override fun create(): ClickableAlphaNode = ClickableAlphaNode(pressedAlpha, debounce, onClick)
+    override fun create(): ClickableAlphaNode = ClickableAlphaNode(pressedAlpha, debounce, onLongClick, onClick)
 
     override fun update(node: ClickableAlphaNode) {
         node.pressedAlpha = pressedAlpha
         node.debounce = debounce
+        node.onLongClick = onLongClick
         node.onClick = onClick
     }
 
@@ -97,6 +102,7 @@ private data class ClickableAlphaElement(
         name = "clickableAlpha"
         properties["pressedAlpha"] = pressedAlpha
         properties["debounce"] = debounce
+        properties["onLongClick"] = onLongClick
         properties["onClick"] = onClick
     }
 }
@@ -104,6 +110,7 @@ private data class ClickableAlphaElement(
 private class ClickableAlphaNode(
     var pressedAlpha: Float,
     var debounce: Duration,
+    var onLongClick: (() -> Unit)?,
     var onClick: () -> Unit,
 ) : DelegatingNode(), LayoutModifierNode, SemanticsModifierNode {
 
@@ -121,6 +128,7 @@ private class ClickableAlphaNode(
                             coroutineScope.launch { animatable.animateTo(1f) }
                         }
                     },
+                    onLongPress = if (onLongClick == null) null else ::handleLongPress,
                     onTap = {
                         if (debouncer.tryClick(debounce, onClick)) {
                             coroutineScope.launch {
@@ -134,6 +142,12 @@ private class ClickableAlphaNode(
                 )
             }
         )
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    private fun handleLongPress(offset: Offset) {
+        onLongClick?.invoke()
+        coroutineScope.launch { animatable.animateTo(1f) }
     }
 
     override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
@@ -151,6 +165,12 @@ private class ClickableAlphaNode(
         onClick {
             debouncer.tryClick(debounce, onClick)
             true
+        }
+        onLongClick?.let {
+            semanticsOnLongClick {
+                it()
+                true
+            }
         }
     }
 }

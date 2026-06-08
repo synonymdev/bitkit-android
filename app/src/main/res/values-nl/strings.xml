@@ -728,7 +728,6 @@
     <string name="settings__support__copyright">Bitkit is gemaakt door Synonym Software, S.A. DE C.V. ©2025. Alle rechten voorbehouden.</string>
     <string name="settings__support_title">Ondersteuning</string>
     <string name="settings__widgets__nav_title">Widgets</string>
-    <string name="settings__widgets__showWidgetTitles">Widgettitels tonen</string>
     <string name="settings__widgets__showWidgets">Widgets</string>
     <string name="settings__widgets__reset_suggestions">Suggestiekaarten resetten</string>
     <string name="settings__widgets__reset_widgets">Widgets resetten</string>
@@ -1009,6 +1008,5 @@
     <string name="widgets__widget__edit_default">Standaard</string>
     <string name="widgets__widget__edit_description">Selecteer welke velden je wilt weergeven in de {name}-widget.</string>
     <string name="widgets__widget__nav_title">Widget</string>
-    <string name="widgets__widget__source">Bron</string>
     <string name="widgets__widgets">Widgets</string>
 </resources>

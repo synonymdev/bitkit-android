@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.widgets.headlines
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
@@ -24,22 +22,25 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
-import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun HeadlinesEditScreen(
     headlinesViewModel: HeadlinesViewModel,
     onBack: () -> Unit,
-    navigatePreview: () -> Unit
+    navigatePreview: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
@@ -60,6 +61,7 @@ fun HeadlinesEditScreen(
         onClickPreview = {
             navigatePreview()
         },
+        modifier = modifier
     )
 }
 
@@ -71,15 +73,17 @@ fun HeadlinesEditContent(
     onClickPreview: () -> Unit,
     onClickShowSource: () -> Unit,
     headlinePreferences: HeadlinePreferences,
-    article: ArticleModel
+    article: ArticleModel,
+    modifier: Modifier = Modifier,
 ) {
-    ScreenColumn(
-        modifier = Modifier.testTag("headlines_edit_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("headlines_edit_screen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__edit),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__news__name),
+            onBack = onBack,
         )
 
         Column(
@@ -87,56 +91,21 @@ fun HeadlinesEditContent(
                 .padding(horizontal = 16.dp)
                 .testTag("WidgetEditScrollView")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
+            VerticalSpacer(16.dp)
 
-            BodyM(
-                text = stringResource(R.string.widgets__widget__edit_description).replace(
-                    "{name}",
-                    stringResource(R.string.widgets__news__name)
-                ),
+            Caption13Up(
+                text = stringResource(R.string.widgets__widget__content),
                 color = Colors.White64,
-                modifier = Modifier.testTag("edit_description")
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("time_setting_row")
-            ) {
-                BodyM(
-                    text = article.timeAgo,
-                    modifier = Modifier.testTag("time_text")
-                )
-
-                IconButton(
-                    onClick = onClickTime,
-                    modifier = Modifier.testTag("time_toggle_button")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_checkmark),
-                        contentDescription = null,
-                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White50,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("time_toggle_icon"),
-                    )
-                }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.testTag("time_divider")
+                    .padding(bottom = 16.dp)
+                    .testTag("content_section_header")
             )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .padding(vertical = 21.dp)
+                    .padding(vertical = 8.dp)
                     .fillMaxWidth()
                     .testTag("title_setting_row")
             ) {
@@ -158,7 +127,7 @@ fun HeadlinesEditContent(
                         tint = Colors.Brand,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("title_toggle_icon"),
+                            .testTag("title_toggle_icon")
                     )
                 }
             }
@@ -171,22 +140,16 @@ fun HeadlinesEditContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .padding(vertical = 21.dp)
+                    .padding(vertical = 8.dp)
                     .fillMaxWidth()
                     .testTag("source_setting_row")
             ) {
-                CaptionB(
-                    text = stringResource(R.string.widgets__widget__source),
-                    color = Colors.White64,
+                BodySSB(
+                    text = article.publisher,
+                    color = Colors.Brand,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("source_label")
-                )
-
-                CaptionB(
-                    text = article.publisher,
-                    color = Colors.White64,
-                    modifier = Modifier.testTag("source_text")
+                        .testTag("source_text")
                 )
 
                 IconButton(
@@ -196,10 +159,10 @@ fun HeadlinesEditContent(
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White50,
+                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.Gray3,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("source_toggle_icon"),
+                            .testTag("source_toggle_icon")
                     )
                 }
             }
@@ -208,32 +171,70 @@ fun HeadlinesEditContent(
                 modifier = Modifier.testTag("source_divider")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .fillMaxWidth()
+                    .testTag("time_setting_row")
+            ) {
+                BodySSB(
+                    text = article.timeAgo,
+                    color = Colors.White64,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("time_text")
+                )
+
+                IconButton(
+                    onClick = onClickTime,
+                    modifier = Modifier.testTag("time_toggle_button")
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_checkmark),
+                        contentDescription = null,
+                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.Gray3,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("time_toggle_icon")
+                    )
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.testTag("time_divider")
+            )
+
+            FillHeight()
 
             Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
-                    .padding(vertical = 21.dp)
+                    .padding(
+                        top = 21.dp,
+                        bottom = Insets.Bottom + 21.dp,
+                    )
                     .fillMaxWidth()
-                    .testTag("buttons_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .testTag("buttons_row")
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__reset),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("WidgetEditReset"),
                     enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
                     fullWidth = false,
-                    onClick = onClickReset
+                    onClick = onClickReset,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("WidgetEditReset")
                 )
 
                 PrimaryButton(
                     text = stringResource(R.string.common__preview),
+                    fullWidth = false,
+                    onClick = onClickPreview,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetEditPreview"),
-                    fullWidth = false,
-                    onClick = onClickPreview
+                        .testTag("WidgetEditPreview")
                 )
             }
         }

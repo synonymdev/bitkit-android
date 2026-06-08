@@ -242,6 +242,10 @@ class CurrencyRepo @Inject constructor(
 
     fun convertFiatToSats(fiat: Double, currency: String?) = convertFiatToSats(BigDecimal.valueOf(fiat), currency)
 
+    fun formatSatsAsFiatWithSymbol(sats: Long, withSpace: Boolean = false): String? {
+        return convertSatsToFiat(sats).getOrNull()?.formattedWithSymbol(withSpace = withSpace)
+    }
+
     companion object {
         private const val TAG = "CurrencyRepo"
     }

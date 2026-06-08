@@ -65,6 +65,7 @@ fun PubkyChoiceScreen(
     onNavigateToCreateProfile: () -> Unit,
     onNavigateToContactImportOverview: () -> Unit,
     onNavigateToPayContacts: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     onBackClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -83,6 +84,13 @@ fun PubkyChoiceScreen(
                 PubkyChoiceEffect.NavigateToPayContacts -> onNavigateToPayContacts()
             }
         }
+    }
+
+    LaunchedEffect(uiState.navigateToProfile) {
+        if (!uiState.navigateToProfile) return@LaunchedEffect
+
+        viewModel.clearProfileNavigation()
+        onNavigateToProfile()
     }
 
     Content(

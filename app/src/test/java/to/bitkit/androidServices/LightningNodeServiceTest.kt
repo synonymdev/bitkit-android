@@ -4,7 +4,10 @@ import android.Manifest
 import android.app.Activity
 import android.app.Application
 import android.app.Notification
+import android.app.Service
 import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.testing.BindValue
@@ -12,6 +15,7 @@ import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltTestApplication
 import dagger.hilt.android.testing.UninstallModules
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
@@ -24,9 +28,12 @@ import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.stub
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.Robolectric
@@ -36,6 +43,8 @@ import org.robolectric.annotation.Config
 import to.bitkit.App
 import to.bitkit.CurrentActivity
 import to.bitkit.R
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.di.DbModule
@@ -58,12 +67,18 @@ import to.bitkit.ui.shared.toast.ToastQueueManager
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @HiltAndroidTest
 @UninstallModules(DispatchersModule::class, DbModule::class, ViewModelModule::class)
 @Config(application = HiltTestApplication::class, sdk = [34]) // Pin Robolectric to an SDK that supports Java 17
 @RunWith(RobolectricTestRunner::class)
 class LightningNodeServiceTest : BaseUnitTest() {
+    companion object {
+        private const val START_ID = 1
+        private const val STOP_START_ID = 2
+        private const val TIMEOUT_START_ID = 3
+    }
 
     @get:Rule(order = 1)
     var hiltRule = HiltAndroidRule(this)
@@ -88,6 +103,9 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
     @BindValue
     val cacheStore = mock<CacheStore>()
+
+    @BindValue
+    val appWidgetRefreshScheduler = mock<AppWidgetRefreshScheduler>()
 
     private var capturedHandler: NodeEventHandler? = null
     private val cacheData = MutableSharedFlow<AppCacheData>(replay = 1)
@@ -146,9 +164,110 @@ class LightningNodeServiceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `start action promotes data sync foreground service and starts node`() = test {
+        val service = createService()
+        val result = service.onStartCommand(serviceIntent(), 0, START_ID)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(Service.START_NOT_STICKY, result)
+        assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, service.foregroundServiceType)
+        assertNotNull(Shadows.shadowOf(service).lastForegroundNotification)
+        assertNotNull(capturedHandler, "Event handler should be captured")
+    }
+
+    @Test
+    fun `start action only starts node once`() = test {
+        val service = createService()
+        service.onStartCommand(serviceIntent(), 0, START_ID)
+        service.onStartCommand(serviceIntent(), 0, START_ID + 1)
+        testScheduler.advanceUntilIdle()
+
+        verifyLightningStart(count = 1)
+    }
+
+    @Test
+    fun `null intent stops service without starting node`() = test {
+        val service = createService()
+        val result = service.onStartCommand(null, 0, START_ID)
+
+        assertEquals(Service.START_NOT_STICKY, result)
+        assertEquals(START_ID, Shadows.shadowOf(service).stopSelfId)
+        assertNull(capturedHandler)
+        verifyLightningNeverStarted()
+    }
+
+    @Test
+    fun `unsupported action stops service without starting node`() = test {
+        val service = createService()
+        val result = service.onStartCommand(serviceIntent("unsupported"), 0, START_ID)
+
+        assertEquals(Service.START_NOT_STICKY, result)
+        assertEquals(START_ID, Shadows.shadowOf(service).stopSelfId)
+        assertNull(capturedHandler)
+        verifyLightningNeverStarted()
+    }
+
+    @Test
+    fun `foreground promotion failure stops service without starting node`() = test {
+        val service = createService()
+        val shadowService = Shadows.shadowOf(service)
+        shadowService.setThrowInStartForeground(RuntimeException("blocked"))
+
+        val result = service.onStartCommand(serviceIntent(), 0, START_ID)
+
+        assertEquals(Service.START_NOT_STICKY, result)
+        assertEquals(START_ID, shadowService.stopSelfId)
+        assertNull(capturedHandler)
+        verifyLightningNeverStarted()
+    }
+
+    @Test
+    fun `stop action stops service before node stop completes`() = test {
+        val stopResult = CompletableDeferred<Result<Unit>>()
+        whenever { lightningRepo.stop() }.doSuspendableAnswer { stopResult.await() }
+
+        val service = startService()
+        testScheduler.advanceUntilIdle()
+        val shadowService = Shadows.shadowOf(service)
+
+        val result = service.onStartCommand(
+            serviceIntent(LightningNodeService.ACTION_STOP_SERVICE_AND_APP),
+            0,
+            STOP_START_ID,
+        )
+
+        assertEquals(Service.START_NOT_STICKY, result)
+        assertTrue(shadowService.isStoppedBySelf)
+        assertTrue(shadowService.isForegroundStopped)
+        assertEquals(STOP_START_ID, shadowService.stopSelfId)
+
+        stopResult.complete(Result.success(Unit))
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `foreground service timeout stops service before node stop completes`() = test {
+        val stopResult = CompletableDeferred<Result<Unit>>()
+        whenever { lightningRepo.stop() }.doSuspendableAnswer { stopResult.await() }
+
+        val service = startService()
+        testScheduler.advanceUntilIdle()
+        val shadowService = Shadows.shadowOf(service)
+
+        service.onTimeout(TIMEOUT_START_ID, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+
+        assertTrue(shadowService.isStoppedBySelf)
+        assertTrue(shadowService.isForegroundStopped)
+        assertEquals(TIMEOUT_START_ID, shadowService.stopSelfId)
+
+        stopResult.complete(Result.success(Unit))
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
     fun `payment received in background shows notification`() = test {
-        val controller = Robolectric.buildService(LightningNodeService::class.java)
-        controller.create().startCommand(0, 0)
+        startService()
         testScheduler.advanceUntilIdle()
 
         assertNotNull(capturedHandler, "Event handler should be captured")
@@ -186,8 +305,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val mockActivity: Activity = mock()
         App.currentActivity?.onActivityStarted(mockActivity)
 
-        val controller = Robolectric.buildService(LightningNodeService::class.java)
-        controller.create().startCommand(0, 0)
+        startService()
         testScheduler.advanceUntilIdle()
 
         val event = Event.PaymentReceived(
@@ -214,8 +332,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
     @Test
     fun `notification uses content from use case result`() = test {
-        val controller = Robolectric.buildService(LightningNodeService::class.java)
-        controller.create().startCommand(0, 0)
+        startService()
         testScheduler.advanceUntilIdle()
 
         val event = Event.PaymentReceived(
@@ -252,8 +369,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             )
         )
 
-        val controller = Robolectric.buildService(LightningNodeService::class.java)
-        controller.create().startCommand(0, 0)
+        startService()
         testScheduler.advanceUntilIdle()
 
         val event = Event.PaymentSuccessful(
@@ -288,8 +404,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             )
         )
 
-        val controller = Robolectric.buildService(LightningNodeService::class.java)
-        controller.create().startCommand(0, 0)
+        startService()
         testScheduler.advanceUntilIdle()
 
         val event = Event.PaymentFailed(
@@ -325,8 +440,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             )
         )
 
-        val controller = Robolectric.buildService(LightningNodeService::class.java)
-        controller.create().startCommand(0, 0)
+        startService()
         testScheduler.advanceUntilIdle()
 
         val event = Event.PaymentSuccessful(
@@ -354,8 +468,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             Result.success(NotifyPendingPaymentResolved.Result.Skip)
         )
 
-        val controller = Robolectric.buildService(LightningNodeService::class.java)
-        controller.create().startCommand(0, 0)
+        startService()
         testScheduler.advanceUntilIdle()
 
         val event = Event.PaymentSuccessful(
@@ -376,5 +489,67 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
         }
         assertNull(notification, "Non-pending payment should NOT trigger notification")
+    }
+
+    @Test
+    fun `stop service action schedules widget catch-up before shutdown`() = test {
+        val service = createService()
+
+        service.onStartCommand(
+            serviceIntent(LightningNodeService.ACTION_STOP_SERVICE_AND_APP),
+            0,
+            STOP_START_ID,
+        )
+        testScheduler.advanceUntilIdle()
+
+        inOrder(appWidgetRefreshScheduler, lightningRepo) {
+            verify(appWidgetRefreshScheduler).ensureScheduled(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+            verify(appWidgetRefreshScheduler).requestCatchUp(AppWidgetRefreshReason.SERVICE_STOP_ACTION)
+            verify(lightningRepo).stop()
+        }
+    }
+
+    private fun createService(): LightningNodeService {
+        return Robolectric.buildService(LightningNodeService::class.java)
+            .create()
+            .get()
+    }
+
+    private fun startService(): LightningNodeService {
+        val service = createService()
+        service.onStartCommand(serviceIntent(), 0, START_ID)
+        return service
+    }
+
+    private fun serviceIntent(action: String = LightningNodeService.ACTION_START_SERVICE): Intent {
+        return Intent(context, LightningNodeService::class.java).apply {
+            this.action = action
+        }
+    }
+
+    private suspend fun verifyLightningStart(count: Int) {
+        verify(lightningRepo, times(count)).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
+    }
+
+    private suspend fun verifyLightningNeverStarted() {
+        verify(lightningRepo, never()).start(
+            any(),
+            anyOrNull(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            any(),
+        )
     }
 }
