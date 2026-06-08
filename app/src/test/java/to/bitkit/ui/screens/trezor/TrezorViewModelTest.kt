@@ -374,7 +374,7 @@ class TrezorViewModelTest : BaseUnitTest() {
     @Test
     fun `startWatcher should not expose active watcher until start completes`() = test {
         val startResult = CompletableDeferred<Result<Unit>>()
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
             .doSuspendableAnswer { startResult.await() }
         sut.setWatcherExtendedKey("xpub6test123")
 
@@ -404,13 +404,13 @@ class TrezorViewModelTest : BaseUnitTest() {
         sut.startWatcher()
         advanceUntilIdle()
 
-        verify(trezorRepo, never()).startWatcher(any(), any(), any(), any())
+        verify(trezorRepo, never()).startWatcher(any(), any(), any(), any(), anyOrNull())
         assertNull(sut.uiState.value.activeWatcherId)
     }
 
     @Test
     fun `watcher transaction event should mark watcher connected`() = test {
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
             .thenReturn(Result.success(Unit))
         sut.setWatcherExtendedKey("xpub6test123")
         sut.startWatcher()
@@ -437,7 +437,7 @@ class TrezorViewModelTest : BaseUnitTest() {
     @Test
     fun `watcher event should be handled while start is in flight`() = test {
         val startResult = CompletableDeferred<Result<Unit>>()
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
             .doSuspendableAnswer { startResult.await() }
         sut.setWatcherExtendedKey("xpub6test123")
         sut.startWatcher()
@@ -471,7 +471,7 @@ class TrezorViewModelTest : BaseUnitTest() {
 
     @Test
     fun `stopWatcher should stop repo watcher and clear watcher state`() = test {
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
             .thenReturn(Result.success(Unit))
         whenever(trezorRepo.stopWatcher(any())).thenReturn(Result.success(Unit))
         sut.setWatcherExtendedKey("xpub6test123")
