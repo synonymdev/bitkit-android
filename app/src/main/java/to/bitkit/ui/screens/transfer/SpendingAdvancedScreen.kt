@@ -107,7 +107,7 @@ fun SpendingAdvancedScreen(
         }
     }
 
-    LaunchedEffect(amountInputViewModel) {
+    LaunchedEffect(Unit) {
         amountInputViewModel.effect.collect {
             when (it) {
                 AmountInputEffect.MaxExceeded -> app.toast(
