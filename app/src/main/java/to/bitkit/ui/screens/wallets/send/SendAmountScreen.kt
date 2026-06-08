@@ -91,7 +91,7 @@ fun SendAmountScreen(
         currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
     }
 
-    LaunchedEffect(amountInputViewModel) {
+    LaunchedEffect(Unit) {
         amountInputViewModel.effect.collect {
             when (it) {
                 AmountInputEffect.MaxExceeded -> app?.toast(
