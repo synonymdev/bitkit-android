@@ -8,7 +8,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -35,7 +34,6 @@ import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -140,39 +138,6 @@ internal fun WatcherSection(
             Column {
                 VerticalSpacer(16.dp)
                 WatcherStatusContent(uiState)
-            }
-        }
-    }
-}
-
-private fun AccountType?.label(): String = when (this) {
-    null -> "Auto"
-    AccountType.LEGACY -> "Legacy"
-    AccountType.WRAPPED_SEGWIT -> "Wrapped"
-    AccountType.NATIVE_SEGWIT -> "Native"
-    AccountType.TAPROOT -> "Taproot"
-}
-
-@Composable
-private fun AccountTypeSelectorRow(
-    selectedAccountType: AccountType?,
-    onAccountTypeChange: (AccountType?) -> Unit,
-) {
-    Column {
-        Caption("Account type (Auto = detect from key prefix)", color = Colors.White50)
-        VerticalSpacer(8.dp)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            val options = listOf(null) + AccountType.entries
-            options.forEach { type ->
-                TagButton(
-                    text = type.label(),
-                    onClick = { onAccountTypeChange(type) },
-                    isSelected = type == selectedAccountType,
-                )
             }
         }
     }

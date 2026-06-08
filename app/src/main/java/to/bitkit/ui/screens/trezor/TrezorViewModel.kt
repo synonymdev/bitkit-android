@@ -303,6 +303,10 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(lookup = it.lookup.copy(input = input)) }
     }
 
+    fun setLookupAccountType(type: AccountType?) {
+        _uiState.update { it.copy(lookup = it.lookup.copy(selectedAccountType = type)) }
+    }
+
     fun lookupBalanceInfo() {
         viewModelScope.launch(bgDispatcher) {
             val input = _uiState.value.lookupInput.trim()
@@ -323,7 +327,8 @@ class TrezorViewModel @Inject constructor(
 
             val network = _uiState.value.selectedNetwork
             if (isExtendedKey(input)) {
-                trezorRepo.getAccountInfo(extendedKey = input, network = network)
+                val scriptType = _uiState.value.lookup.selectedAccountType
+                trezorRepo.getAccountInfo(extendedKey = input, network = network, scriptType = scriptType)
                     .onSuccess { result ->
                         _uiState.update {
                             it.copy(
@@ -648,6 +653,10 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(txHistory = it.txHistory.copy(input = input)) }
     }
 
+    fun setTxHistoryAccountType(type: AccountType?) {
+        _uiState.update { it.copy(txHistory = it.txHistory.copy(selectedAccountType = type)) }
+    }
+
     fun lookupTransactionHistory() {
         viewModelScope.launch(bgDispatcher) {
             val input = _uiState.value.txHistoryInput.trim()
@@ -660,7 +669,8 @@ class TrezorViewModel @Inject constructor(
             }
 
             val network = _uiState.value.selectedNetwork
-            trezorRepo.getTransactionHistory(extendedKey = input, network = network)
+            val scriptType = _uiState.value.txHistory.selectedAccountType
+            trezorRepo.getTransactionHistory(extendedKey = input, network = network, scriptType = scriptType)
                 .onSuccess { result ->
                     _uiState.update {
                         it.copy(txHistory = it.txHistory.copy(isLoading = false, result = result))
@@ -906,6 +916,9 @@ data class TrezorUiState(
     val addressInfoResult: SingleAddressInfoResult?
         get() = lookup.addressInfoResult
 
+    val lookupSelectedAccountType: AccountType?
+        get() = lookup.selectedAccountType
+
     val sendAddress: String
         get() = send.address
 
@@ -950,6 +963,9 @@ data class TrezorUiState(
 
     val txHistoryResult: TransactionHistoryResult?
         get() = txHistory.result
+
+    val txHistorySelectedAccountType: AccountType?
+        get() = txHistory.selectedAccountType
 
     val watcherExtendedKey: String
         get() = watcher.extendedKey
@@ -1018,6 +1034,7 @@ data class TrezorLookupState(
     val isLookingUp: Boolean = false,
     val accountInfoResult: AccountInfoResult? = null,
     val addressInfoResult: SingleAddressInfoResult? = null,
+    val selectedAccountType: AccountType? = null,
 )
 
 @Stable
@@ -1038,6 +1055,7 @@ data class TrezorTxHistoryState(
     val input: String = "",
     val isLoading: Boolean = false,
     val result: TransactionHistoryResult? = null,
+    val selectedAccountType: AccountType? = null,
 )
 
 @Stable

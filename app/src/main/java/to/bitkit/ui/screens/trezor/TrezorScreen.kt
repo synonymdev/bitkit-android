@@ -154,6 +154,7 @@ private fun TrezorScreenContent(
             onMessageChange = viewModel::setMessageToSign,
             onClearError = viewModel::clearError,
             onLookupInputChange = viewModel::setLookupInput,
+            onLookupAccountTypeChange = viewModel::setLookupAccountType,
             onLookup = viewModel::lookupBalanceInfo,
             onNetworkChange = viewModel::setSelectedNetwork,
             onSendAddressChange = viewModel::setSendAddress,
@@ -167,6 +168,7 @@ private fun TrezorScreenContent(
             onBackToForm = viewModel::backToComposeForm,
             onResetSend = viewModel::resetSendFlow,
             onTxHistoryInputChange = viewModel::setTxHistoryInput,
+            onTxHistoryAccountTypeChange = viewModel::setTxHistoryAccountType,
             onLookupTxHistory = viewModel::lookupTransactionHistory,
             onWatcherExtendedKeyChange = viewModel::setWatcherExtendedKey,
             onWatcherGapLimitChange = viewModel::setWatcherGapLimit,
@@ -200,6 +202,7 @@ private fun Content(
     onMessageChange: (String) -> Unit = {},
     onClearError: () -> Unit = {},
     onLookupInputChange: (String) -> Unit = {},
+    onLookupAccountTypeChange: (AccountType?) -> Unit = {},
     onLookup: () -> Unit = {},
     onNetworkChange: (BitkitCoreNetwork) -> Unit = {},
     onSendAddressChange: (String) -> Unit = {},
@@ -213,6 +216,7 @@ private fun Content(
     onBackToForm: () -> Unit = {},
     onResetSend: () -> Unit = {},
     onTxHistoryInputChange: (String) -> Unit = {},
+    onTxHistoryAccountTypeChange: (AccountType?) -> Unit = {},
     onLookupTxHistory: () -> Unit = {},
     onWatcherExtendedKeyChange: (String) -> Unit = {},
     onWatcherGapLimitChange: (String) -> Unit = {},
@@ -419,6 +423,7 @@ private fun Content(
                     uiState = uiState,
                     isDeviceConnected = trezorState.connectedDevice != null,
                     onInputChange = onLookupInputChange,
+                    onAccountTypeChange = onLookupAccountTypeChange,
                     onLookup = onLookup,
                     onSendAddressChange = onSendAddressChange,
                     onSendAmountChange = onSendAmountChange,
@@ -437,6 +442,7 @@ private fun Content(
                 TransactionHistorySection(
                     uiState = uiState,
                     onInputChange = onTxHistoryInputChange,
+                    onAccountTypeChange = onTxHistoryAccountTypeChange,
                     onLookup = onLookupTxHistory,
                 )
 

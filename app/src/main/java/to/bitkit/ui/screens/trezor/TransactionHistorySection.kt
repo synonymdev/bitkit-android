@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TxDirection
@@ -36,6 +37,7 @@ import java.util.Locale
 internal fun TransactionHistorySection(
     uiState: TrezorUiState,
     onInputChange: (String) -> Unit,
+    onAccountTypeChange: (AccountType?) -> Unit,
     onLookup: () -> Unit,
 ) {
     Column {
@@ -58,6 +60,13 @@ internal fun TransactionHistorySection(
             ),
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
+        )
+
+        VerticalSpacer(8.dp)
+
+        AccountTypeSelectorRow(
+            selectedAccountType = uiState.txHistorySelectedAccountType,
+            onAccountTypeChange = onAccountTypeChange,
         )
 
         VerticalSpacer(16.dp)
@@ -165,6 +174,7 @@ private fun PreviewTransactionHistoryEmpty() {
         TransactionHistorySection(
             uiState = TrezorUiState(),
             onInputChange = {},
+            onAccountTypeChange = {},
             onLookup = {},
         )
     }
@@ -182,6 +192,7 @@ private fun PreviewTransactionHistoryLoading() {
                 ),
             ),
             onInputChange = {},
+            onAccountTypeChange = {},
             onLookup = {},
         )
     }
@@ -194,6 +205,7 @@ private fun PreviewTransactionHistoryWithResult() {
         TransactionHistorySection(
             uiState = TrezorPreviewData.uiStateWithTxHistory,
             onInputChange = {},
+            onAccountTypeChange = {},
             onLookup = {},
         )
     }
