@@ -1044,6 +1044,83 @@ class AmountInputViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `delete is allowed when amount is above the cap`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        // Type 50000 under a high cap
+        "50000".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(50000L, viewModel.uiState.value.sats)
+
+        // Cap drops below the current amount
+        viewModel.setMaxAmount(30000)
+
+        // Adding a digit is still blocked
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals(50000L, viewModel.uiState.value.sats)
+        assertNotNull(viewModel.uiState.value.errorKey)
+
+        // Deleting is allowed even though the result is still above the cap
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(5000L, viewModel.uiState.value.sats)
+        assertNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
+    fun `no max exceeded effect emitted on delete above cap`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        "50000".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        viewModel.setMaxAmount(30000)
+
+        var effectReceived = false
+        val job = backgroundScope.launch(testDispatcher) {
+            viewModel.effect.collect {
+                if (it is AmountInputEffect.MaxExceeded) effectReceived = true
+            }
+        }
+
+        // Deleting an over-cap amount must not emit MaxExceeded
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(5000L, viewModel.uiState.value.sats)
+        assertFalse(effectReceived)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `setMaxAmount with zero keeps input usable`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(0)
+
+        var effectReceived = false
+        val job = backgroundScope.launch(testDispatcher) {
+            viewModel.effect.collect {
+                if (it is AmountInputEffect.MaxExceeded) effectReceived = true
+            }
+        }
+
+        // A zero cap means no cap - input is accepted, no MaxExceeded effect
+        "500".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(500L, viewModel.uiState.value.sats)
+        assertNull(viewModel.uiState.value.errorKey)
+        assertFalse(effectReceived)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `setMaxAmount with negative value keeps input usable`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(-1)
+
+        "500".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(500L, viewModel.uiState.value.sats)
+        assertNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
     fun `classic conversion calculations are accurate`() = test {
         val btcClassic = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.CLASSIC)
         whenever(settingsStore.data).thenReturn(

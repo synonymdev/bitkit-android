@@ -62,7 +62,7 @@ class AmountInputViewModel @Inject constructor(
     private var rawInputText: String = ""
 
     fun setMaxAmount(amount: Long) {
-        maxAmount = amount.coerceIn(0, MAX_AMOUNT)
+        maxAmount = if (amount > 0) amount.coerceAtMost(MAX_AMOUNT) else MAX_AMOUNT
     }
 
     fun handleNumberPadInput(
@@ -85,7 +85,7 @@ class AmountInputViewModel @Inject constructor(
         if (primaryDisplay == PrimaryDisplay.BITCOIN && isModern) {
             val newAmount = convertToSats(newText, primaryDisplay, isModern = true)
 
-            if (newAmount <= maxAmount) {
+            if (key == KEY_DELETE || newAmount <= maxAmount) {
                 rawInputText = newText
                 _uiState.update {
                     it.copy(
@@ -102,7 +102,7 @@ class AmountInputViewModel @Inject constructor(
             // For decimal input, check limits before updating state
             if (newText.isNotEmpty()) {
                 val newAmount = convertToSats(newText, primaryDisplay, isModern)
-                if (newAmount <= maxAmount) {
+                if (key == KEY_DELETE || newAmount <= maxAmount) {
                     // Update both raw input and display text
                     rawInputText = newText
                     _uiState.update {

@@ -217,8 +217,13 @@ private fun SendAmountNodeRunning(
             }
         }
 
-        LaunchedEffect(availableAmount) {
-            amountInputViewModel.setMaxAmount(availableAmount)
+        val maxAllowed = when (val lnurl = uiState.lnurl) {
+            is LnurlParams.LnurlPay -> minOf(lnurl.data.maxSendableSat().toLong(), availableAmount)
+            else -> availableAmount
+        }
+
+        LaunchedEffect(maxAllowed) {
+            amountInputViewModel.setMaxAmount(maxAllowed)
         }
 
         Column(
