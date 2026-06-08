@@ -685,6 +685,10 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(watcher = it.watcher.copy(gapLimit = limit)) }
     }
 
+    fun setWatcherAccountType(type: AccountType?) {
+        _uiState.update { it.copy(watcher = it.watcher.copy(selectedAccountType = type)) }
+    }
+
     fun populateWatcherFromXpub() {
         val xpub = trezorRepo.state.value.lastPublicKey?.xpub ?: return
         _uiState.update { it.copy(watcher = it.watcher.copy(extendedKey = xpub)) }
@@ -721,6 +725,7 @@ class TrezorViewModel @Inject constructor(
                 extendedKey = key,
                 network = state.selectedNetwork,
                 gapLimit = gapLimit,
+                accountType = state.watcher.selectedAccountType,
             )
 
             if (result.isSuccess) {
@@ -979,6 +984,9 @@ data class TrezorUiState(
     val watcherAccountType: AccountType?
         get() = watcher.accountType
 
+    val watcherSelectedAccountType: AccountType?
+        get() = watcher.selectedAccountType
+
     val watcherEvents: ImmutableList<String>
         get() = watcher.events
 }
@@ -1045,6 +1053,7 @@ data class TrezorWatcherState(
     val transactionCount: UInt = 0u,
     val blockHeight: UInt = 0u,
     val accountType: AccountType? = null,
+    val selectedAccountType: AccountType? = null,
     val events: ImmutableList<String> = persistentListOf(),
 )
 

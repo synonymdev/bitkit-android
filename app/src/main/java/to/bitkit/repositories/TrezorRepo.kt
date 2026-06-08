@@ -577,6 +577,7 @@ class TrezorRepo @Inject constructor(
         extendedKey: String,
         network: BitkitCoreNetwork,
         gapLimit: UInt = 20u,
+        accountType: AccountType? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             val params = WatcherParams(
@@ -584,7 +585,7 @@ class TrezorRepo @Inject constructor(
                 extendedKey = extendedKey,
                 electrumUrl = electrumUrlForNetwork(network),
                 network = network,
-                accountType = null,
+                accountType = accountType,
                 gapLimit = gapLimit,
             )
             trezorService.startWatcher(params, eventBridge)

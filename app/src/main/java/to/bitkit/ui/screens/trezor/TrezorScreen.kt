@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.CoinSelection
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
@@ -169,6 +170,7 @@ private fun TrezorScreenContent(
             onLookupTxHistory = viewModel::lookupTransactionHistory,
             onWatcherExtendedKeyChange = viewModel::setWatcherExtendedKey,
             onWatcherGapLimitChange = viewModel::setWatcherGapLimit,
+            onWatcherAccountTypeChange = viewModel::setWatcherAccountType,
             onStartWatcher = viewModel::startWatcher,
             onStopWatcher = viewModel::stopWatcher,
             onPopulateWatcherFromXpub = viewModel::populateWatcherFromXpub,
@@ -214,6 +216,7 @@ private fun Content(
     onLookupTxHistory: () -> Unit = {},
     onWatcherExtendedKeyChange: (String) -> Unit = {},
     onWatcherGapLimitChange: (String) -> Unit = {},
+    onWatcherAccountTypeChange: (AccountType?) -> Unit = {},
     onStartWatcher: () -> Unit = {},
     onStopWatcher: () -> Unit = {},
     onPopulateWatcherFromXpub: () -> Unit = {},
@@ -444,6 +447,7 @@ private fun Content(
                     trezorState = trezorState,
                     onExtendedKeyChange = onWatcherExtendedKeyChange,
                     onGapLimitChange = onWatcherGapLimitChange,
+                    onAccountTypeChange = onWatcherAccountTypeChange,
                     onStartWatcher = onStartWatcher,
                     onStopWatcher = onStopWatcher,
                     onPopulateFromXpub = onPopulateWatcherFromXpub,
