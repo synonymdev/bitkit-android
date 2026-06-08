@@ -68,7 +68,7 @@ fun ExternalAmountScreen(
         amountInputViewModel.setMaxAmount(uiState.amount.max)
     }
 
-    LaunchedEffect(amountInputViewModel) {
+    LaunchedEffect(Unit) {
         amountInputViewModel.effect.collect {
             when (it) {
                 AmountInputEffect.MaxExceeded -> viewModel.onMaxExceeded()
