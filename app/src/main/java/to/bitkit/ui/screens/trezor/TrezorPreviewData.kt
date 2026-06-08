@@ -17,6 +17,8 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.repositories.ConnectedTrezorDevice
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.KnownDeviceTransportType
@@ -302,6 +304,24 @@ internal object TrezorPreviewData {
         txHistory = TrezorTxHistoryState(
             input = SAMPLE_XPUB,
             result = sampleTransactionHistoryResult,
+        ),
+    )
+
+    val uiStateWithActiveWatcher = TrezorUiState(
+        network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
+        watcher = TrezorWatcherState(
+            extendedKey = SAMPLE_XPUB,
+            activeWatcherId = "watcher-abc-123",
+            connectionStatus = WatcherConnectionStatus.CONNECTED,
+            balance = sampleWalletBalance,
+            transactions = sampleHistoryTransactions.toImmutableList(),
+            transactionCount = 2u,
+            blockHeight = 850_000u,
+            accountType = AccountType.NATIVE_SEGWIT,
+            events = persistentListOf(
+                "Watcher started: watcher-abc-123",
+                "TX update: 2 txs, balance=155000 sats",
+            ),
         ),
     )
 
