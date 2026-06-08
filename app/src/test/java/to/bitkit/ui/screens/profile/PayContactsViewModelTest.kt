@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -225,7 +226,36 @@ class PayContactsViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isLoading)
         assertTrue(sut.uiState.value.isPaymentSharingEnabled)
         verify(privatePaykitRepo).setContactSharingCleanupPending(false)
-        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), false)
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), true)
+    }
+
+    @Test
+    fun `continueToProfile keeps private sharing disabled when private restore fails`() = test {
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
+        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
+            .thenReturn(Result.failure(PayContactsTestAppError("cleanup failed")))
+        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), eq(true)) }
+            .thenReturn(Result.failure(PayContactsTestAppError("restore failed")))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.setPaymentSharingEnabled(false)
+            sut.continueToProfile()
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(sut.uiState.value.isLoading)
+        assertFalse(sut.uiState.value.isPaymentSharingEnabled)
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), true)
+        verify(privatePaykitRepo, never()).setContactSharingCleanupPending(false)
     }
 
     @Test

@@ -208,6 +208,11 @@ class PaymentPreferenceViewModel @Inject constructor(
         error: Throwable,
     ) {
         val contacts = contactPublicKeys()
+        if (!requestedEnabled && previous.sharesPrivatePaykitEndpoints) {
+            restorePrivateContactsPreference(contacts, error)
+            return
+        }
+
         runCatching {
             settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints) }
         }.onFailure(error::addSuppressed)
@@ -216,13 +221,37 @@ class PaymentPreferenceViewModel @Inject constructor(
             privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
                 .onFailure(error::addSuppressed)
         }
-        if (!requestedEnabled && previous.sharesPrivatePaykitEndpoints) {
-            privatePaykitRepo.setContactSharingCleanupPending(false)
-                .onFailure(error::addSuppressed)
-            privatePaykitRepo.prepareSavedContacts(contacts)
-                .onFailure(error::addSuppressed)
-        }
     }
+
+    private suspend fun restorePrivateContactsPreference(
+        contacts: List<String>,
+        error: Throwable,
+    ) {
+        val preferenceRestored = updatePrivateContactsPreference(isEnabled = true, error = error)
+        if (!preferenceRestored) return
+
+        privatePaykitRepo.prepareSavedContacts(
+            publicKeys = contacts,
+            requireImmediatePublication = true,
+        ).onFailure {
+            error.addSuppressed(it)
+            updatePrivateContactsPreference(isEnabled = false, error = error)
+            return
+        }
+
+        privatePaykitRepo.setContactSharingCleanupPending(false)
+            .onFailure {
+                error.addSuppressed(it)
+                updatePrivateContactsPreference(isEnabled = false, error = error)
+            }
+    }
+
+    private suspend fun updatePrivateContactsPreference(
+        isEnabled: Boolean,
+        error: Throwable,
+    ): Boolean = runCatching {
+        settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = isEnabled) }
+    }.onFailure(error::addSuppressed).isSuccess
 
     private suspend fun showSyncError(error: Throwable) {
         ToastEventBus.send(
