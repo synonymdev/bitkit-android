@@ -14,11 +14,13 @@ import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
+import to.bitkit.repositories.HwWallet
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 
 @Stable
 data class HomeUiState(
     val suggestions: ImmutableList<Suggestion> = persistentListOf(),
+    val hardwareWallets: ImmutableList<HwWallet> = persistentListOf(),
     val banners: ImmutableList<BannerItem> = persistentListOf(),
     val showWidgets: Boolean = false,
     val widgetsWithPosition: ImmutableList<WidgetWithPosition> = persistentListOf(),

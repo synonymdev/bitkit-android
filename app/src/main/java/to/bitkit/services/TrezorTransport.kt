@@ -29,6 +29,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.core.content.edit
 import com.synonym.bitkitcore.NativeDeviceInfo
 import com.synonym.bitkitcore.TrezorCallMessageResult
@@ -157,6 +158,50 @@ class TrezorTransport @Inject constructor(
 
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         bluetoothManager.adapter
+    }
+
+    /**
+     * Surfaces link loss the per-connection GATT callback misses: the phone's
+     * Bluetooth being switched off, or a USB device being unplugged. Both feed the
+     * same [externalDisconnect] flow so the repo clears the connected device and the
+     * UI connection indicator reflects reality in real time.
+     */
+    private val connectionStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            when (intent.action) {
+                BluetoothAdapter.ACTION_STATE_CHANGED -> onBluetoothStateChanged(intent)
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> onUsbDeviceDetached(intent)
+            }
+        }
+    }
+
+    private fun onBluetoothStateChanged(intent: Intent) {
+        val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+        if (state != BluetoothAdapter.STATE_OFF && state != BluetoothAdapter.STATE_TURNING_OFF) return
+        bleConnections.keys.toList().forEach { path ->
+            bleConnections[path]?.isConnected = false
+            emitExternalDisconnect(path)
+        }
+    }
+
+    private fun onUsbDeviceDetached(intent: Intent) {
+        val device = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+        val path = device?.deviceName ?: return
+        if (path in usbConnections.keys) emitExternalDisconnect(path)
+    }
+
+    private fun emitExternalDisconnect(path: String) {
+        if (!userInitiatedCloseSet.remove(path)) {
+            _externalDisconnect.tryEmit(path)
+        }
+    }
+
+    init {
+        val filter = IntentFilter().apply {
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
+        ContextCompat.registerReceiver(context, connectionStateReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     private val usbConnections = ConcurrentHashMap<String, UsbOpenDevice>()

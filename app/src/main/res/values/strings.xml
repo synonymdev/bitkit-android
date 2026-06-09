@@ -32,6 +32,8 @@
     <string name="cards__backupSeedPhrase__title">Back up</string>
     <string name="cards__buyBitcoin__description">Buy some bitcoin</string>
     <string name="cards__buyBitcoin__title">Buy</string>
+    <string name="cards__hardware__description">Connect device</string>
+    <string name="cards__hardware__title">Hardware</string>
     <string name="cards__invite__description">Share Bitkit</string>
     <string name="cards__invite__title">Invite</string>
     <string name="cards__lightning__description">Instant payments</string>

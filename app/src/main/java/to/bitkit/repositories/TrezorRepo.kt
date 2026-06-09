@@ -48,7 +48,11 @@ import kotlinx.serialization.Serializable
 import to.bitkit.data.TrezorStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.models.ALL_ADDRESS_TYPES
+import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.toSettingsString
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
@@ -641,6 +645,7 @@ class TrezorRepo @Inject constructor(
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
         val existing = _state.value.knownDevices
+        val previous = existing.find { it.id == deviceInfo.id }
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -649,10 +654,32 @@ class TrezorRepo @Inject constructor(
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = System.currentTimeMillis(),
+            xpubs = fetchAccountXpubs().ifEmpty { previous?.xpubs ?: emptyMap() },
         )
         val updated = existing.filter { it.id != known.id } + known
         saveKnownDevices(updated)
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
+    }
+
+    /**
+     * Reads account-level extended public keys for every supported address type so a
+     * watch-only balance can be tracked later without the device present. Failures are
+     * swallowed per type: a missing xpub just means that address type is not watched.
+     */
+    private suspend fun fetchAccountXpubs(): Map<String, String> {
+        val coin = Env.network.toTrezorCoinType()
+        return ALL_ADDRESS_TYPES.mapNotNull { addressType ->
+            runCatching {
+                val xpub = trezorService.getPublicKey(
+                    path = addressType.toAccountDerivationPath(),
+                    coin = coin,
+                    showOnTrezor = false,
+                ).xpub
+                addressType.toSettingsString() to xpub
+            }.onFailure {
+                Logger.warn("Could not read xpub for '${addressType.toSettingsString()}'", it, context = TAG)
+            }.getOrNull()
+        }.toMap()
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
@@ -778,6 +805,8 @@ data class KnownDevice(
     val label: String?,
     val model: String?,
     val lastConnectedAt: Long,
+    /** Account-level extended public keys per address type (key = [AddressType.toSettingsString]). */
+    val xpubs: Map<String, String> = emptyMap(),
 )
 
 @Serializable

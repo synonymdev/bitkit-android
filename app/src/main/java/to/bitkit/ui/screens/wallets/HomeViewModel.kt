@@ -32,6 +32,7 @@ import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
@@ -51,6 +52,7 @@ class HomeViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val pubkyRepo: PubkyRepo,
     private val activityRepo: ActivityRepo,
+    private val hwWalletRepo: HwWalletRepo,
 ) : ViewModel() {
 
     companion object {
@@ -117,6 +119,12 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             createSuggestionsFlow().collect { suggestions ->
                 _uiState.update { it.copy(suggestions = suggestions.toImmutableList()) }
+            }
+        }
+
+        viewModelScope.launch {
+            hwWalletRepo.hardwareWallets.collect { wallets ->
+                _uiState.update { it.copy(hardwareWallets = wallets) }
             }
         }
 
@@ -312,12 +320,14 @@ class HomeViewModel @Inject constructor(
         settingsStore.data,
         transferRepo.activeTransfers,
         pubkyRepo.isAuthenticated,
-    ) { balanceState, settings, transfers, profileAuthenticated ->
+        hwWalletRepo.hardwareWallets,
+    ) { balanceState, settings, transfers, profileAuthenticated, hardwareWallets ->
+        val hasHardwareWallet = hardwareWallets.isNotEmpty()
         val baseSuggestions = when {
             balanceState.totalLightningSats > 0uL ->
-                spendingSuggestions(settings, profileAuthenticated)
+                spendingSuggestions(settings, profileAuthenticated, hasHardwareWallet)
             balanceState.totalOnchainSats > 0uL ->
-                savingsOnlySuggestions(settings, transfers, profileAuthenticated)
+                savingsOnlySuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
             else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
@@ -329,10 +339,12 @@ class HomeViewModel @Inject constructor(
     private fun spendingSuggestions(
         settings: SettingsData,
         profileAuthenticated: Boolean,
+        hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
         Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
         Suggestion.SHOP,
+        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.SUPPORT,
         Suggestion.INVITE,
@@ -343,12 +355,14 @@ class HomeViewModel @Inject constructor(
         settings: SettingsData,
         transfers: List<TransferEntity>,
         profileAuthenticated: Boolean,
+        hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.BACK_UP.takeIf { !settings.backupVerified },
         Suggestion.SECURE.takeIf { !settings.isPinEnabled },
         Suggestion.LIGHTNING.takeIf {
             transfers.all { it.type != TransferType.TO_SPENDING }
         },
+        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SUPPORT,
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.INVITE,

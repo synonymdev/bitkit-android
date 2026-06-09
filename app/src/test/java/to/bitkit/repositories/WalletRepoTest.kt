@@ -54,6 +54,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val transferRepo = mock<TransferRepo>()
     private val onchainService = mock<OnchainService>()
     private val activityRepo = mock<ActivityRepo>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -86,6 +87,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = "", onchainAddress = ADDRESS)))
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(hwWalletRepo.totalHardwareSats).thenReturn(MutableStateFlow(0uL))
         whenever(lightningRepo.nodeEvents).thenReturn(MutableSharedFlow())
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull()))
@@ -134,6 +136,7 @@ class WalletRepoTest : BaseUnitTest() {
         privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
         transferRepo = transferRepo,
         activityRepo = activityRepo,
+        hwWalletRepo = hwWalletRepo,
     )
 
     @Test

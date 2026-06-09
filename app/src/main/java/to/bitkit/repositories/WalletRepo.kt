@@ -66,6 +66,7 @@ class WalletRepo @Inject constructor(
     private val wipeWalletUseCase: WipeWalletUseCase,
     private val transferRepo: TransferRepo,
     private val activityRepo: ActivityRepo,
+    private val hwWalletRepo: HwWalletRepo,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
@@ -82,6 +83,11 @@ class WalletRepo @Inject constructor(
             lightningRepo.nodeEvents.collect { event ->
                 if (!walletExists()) return@collect
                 refreshBip21ForEvent(event)
+            }
+        }
+        repoScope.launch {
+            hwWalletRepo.totalHardwareSats.collect { hardwareSats ->
+                _balanceState.update { it.copy(totalHardwareSats = hardwareSats) }
             }
         }
     }
@@ -274,7 +280,8 @@ class WalletRepo @Inject constructor(
     suspend fun syncBalances() {
         deriveBalanceStateUseCase().onSuccess { balanceState ->
             runCatching { cacheStore.cacheBalance(balanceState) }
-            _balanceState.update { balanceState }
+            // Preserve the live hardware-wallet total; the use case only derives onchain + lightning.
+            _balanceState.update { balanceState.copy(totalHardwareSats = hwWalletRepo.totalHardwareSats.value) }
         }.onFailure {
             if (it !is CancellationException) {
                 Logger.warn("Could not sync balances", it, context = TAG)

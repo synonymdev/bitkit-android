@@ -29,9 +29,11 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
+import to.bitkit.ext.timestamp
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
@@ -42,6 +44,7 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
+    hwWalletRepo: HwWalletRepo,
     pubkyRepo: PubkyRepo,
     settingsStore: SettingsStore,
 ) : ViewModel() {
@@ -55,7 +58,22 @@ class ActivityListViewModel @Inject constructor(
     val onchainActivities = _onchainActivities.asStateFlow()
 
     private val _latestActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
-    val latestActivities = _latestActivities.asStateFlow()
+
+    // Merge the device's watch-only hardware-wallet activity into the home list,
+    // newest first, capped at the same limit as the on-chain/lightning list.
+    val latestActivities: StateFlow<ImmutableList<Activity>?> = combine(
+        _latestActivities,
+        hwWalletRepo.hardwareActivities,
+    ) { localActivities, hardwareActivities ->
+        if (localActivities == null && hardwareActivities.isEmpty()) {
+            null
+        } else {
+            (localActivities.orEmpty() + hardwareActivities)
+                .sortedByDescending { it.timestamp() }
+                .take(SIZE_LATEST)
+                .toImmutableList()
+        }
+    }.stateInScope(null)
 
     val contacts: StateFlow<ImmutableList<PubkyProfile>> =
         combine(

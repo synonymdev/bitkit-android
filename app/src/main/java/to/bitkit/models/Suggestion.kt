@@ -19,6 +19,12 @@ enum class Suggestion(
         color = Colors.Brand24,
         icon = R.drawable.b_emboss,
     ),
+    HARDWARE(
+        title = R.string.cards__hardware__title,
+        description = R.string.cards__hardware__description,
+        color = Colors.Blue24,
+        icon = R.drawable.trezor_device,
+    ),
     LIGHTNING(
         title = R.string.cards__lightning__title,
         description = R.string.cards__lightning__description,

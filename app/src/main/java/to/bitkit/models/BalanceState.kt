@@ -13,6 +13,9 @@ data class BalanceState(
     val maxSendOnchainSats: ULong = 0uL,
     val balanceInTransferToSavings: ULong = 0uL,
     val balanceInTransferToSpending: ULong = 0uL,
+    val totalHardwareSats: ULong = 0uL,
 ) {
     val totalSats get() = totalOnchainSats + totalLightningSats
+
+    val totalWithHardwareSats get() = totalSats + totalHardwareSats
 }
