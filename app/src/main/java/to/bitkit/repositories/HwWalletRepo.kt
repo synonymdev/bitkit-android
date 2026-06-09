@@ -17,10 +17,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.TrezorStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -43,6 +45,7 @@ import javax.inject.Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
     private val trezorStore: TrezorStore,
+    private val settingsStore: SettingsStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -100,9 +103,19 @@ class HwWalletRepo @Inject constructor(
 
     private fun syncWatchers() {
         scope.launch {
-            trezorStore.data.collect { data ->
-                val wanted = data.knownDevices.flatMap { device ->
-                    device.xpubs.map { (addressType, xpub) -> WatcherSpec(device.id, addressType, xpub) }
+            combine(
+                trezorStore.data,
+                settingsStore.data.map { it.addressTypesToMonitor.toSet() }.distinctUntilChanged(),
+            ) { data, monitoredTypes ->
+                data.knownDevices to monitoredTypes
+            }.collect { (knownDevices, monitoredTypes) ->
+                // Only watch the address types the user monitors (Settings > Advanced > Address Type),
+                // mirroring the on-chain wallet. Xpubs for all types are still captured on connect, so
+                // toggling a type on later starts its watcher without reconnecting the device.
+                val wanted = knownDevices.flatMap { device ->
+                    device.xpubs
+                        .filterKeys { it in monitoredTypes }
+                        .map { (addressType, xpub) -> WatcherSpec(device.id, addressType, xpub) }
                 }
                 val wantedIds = wanted.map { it.watcherId }.toSet()
 

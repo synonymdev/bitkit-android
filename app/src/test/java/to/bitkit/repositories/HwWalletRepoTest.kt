@@ -10,8 +10,15 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.TrezorData
 import to.bitkit.data.TrezorStore
 import to.bitkit.test.BaseUnitTest
@@ -21,8 +28,10 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     private val trezorRepo = mock<TrezorRepo>()
     private val trezorStore = mock<TrezorStore>()
+    private val settingsStore = mock<SettingsStore>()
 
     private lateinit var storeData: MutableStateFlow<TrezorData>
+    private lateinit var settingsData: MutableStateFlow<SettingsData>
     private lateinit var trezorState: MutableStateFlow<TrezorState>
     private lateinit var watcherEvents: MutableSharedFlow<Pair<String, WatcherEvent>>
 
@@ -39,16 +48,20 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Before
     fun setUp() {
         storeData = MutableStateFlow(TrezorData(knownDevices = listOf(device)))
+        settingsData = MutableStateFlow(SettingsData())
         trezorState = MutableStateFlow(TrezorState())
         watcherEvents = MutableSharedFlow(extraBufferCapacity = 8)
         whenever(trezorStore.data).thenReturn(storeData)
+        whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
     }
 
+    private fun createRepo() = HwWalletRepo(trezorRepo, trezorStore, settingsStore, testDispatcher)
+
     @Test
     fun `lists a known device with zero balance before any watcher event`() = test {
-        val sut = HwWalletRepo(trezorRepo, trezorStore, testDispatcher)
+        val sut = createRepo()
 
         val wallet = sut.hardwareWallets.value.single()
         assertEquals("dev1", wallet.id)
@@ -59,7 +72,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `transactions changed event sets device balance and maps activity`() = test {
-        val sut = HwWalletRepo(trezorRepo, trezorStore, testDispatcher)
+        val sut = createRepo()
 
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
@@ -81,7 +94,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `balances from multiple address-type watchers are summed per device`() = test {
-        val sut = HwWalletRepo(trezorRepo, trezorStore, testDispatcher)
+        val sut = createRepo()
 
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
@@ -98,12 +111,35 @@ class HwWalletRepoTest : BaseUnitTest() {
                 transactions = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
-                accountType = AccountType.NATIVE_SEGWIT,
+                accountType = AccountType.TAPROOT,
             )
         )
 
         assertEquals(150uL, sut.hardwareWallets.value.single().balanceSats)
         assertEquals(150uL, sut.totalHardwareSats.value)
+    }
+
+    @Test
+    fun `starts watchers only for the address types the user monitors`() = test {
+        storeData.value = TrezorData(
+            knownDevices = listOf(
+                device.copy(
+                    xpubs = mapOf(
+                        "nativeSegwit" to "zpubNS",
+                        "taproot" to "zpubTR",
+                        "legacy" to "xpubLG",
+                    )
+                )
+            )
+        )
+        settingsData.value = SettingsData(addressTypesToMonitor = listOf("nativeSegwit", "taproot"))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+
+        createRepo()
+
+        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
+        verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull())
+        verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull())
     }
 
     private fun walletBalance(total: ULong) = WalletBalance(
