@@ -1070,6 +1070,8 @@
     <string name="wallet__lnurl_pay_confirm__comment">Comment</string>
     <string name="wallet__lnurl_pay_confirm__comment_placeholder">Optional comment to receiver</string>
     <string name="wallet__lnurl_w_button">Withdraw</string>
+    <string name="wallet__lnurl_w_error_max__description">The amount exceeds the maximum you can withdraw.</string>
+    <string name="wallet__lnurl_w_error_max__title">Amount Too High</string>
     <string name="wallet__lnurl_w_max">AvailablE TO WITHDRAW</string>
     <string name="wallet__lnurl_w_text">The funds you withdraw will be deposited into your Bitkit spending balance.</string>
     <string name="wallet__lnurl_w_title">Withdraw Bitcoin</string>

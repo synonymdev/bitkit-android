@@ -82,13 +82,21 @@ fun SendAmountScreen(
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
 
-    val lnurlPayMaxExceeded = run {
+    val maxExceededMessage = run {
         val lnurl = uiState.lnurl
-        lnurl is LnurlParams.LnurlPay &&
+        val lnurlPayMaxExceeded = lnurl is LnurlParams.LnurlPay &&
             lnurl.data.maxSendableSat().toLong() <
             (balances.maxSendLightningSats.safe() - uiState.estimatedRoutingFee.safe()).toLong()
+        when {
+            lnurl is LnurlParams.LnurlWithdraw ->
+                R.string.wallet__lnurl_w_error_max__title to R.string.wallet__lnurl_w_error_max__description
+            lnurlPayMaxExceeded ->
+                R.string.wallet__lnurl_pay__error_max__title to R.string.wallet__lnurl_pay__error_max__description
+            else ->
+                R.string.wallet__send_amount_exceeded__title to R.string.wallet__send_amount_exceeded__description
+        }
     }
-    val currentLnurlPayMaxExceeded by rememberUpdatedState(lnurlPayMaxExceeded)
+    val currentMaxExceededMessage by rememberUpdatedState(maxExceededMessage)
 
     LaunchedEffect(Unit) {
         if (uiState.amount > 0u) {
@@ -103,24 +111,15 @@ fun SendAmountScreen(
     LaunchedEffect(Unit) {
         amountInputViewModel.effect.collect {
             when (it) {
-                AmountInputEffect.MaxExceeded -> app?.toast(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(
-                        if (currentLnurlPayMaxExceeded) {
-                            R.string.wallet__lnurl_pay__error_max__title
-                        } else {
-                            R.string.wallet__send_amount_exceeded__title
-                        }
-                    ),
-                    description = context.getString(
-                        if (currentLnurlPayMaxExceeded) {
-                            R.string.wallet__lnurl_pay__error_max__description
-                        } else {
-                            R.string.wallet__send_amount_exceeded__description
-                        }
-                    ),
-                    visibilityTime = Toast.VISIBILITY_TIME_SHORT,
-                )
+                AmountInputEffect.MaxExceeded -> {
+                    val (titleRes, descriptionRes) = currentMaxExceededMessage
+                    app?.toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(titleRes),
+                        description = context.getString(descriptionRes),
+                        visibilityTime = Toast.VISIBILITY_TIME_SHORT,
+                    )
+                }
             }
         }
     }
