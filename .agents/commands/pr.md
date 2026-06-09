@@ -136,7 +136,8 @@ When the user provides custom instructions after `--`:
   #### Automated Checks
   ```
 - Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
-- Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed with file paths and a short explanation.
+- Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed, each with the test file name and a short explanation.
+- Reference test files by bare file name only (e.g. `HwWalletRepoTest.kt`), never the full path. Only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`).
 - For removed automated coverage, state why it was removed.
 - Do not list standard CI or PR bot commands as checkbox items just because they run for every PR. If standard CI coverage is worth mentioning, summarize it in one sentence.
 - List raw commands only when they were run locally, are non-standard, use special flags or environment values, validate workflow behavior, or explain a meaningful verification gap.
@@ -184,9 +185,9 @@ Concrete style target:
   - [ ] **5b.** back: returns to Connections List.
 - [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
 #### Automated Checks
-- Unit tests added: cover invoice timeout handling in `app/src/test/.../SendInvoiceTest.kt`.
-- Unit tests modified: update channel navigation assertions in `app/src/test/.../ChannelDetailTest.kt`.
-- Test coverage removed: delete stale mock-only assertions from `app/src/test/.../OldFlowTest.kt` because the flow no longer exists.
+- Unit tests added: cover invoice timeout handling in `SendInvoiceTest.kt`.
+- Unit tests modified: update channel navigation assertions in `ChannelDetailTest.kt`.
+- Test coverage removed: delete stale mock-only assertions from `OldFlowTest.kt` because the flow no longer exists.
 - CI: standard compile, unit test, and detekt checks run by the PR bot.
 ```
 
