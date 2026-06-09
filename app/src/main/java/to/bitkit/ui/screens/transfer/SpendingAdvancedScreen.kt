@@ -74,6 +74,7 @@ fun SpendingAdvancedScreen(
     var isLoading by remember { mutableStateOf(false) }
 
     val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
+    val currentMaxLspBalance by rememberUpdatedState(transferValues.maxLspBalance)
 
     LaunchedEffect(order.clientBalanceSat) {
         viewModel.updateTransferValues(order.clientBalanceSat)
@@ -115,7 +116,7 @@ fun SpendingAdvancedScreen(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.lightning__spending_advanced__error_max__title),
                     description = context.getString(R.string.lightning__spending_advanced__error_max__description)
-                        .replace("{amount}", transferValues.maxLspBalance.formatToModernDisplay()),
+                        .replace("{amount}", currentMaxLspBalance.formatToModernDisplay()),
                     visibilityTime = Toast.VISIBILITY_TIME_SHORT,
                 )
             }

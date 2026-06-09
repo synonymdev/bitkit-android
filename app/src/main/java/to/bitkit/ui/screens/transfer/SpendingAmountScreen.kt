@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,6 +73,7 @@ fun SpendingAmountScreen(
     val isNodeRunning by viewModel.isNodeRunning.collectAsStateWithLifecycle()
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val currentMaxAllowedToSend by rememberUpdatedState(uiState.maxAllowedToSend)
 
     LaunchedEffect(isOffline) {
         viewModel.updateLimits()
@@ -93,7 +95,7 @@ fun SpendingAmountScreen(
                 AmountInputEffect.MaxExceeded -> toast(
                     context.getString(R.string.lightning__spending_amount__error_max__title),
                     context.getString(R.string.lightning__spending_amount__error_max__description)
-                        .replace("{amount}", uiState.maxAllowedToSend.formatToModernDisplay()),
+                        .replace("{amount}", currentMaxAllowedToSend.formatToModernDisplay()),
                 )
             }
         }
