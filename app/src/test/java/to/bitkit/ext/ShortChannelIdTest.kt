@@ -41,21 +41,26 @@ class ShortChannelIdTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resolveDisplayShortChannelId falls back to linked order scid for closed channel`() {
-        val result = resolveDisplayShortChannelId(
-            channelScid = null,
-            linkedOrderScid = "854845001888432128",
-        )
+    fun `resolveDisplayShortChannelId keeps cln-form linked order scid for closed channel`() {
+        // Blocktank delivers the order scid already in `block x tx x output` form.
+        val result = resolveDisplayShortChannelId(channelScid = null, linkedOrderScid = "792906x599x1")
+        assertEquals("792906x599x1", result)
+    }
+
+    @Test
+    fun `resolveDisplayShortChannelId decodes numeric linked order scid`() {
+        val result = resolveDisplayShortChannelId(channelScid = null, linkedOrderScid = "854845001888432128")
         assertEquals("777477x916x0", result)
     }
 
     @Test
     fun `resolveDisplayShortChannelId returns null when both unavailable`() {
         assertNull(resolveDisplayShortChannelId(channelScid = null, linkedOrderScid = null))
+        assertNull(resolveDisplayShortChannelId(channelScid = null, linkedOrderScid = ""))
     }
 
     @Test
-    fun `resolveDisplayShortChannelId returns null for non-numeric order scid`() {
-        assertNull(resolveDisplayShortChannelId(channelScid = null, linkedOrderScid = "not-a-number"))
+    fun `resolveDisplayShortChannelId returns null for malformed order scid`() {
+        assertNull(resolveDisplayShortChannelId(channelScid = null, linkedOrderScid = "not-a-scid"))
     }
 }

@@ -12,10 +12,18 @@ fun ULong.formattedAsShortChannelId(): String {
     return "${blockHeight}x${txIndex}x$outputIndex"
 }
 
+private val CLN_SHORT_CHANNEL_ID = Regex("""\d+x\d+x\d+""")
+
 /**
- * Short channel id for display. Uses the channel's own scid (open channels) and, for closed
- * channels which carry none, the scid from the confidently-linked order. Null when unavailable.
+ * Short channel id for display. Uses the channel's own scid (open channels, a numeric BOLT scid)
+ * and, for closed channels which carry none, the scid from the confidently-linked Blocktank order.
+ * Blocktank delivers it already in `block x tx x output` form, so an `x`-formatted value is kept
+ * as-is and only a numeric value is decoded. Null when unavailable.
  */
-internal fun resolveDisplayShortChannelId(channelScid: ULong?, linkedOrderScid: String?): String? =
-    channelScid?.formattedAsShortChannelId()
-        ?: linkedOrderScid?.toULongOrNull()?.formattedAsShortChannelId()
+internal fun resolveDisplayShortChannelId(channelScid: ULong?, linkedOrderScid: String?): String? {
+    channelScid?.let { return it.formattedAsShortChannelId() }
+
+    val orderScid = linkedOrderScid?.takeIf { it.isNotBlank() } ?: return null
+    orderScid.toULongOrNull()?.let { return it.formattedAsShortChannelId() }
+    return orderScid.takeIf { CLN_SHORT_CHANNEL_ID.matches(it) }
+}
