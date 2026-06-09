@@ -27,6 +27,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -38,6 +39,7 @@ class ActivityDetailViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val settingsStore: SettingsStore,
     private val blocktankRepo: BlocktankRepo,
+    private val hwWalletRepo: HwWalletRepo,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
@@ -66,13 +68,7 @@ class ActivityDetailViewModel @Inject constructor(
                         loadTags()
                         observeActivityChanges(activityId)
                     } else {
-                        _uiState.update {
-                            it.copy(
-                                activityLoadState = ActivityLoadState.Error(
-                                    context.getString(R.string.wallet__activity_error_not_found)
-                                )
-                            )
-                        }
+                        loadHwWalletActivity(activityId)
                     }
                 }
                 .onFailure { e ->
@@ -91,9 +87,31 @@ class ActivityDetailViewModel @Inject constructor(
     fun clearActivityState() {
         observeJob?.cancel()
         observeJob = null
-        _uiState.update { it.copy(activityLoadState = ActivityLoadState.Initial) }
+        _uiState.update { it.copy(activityLoadState = ActivityLoadState.Initial, isHardwareActivity = false) }
         activity = null
         _tags.update { persistentListOf() }
+    }
+
+    /**
+     * Watch-only hardware-wallet activities live in [HwWalletRepo], not the activity
+     * database, so tags and change observation don't apply to them.
+     */
+    private fun loadHwWalletActivity(activityId: String) {
+        val hwActivity = hwWalletRepo.activities.value.find { it.rawId() == activityId }
+        if (hwActivity != null) {
+            activity = hwActivity
+            _uiState.update {
+                it.copy(activityLoadState = ActivityLoadState.Success(hwActivity), isHardwareActivity = true)
+            }
+        } else {
+            _uiState.update {
+                it.copy(
+                    activityLoadState = ActivityLoadState.Error(
+                        context.getString(R.string.wallet__activity_error_not_found)
+                    )
+                )
+            }
+        }
     }
 
     private fun observeActivityChanges(activityId: String) {
@@ -245,5 +263,6 @@ class ActivityDetailViewModel @Inject constructor(
 
     data class ActivityDetailUiState(
         val activityLoadState: ActivityLoadState = ActivityLoadState.Initial,
+        val isHardwareActivity: Boolean = false,
     )
 }

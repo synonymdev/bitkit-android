@@ -20,6 +20,7 @@ import to.bitkit.ext.create
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -30,6 +31,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val settingsStore = mock<SettingsStore>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
 
     companion object Fixtures {
         const val ACTIVITY_ID = "test-activity-1"
@@ -42,6 +44,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.wallet__activity_error_load_failed)).thenReturn("Failed to load activity")
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(System.currentTimeMillis()))
+        whenever(hwWalletRepo.activities).thenReturn(MutableStateFlow(persistentListOf()))
 
         sut = ActivityDetailViewModel(
             context = context,
@@ -49,7 +52,44 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
             activityRepo = activityRepo,
             blocktankRepo = blocktankRepo,
             settingsStore = settingsStore,
+            hwWalletRepo = hwWalletRepo,
         )
+    }
+
+    @Test
+    fun `loadActivity falls back to hardware wallet activity when missing from the database`() = test {
+        val hwActivity = Activity.Onchain(
+            OnchainActivity.create(
+                id = ACTIVITY_ID,
+                txType = PaymentType.RECEIVED,
+                txId = ACTIVITY_ID,
+                value = 100_000uL,
+                fee = 0uL,
+                address = "",
+                timestamp = 1_700_000_000uL,
+                confirmed = true,
+            )
+        )
+        whenever { activityRepo.getActivity(ACTIVITY_ID) }.thenReturn(Result.success(null))
+        whenever(hwWalletRepo.activities).thenReturn(MutableStateFlow(persistentListOf<Activity>(hwActivity)))
+
+        sut.loadActivity(ACTIVITY_ID)
+
+        val state = sut.uiState.value
+        val loadState = state.activityLoadState as ActivityDetailViewModel.ActivityLoadState.Success
+        assertEquals(hwActivity, loadState.activity)
+        assertTrue(state.isHardwareActivity)
+    }
+
+    @Test
+    fun `loadActivity reports not found when missing from database and hardware wallets`() = test {
+        whenever { activityRepo.getActivity(ACTIVITY_ID) }.thenReturn(Result.success(null))
+
+        sut.loadActivity(ACTIVITY_ID)
+
+        val state = sut.uiState.value
+        assertTrue(state.activityLoadState is ActivityDetailViewModel.ActivityLoadState.Error)
+        assertFalse(state.isHardwareActivity)
     }
 
     @Test

@@ -246,6 +246,7 @@ fun ActivityDetailScreen(
                         onChannelClick = onChannelClick,
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
+                        isHardware = uiState.isHardwareActivity,
                         showContactActions = isPaykitEnabled,
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
@@ -328,6 +329,7 @@ private fun ActivityDetailContent(
     onChannelClick: ((String) -> Unit)?,
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
+    isHardware: Boolean = false,
     showContactActions: Boolean = true,
     boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
@@ -403,6 +405,7 @@ private fun ActivityDetailContent(
                 activity = item,
                 size = 48.dp,
                 isCpfpChild = isCpfpChild,
+                isHardware = isHardware,
             )
         }
 
