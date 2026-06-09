@@ -391,15 +391,16 @@ class TransferViewModel @Inject constructor(
             maxLspFee = estimate.feeSat
             val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
             val maxClientBalance = availableAmount.safe() - lspFees.safe()
+            val maxSend = min(
+                liquidity.maxClientBalanceSat.toLong(),
+                maxClientBalance.toLong()
+            )
 
             _spendingUiState.update {
                 it.copy(
-                    maxAllowedToSend = min(
-                        liquidity.maxClientBalanceSat.toLong(),
-                        maxClientBalance.toLong()
-                    ),
+                    maxAllowedToSend = maxSend,
                     isLoading = false,
-                    balanceAfterFee = availableAmount.toLong(),
+                    balanceAfterFee = maxSend,
                 )
             }
         }.onFailure {
