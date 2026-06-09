@@ -19,6 +19,7 @@ import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
+import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.CurrencyRepo
@@ -71,6 +72,14 @@ class WidgetsGalleryViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
             initialValue = null,
+        )
+
+    val currentCalculatorValues: StateFlow<CalculatorValues> = widgetsRepo.widgetsDataFlow
+        .map { it.calculatorValues }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
+            initialValue = CalculatorValues(),
         )
 
     fun refreshOnDisplay() {

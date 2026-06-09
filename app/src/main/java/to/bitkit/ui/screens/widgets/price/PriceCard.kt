@@ -19,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -55,7 +54,6 @@ fun PriceCard(
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
 ) {
     val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
         priceDTO.resolveWidget(pricePreferences)
@@ -64,7 +62,7 @@ fun PriceCard(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -117,7 +115,6 @@ fun PriceCardSmall(
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Colors.White10,
 ) {
     val widgetData = remember(pricePreferences.enabledPairs, priceDTO.widgets) {
         priceDTO.resolveWidget(pricePreferences)
@@ -126,7 +123,7 @@ fun PriceCardSmall(
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
-            .background(backgroundColor)
+            .background(Colors.Gray6)
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -141,7 +138,7 @@ fun PriceCardSmall(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("price_card_small_pair_row_${widgetData.pair.displayName}")
+                        .testTag("PriceWidgetRow-${widgetData.pair.displayName}")
                 ) {
                     Caption13Up(
                         text = widgetData.pair.displayName,

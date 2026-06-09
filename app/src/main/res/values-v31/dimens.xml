@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 31+ honors targetCellHeight/maxResizeHeight, so the original 2-cell height floor is
+         restored here. The base values/dimens.xml carries the shorter pre-31 floor. -->
+    <dimen name="appwidget_min_height">110dp</dimen>
+    <dimen name="appwidget_min_resize_height">110dp</dimen>
+</resources>

@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
@@ -22,18 +23,25 @@ import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.WalletParams
 import com.synonym.bitkitcore.WalletSelection
+import com.synonym.bitkitcore.WatcherEvent
+import com.synonym.bitkitcore.WatcherParams
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -65,6 +73,7 @@ class TrezorRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "TrezorRepo"
+        private const val WATCHER_TAG = "WATCHER"
         private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
         private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
         private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
@@ -72,6 +81,18 @@ class TrezorRepo @Inject constructor(
 
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
+
+    private val watcherCleanupScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+
+    private val _watcherEvents = MutableSharedFlow<Pair<String, WatcherEvent>>(extraBufferCapacity = 64)
+    val watcherEvents: SharedFlow<Pair<String, WatcherEvent>> = _watcherEvents.asSharedFlow()
+
+    private val eventBridge: EventListener = object : EventListener {
+        override fun onEvent(watcherId: String, event: WatcherEvent) {
+            TrezorDebugLog.log(WATCHER_TAG, "[$watcherId] ${event::class.simpleName}")
+            _watcherEvents.tryEmit(watcherId to event)
+        }
+    }
 
     /**
      * Flow indicating when a pairing code needs to be entered.
@@ -548,6 +569,56 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("FORGET", "FAILED: ${e.message}")
             Logger.error("Forget device failed", e, context = TAG)
             _state.update { it.copy(error = e.message) }
+        }
+    }
+
+    suspend fun startWatcher(
+        watcherId: String,
+        extendedKey: String,
+        network: BitkitCoreNetwork,
+        gapLimit: UInt = 20u,
+        accountType: AccountType? = null,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val params = WatcherParams(
+                watcherId = watcherId,
+                extendedKey = extendedKey,
+                electrumUrl = electrumUrlForNetwork(network),
+                network = network,
+                accountType = accountType,
+                gapLimit = gapLimit,
+            )
+            trezorService.startWatcher(params, eventBridge)
+            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId' for '${extendedKey.take(12)}...'")
+            Logger.info("Started watcher '$watcherId'", context = TAG)
+        }.onFailure {
+            Logger.error("Start watcher failed", it, context = TAG)
+            _state.update { s -> s.copy(error = it.message) }
+        }
+    }
+
+    suspend fun stopWatcher(watcherId: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            trezorService.stopWatcher(watcherId)
+            TrezorDebugLog.log(WATCHER_TAG, "Stopped watcher '$watcherId'")
+            Logger.info("Stopped watcher '$watcherId'", context = TAG)
+        }.onFailure {
+            Logger.error("Stop watcher failed", it, context = TAG)
+            _state.update { s -> s.copy(error = it.message) }
+        }
+    }
+
+    fun stopWatcherOnCleared(watcherId: String) {
+        watcherCleanupScope.launch { stopWatcher(watcherId) }
+    }
+
+    suspend fun stopAllWatchers(): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            trezorService.stopAllWatchers()
+            TrezorDebugLog.log(WATCHER_TAG, "Stopped all watchers")
+        }.onFailure {
+            Logger.error("Stop all watchers failed", it, context = TAG)
+            _state.update { s -> s.copy(error = it.message) }
         }
     }
 

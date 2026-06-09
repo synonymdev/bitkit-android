@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
@@ -18,6 +19,7 @@ import to.bitkit.models.widget.BlocksWidgetField
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.models.widget.toggleField
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.WidgetSizeDraft
 import javax.inject.Inject
 
 @HiltViewModel
@@ -58,6 +60,11 @@ class BlocksViewModel @Inject constructor(
     private val _customPreferences = MutableStateFlow(BlocksPreferences())
     val customPreferences: StateFlow<BlocksPreferences> = _customPreferences.asStateFlow()
 
+    private val sizeDraft = WidgetSizeDraft(viewModelScope, WidgetType.BLOCK, widgetsRepo.widgetsDataFlow)
+    val draftSize: StateFlow<WidgetSize> = sizeDraft.size
+
+    fun setSize(size: WidgetSize) = sizeDraft.set(size)
+
     init {
         initializeCustomPreferences()
     }
@@ -77,7 +84,7 @@ class BlocksViewModel @Inject constructor(
     fun savePreferences(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.updateBlocksPreferences(_customPreferences.value)
-            widgetsRepo.addWidget(WidgetType.BLOCK)
+            widgetsRepo.addWidget(WidgetType.BLOCK, sizeDraft.current)
             onComplete()
         }
     }

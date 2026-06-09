@@ -4,6 +4,7 @@ import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
@@ -19,11 +20,15 @@ import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TrezorVerifyMessageParams
 import com.synonym.bitkitcore.WalletSelection
+import com.synonym.bitkitcore.WatcherParams
 import com.synonym.bitkitcore.onchainBroadcastRawTx
 import com.synonym.bitkitcore.onchainComposeTransaction
 import com.synonym.bitkitcore.onchainGetAccountInfo
 import com.synonym.bitkitcore.onchainGetAddressInfo
 import com.synonym.bitkitcore.onchainGetTransactionHistory
+import com.synonym.bitkitcore.onchainStartWatcher
+import com.synonym.bitkitcore.onchainStopAllWatchers
+import com.synonym.bitkitcore.onchainStopWatcher
 import com.synonym.bitkitcore.trezorClearCredentials
 import com.synonym.bitkitcore.trezorConnect
 import com.synonym.bitkitcore.trezorDisconnect
@@ -264,6 +269,24 @@ class TrezorService @Inject constructor(
                 electrumUrl = electrumUrl,
                 network = network,
             )
+        }
+    }
+
+    suspend fun startWatcher(params: WatcherParams, listener: EventListener) {
+        ServiceQueue.CORE.background {
+            onchainStartWatcher(params = params, listener = listener)
+        }
+    }
+
+    suspend fun stopWatcher(watcherId: String) {
+        ServiceQueue.CORE.background {
+            onchainStopWatcher(watcherId = watcherId)
+        }
+    }
+
+    suspend fun stopAllWatchers() {
+        ServiceQueue.CORE.background {
+            onchainStopAllWatchers()
         }
     }
 }

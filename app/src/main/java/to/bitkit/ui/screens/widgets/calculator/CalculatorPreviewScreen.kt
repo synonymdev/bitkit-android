@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,14 +18,15 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
-import to.bitkit.models.MoneyType
+import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardEditor
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardSmall
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -40,21 +42,20 @@ fun CalculatorPreviewScreen(
 ) {
     val isCalculatorWidgetEnabled by viewModel.isCalculatorWidgetEnabled.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val draftSize by viewModel.draftSize.collectAsStateWithLifecycle()
 
     CalculatorPreviewContent(
         onBack = onBack,
         isCalculatorWidgetEnabled = isCalculatorWidgetEnabled,
         uiState = uiState,
-        onBtcChange = viewModel::onBtcInputChanged,
-        onFiatChange = viewModel::onFiatInputChanged,
-        onInputSelected = viewModel::onInputSelected,
-        onInputDismissed = viewModel::onInputDismissed,
         onClickDelete = {
             viewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
             viewModel.saveWidget(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = viewModel::setSize,
         modifier = modifier
     )
 }
@@ -67,10 +68,8 @@ fun CalculatorPreviewContent(
     isCalculatorWidgetEnabled: Boolean,
     modifier: Modifier = Modifier,
     uiState: CalculatorUiState = CalculatorUiState(),
-    onBtcChange: (String) -> Unit = {},
-    onFiatChange: (String) -> Unit = {},
-    onInputSelected: (MoneyType) -> Unit = {},
-    onInputDismissed: () -> Unit = {},
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -111,25 +110,25 @@ fun CalculatorPreviewContent(
                         btcValue = uiState.btcValue,
                         fiatSymbol = uiState.currencySymbol,
                         fiatValue = uiState.fiatValue,
-                        modifier = Modifier.testTag("calculator_card_small")
+                        modifier = Modifier
+                            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                            .testTag("calculator_card_small")
                     )
                 },
                 wideContent = {
-                    CalculatorCardEditor(
+                    CalculatorCard(
                         btcPrimaryDisplayUnit = uiState.displayUnit,
                         btcValue = uiState.btcValue,
-                        onBtcChange = onBtcChange,
                         fiatSymbol = uiState.currencySymbol,
                         fiatName = uiState.selectedCurrency,
                         fiatValue = uiState.fiatValue,
-                        onFiatChange = onFiatChange,
-                        onInputSelected = onInputSelected,
-                        onInputDismissed = onInputDismissed,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("calculator_card_wide")
                     )
                 },
+                initialSize = initialSize,
+                onSizeSelected = onSizeSelected,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("calculator_preview_carousel")
@@ -143,7 +142,7 @@ fun CalculatorPreviewContent(
                     start = 16.dp,
                     end = 16.dp,
                     bottom = Insets.Bottom + 16.dp,
-                    top = 22.dp,
+                    top = 16.dp,
                 )
                 .fillMaxWidth()
                 .testTag("buttons_row")

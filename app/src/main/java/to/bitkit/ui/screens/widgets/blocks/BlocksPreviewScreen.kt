@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,6 +17,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.ui.components.BodyM
@@ -25,6 +27,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
 import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -42,6 +45,7 @@ fun BlocksPreviewScreen(
     val customBlocksPreferences by blocksViewModel.customPreferences.collectAsStateWithLifecycle()
     val currentBlock by blocksViewModel.currentBlock.collectAsStateWithLifecycle()
     val isBlocksWidgetEnabled by blocksViewModel.isBlocksWidgetEnabled.collectAsStateWithLifecycle()
+    val draftSize by blocksViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         blocksViewModel.refreshOnDisplay()
@@ -59,6 +63,8 @@ fun BlocksPreviewScreen(
         onClickSave = {
             blocksViewModel.savePreferences(onComplete = onClose)
         },
+        initialSize = draftSize,
+        onSizeSelected = blocksViewModel::setSize,
         modifier = modifier
     )
 }
@@ -73,6 +79,8 @@ private fun Content(
     blocksPreferences: BlocksPreferences,
     block: BlockModel?,
     modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -122,7 +130,9 @@ private fun Content(
                         BlockCardSmall(
                             preferences = blocksPreferences,
                             block = it,
-                            modifier = Modifier.testTag("block_card_small")
+                            modifier = Modifier
+                                .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                                .testTag("block_card_small")
                         )
                     },
                     wideContent = {
@@ -134,6 +144,8 @@ private fun Content(
                                 .testTag("block_card_wide")
                         )
                     },
+                    initialSize = initialSize,
+                    onSizeSelected = onSizeSelected,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("blocks_preview_carousel")
@@ -148,7 +160,7 @@ private fun Content(
                     start = 16.dp,
                     end = 16.dp,
                     bottom = Insets.Bottom + 16.dp,
-                    top = 22.dp,
+                    top = 16.dp,
                 )
                 .fillMaxWidth()
                 .testTag("buttons_row")

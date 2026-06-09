@@ -5,15 +5,24 @@ import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorScriptType
 import com.synonym.bitkitcore.TrezorSignedTx
+import com.synonym.bitkitcore.WalletBalance
+import com.synonym.bitkitcore.WatcherEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +39,7 @@ import to.bitkit.repositories.TrezorRepo
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorWalletMode
 import to.bitkit.ui.shared.toast.ToastEventBus
+import java.util.UUID
 import javax.inject.Inject
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
@@ -40,8 +50,73 @@ class TrezorViewModel @Inject constructor(
     private val trezorRepo: TrezorRepo,
 ) : ViewModel() {
 
+    @Volatile
+    private var isCleared = false
+
+    private val watcherStartScope = CoroutineScope(SupervisorJob() + bgDispatcher)
+
     init {
         trezorRepo.observeExternalDisconnects(viewModelScope)
+        observeWatcherEvents()
+    }
+
+    private fun observeWatcherEvents() {
+        viewModelScope.launch(bgDispatcher) {
+            trezorRepo.watcherEvents.collect { (watcherId, event) ->
+                if (watcherId != _uiState.value.watcherId) return@collect
+                when (event) {
+                    is WatcherEvent.TransactionsChanged -> _uiState.update {
+                        it.copy(
+                            watcher = it.watcher.copy(
+                                balance = event.balance,
+                                transactions = event.transactions.toImmutableList(),
+                                transactionCount = event.txCount,
+                                blockHeight = event.blockHeight,
+                                accountType = event.accountType,
+                                connectionStatus = WatcherConnectionStatus.CONNECTED,
+                                events = (
+                                    it.watcher.events +
+                                        "TX update: ${event.txCount} txs, balance=${event.balance.total} sats"
+                                    ).takeLast(MAX_WATCHER_EVENT_LOG).toImmutableList(),
+                            )
+                        )
+                    }
+
+                    is WatcherEvent.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                watcher = it.watcher.copy(
+                                    connectionStatus = WatcherConnectionStatus.ERROR,
+                                    events = (it.watcher.events + "Error: ${event.message}")
+                                        .takeLast(MAX_WATCHER_EVENT_LOG).toImmutableList(),
+                                )
+                            )
+                        }
+                        ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Watcher error: ${event.message}")
+                    }
+
+                    is WatcherEvent.Disconnected -> _uiState.update {
+                        it.copy(
+                            watcher = it.watcher.copy(
+                                connectionStatus = WatcherConnectionStatus.DISCONNECTED,
+                                events = (it.watcher.events + "Disconnected: ${event.message}")
+                                    .takeLast(MAX_WATCHER_EVENT_LOG).toImmutableList(),
+                            )
+                        )
+                    }
+
+                    is WatcherEvent.Reconnected -> _uiState.update {
+                        it.copy(
+                            watcher = it.watcher.copy(
+                                connectionStatus = WatcherConnectionStatus.CONNECTED,
+                                events = (it.watcher.events + "Reconnected")
+                                    .takeLast(MAX_WATCHER_EVENT_LOG).toImmutableList(),
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 
     val trezorState = trezorRepo.state
@@ -228,6 +303,10 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(lookup = it.lookup.copy(input = input)) }
     }
 
+    fun setLookupAccountType(type: AccountType?) {
+        _uiState.update { it.copy(lookup = it.lookup.copy(selectedAccountType = type)) }
+    }
+
     fun lookupBalanceInfo() {
         viewModelScope.launch(bgDispatcher) {
             val input = _uiState.value.lookupInput.trim()
@@ -248,7 +327,8 @@ class TrezorViewModel @Inject constructor(
 
             val network = _uiState.value.selectedNetwork
             if (isExtendedKey(input)) {
-                trezorRepo.getAccountInfo(extendedKey = input, network = network)
+                val scriptType = _uiState.value.lookup.selectedAccountType
+                trezorRepo.getAccountInfo(extendedKey = input, network = network, scriptType = scriptType)
                     .onSuccess { result ->
                         _uiState.update {
                             it.copy(
@@ -573,6 +653,10 @@ class TrezorViewModel @Inject constructor(
         _uiState.update { it.copy(txHistory = it.txHistory.copy(input = input)) }
     }
 
+    fun setTxHistoryAccountType(type: AccountType?) {
+        _uiState.update { it.copy(txHistory = it.txHistory.copy(selectedAccountType = type)) }
+    }
+
     fun lookupTransactionHistory() {
         viewModelScope.launch(bgDispatcher) {
             val input = _uiState.value.txHistoryInput.trim()
@@ -585,7 +669,8 @@ class TrezorViewModel @Inject constructor(
             }
 
             val network = _uiState.value.selectedNetwork
-            trezorRepo.getTransactionHistory(extendedKey = input, network = network)
+            val scriptType = _uiState.value.txHistory.selectedAccountType
+            trezorRepo.getTransactionHistory(extendedKey = input, network = network, scriptType = scriptType)
                 .onSuccess { result ->
                     _uiState.update {
                         it.copy(txHistory = it.txHistory.copy(isLoading = false, result = result))
@@ -600,6 +685,133 @@ class TrezorViewModel @Inject constructor(
                     ToastEventBus.send(it)
                 }
         }
+    }
+
+    fun setWatcherExtendedKey(key: String) {
+        _uiState.update { it.copy(watcher = it.watcher.copy(extendedKey = key)) }
+    }
+
+    fun setWatcherGapLimit(limit: String) {
+        _uiState.update { it.copy(watcher = it.watcher.copy(gapLimit = limit)) }
+    }
+
+    fun setWatcherAccountType(type: AccountType?) {
+        _uiState.update { it.copy(watcher = it.watcher.copy(selectedAccountType = type)) }
+    }
+
+    fun populateWatcherFromXpub() {
+        val xpub = trezorRepo.state.value.lastPublicKey?.xpub ?: return
+        _uiState.update { it.copy(watcher = it.watcher.copy(extendedKey = xpub)) }
+    }
+
+    fun startWatcher() {
+        watcherStartScope.launch {
+            val state = _uiState.value
+            val key = state.watcherExtendedKey.trim()
+            if (key.isBlank()) {
+                ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Enter an extended key (xpub)")
+                return@launch
+            }
+            val gapLimit = state.watcherGapLimit.toUIntOrNull()
+            if (gapLimit == null || gapLimit == 0u) {
+                ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Gap limit must be a positive integer")
+                return@launch
+            }
+
+            val watcherId = UUID.randomUUID().toString()
+            _uiState.update {
+                it.copy(
+                    watcher = it.watcher.copy(
+                        isStarting = true,
+                        activeWatcherId = null,
+                        startingWatcherId = watcherId,
+                        connectionStatus = WatcherConnectionStatus.STARTING,
+                        events = persistentListOf("Watcher starting: $watcherId"),
+                    )
+                )
+            }
+            val result = trezorRepo.startWatcher(
+                watcherId = watcherId,
+                extendedKey = key,
+                network = state.selectedNetwork,
+                gapLimit = gapLimit,
+                accountType = state.watcher.selectedAccountType,
+            )
+
+            if (result.isSuccess) {
+                handleWatcherStartSuccess(watcherId)
+            } else {
+                handleWatcherStartFailure(watcherId, result)
+            }
+        }
+    }
+
+    private suspend fun handleWatcherStartSuccess(watcherId: String) {
+        if (isCleared) {
+            trezorRepo.stopWatcher(watcherId)
+            return
+        }
+
+        _uiState.update {
+            if (it.watcher.startingWatcherId != watcherId) return@update it
+            it.copy(
+                watcher = it.watcher.copy(
+                    isStarting = false,
+                    startingWatcherId = null,
+                    activeWatcherId = watcherId,
+                )
+            )
+        }
+        ToastEventBus.send(type = Toast.ToastType.INFO, title = "Watcher started")
+    }
+
+    private suspend fun handleWatcherStartFailure(watcherId: String, result: Result<Unit>) {
+        if (isCleared) return
+
+        _uiState.update {
+            if (it.watcher.startingWatcherId != watcherId) return@update it
+            it.copy(
+                watcher = it.watcher.copy(
+                    isStarting = false,
+                    startingWatcherId = null,
+                    activeWatcherId = null,
+                    connectionStatus = WatcherConnectionStatus.IDLE,
+                    events = persistentListOf(),
+                )
+            )
+        }
+        result.exceptionOrNull()?.let { ToastEventBus.send(it) }
+    }
+
+    fun stopWatcher() {
+        val watcherId = _uiState.value.activeWatcherId ?: return
+        viewModelScope.launch(bgDispatcher) {
+            trezorRepo.stopWatcher(watcherId)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            watcher = it.watcher.copy(
+                                activeWatcherId = null,
+                                connectionStatus = WatcherConnectionStatus.IDLE,
+                                balance = null,
+                                transactions = persistentListOf(),
+                                transactionCount = 0u,
+                                blockHeight = 0u,
+                                accountType = null,
+                                events = persistentListOf(),
+                            )
+                        )
+                    }
+                    ToastEventBus.send(type = Toast.ToastType.INFO, title = "Watcher stopped")
+                }
+                .onFailure { ToastEventBus.send(it) }
+        }
+    }
+
+    override fun onCleared() {
+        isCleared = true
+        _uiState.value.activeWatcherId?.let { trezorRepo.stopWatcherOnCleared(it) }
+        super.onCleared()
     }
 
     fun clearError() {
@@ -660,6 +872,7 @@ data class TrezorUiState(
     val lookup: TrezorLookupState = TrezorLookupState(),
     val send: TrezorSendState = TrezorSendState(),
     val txHistory: TrezorTxHistoryState = TrezorTxHistoryState(),
+    val watcher: TrezorWatcherState = TrezorWatcherState(),
 ) {
     val selectedNetwork: BitkitCoreNetwork
         get() = network.selectedNetwork
@@ -702,6 +915,9 @@ data class TrezorUiState(
 
     val addressInfoResult: SingleAddressInfoResult?
         get() = lookup.addressInfoResult
+
+    val lookupSelectedAccountType: AccountType?
+        get() = lookup.selectedAccountType
 
     val sendAddress: String
         get() = send.address
@@ -747,6 +963,48 @@ data class TrezorUiState(
 
     val txHistoryResult: TransactionHistoryResult?
         get() = txHistory.result
+
+    val txHistorySelectedAccountType: AccountType?
+        get() = txHistory.selectedAccountType
+
+    val watcherExtendedKey: String
+        get() = watcher.extendedKey
+
+    val watcherGapLimit: String
+        get() = watcher.gapLimit
+
+    val isStartingWatcher: Boolean
+        get() = watcher.isStarting
+
+    val activeWatcherId: String?
+        get() = watcher.activeWatcherId
+
+    val watcherId: String?
+        get() = watcher.activeWatcherId ?: watcher.startingWatcherId
+
+    val watcherConnectionStatus: WatcherConnectionStatus
+        get() = watcher.connectionStatus
+
+    val watcherBalance: WalletBalance?
+        get() = watcher.balance
+
+    val watcherTransactions: ImmutableList<HistoryTransaction>
+        get() = watcher.transactions
+
+    val watcherTransactionCount: UInt
+        get() = watcher.transactionCount
+
+    val watcherBlockHeight: UInt
+        get() = watcher.blockHeight
+
+    val watcherAccountType: AccountType?
+        get() = watcher.accountType
+
+    val watcherSelectedAccountType: AccountType?
+        get() = watcher.selectedAccountType
+
+    val watcherEvents: ImmutableList<String>
+        get() = watcher.events
 }
 
 @Stable
@@ -776,6 +1034,7 @@ data class TrezorLookupState(
     val isLookingUp: Boolean = false,
     val accountInfoResult: AccountInfoResult? = null,
     val addressInfoResult: SingleAddressInfoResult? = null,
+    val selectedAccountType: AccountType? = null,
 )
 
 @Stable
@@ -796,7 +1055,29 @@ data class TrezorTxHistoryState(
     val input: String = "",
     val isLoading: Boolean = false,
     val result: TransactionHistoryResult? = null,
+    val selectedAccountType: AccountType? = null,
 )
+
+@Stable
+data class TrezorWatcherState(
+    val extendedKey: String = "",
+    val gapLimit: String = "20",
+    val isStarting: Boolean = false,
+    val startingWatcherId: String? = null,
+    val activeWatcherId: String? = null,
+    val connectionStatus: WatcherConnectionStatus = WatcherConnectionStatus.IDLE,
+    val balance: WalletBalance? = null,
+    val transactions: ImmutableList<HistoryTransaction> = persistentListOf(),
+    val transactionCount: UInt = 0u,
+    val blockHeight: UInt = 0u,
+    val accountType: AccountType? = null,
+    val selectedAccountType: AccountType? = null,
+    val events: ImmutableList<String> = persistentListOf(),
+)
+
+private const val MAX_WATCHER_EVENT_LOG = 50
+
+enum class WatcherConnectionStatus { IDLE, STARTING, CONNECTED, DISCONNECTED, ERROR }
 
 sealed interface SendStep {
     data object Form : SendStep

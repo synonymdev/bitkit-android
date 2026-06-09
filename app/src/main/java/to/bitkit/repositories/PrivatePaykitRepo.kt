@@ -112,7 +112,10 @@ class PrivatePaykitRepo @Inject constructor(
     ): Result<Unit> = withContext(serializedDispatcher) {
         runCatching {
             val keys = rememberSavedContacts(publicKeys, replacing = true)
-            if (!canPublishPrivateEndpoints()) return@runCatching
+            if (!canPublishPrivateEndpoints()) {
+                if (requireImmediatePublication && keys.isNotEmpty()) throw PrivatePaykitError.PrivateUnavailable
+                return@runCatching
+            }
             if (isProfileRecoveryPending() && keys.isNotEmpty()) {
                 recoverSavedContactsAfterProfileRecreation(
                     publicKeys = keys,
@@ -162,13 +165,19 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun enableSharingAndPrepareSavedContacts(publicKeys: Collection<String>): Result<Unit> =
+    suspend fun enableSharingAndPrepareSavedContacts(
+        publicKeys: Collection<String>,
+        requireImmediatePublication: Boolean = false,
+    ): Result<Unit> =
         withContext(serializedDispatcher) {
             runCatching {
                 val wasCleanupPending = isContactSharingCleanupPending()
-                if (wasCleanupPending && !canPublishPrivateEndpoints()) return@runCatching
+                if (wasCleanupPending && !canPublishPrivateEndpoints()) {
+                    if (requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
+                    return@runCatching
+                }
                 updateContactSharingCleanupPending(false)
-                prepareSavedContacts(publicKeys).onFailure {
+                prepareSavedContacts(publicKeys, requireImmediatePublication).onFailure {
                     if (wasCleanupPending) {
                         runCatching { updateContactSharingCleanupPending(true) }
                             .onFailure(it::addSuppressed)
@@ -272,6 +281,7 @@ class PrivatePaykitRepo @Inject constructor(
                         removalError,
                         context = TAG,
                     )
+                    throw removalError
                 } else {
                     clearUnsavedContactState(savedPublicKeys).getOrThrow()
                     updateContactSharingCleanupPending(false)
@@ -691,9 +701,7 @@ class PrivatePaykitRepo @Inject constructor(
                     generation = generation,
                     scheduleRetries = scheduleRetries,
                 ) ?: run {
-                    val shouldFailImmediatePublish = requireImmediatePublication &&
-                        shouldRequirePrivateEndpointRemoval(normalizedKey)
-                    if (firstError == null && shouldFailImmediatePublish) {
+                    if (firstError == null && requireImmediatePublication) {
                         firstError = PrivatePaykitError.PrivateUnavailable
                     }
                     return@forEach
@@ -710,9 +718,7 @@ class PrivatePaykitRepo @Inject constructor(
                     scheduleRetries = scheduleRetries,
                     generation = generation,
                 ) ?: run {
-                    val shouldFailImmediatePublish = requireImmediatePublication &&
-                        shouldRequirePrivateEndpointRemoval(normalizedKey)
-                    if (firstError == null && shouldFailImmediatePublish) {
+                    if (firstError == null && requireImmediatePublication) {
                         firstError = PrivatePaykitError.PrivateUnavailable
                     }
                     return@forEach
