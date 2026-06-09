@@ -102,6 +102,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
@@ -111,9 +112,12 @@ import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.env.Env
+import to.bitkit.ext.rawId
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
+import to.bitkit.models.HwTransportType
+import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
@@ -121,10 +125,9 @@ import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.effectiveSize
+import to.bitkit.models.toBalance
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
-import to.bitkit.repositories.HwWallet
-import to.bitkit.repositories.KnownDeviceTransportType
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
@@ -286,7 +289,7 @@ fun HomeScreen(
                 }
 
                 Suggestion.HARDWARE -> {
-                    appViewModel.showSheet(Sheet.HardwareWalletConnect())
+                    appViewModel.showSheet(Sheet.Connect())
                 }
 
                 Suggestion.LIGHTNING -> {
@@ -667,10 +670,16 @@ private fun WalletPage(
                         }
                     }
 
+                    val hardwareIds = remember(homeUiState.hardwareWallets) {
+                        homeUiState.hardwareWallets
+                            .flatMap { wallet -> wallet.activities.map { it.rawId() } }
+                            .toImmutableSet()
+                    }
                     ActivityListSimple(
                         items = latestActivities,
                         onAllActivityClick = onNavigateToAllActivity,
                         onActivityItemClick = onNavigateToActivityItem,
+                        hardwareIds = hardwareIds,
                     )
 
                     FillHeight()
@@ -772,8 +781,8 @@ private fun RowScope.HardwareWalletCell(
         Icon(
             painter = painterResource(
                 id = when (wallet.transportType) {
-                    KnownDeviceTransportType.BLUETOOTH -> R.drawable.ic_bluetooth_connected
-                    KnownDeviceTransportType.USB -> R.drawable.ic_usb_connected
+                    HwTransportType.BLUETOOTH -> R.drawable.ic_bluetooth_connected
+                    HwTransportType.USB -> R.drawable.ic_usb_connected
                 }
             ),
             contentDescription = null,
@@ -1473,7 +1482,7 @@ private val previewHardwareWalletBt = HwWallet(
     id = "trezor-1",
     name = "Trezor Safe 5",
     model = "Safe 5",
-    transportType = KnownDeviceTransportType.BLUETOOTH,
+    transportType = HwTransportType.BLUETOOTH,
     isConnected = true,
     balanceSats = 10_562_411uL,
     activities = persistentListOf(),
@@ -1482,7 +1491,7 @@ private val previewHardwareWalletUsb = HwWallet(
     id = "trezor-2",
     name = "Trezor Model T",
     model = "Model T",
-    transportType = KnownDeviceTransportType.USB,
+    transportType = HwTransportType.USB,
     isConnected = false,
     balanceSats = 2_735_180uL,
     activities = persistentListOf(),
@@ -1491,7 +1500,7 @@ private val previewHardwareWalletThird = HwWallet(
     id = "trezor-3",
     name = "Trezor Safe 3",
     model = "Safe 3",
-    transportType = KnownDeviceTransportType.BLUETOOTH,
+    transportType = HwTransportType.BLUETOOTH,
     isConnected = true,
     balanceSats = 500_000uL,
     activities = persistentListOf(),
@@ -1528,7 +1537,7 @@ private fun PreviewWithHardwareWallet() {
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewLatestActivities,
-                balances = previewBalances.copy(totalHardwareSats = 10_562_411uL),
+                balances = previewBalances.copy(hardwareWallets = listOf(previewHardwareWalletBt.toBalance())),
             )
             TabBar()
         }
@@ -1547,7 +1556,12 @@ private fun PreviewWithTwoHardwareWallets() {
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewLatestActivities,
-                balances = previewBalances.copy(totalHardwareSats = 13_297_591uL),
+                balances = previewBalances.copy(
+                    hardwareWallets = listOf(
+                        previewHardwareWalletBt.toBalance(),
+                        previewHardwareWalletUsb.toBalance(),
+                    )
+                ),
             )
             TabBar()
         }
@@ -1570,7 +1584,13 @@ private fun PreviewWithThreeHardwareWallets() {
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewLatestActivities,
-                balances = previewBalances.copy(totalHardwareSats = 13_797_591uL),
+                balances = previewBalances.copy(
+                    hardwareWallets = listOf(
+                        previewHardwareWalletBt.toBalance(),
+                        previewHardwareWalletUsb.toBalance(),
+                        previewHardwareWalletThird.toBalance(),
+                    )
+                ),
             )
             TabBar()
         }

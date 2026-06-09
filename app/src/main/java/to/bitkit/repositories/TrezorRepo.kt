@@ -43,12 +43,13 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import to.bitkit.data.TrezorStore
+import to.bitkit.data.HwWalletStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.nowMs
 import to.bitkit.models.ALL_ADDRESS_TYPES
+import to.bitkit.models.HwTransportType
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
@@ -63,16 +64,20 @@ import to.bitkit.utils.Logger
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
-@Suppress("TooManyFunctions")
+@OptIn(ExperimentalTime::class)
+@Suppress("TooManyFunctions", "LongParameterList")
 @Singleton
 class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trezorService: TrezorService,
     private val trezorTransport: TrezorTransport,
     private val trezorUiHandler: TrezorUiHandler,
-    private val trezorStore: TrezorStore,
+    private val hwWalletStore: HwWalletStore,
+    private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -650,10 +655,10 @@ class TrezorRepo @Inject constructor(
             id = deviceInfo.id,
             name = deviceInfo.name,
             path = deviceInfo.path,
-            transportType = deviceInfo.transportType.toKnownTransportType(),
+            transportType = deviceInfo.transportType.toHwTransportType(),
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
-            lastConnectedAt = System.currentTimeMillis(),
+            lastConnectedAt = clock.nowMs(),
             xpubs = fetchAccountXpubs().ifEmpty { previous?.xpubs ?: emptyMap() },
         )
         val updated = existing.filter { it.id != known.id } + known
@@ -671,7 +676,7 @@ class TrezorRepo @Inject constructor(
         return ALL_ADDRESS_TYPES.mapNotNull { addressType ->
             runCatching {
                 val xpub = trezorService.getPublicKey(
-                    path = addressType.toAccountDerivationPath(),
+                    path = addressType.toAccountDerivationPath(network = Env.network),
                     coin = coin,
                     showOnTrezor = false,
                 ).xpub
@@ -683,14 +688,14 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
-        trezorStore.loadKnownDevices()
+        hwWalletStore.loadKnownDevices()
     }.onFailure {
         Logger.error("Failed to load known devices", it, context = TAG)
     }.getOrDefault(emptyList())
 
     private suspend fun saveKnownDevices(devices: List<KnownDevice>) {
         runCatching {
-            trezorStore.saveKnownDevices(devices)
+            hwWalletStore.saveKnownDevices(devices)
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
@@ -801,7 +806,7 @@ data class KnownDevice(
     val id: String,
     val name: String?,
     val path: String,
-    val transportType: KnownDeviceTransportType,
+    val transportType: HwTransportType,
     val label: String?,
     val model: String?,
     val lastConnectedAt: Long,
@@ -809,21 +814,12 @@ data class KnownDevice(
     val xpubs: Map<String, String> = emptyMap(),
 )
 
-@Serializable
-enum class KnownDeviceTransportType {
-    @SerialName("bluetooth")
-    BLUETOOTH,
-
-    @SerialName("usb")
-    USB,
+private fun TrezorTransportType.toHwTransportType(): HwTransportType = when (this) {
+    TrezorTransportType.BLUETOOTH -> HwTransportType.BLUETOOTH
+    TrezorTransportType.USB -> HwTransportType.USB
 }
 
-private fun TrezorTransportType.toKnownTransportType(): KnownDeviceTransportType = when (this) {
-    TrezorTransportType.BLUETOOTH -> KnownDeviceTransportType.BLUETOOTH
-    TrezorTransportType.USB -> KnownDeviceTransportType.USB
-}
-
-private fun KnownDeviceTransportType.toCoreTransportType(): TrezorTransportType = when (this) {
-    KnownDeviceTransportType.BLUETOOTH -> TrezorTransportType.BLUETOOTH
-    KnownDeviceTransportType.USB -> TrezorTransportType.USB
+private fun HwTransportType.toCoreTransportType(): TrezorTransportType = when (this) {
+    HwTransportType.BLUETOOTH -> TrezorTransportType.BLUETOOTH
+    HwTransportType.USB -> TrezorTransportType.USB
 }

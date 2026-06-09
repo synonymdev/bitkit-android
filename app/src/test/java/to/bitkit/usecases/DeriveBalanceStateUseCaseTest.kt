@@ -1,5 +1,6 @@
 package to.bitkit.usecases
 
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -19,6 +20,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.models.TransferType
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
@@ -31,6 +33,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     private val lightningRepo: LightningRepo = mock()
     private val transferRepo: TransferRepo = mock()
     private val settingsStore: SettingsStore = mock()
+    private val hwWalletRepo: HwWalletRepo = mock()
 
     private lateinit var sut: DeriveBalanceStateUseCase
 
@@ -40,6 +43,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
             whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
             whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+            whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
             wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
             wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
             wheneverBlocking {
@@ -51,6 +55,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             transferRepo = transferRepo,
             settingsStore = settingsStore,
+            hwWalletRepo = hwWalletRepo,
         )
     }
 

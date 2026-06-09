@@ -17,20 +17,27 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.HwWalletData
+import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.TrezorData
-import to.bitkit.data.TrezorStore
+import to.bitkit.env.Env
+import to.bitkit.models.HwTransportType
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class HwWalletRepoTest : BaseUnitTest() {
 
     private val trezorRepo = mock<TrezorRepo>()
-    private val trezorStore = mock<TrezorStore>()
+    private val hwWalletStore = mock<HwWalletStore>()
     private val settingsStore = mock<SettingsStore>()
+    private val clock = Clock.System
 
-    private lateinit var storeData: MutableStateFlow<TrezorData>
+    private lateinit var storeData: MutableStateFlow<HwWalletData>
     private lateinit var settingsData: MutableStateFlow<SettingsData>
     private lateinit var trezorState: MutableStateFlow<TrezorState>
     private lateinit var watcherEvents: MutableSharedFlow<Pair<String, WatcherEvent>>
@@ -39,7 +46,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         id = "dev1",
         name = null,
         path = "ble:AA:BB",
-        transportType = KnownDeviceTransportType.BLUETOOTH,
+        transportType = HwTransportType.BLUETOOTH,
         label = "Trezor",
         model = "Safe 5",
         lastConnectedAt = 0L,
@@ -47,27 +54,27 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        storeData = MutableStateFlow(TrezorData(knownDevices = listOf(device)))
+        storeData = MutableStateFlow(HwWalletData(knownDevices = listOf(device)))
         settingsData = MutableStateFlow(SettingsData())
         trezorState = MutableStateFlow(TrezorState())
         watcherEvents = MutableSharedFlow(extraBufferCapacity = 8)
-        whenever(trezorStore.data).thenReturn(storeData)
+        whenever(hwWalletStore.data).thenReturn(storeData)
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
     }
 
-    private fun createRepo() = HwWalletRepo(trezorRepo, trezorStore, settingsStore, testDispatcher)
+    private fun createRepo() = HwWalletRepo(trezorRepo, hwWalletStore, settingsStore, clock, testDispatcher)
 
     @Test
     fun `lists a known device with zero balance before any watcher event`() = test {
         val sut = createRepo()
 
-        val wallet = sut.hardwareWallets.value.single()
+        val wallet = sut.wallets.value.single()
         assertEquals("dev1", wallet.id)
         assertEquals("Trezor", wallet.name)
         assertEquals(0uL, wallet.balanceSats)
-        assertEquals(0uL, sut.totalHardwareSats.value)
+        assertEquals(0uL, sut.totalSats.value)
     }
 
     @Test
@@ -84,11 +91,11 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
 
-        val wallet = sut.hardwareWallets.value.single()
+        val wallet = sut.wallets.value.single()
         assertEquals(10_562_411uL, wallet.balanceSats)
-        assertEquals(10_562_411uL, sut.totalHardwareSats.value)
+        assertEquals(10_562_411uL, sut.totalSats.value)
         assertEquals(1, wallet.activities.size)
-        assertEquals(1, sut.hardwareActivities.value.size)
+        assertEquals(1, sut.activities.value.size)
         assertEquals(Activity.Onchain::class, wallet.activities.single()::class)
     }
 
@@ -115,13 +122,13 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
 
-        assertEquals(150uL, sut.hardwareWallets.value.single().balanceSats)
-        assertEquals(150uL, sut.totalHardwareSats.value)
+        assertEquals(150uL, sut.wallets.value.single().balanceSats)
+        assertEquals(150uL, sut.totalSats.value)
     }
 
     @Test
     fun `starts watchers only for the address types the user monitors`() = test {
-        storeData.value = TrezorData(
+        storeData.value = HwWalletData(
             knownDevices = listOf(
                 device.copy(
                     xpubs = mapOf(
@@ -140,6 +147,24 @@ class HwWalletRepoTest : BaseUnitTest() {
         verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
         verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull())
         verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `starts watchers on the network configured in Env`() = test {
+        storeData.value = HwWalletData(
+            knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
+        )
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+
+        createRepo()
+
+        verify(trezorRepo).startWatcher(
+            watcherId = any(),
+            extendedKey = any(),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+        )
     }
 
     private fun walletBalance(total: ULong) = WalletBalance(

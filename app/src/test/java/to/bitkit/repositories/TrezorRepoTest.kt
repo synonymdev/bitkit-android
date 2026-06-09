@@ -23,8 +23,9 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import to.bitkit.data.TrezorStore
+import to.bitkit.data.HwWalletStore
 import to.bitkit.env.Env
+import to.bitkit.models.HwTransportType
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
@@ -34,7 +35,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class TrezorRepoTest : BaseUnitTest() {
 
     companion object Fixtures {
@@ -55,7 +59,7 @@ class TrezorRepoTest : BaseUnitTest() {
     private val trezorService = mock<TrezorService>()
     private val trezorTransport = mock<TrezorTransport>()
     private val trezorUiHandler = mock<TrezorUiHandler>()
-    private val trezorStore = mock<TrezorStore>()
+    private val hwWalletStore = mock<HwWalletStore>()
     private val prefs = mock<SharedPreferences>()
     private val prefsEditor = mock<SharedPreferences.Editor>()
 
@@ -73,7 +77,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(context.filesDir).thenReturn(tempFolder.root)
-        whenever { trezorStore.loadKnownDevices() }.thenReturn(emptyList())
+        whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
     }
 
     private fun createSut(): TrezorRepo = TrezorRepo(
@@ -81,7 +85,8 @@ class TrezorRepoTest : BaseUnitTest() {
         trezorService = trezorService,
         trezorTransport = trezorTransport,
         trezorUiHandler = trezorUiHandler,
-        trezorStore = trezorStore,
+        hwWalletStore = hwWalletStore,
+        clock = Clock.System,
         ioDispatcher = testDispatcher,
     )
 
@@ -122,7 +127,7 @@ class TrezorRepoTest : BaseUnitTest() {
         id = id,
         name = name,
         path = path,
-        transportType = KnownDeviceTransportType.USB,
+        transportType = HwTransportType.USB,
         label = label,
         model = model,
         lastConnectedAt = 123L,
@@ -176,7 +181,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val known = mockDeviceInfo()
         val nearby = mockDeviceInfo(id = "device-456", path = "/dev/trezor1")
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(known, nearby))
         sut = createSut()
 
@@ -237,10 +242,10 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(trezorStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
         val saved = captor.firstValue.single()
         assertEquals(DEVICE_ID, saved.id)
-        assertEquals(KnownDeviceTransportType.USB, saved.transportType)
+        assertEquals(HwTransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
     }
@@ -501,7 +506,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val device = mockDeviceInfo()
         val features = mockFeatures()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(device))
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.isConnected()).thenReturn(false)
@@ -525,7 +530,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val device = mockDeviceInfo()
         val features = mockFeatures()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(device))
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         sut = createSut()
@@ -582,7 +587,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val device = mockDeviceInfo()
         val features = mockFeatures()
         val addressResponse = mock<TrezorAddressResponse>()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.isConnected()).thenReturn(false)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
@@ -615,7 +620,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val features = mockFeatures()
         val device = mockDeviceInfo()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
@@ -635,7 +640,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals("disconnect failed", sut.state.value.error)
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
-        verify(trezorStore).saveKnownDevices(emptyList())
+        verify(hwWalletStore).saveKnownDevices(emptyList())
     }
 
     // endregion

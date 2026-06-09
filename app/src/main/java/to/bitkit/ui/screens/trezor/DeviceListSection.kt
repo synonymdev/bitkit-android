@@ -21,8 +21,8 @@ import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
+import to.bitkit.models.HwTransportType
 import to.bitkit.repositories.KnownDevice
-import to.bitkit.repositories.KnownDeviceTransportType
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -98,8 +98,8 @@ internal fun KnownDeviceCard(
         Icon(
             painter = painterResource(
                 when (device.transportType) {
-                    KnownDeviceTransportType.BLUETOOTH -> R.drawable.ic_broadcast
-                    KnownDeviceTransportType.USB -> R.drawable.ic_git_branch
+                    HwTransportType.BLUETOOTH -> R.drawable.ic_broadcast
+                    HwTransportType.USB -> R.drawable.ic_git_branch
                 }
             ),
             contentDescription = null,
@@ -120,8 +120,8 @@ internal fun KnownDeviceCard(
             ) {
                 Caption(
                     text = when (device.transportType) {
-                        KnownDeviceTransportType.BLUETOOTH -> "Bluetooth"
-                        KnownDeviceTransportType.USB -> "USB"
+                        HwTransportType.BLUETOOTH -> "Bluetooth"
+                        HwTransportType.USB -> "USB"
                     },
                     color = Colors.White50,
                 )

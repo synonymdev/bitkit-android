@@ -1,0 +1,39 @@
+package to.bitkit.models
+
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import com.synonym.bitkitcore.Activity
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+/** A paired hardware wallet tracked as a watch-only balance. */
+@Stable
+data class HwWallet(
+    val id: String,
+    val name: String,
+    val model: String?,
+    val transportType: HwTransportType,
+    val isConnected: Boolean,
+    val balanceSats: ULong,
+    val activities: ImmutableList<Activity>,
+)
+
+/** Serializable per-device balance snapshot carried by [BalanceState]. */
+@Immutable
+@Serializable
+data class HwWalletBalance(
+    val id: String,
+    val sats: ULong,
+)
+
+@Serializable
+enum class HwTransportType {
+    @SerialName("bluetooth")
+    BLUETOOTH,
+
+    @SerialName("usb")
+    USB,
+}
+
+fun HwWallet.toBalance() = HwWalletBalance(id = id, sats = balanceSats)

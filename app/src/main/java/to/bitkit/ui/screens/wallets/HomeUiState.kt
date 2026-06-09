@@ -5,6 +5,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.models.BannerItem
+import to.bitkit.models.HwWallet
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
@@ -14,7 +15,6 @@ import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
-import to.bitkit.repositories.HwWallet
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 
 @Stable

@@ -123,7 +123,7 @@ class HomeViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            hwWalletRepo.hardwareWallets.collect { wallets ->
+            hwWalletRepo.wallets.collect { wallets ->
                 _uiState.update { it.copy(hardwareWallets = wallets) }
             }
         }
@@ -320,7 +320,7 @@ class HomeViewModel @Inject constructor(
         settingsStore.data,
         transferRepo.activeTransfers,
         pubkyRepo.isAuthenticated,
-        hwWalletRepo.hardwareWallets,
+        hwWalletRepo.wallets,
     ) { balanceState, settings, transfers, profileAuthenticated, hardwareWallets ->
         val hasHardwareWallet = hardwareWallets.isNotEmpty()
         val baseSuggestions = when {

@@ -41,6 +41,7 @@ fun ActivityIcon(
     modifier: Modifier = Modifier,
     size: Dp = 32.dp,
     isCpfpChild: Boolean = false,
+    isHardware: Boolean = false,
     contact: PubkyProfile? = null,
 ) {
     val isLightning = activity is Activity.Lightning
@@ -67,7 +68,7 @@ fun ActivityIcon(
             modifier = modifier
         )
         isLightning -> ActivityIconLightning(status, size, arrowIcon, modifier)
-        else -> ActivityIconOnchain(activity, arrowIcon, size, modifier)
+        else -> ActivityIconOnchain(activity, arrowIcon, size, isHardware, modifier)
     }
 }
 
@@ -76,12 +77,21 @@ private fun ActivityIconOnchain(
     activity: Activity,
     arrowIcon: Painter,
     size: Dp,
+    isHardware: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val isTransfer = activity.isTransfer()
     val isTransferFromSpending = isTransfer && activity.txType() == PaymentType.RECEIVED
-    val transferIconColor = if (isTransferFromSpending) Colors.Purple else Colors.Brand
-    val transferBackgroundColor = if (isTransferFromSpending) Colors.Purple16 else Colors.Brand16
+    val (iconColor, backgroundColor) = when {
+        isHardware -> Colors.Blue to Colors.Blue16
+        isTransferFromSpending -> Colors.Purple to Colors.Purple16
+        else -> Colors.Brand to Colors.Brand16
+    }
+    val tag = when {
+        isHardware -> "HardwareActivityIcon"
+        isTransfer -> "TransferIcon"
+        else -> "ActivityIcon"
+    }
 
     CircularIcon(
         icon = when {
@@ -89,10 +99,10 @@ private fun ActivityIconOnchain(
             isTransfer -> painterResource(R.drawable.ic_transfer)
             else -> arrowIcon
         },
-        iconColor = if (isTransfer) transferIconColor else Colors.Brand,
-        backgroundColor = if (isTransfer) transferBackgroundColor else Colors.Brand16,
+        iconColor = iconColor,
+        backgroundColor = backgroundColor,
         size = size,
-        modifier = modifier.testTag(if (isTransfer) "TransferIcon" else "ActivityIcon"),
+        modifier = modifier.testTag(tag),
     )
 }
 

@@ -37,6 +37,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAccountDerivationPath
+import to.bitkit.models.toBalance
 import to.bitkit.models.toDerivationPath
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
@@ -86,8 +87,8 @@ class WalletRepo @Inject constructor(
             }
         }
         repoScope.launch {
-            hwWalletRepo.totalHardwareSats.collect { hardwareSats ->
-                _balanceState.update { it.copy(totalHardwareSats = hardwareSats) }
+            hwWalletRepo.wallets.collect { wallets ->
+                _balanceState.update { state -> state.copy(hardwareWallets = wallets.map { it.toBalance() }) }
             }
         }
     }
@@ -280,8 +281,7 @@ class WalletRepo @Inject constructor(
     suspend fun syncBalances() {
         deriveBalanceStateUseCase().onSuccess { balanceState ->
             runCatching { cacheStore.cacheBalance(balanceState) }
-            // Preserve the live hardware-wallet total; the use case only derives onchain + lightning.
-            _balanceState.update { balanceState.copy(totalHardwareSats = hwWalletRepo.totalHardwareSats.value) }
+            _balanceState.update { balanceState }
         }.onFailure {
             if (it !is CancellationException) {
                 Logger.warn("Could not sync balances", it, context = TAG)

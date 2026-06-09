@@ -63,7 +63,7 @@ class ActivityListViewModel @Inject constructor(
     // newest first, capped at the same limit as the on-chain/lightning list.
     val latestActivities: StateFlow<ImmutableList<Activity>?> = combine(
         _latestActivities,
-        hwWalletRepo.hardwareActivities,
+        hwWalletRepo.activities,
     ) { localActivities, hardwareActivities ->
         if (localActivities == null && hardwareActivities.isEmpty()) {
             null

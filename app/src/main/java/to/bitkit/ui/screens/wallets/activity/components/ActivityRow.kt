@@ -68,6 +68,7 @@ fun ActivityRow(
     onClick: (String) -> Unit,
     testTag: String,
     title: String? = null,
+    isHardware: Boolean = false,
     contact: PubkyProfile? = null,
 ) {
     val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
@@ -115,7 +116,13 @@ fun ActivityRow(
             .padding(16.dp)
             .testTag(testTag)
     ) {
-        ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild, contact = resolvedContact)
+        ActivityIcon(
+            activity = item,
+            size = 40.dp,
+            isCpfpChild = isCpfpChild,
+            isHardware = isHardware,
+            contact = resolvedContact,
+        )
         HorizontalSpacer(16.dp)
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp),

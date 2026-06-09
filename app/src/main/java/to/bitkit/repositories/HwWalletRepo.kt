@@ -1,6 +1,5 @@
 package to.bitkit.repositories
 
-import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.OnchainActivity
@@ -22,16 +21,19 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.TrezorStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.create
+import to.bitkit.models.HwWallet
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Production hardware-wallet business layer. Tracks paired Trezor devices as
@@ -41,11 +43,13 @@ import javax.inject.Singleton
  * Built on top of [TrezorRepo], which owns the device list, connect orchestration
  * and the underlying watcher transport.
  */
+@OptIn(ExperimentalTime::class)
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
-    private val trezorStore: TrezorStore,
+    private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
+    private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -57,8 +61,8 @@ class HwWalletRepo @Inject constructor(
     private val activeWatchers = mutableSetOf<String>()
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
 
-    val hardwareWallets: StateFlow<ImmutableList<HwWallet>> = combine(
-        trezorStore.data,
+    val wallets: StateFlow<ImmutableList<HwWallet>> = combine(
+        hwWalletStore.data,
         trezorRepo.state,
         _watcherData,
     ) { data, trezorState, watcherData ->
@@ -76,11 +80,11 @@ class HwWalletRepo @Inject constructor(
         }.toImmutableList()
     }.stateIn(scope, SharingStarted.Eagerly, persistentListOf())
 
-    val totalHardwareSats: StateFlow<ULong> = hardwareWallets
+    val totalSats: StateFlow<ULong> = wallets
         .map { wallets -> wallets.fold(0uL) { acc, wallet -> acc + wallet.balanceSats } }
         .stateIn(scope, SharingStarted.Eagerly, 0uL)
 
-    val hardwareActivities: StateFlow<ImmutableList<Activity>> = hardwareWallets
+    val activities: StateFlow<ImmutableList<Activity>> = wallets
         .map { wallets -> wallets.flatMap { it.activities }.toImmutableList() }
         .stateIn(scope, SharingStarted.Eagerly, persistentListOf())
 
@@ -93,7 +97,7 @@ class HwWalletRepo @Inject constructor(
         scope.launch {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
-                val activities = event.transactions.map { it.toOnchainActivity() }.toImmutableList()
+                val activities = event.transactions.map { it.toOnchainActivity(clock) }.toImmutableList()
                 _watcherData.update {
                     it + (watcherId to HwWatcherData(watcherId.toDeviceId(), event.balance.total, activities))
                 }
@@ -104,7 +108,7 @@ class HwWalletRepo @Inject constructor(
     private fun syncWatchers() {
         scope.launch {
             combine(
-                trezorStore.data,
+                hwWalletStore.data,
                 settingsStore.data.map { it.addressTypesToMonitor.toSet() }.distinctUntilChanged(),
             ) { data, monitoredTypes ->
                 data.knownDevices to monitoredTypes
@@ -112,14 +116,14 @@ class HwWalletRepo @Inject constructor(
                 // Only watch the address types the user monitors (Settings > Advanced > Address Type),
                 // mirroring the on-chain wallet. Xpubs for all types are still captured on connect, so
                 // toggling a type on later starts its watcher without reconnecting the device.
-                val wanted = knownDevices.flatMap { device ->
+                val filtered = knownDevices.flatMap { device ->
                     device.xpubs
                         .filterKeys { it in monitoredTypes }
                         .map { (addressType, xpub) -> WatcherSpec(device.id, addressType, xpub) }
                 }
-                val wantedIds = wanted.map { it.watcherId }.toSet()
+                val filteredIds = filtered.map { it.watcherId }.toSet()
 
-                wanted.forEach { spec ->
+                filtered.forEach { spec ->
                     if (spec.watcherId in activeWatchers) return@forEach
                     trezorRepo.startWatcher(
                         watcherId = spec.watcherId,
@@ -129,7 +133,7 @@ class HwWalletRepo @Inject constructor(
                     ).onSuccess { activeWatchers += spec.watcherId }
                 }
 
-                (activeWatchers - wantedIds).forEach { staleId ->
+                (activeWatchers - filteredIds).forEach { staleId ->
                     activeWatchers -= staleId
                     trezorRepo.stopWatcher(staleId)
                     _watcherData.update { it - staleId }
@@ -138,12 +142,12 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun HistoryTransaction.toOnchainActivity(): Activity {
+    private fun HistoryTransaction.toOnchainActivity(clock: Clock): Activity {
         val type = when (direction) {
             TxDirection.RECEIVED -> PaymentType.RECEIVED
             TxDirection.SENT, TxDirection.SELF_TRANSFER -> PaymentType.SENT
         }
-        val activityTimestamp = timestamp ?: (System.currentTimeMillis() / 1000).toULong()
+        val activityTimestamp = timestamp ?: clock.now().epochSeconds.toULong()
         return Activity.Onchain(
             OnchainActivity.create(
                 id = txid,
@@ -168,17 +172,6 @@ class HwWalletRepo @Inject constructor(
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 }
-
-@Stable
-data class HwWallet(
-    val id: String,
-    val name: String,
-    val model: String?,
-    val transportType: KnownDeviceTransportType,
-    val isConnected: Boolean,
-    val balanceSats: ULong,
-    val activities: ImmutableList<Activity>,
-)
 
 private data class HwWatcherData(
     val deviceId: String,
