@@ -343,8 +343,8 @@ class HomeViewModel @Inject constructor(
     ) = listOfNotNull(
         Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
         Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
-        Suggestion.SHOP,
         Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
+        Suggestion.SHOP,
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.SUPPORT,
         Suggestion.INVITE,

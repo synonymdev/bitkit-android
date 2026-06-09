@@ -52,13 +52,13 @@ enum class Suggestion(
     INVITE(
         title = R.string.cards__invite__title,
         description = R.string.cards__invite__description,
-        color = Colors.Blue24,
+        color = Colors.White16,
         icon = R.drawable.group
     ),
     PROFILE(
         title = R.string.cards__slashtagsProfile__title,
         description = R.string.cards__slashtagsProfile__description,
-        color = Colors.PubkyGreen24,
+        color = Colors.Brand24,
         icon = R.drawable.crown,
     ),
     SHOP(
