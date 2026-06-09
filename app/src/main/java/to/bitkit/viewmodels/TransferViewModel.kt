@@ -376,8 +376,18 @@ class TransferViewModel @Inject constructor(
         availableAmount: ULong,
         balanceAfterLspFee: ULong,
     ) {
-        val liquidity = blocktankRepo.calculateLiquidityOptions(balanceAfterLspFee).getOrNull()
-        if (liquidity == null || liquidity.maxLspBalanceSat == 0uL) {
+        // An on-chain balance larger than the LSP's max channel size makes
+        // calculateLiquidityOptions report maxLspBalanceSat = 0 (the client balance already
+        // saturates the channel). Clamp the prospective client balance to the LSP's
+        // maxClientBalanceSat so the spendable amount caps at that limit instead of collapsing
+        // to zero, leaving the rest of the funds on-chain.
+        val lspMaxClientBalance = blocktankRepo.blocktankState.value.info?.options?.maxClientBalanceSat
+        val cappedClientBalance = lspMaxClientBalance
+            ?.let { max -> minOf(balanceAfterLspFee, max) }
+            ?: balanceAfterLspFee
+
+        val liquidity = blocktankRepo.calculateLiquidityOptions(cappedClientBalance).getOrNull()
+        if (liquidity == null || liquidity.maxClientBalanceSat == 0uL) {
             _spendingUiState.update { it.copy(isLoading = false, maxAllowedToSend = 0) }
             return
         }
@@ -385,7 +395,7 @@ class TransferViewModel @Inject constructor(
         val receivingAmount = maxOf(liquidity.defaultLspBalanceSat, liquidity.minLspBalanceSat)
 
         blocktankRepo.estimateOrderFee(
-            spendingBalanceSats = balanceAfterLspFee,
+            spendingBalanceSats = cappedClientBalance,
             receivingBalanceSats = receivingAmount,
         ).onSuccess { estimate ->
             maxLspFee = estimate.feeSat
