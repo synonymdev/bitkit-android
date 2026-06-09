@@ -103,6 +103,7 @@ run mode="":
         adb -s "$device_id" reverse tcp:60001 tcp:60001  # local Electrum
         adb -s "$device_id" reverse tcp:6288 tcp:6288     # local homegate
         adb -s "$device_id" reverse tcp:9735 tcp:9735     # local lnd peer
+        adb -s "$device_id" reverse tcp:3000 tcp:3000     # local lnurl-server
         build_env="E2E=true"
     fi
 
