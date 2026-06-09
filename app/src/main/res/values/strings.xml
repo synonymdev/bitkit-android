@@ -1063,6 +1063,8 @@
     <string name="wallet__instant_payment_received">Received Instant Bitcoin</string>
     <string name="wallet__ldk_start_error_title">Lightning Startup Error</string>
     <string name="wallet__lnurl_p_title">Pay Bitcoin</string>
+    <string name="wallet__lnurl_pay__error_max__description">The amount exceeds this invoice\'s maximum.</string>
+    <string name="wallet__lnurl_pay__error_max__title">Amount Too High</string>
     <string name="wallet__lnurl_pay__error_min__description">The minimum amount for this invoice is ₿ {amount}.</string>
     <string name="wallet__lnurl_pay__error_min__title">Amount Too Low</string>
     <string name="wallet__lnurl_pay_confirm__comment">Comment</string>

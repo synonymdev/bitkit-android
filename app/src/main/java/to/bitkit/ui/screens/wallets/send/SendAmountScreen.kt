@@ -74,12 +74,21 @@ fun SendAmountScreen(
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
+    balances: BalanceState = LocalBalances.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
     val app = appViewModel
     val context = LocalContext.current
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
+
+    val lnurlPayMaxExceeded = run {
+        val lnurl = uiState.lnurl
+        lnurl is LnurlParams.LnurlPay &&
+            lnurl.data.maxSendableSat().toLong() <
+            (balances.maxSendLightningSats.safe() - uiState.estimatedRoutingFee.safe()).toLong()
+    }
+    val currentLnurlPayMaxExceeded by rememberUpdatedState(lnurlPayMaxExceeded)
 
     LaunchedEffect(Unit) {
         if (uiState.amount > 0u) {
@@ -96,8 +105,20 @@ fun SendAmountScreen(
             when (it) {
                 AmountInputEffect.MaxExceeded -> app?.toast(
                     type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.wallet__send_amount_exceeded__title),
-                    description = context.getString(R.string.wallet__send_amount_exceeded__description),
+                    title = context.getString(
+                        if (currentLnurlPayMaxExceeded) {
+                            R.string.wallet__lnurl_pay__error_max__title
+                        } else {
+                            R.string.wallet__send_amount_exceeded__title
+                        }
+                    ),
+                    description = context.getString(
+                        if (currentLnurlPayMaxExceeded) {
+                            R.string.wallet__lnurl_pay__error_max__description
+                        } else {
+                            R.string.wallet__send_amount_exceeded__description
+                        }
+                    ),
                     visibilityTime = Toast.VISIBILITY_TIME_SHORT,
                 )
             }
