@@ -26,4 +26,10 @@ class BalanceStateTest {
         val state = BalanceState(totalOnchainSats = 100uL, totalLightningSats = 50uL)
         assertEquals(state.totalSats, state.totalWithHardwareSats)
     }
+
+    @Test
+    fun `totalWithHardwareSats saturates instead of overflowing`() {
+        val state = BalanceState(totalLightningSats = ULong.MAX_VALUE, totalHardwareSats = 10uL)
+        assertEquals(ULong.MAX_VALUE, state.totalWithHardwareSats)
+    }
 }

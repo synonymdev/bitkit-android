@@ -17,5 +17,5 @@ data class BalanceState(
 ) {
     val totalSats get() = totalOnchainSats + totalLightningSats
 
-    val totalWithHardwareSats get() = totalSats + totalHardwareSats
+    val totalWithHardwareSats get() = totalSats.safe() + totalHardwareSats.safe()
 }
