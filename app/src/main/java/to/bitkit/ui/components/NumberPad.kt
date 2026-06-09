@@ -170,6 +170,7 @@ fun NumberPad(
     viewModel: AmountInputViewModel,
     modifier: Modifier = Modifier,
     currencies: CurrencyState = LocalCurrencies.current,
+    enabled: Boolean = true,
     type: NumberPadType = viewModel.getNumberPadType(currencies),
     availableHeight: Dp = defaultHeight,
     decimalSeparator: String = KEY_DECIMAL,
@@ -177,7 +178,7 @@ fun NumberPad(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     NumberPad(
-        onPress = { key -> viewModel.handleNumberPadInput(key, currencies) },
+        onPress = { key -> if (enabled) viewModel.handleNumberPadInput(key, currencies) },
         modifier = modifier,
         type = type,
         availableHeight = availableHeight,

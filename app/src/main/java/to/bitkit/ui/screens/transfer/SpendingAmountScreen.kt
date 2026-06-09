@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -264,6 +265,8 @@ private fun SpendingAmountNodeRunning(
         NumberPad(
             viewModel = amountInputViewModel,
             currencies = currencies,
+            enabled = !uiState.isLoading,
+            modifier = Modifier.alpha(if (uiState.isLoading) 0.5f else 1f)
         )
 
         PrimaryButton(
