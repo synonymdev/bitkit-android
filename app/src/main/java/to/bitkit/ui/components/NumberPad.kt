@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -179,7 +180,7 @@ fun NumberPad(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     NumberPad(
         onPress = { key -> if (enabled) viewModel.handleNumberPadInput(key, currencies) },
-        modifier = modifier,
+        modifier = modifier.alpha(if (enabled) 1f else 0.5f),
         type = type,
         availableHeight = availableHeight,
         decimalSeparator = decimalSeparator,
