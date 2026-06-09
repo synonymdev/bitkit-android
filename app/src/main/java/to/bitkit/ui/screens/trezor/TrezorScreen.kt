@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.CoinSelection
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
@@ -153,6 +154,7 @@ private fun TrezorScreenContent(
             onMessageChange = viewModel::setMessageToSign,
             onClearError = viewModel::clearError,
             onLookupInputChange = viewModel::setLookupInput,
+            onLookupAccountTypeChange = viewModel::setLookupAccountType,
             onLookup = viewModel::lookupBalanceInfo,
             onNetworkChange = viewModel::setSelectedNetwork,
             onSendAddressChange = viewModel::setSendAddress,
@@ -166,7 +168,14 @@ private fun TrezorScreenContent(
             onBackToForm = viewModel::backToComposeForm,
             onResetSend = viewModel::resetSendFlow,
             onTxHistoryInputChange = viewModel::setTxHistoryInput,
+            onTxHistoryAccountTypeChange = viewModel::setTxHistoryAccountType,
             onLookupTxHistory = viewModel::lookupTransactionHistory,
+            onWatcherExtendedKeyChange = viewModel::setWatcherExtendedKey,
+            onWatcherGapLimitChange = viewModel::setWatcherGapLimit,
+            onWatcherAccountTypeChange = viewModel::setWatcherAccountType,
+            onStartWatcher = viewModel::startWatcher,
+            onStopWatcher = viewModel::stopWatcher,
+            onPopulateWatcherFromXpub = viewModel::populateWatcherFromXpub,
             permissionsGranted = permissionsState.allPermissionsGranted,
         )
     }
@@ -193,6 +202,7 @@ private fun Content(
     onMessageChange: (String) -> Unit = {},
     onClearError: () -> Unit = {},
     onLookupInputChange: (String) -> Unit = {},
+    onLookupAccountTypeChange: (AccountType?) -> Unit = {},
     onLookup: () -> Unit = {},
     onNetworkChange: (BitkitCoreNetwork) -> Unit = {},
     onSendAddressChange: (String) -> Unit = {},
@@ -206,7 +216,14 @@ private fun Content(
     onBackToForm: () -> Unit = {},
     onResetSend: () -> Unit = {},
     onTxHistoryInputChange: (String) -> Unit = {},
+    onTxHistoryAccountTypeChange: (AccountType?) -> Unit = {},
     onLookupTxHistory: () -> Unit = {},
+    onWatcherExtendedKeyChange: (String) -> Unit = {},
+    onWatcherGapLimitChange: (String) -> Unit = {},
+    onWatcherAccountTypeChange: (AccountType?) -> Unit = {},
+    onStartWatcher: () -> Unit = {},
+    onStopWatcher: () -> Unit = {},
+    onPopulateWatcherFromXpub: () -> Unit = {},
     permissionsGranted: Boolean = true,
 ) {
     Column(
@@ -406,6 +423,7 @@ private fun Content(
                     uiState = uiState,
                     isDeviceConnected = trezorState.connectedDevice != null,
                     onInputChange = onLookupInputChange,
+                    onAccountTypeChange = onLookupAccountTypeChange,
                     onLookup = onLookup,
                     onSendAddressChange = onSendAddressChange,
                     onSendAmountChange = onSendAmountChange,
@@ -419,12 +437,26 @@ private fun Content(
                     onResetSend = onResetSend,
                 )
 
-                // Transaction History (always visible, no device needed)
+                // Transaction History (one-shot snapshot, no device needed)
                 VerticalSpacer(32.dp)
                 TransactionHistorySection(
                     uiState = uiState,
                     onInputChange = onTxHistoryInputChange,
+                    onAccountTypeChange = onTxHistoryAccountTypeChange,
                     onLookup = onLookupTxHistory,
+                )
+
+                // Event Watcher (live subscription, no device needed)
+                VerticalSpacer(32.dp)
+                WatcherSection(
+                    uiState = uiState,
+                    trezorState = trezorState,
+                    onExtendedKeyChange = onWatcherExtendedKeyChange,
+                    onGapLimitChange = onWatcherGapLimitChange,
+                    onAccountTypeChange = onWatcherAccountTypeChange,
+                    onStartWatcher = onStartWatcher,
+                    onStopWatcher = onStopWatcher,
+                    onPopulateFromXpub = onPopulateWatcherFromXpub,
                 )
 
                 // Debug Log Window
@@ -668,7 +700,7 @@ private fun StatusRow(trezorState: TrezorState) {
 }
 
 @Composable
-private fun StatusBadge(text: String, color: Color) {
+internal fun StatusBadge(text: String, color: Color) {
     Caption(
         text = text,
         color = color,

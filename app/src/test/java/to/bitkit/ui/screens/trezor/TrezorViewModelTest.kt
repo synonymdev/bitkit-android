@@ -1,8 +1,10 @@
 package to.bitkit.ui.screens.trezor
 
 import com.synonym.bitkitcore.TrezorSignedTx
+import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -22,6 +24,7 @@ import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
@@ -34,6 +37,7 @@ class TrezorViewModelTest : BaseUnitTest() {
     private val needsPairingCodeFlow = MutableStateFlow(false)
     private val needsPinEntryFlow = MutableStateFlow(false)
     private val walletModeFlow = MutableStateFlow(TrezorWalletMode.STANDARD)
+    private val watcherEventsFlow = MutableSharedFlow<Pair<String, WatcherEvent>>()
 
     private lateinit var sut: TrezorViewModel
 
@@ -43,6 +47,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         whenever(trezorRepo.needsPairingCode).thenReturn(needsPairingCodeFlow)
         whenever(trezorRepo.needsPinEntry).thenReturn(needsPinEntryFlow)
         whenever(trezorRepo.walletMode).thenReturn(walletModeFlow)
+        whenever(trezorRepo.watcherEvents).thenReturn(watcherEventsFlow)
         whenever(trezorRepo.observeExternalDisconnects(any())).then { }
         sut = createViewModel()
     }
@@ -364,6 +369,125 @@ class TrezorViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
+    fun `startWatcher should not expose active watcher until start completes`() = test {
+        val startResult = CompletableDeferred<Result<Unit>>()
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
+            .doSuspendableAnswer { startResult.await() }
+        sut.setWatcherExtendedKey("xpub6test123")
+
+        sut.startWatcher()
+        advanceUntilIdle()
+
+        val startingState = sut.uiState.value
+        val watcherId = assertNotNull(startingState.watcherId)
+        assertTrue(startingState.isStartingWatcher)
+        assertNull(startingState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.STARTING, startingState.watcherConnectionStatus)
+
+        startResult.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        val startedState = sut.uiState.value
+        assertFalse(startedState.isStartingWatcher)
+        assertEquals(watcherId, startedState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.STARTING, startedState.watcherConnectionStatus)
+    }
+
+    @Test
+    fun `startWatcher should reject zero gap limit`() = test {
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.setWatcherGapLimit("0")
+
+        sut.startWatcher()
+        advanceUntilIdle()
+
+        verify(trezorRepo, never()).startWatcher(any(), any(), any(), any(), anyOrNull())
+        assertNull(sut.uiState.value.activeWatcherId)
+    }
+
+    @Test
+    fun `watcher transaction event should mark watcher connected`() = test {
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
+            .thenReturn(Result.success(Unit))
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.startWatcher()
+        advanceUntilIdle()
+        val watcherId = assertNotNull(sut.uiState.value.activeWatcherId)
+
+        watcherEventsFlow.emit(
+            watcherId to WatcherEvent.TransactionsChanged(
+                transactions = TrezorPreviewData.sampleHistoryTransactions,
+                balance = TrezorPreviewData.sampleWalletBalance,
+                txCount = 3u,
+                blockHeight = 850_000u,
+                accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
+            ),
+        )
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertEquals(WatcherConnectionStatus.CONNECTED, state.watcherConnectionStatus)
+        assertEquals(TrezorPreviewData.sampleWalletBalance, state.watcherBalance)
+        assertEquals(3u, state.watcherTransactionCount)
+    }
+
+    @Test
+    fun `watcher event should be handled while start is in flight`() = test {
+        val startResult = CompletableDeferred<Result<Unit>>()
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
+            .doSuspendableAnswer { startResult.await() }
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.startWatcher()
+        advanceUntilIdle()
+        val watcherId = assertNotNull(sut.uiState.value.watcherId)
+
+        watcherEventsFlow.emit(
+            watcherId to WatcherEvent.TransactionsChanged(
+                transactions = TrezorPreviewData.sampleHistoryTransactions,
+                balance = TrezorPreviewData.sampleWalletBalance,
+                txCount = 3u,
+                blockHeight = 850_000u,
+                accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
+            ),
+        )
+        advanceUntilIdle()
+
+        val startingState = sut.uiState.value
+        assertTrue(startingState.isStartingWatcher)
+        assertNull(startingState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.CONNECTED, startingState.watcherConnectionStatus)
+
+        startResult.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        val startedState = sut.uiState.value
+        assertFalse(startedState.isStartingWatcher)
+        assertEquals(watcherId, startedState.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.CONNECTED, startedState.watcherConnectionStatus)
+    }
+
+    @Test
+    fun `stopWatcher should stop repo watcher and clear watcher state`() = test {
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
+            .thenReturn(Result.success(Unit))
+        whenever(trezorRepo.stopWatcher(any())).thenReturn(Result.success(Unit))
+        sut.setWatcherExtendedKey("xpub6test123")
+        sut.startWatcher()
+        advanceUntilIdle()
+        val watcherId = assertNotNull(sut.uiState.value.activeWatcherId)
+
+        sut.stopWatcher()
+        advanceUntilIdle()
+
+        verify(trezorRepo).stopWatcher(watcherId)
+        val state = sut.uiState.value
+        assertNull(state.activeWatcherId)
+        assertEquals(WatcherConnectionStatus.IDLE, state.watcherConnectionStatus)
+        assertNull(state.watcherBalance)
+        assertTrue(state.watcherTransactions.isEmpty())
     }
 
     @Test

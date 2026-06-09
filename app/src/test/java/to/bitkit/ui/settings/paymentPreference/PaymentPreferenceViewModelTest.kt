@@ -61,7 +61,7 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.setContactSharingCleanupPending(any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
@@ -70,7 +70,7 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `setPrivateContactsEnabled prepares contacts without immediate publication`() = test {
+    fun `setPrivateContactsEnabled prepares contacts with immediate publication`() = test {
         val sut = createSut()
         advanceUntilIdle()
 
@@ -78,7 +78,7 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY))
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY), true)
     }
 
     @Test
@@ -93,7 +93,7 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         assertFalse(sut.uiState.value.hasPubkyProfile)
         verify(settingsStore, never()).update(any())
-        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>(), any())
     }
 
     @Test
@@ -107,7 +107,7 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
 
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         assertFalse(sut.uiState.value.canUsePrivateContacts)
-        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>())
+        verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>(), any())
     }
 
     @Test
@@ -124,7 +124,7 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
 
     @Test
     fun `setPrivateContactsEnabled rolls back when private enable fails`() = test {
-        whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>()) }
+        whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.failure(PublicPaykitError.WalletNotReady))
         val sut = createSut()
         advanceUntilIdle()
@@ -133,7 +133,46 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY))
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY), true)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+    }
+
+    @Test
+    fun `setPrivateContactsEnabled restores enabled state when private disable fails`() = test {
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
+            .thenReturn(Result.failure(PublicPaykitError.WalletNotReady))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.setPrivateContactsEnabled(false)
+        advanceUntilIdle()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(sut.uiState.value.privateContactsEnabled)
+        assertFalse(sut.uiState.value.isUpdatingPrivateContacts)
+        verify(privatePaykitRepo).setContactSharingCleanupPending(false)
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), true)
+    }
+
+    @Test
+    fun `setPrivateContactsEnabled keeps disabled when private disable rollback publish fails`() = test {
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
+            .thenReturn(Result.failure(PublicPaykitError.WalletNotReady))
+        whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), eq(true)) }
+            .thenReturn(Result.failure(PublicPaykitError.WalletNotReady))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.setPrivateContactsEnabled(false)
+        advanceUntilIdle()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(sut.uiState.value.privateContactsEnabled)
+        assertFalse(sut.uiState.value.isUpdatingPrivateContacts)
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), true)
+        verify(privatePaykitRepo, never()).setContactSharingCleanupPending(false)
     }
 
     @Test
