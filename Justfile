@@ -12,7 +12,7 @@ list:
         "list" \
         "init" \
         "compile" \
-        "run" \
+        "run [docker]" \
         "build [TASK]" \
         "release" \
         "install" \
@@ -45,12 +45,18 @@ init:
 compile:
     {{ gradle }} compileDevDebugKotlin
 
-run:
+run mode="":
     #!/usr/bin/env sh
     set -eu
 
     app_id="to.bitkit.dev"
     app_dir="app/build/outputs/apk/dev/debug"
+    mode="{{ mode }}"
+
+    if [ -n "$mode" ] && [ "$mode" != "docker" ]; then
+        echo "usage: just run [docker]" >&2
+        exit 1
+    fi
 
     if ! command -v adb >/dev/null 2>&1; then
         echo "adb is required to run the app." >&2
@@ -90,8 +96,18 @@ run:
     fi
 
     echo "Using $device_name ($device_id)"
+
+    build_env=""
+    if [ "$mode" = "docker" ]; then
+        echo "Forwarding bitkit-docker ports via adb reverse..."
+        adb -s "$device_id" reverse tcp:60001 tcp:60001  # local Electrum
+        adb -s "$device_id" reverse tcp:6288 tcp:6288     # local homegate
+        adb -s "$device_id" reverse tcp:9735 tcp:9735     # local lnd peer
+        build_env="E2E=true"
+    fi
+
     echo "Building Debug app..."
-    {{ gradle }} assembleDevDebug
+    env $build_env {{ gradle }} assembleDevDebug
 
     app_path="$(
         find "$app_dir" -maxdepth 1 -name '*-universal.apk' -type f \
