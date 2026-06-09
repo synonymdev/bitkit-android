@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -131,6 +132,7 @@ import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PubkyImage
@@ -729,32 +731,44 @@ private fun BalancesSection(
             )
         }
 
-        hardwareWallets.forEach { wallet ->
+        // Hardware wallets flow into a 2-column grid: a second device fills the
+        // bottom-right column, additional devices wrap onto new rows.
+        hardwareWallets.chunked(2).forEach { rowWallets ->
             VerticalSpacer(16.dp)
-            HardwareWalletRow(wallet = wallet, onClick = onClickHardwareWallet)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+            ) {
+                HardwareWalletCell(wallet = rowWallets[0], onClick = onClickHardwareWallet)
+                VerticalDivider(color = Colors.Gray4)
+                HorizontalSpacer(16.dp)
+                val second = rowWallets.getOrNull(1)
+                if (second != null) {
+                    HardwareWalletCell(wallet = second, onClick = onClickHardwareWallet)
+                } else {
+                    FillWidth()
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun HardwareWalletRow(
+private fun RowScope.HardwareWalletCell(
     wallet: HwWallet,
     onClick: () -> Unit,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    WalletBalanceView(
+        title = wallet.name,
+        sats = wallet.balanceSats.toLong(),
+        icon = painterResource(id = R.drawable.ic_btc_circle_blue),
         modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min)
             .clickableAlpha(onClick = onClick)
             .padding(vertical = 4.dp)
             .testTag("ActivityHardware")
     ) {
-        WalletBalanceView(
-            title = wallet.name,
-            sats = wallet.balanceSats.toLong(),
-            icon = painterResource(id = R.drawable.ic_btc_circle_blue),
-        )
+        HorizontalSpacer(4.dp)
         Icon(
             painter = painterResource(
                 id = when (wallet.transportType) {
@@ -1455,16 +1469,32 @@ private val previewWeather = WeatherModel(
 private val previewLatestActivities = previewActivityItems.take(3).toImmutableList()
 private val previewBanners = ActivityBannerType.entries.map { BannerItem(type = it, title = "") }.toImmutableList()
 private val previewSuggestions = Suggestion.entries.take(4).toImmutableList()
-private val previewHardwareWallets = persistentListOf(
-    HwWallet(
-        id = "trezor-1",
-        name = "Trezor Safe 5",
-        model = "Safe 5",
-        transportType = KnownDeviceTransportType.BLUETOOTH,
-        isConnected = true,
-        balanceSats = 10_562_411uL,
-        activities = persistentListOf(),
-    ),
+private val previewHardwareWalletBt = HwWallet(
+    id = "trezor-1",
+    name = "Trezor Safe 5",
+    model = "Safe 5",
+    transportType = KnownDeviceTransportType.BLUETOOTH,
+    isConnected = true,
+    balanceSats = 10_562_411uL,
+    activities = persistentListOf(),
+)
+private val previewHardwareWalletUsb = HwWallet(
+    id = "trezor-2",
+    name = "Trezor Model T",
+    model = "Model T",
+    transportType = KnownDeviceTransportType.USB,
+    isConnected = false,
+    balanceSats = 2_735_180uL,
+    activities = persistentListOf(),
+)
+private val previewHardwareWalletThird = HwWallet(
+    id = "trezor-3",
+    name = "Trezor Safe 3",
+    model = "Safe 3",
+    transportType = KnownDeviceTransportType.BLUETOOTH,
+    isConnected = true,
+    balanceSats = 500_000uL,
+    activities = persistentListOf(),
 )
 
 @Preview(showSystemUi = true)
@@ -1494,11 +1524,53 @@ private fun PreviewWithHardwareWallet() {
             Content(
                 isRefreshing = false,
                 homeUiState = HomeUiState(
-                    hardwareWallets = previewHardwareWallets,
+                    hardwareWallets = persistentListOf(previewHardwareWalletBt),
                 ),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewLatestActivities,
                 balances = previewBalances.copy(totalHardwareSats = 10_562_411uL),
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithTwoHardwareWallets() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    hardwareWallets = persistentListOf(previewHardwareWalletBt, previewHardwareWalletUsb),
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewLatestActivities,
+                balances = previewBalances.copy(totalHardwareSats = 13_297_591uL),
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithThreeHardwareWallets() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    hardwareWallets = persistentListOf(
+                        previewHardwareWalletBt,
+                        previewHardwareWalletUsb,
+                        previewHardwareWalletThird,
+                    ),
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewLatestActivities,
+                balances = previewBalances.copy(totalHardwareSats = 13_797_591uL),
             )
             TabBar()
         }
