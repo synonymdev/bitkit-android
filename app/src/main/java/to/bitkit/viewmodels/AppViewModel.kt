@@ -123,6 +123,7 @@ import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
@@ -181,6 +182,7 @@ class AppViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
+    private val hwWalletRepo: HwWalletRepo,
     private val backupRepo: BackupRepo,
     private val settingsStore: SettingsStore,
     private val currencyRepo: CurrencyRepo,
@@ -315,6 +317,18 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             lightningRepo.updateGeoBlockState()
+        }
+        viewModelScope.launch {
+            hwWalletRepo.receivedTxs.collect { tx ->
+                showTransactionSheet(
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.ONCHAIN,
+                        direction = NewTransactionSheetDirection.RECEIVED,
+                        paymentHashOrTxId = tx.txid,
+                        sats = tx.sats.toLong(),
+                    ),
+                )
+            }
         }
         viewModelScope.launch {
             widgetsRepo.refreshEnabledWidgets()

@@ -50,6 +50,7 @@ import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PaymentPendingException
@@ -94,6 +95,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val lightningRepo = mock<LightningRepo>()
     private val walletRepo = mock<WalletRepo>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val currencyRepo = mock<CurrencyRepo>()
     private val connectivityRepo = mock<ConnectivityRepo>()
@@ -145,6 +147,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
+        whenever(hwWalletRepo.receivedTxs).thenReturn(MutableSharedFlow())
         whenever(coreService.activity).thenReturn(activityService)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
@@ -219,6 +222,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         lightningRepo = lightningRepo,
         pendingPaymentRepo = pendingPaymentRepo,
         walletRepo = walletRepo,
+        hwWalletRepo = hwWalletRepo,
         backupRepo = backupRepo,
         settingsStore = settingsStore,
         currencyRepo = currencyRepo,

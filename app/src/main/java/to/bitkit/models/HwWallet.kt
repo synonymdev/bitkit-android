@@ -27,6 +27,13 @@ data class HwWalletBalance(
     val sats: ULong,
 )
 
+/** A newly detected inbound transaction to a watched hardware wallet. */
+@Immutable
+data class HwWalletReceivedTx(
+    val txid: String,
+    val sats: ULong,
+)
+
 @Serializable
 enum class HwTransportType {
     @SerialName("bluetooth")

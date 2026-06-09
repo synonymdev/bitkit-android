@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -23,6 +24,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.models.HwTransportType
+import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -147,6 +149,88 @@ class HwWalletRepoTest : BaseUnitTest() {
         verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
         verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull())
         verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `emits received tx only for new inbound transactions after the baseline sync`() = test {
+        val sut = createRepo()
+        val received = mutableListOf<HwWalletReceivedTx>()
+        val job = launch { sut.receivedTxs.collect { received += it } }
+
+        // Baseline: full history delivered on watcher start must not emit.
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = listOf(receivedTransaction(amount = 100uL)),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        assertEquals(0, received.size)
+
+        // New inbound tx after the baseline emits once.
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 150uL),
+                transactions = listOf(
+                    receivedTransaction(amount = 100uL),
+                    receivedTransaction(amount = 50uL).copy(txid = "t2"),
+                ),
+                txCount = 2u,
+                blockHeight = 2u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        assertEquals(listOf(HwWalletReceivedTx(txid = "t2", sats = 50uL)), received)
+
+        // Re-delivering the same set (e.g. confirmation update) must not emit again.
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 150uL),
+                transactions = listOf(
+                    receivedTransaction(amount = 100uL),
+                    receivedTransaction(amount = 50uL).copy(txid = "t2"),
+                ),
+                txCount = 2u,
+                blockHeight = 3u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        assertEquals(1, received.size)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `does not emit received tx for new outbound transactions`() = test {
+        val sut = createRepo()
+        val received = mutableListOf<HwWalletReceivedTx>()
+        val job = launch { sut.receivedTxs.collect { received += it } }
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = emptyList(),
+                txCount = 0u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 40uL),
+                transactions = listOf(
+                    receivedTransaction(amount = 60uL).copy(txid = "t3", direction = TxDirection.SENT),
+                ),
+                txCount = 1u,
+                blockHeight = 2u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        assertEquals(0, received.size)
+        job.cancel()
     }
 
     @Test

@@ -12,9 +12,12 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -26,7 +29,9 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.create
+import to.bitkit.ext.rawId
 import to.bitkit.models.HwWallet
+import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
@@ -60,6 +65,11 @@ class HwWalletRepo @Inject constructor(
 
     private val activeWatchers = mutableSetOf<String>()
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
+
+    private val _receivedTxs = MutableSharedFlow<HwWalletReceivedTx>(extraBufferCapacity = 8)
+
+    /** Inbound transactions detected by a running watcher after its initial history sync. */
+    val receivedTxs: SharedFlow<HwWalletReceivedTx> = _receivedTxs.asSharedFlow()
 
     val wallets: StateFlow<ImmutableList<HwWallet>> = combine(
         hwWalletStore.data,
@@ -97,12 +107,26 @@ class HwWalletRepo @Inject constructor(
         scope.launch {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
+                val previous = _watcherData.value[watcherId]
                 val activities = event.transactions.map { it.toOnchainActivity(clock) }.toImmutableList()
                 _watcherData.update {
                     it + (watcherId to HwWatcherData(watcherId.toDeviceId(), event.balance.total, activities))
                 }
+                emitReceivedTxs(previous, event)
             }
         }
+    }
+
+    /**
+     * The first event after a watcher starts delivers the full transaction history;
+     * treat it as the baseline so only transactions arriving while watching are emitted.
+     */
+    private suspend fun emitReceivedTxs(previous: HwWatcherData?, event: WatcherEvent.TransactionsChanged) {
+        if (previous == null) return
+        val knownTxIds = previous.activities.map { it.rawId() }.toSet()
+        event.transactions
+            .filter { it.direction == TxDirection.RECEIVED && it.txid !in knownTxIds }
+            .forEach { _receivedTxs.emit(HwWalletReceivedTx(txid = it.txid, sats = it.amount)) }
     }
 
     private fun syncWatchers() {
