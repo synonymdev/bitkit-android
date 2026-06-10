@@ -56,7 +56,6 @@ class TrezorViewModel @Inject constructor(
     private val watcherStartScope = CoroutineScope(SupervisorJob() + bgDispatcher)
 
     init {
-        trezorRepo.observeExternalDisconnects(viewModelScope)
         observeWatcherEvents()
     }
 

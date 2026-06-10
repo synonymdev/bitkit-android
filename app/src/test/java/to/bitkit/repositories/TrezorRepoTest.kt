@@ -210,6 +210,25 @@ class TrezorRepoTest : BaseUnitTest() {
     // region connect
 
     @Test
+    fun `external disconnect clears the connected device while no screen observes it`() = test {
+        val externalDisconnect = MutableSharedFlow<String>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.externalDisconnect).thenReturn(externalDisconnect)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        assertNotNull(sut.state.value.connected)
+
+        externalDisconnect.emit(DEVICE_PATH)
+
+        assertNull(sut.state.value.connected)
+        assertEquals("Device disconnected", sut.state.value.error)
+    }
+
+    @Test
     fun `connect should return features and update connectedDevice state`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()

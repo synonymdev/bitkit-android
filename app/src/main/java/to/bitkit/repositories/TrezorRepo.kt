@@ -91,7 +91,11 @@ class TrezorRepo @Inject constructor(
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
 
-    private val watcherCleanupScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val repoScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+
+    init {
+        observeExternalDisconnects()
+    }
 
     private val _watcherEvents = MutableSharedFlow<Pair<String, WatcherEvent>>(extraBufferCapacity = 64)
     val watcherEvents: SharedFlow<Pair<String, WatcherEvent>> = _watcherEvents.asSharedFlow()
@@ -618,7 +622,7 @@ class TrezorRepo @Inject constructor(
     }
 
     fun stopWatcherOnCleared(watcherId: String) {
-        watcherCleanupScope.launch { stopWatcher(watcherId) }
+        repoScope.launch { stopWatcher(watcherId) }
     }
 
     suspend fun stopAllWatchers(): Result<Unit> = withContext(ioDispatcher) {
@@ -635,7 +639,7 @@ class TrezorRepo @Inject constructor(
         _state.update { it.copy(error = null) }
     }
 
-    fun observeExternalDisconnects(scope: CoroutineScope) {
+    private fun observeExternalDisconnects() {
         trezorTransport.externalDisconnect.onEach { path ->
             val currentId = _state.value.connectedDeviceId ?: return@onEach
             val knownDevice = _state.value.knownDevices.find { it.path == path }
@@ -645,7 +649,7 @@ class TrezorRepo @Inject constructor(
                     it.copy(connected = null, error = "Device disconnected")
                 }
             }
-        }.launchIn(scope)
+        }.launchIn(repoScope)
     }
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {

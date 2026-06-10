@@ -48,7 +48,6 @@ class TrezorViewModelTest : BaseUnitTest() {
         whenever(trezorRepo.needsPinEntry).thenReturn(needsPinEntryFlow)
         whenever(trezorRepo.walletMode).thenReturn(walletModeFlow)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEventsFlow)
-        whenever(trezorRepo.observeExternalDisconnects(any())).then { }
         sut = createViewModel()
     }
 
