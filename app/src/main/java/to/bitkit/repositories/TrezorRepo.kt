@@ -87,7 +87,8 @@ class TrezorRepo @Inject constructor(
         private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
         private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
         private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
-        private val TRANSPORT_RESTORED_RECONNECT_DELAY = 1.seconds
+        private const val TRANSPORT_RESTORED_MAX_ATTEMPTS = 4
+        private val TRANSPORT_RESTORED_RECONNECT_DELAY = 2.seconds
     }
 
     private val _state = MutableStateFlow(TrezorState())
@@ -495,9 +496,15 @@ class TrezorRepo @Inject constructor(
             if (!_state.value.isInitialized) {
                 initialize(walletIndex).getOrThrow()
             }
-            if (trezorService.isConnected()) {
-                _state.value.connectedDevice ?: throw AppError("Connected but no features")
+            val cachedFeatures = if (trezorService.isConnected()) _state.value.connectedDevice else null
+            if (cachedFeatures != null) {
+                cachedFeatures
             } else {
+                if (trezorService.isConnected()) {
+                    // The transport dropped underneath the session (e.g. bluetooth was
+                    // toggled), so reset it before a fresh scan and connect.
+                    runCatching { trezorService.disconnect() }
+                }
                 val scannedDevices = scan().getOrThrow()
                 val knownIds = knownDevices.map { it.id }.toSet()
                 val usbDevice = scannedDevices.find {
@@ -662,12 +669,23 @@ class TrezorRepo @Inject constructor(
      */
     private fun observeTransportRestored() {
         trezorTransport.transportRestored.onEach {
-            val current = _state.value
-            if (current.connected != null || current.isConnecting || current.isAutoReconnecting) return@onEach
-            delay(TRANSPORT_RESTORED_RECONNECT_DELAY)
-            Logger.info("Detected transport restored, attempting auto-reconnect", context = TAG)
-            autoReconnect()
+            retryAutoReconnect()
         }.launchIn(scope)
+    }
+
+    /**
+     * A device is often not discoverable right after its transport returns (a BLE
+     * Trezor takes a few seconds to advertise again), so retry the silent reconnect
+     * with growing delays instead of giving up on the first empty scan.
+     */
+    private suspend fun retryAutoReconnect() {
+        repeat(TRANSPORT_RESTORED_MAX_ATTEMPTS) { attempt ->
+            val current = _state.value
+            if (current.connected != null || current.isConnecting || current.isAutoReconnecting) return
+            delay(TRANSPORT_RESTORED_RECONNECT_DELAY * (attempt + 1))
+            Logger.info("Attempting auto-reconnect after transport restored, attempt '${attempt + 1}'", context = TAG)
+            if (autoReconnect().isSuccess) return
+        }
     }
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {

@@ -230,6 +230,45 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `transport restored retries reconnect until the device is discoverable`() = test {
+        val transportRestored = MutableSharedFlow<Unit>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        // A device is usually not advertising yet right after the transport returns.
+        whenever(trezorService.scan()).thenReturn(emptyList(), listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        transportRestored.emit(Unit)
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+        verify(trezorService, times(2)).scan()
+    }
+
+    @Test
+    fun `autoReconnect resets a stale session before scanning`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        // The core still reports a session although the transport dropped underneath it.
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+        sut.initialize()
+
+        val result = sut.autoReconnect()
+
+        assertTrue(result.isSuccess)
+        verify(trezorService).disconnect()
+        assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
     fun `transport restored does not reconnect when a device is already connected`() = test {
         val transportRestored = MutableSharedFlow<Unit>()
         val features = mockFeatures()
