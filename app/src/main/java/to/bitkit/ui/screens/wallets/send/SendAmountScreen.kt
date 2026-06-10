@@ -118,6 +118,7 @@ fun SendAmountScreen(
                         title = context.getString(titleRes),
                         description = context.getString(descriptionRes),
                         visibilityTime = Toast.VISIBILITY_TIME_SHORT,
+                        testTag = "SendAmountExceededToast",
                     )
                 }
             }
