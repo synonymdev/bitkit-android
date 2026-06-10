@@ -116,11 +116,11 @@ import to.bitkit.ext.rawId
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
-import to.bitkit.models.TransportType
 import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.TransportType
 import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition

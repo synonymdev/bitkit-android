@@ -181,12 +181,12 @@ import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
-import to.bitkit.ui.sheets.HardwareSheet
 import to.bitkit.ui.sheets.ChangePinSheet
 import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.DisablePinSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.GiftSheet
+import to.bitkit.ui.sheets.HardwareSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
