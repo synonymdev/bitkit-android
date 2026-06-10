@@ -71,6 +71,9 @@ class HwWalletRepo @Inject constructor(
     /** Inbound transactions detected by a running watcher after its initial history sync. */
     val receivedTxs: SharedFlow<HwWalletReceivedTx> = _receivedTxs.asSharedFlow()
 
+    /** Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. */
+    fun onTransportRestored() = trezorRepo.onTransportRestored()
+
     val wallets: StateFlow<ImmutableList<HwWallet>> = combine(
         hwWalletStore.data,
         trezorRepo.state,

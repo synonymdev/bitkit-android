@@ -674,6 +674,15 @@ class TrezorRepo @Inject constructor(
     }
 
     /**
+     * Triggers the silent reconnect for transport events delivered through UI intents,
+     * e.g. the USB attach intent the OS app picker routes to the activity (attach is
+     * not broadcast to receivers, unlike detach).
+     */
+    fun onTransportRestored() {
+        scope.launch { retryAutoReconnect() }
+    }
+
+    /**
      * A device is often not discoverable right after its transport returns (a BLE
      * Trezor takes a few seconds to advertise again), so retry the silent reconnect
      * with growing delays instead of giving up on the first empty scan.

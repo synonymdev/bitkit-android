@@ -2,6 +2,7 @@ package to.bitkit.ui
 
 import android.app.NotificationManager
 import android.content.Intent
+import android.hardware.usb.UsbManager
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -95,6 +96,7 @@ class MainActivity : FragmentActivity() {
         if (currentLaunchIntent == null || currentLaunchIntent != consumedLaunchIntent) {
             appViewModel.handleDeeplinkIntent(intent)
         }
+        handleUsbAttachIntent(intent)
 
         installSplashScreen()
         enableAppEdgeToEdge()
@@ -210,6 +212,17 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         appViewModel.handleDeeplinkIntent(intent)
+        handleUsbAttachIntent(intent)
+    }
+
+    /**
+     * The OS delivers the USB attach event as an activity intent (via the app picker),
+     * not as a broadcast, so it is forwarded from here to trigger the silent reconnect.
+     */
+    private fun handleUsbAttachIntent(intent: Intent) {
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            appViewModel.onUsbDeviceAttached()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

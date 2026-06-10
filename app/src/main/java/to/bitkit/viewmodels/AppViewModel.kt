@@ -3046,6 +3046,8 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun onUsbDeviceAttached() = hwWalletRepo.onTransportRestored()
+
     fun clearPendingPubkyImport() {
         viewModelScope.launch {
             pubkyRepo.clearPendingImport()

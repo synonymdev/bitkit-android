@@ -250,6 +250,22 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransportRestored auto-reconnects to a known device`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.onTransportRestored()
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
     fun `autoReconnect resets a stale session before scanning`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()

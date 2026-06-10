@@ -329,6 +329,15 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forwards transport restored to the trezor repo`() = test {
+        val sut = createRepo()
+
+        sut.onTransportRestored()
+
+        verify(trezorRepo).onTransportRestored()
+    }
+
+    @Test
     fun `starts watchers on the network configured in Env`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))

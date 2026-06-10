@@ -249,6 +249,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     )
 
     @Test
+    fun `onUsbDeviceAttached forwards to the hardware wallet repo`() = test {
+        sut.onUsbDeviceAttached()
+
+        verify(hwWalletRepo).onTransportRestored()
+    }
+
+    @Test
     fun `canSwitchWallet is false when not unified`() = test {
         sut.setSendEvent(SendEvent.AmountChange(1000u))
         advanceUntilIdle()
