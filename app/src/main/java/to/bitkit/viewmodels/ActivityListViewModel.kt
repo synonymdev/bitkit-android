@@ -29,7 +29,9 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
+import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
+import to.bitkit.ext.txType
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.ActivityRepo
@@ -44,7 +46,7 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
-    hwWalletRepo: HwWalletRepo,
+    private val hwWalletRepo: HwWalletRepo,
     pubkyRepo: PubkyRepo,
     settingsStore: SettingsStore,
 ) : ViewModel() {
@@ -85,6 +87,10 @@ class ActivityListViewModel @Inject constructor(
 
     val availableTags: StateFlow<ImmutableList<String>> =
         activityRepo.state.map { it.tags }.stateInScope(persistentListOf())
+
+    val hardwareIds: StateFlow<ImmutableSet<String>> = hwWalletRepo.activities
+        .map { activities -> activities.map { it.rawId() }.toImmutableSet() }
+        .stateInScope(persistentSetOf())
 
     private val _filters = MutableStateFlow(ActivityFilters())
 
@@ -128,10 +134,39 @@ class ActivityListViewModel @Inject constructor(
             _filters.map { it.searchText }.debounce(300),
             _filters.map { it.copy(searchText = "") },
             activityRepo.activitiesChanged,
-        ) { debouncedSearch, filtersWithoutSearch, _ ->
-            fetchFilteredActivities(filtersWithoutSearch.copy(searchText = debouncedSearch))
+            hwWalletRepo.activities,
+        ) { debouncedSearch, filtersWithoutSearch, _, hardwareActivities ->
+            val filters = filtersWithoutSearch.copy(searchText = debouncedSearch)
+            fetchFilteredActivities(filters)?.let { activities ->
+                (activities + hardwareActivities.filteredWith(filters)).sortedByDescending { it.timestamp() }
+            }
         }.collect { activities ->
             _filteredActivities.update { activities?.toImmutableList() }
+        }
+    }
+
+    /**
+     * Watch-only hardware-wallet activities live outside the activity database, so the
+     * list filters are applied to them here. They carry no tags and are never transfers.
+     */
+    private fun List<Activity>.filteredWith(filters: ActivityFilters): List<Activity> {
+        if (filters.tags.isNotEmpty() || filters.tab == ActivityTab.OTHER) return emptyList()
+
+        val minTimestamp = filters.startDate?.let { (it / 1000).toULong() }
+        val maxTimestamp = filters.endDate?.let { (it / 1000).toULong() }
+
+        return filter { activity ->
+            val matchesTab = when (filters.tab) {
+                ActivityTab.SENT -> activity.txType() == PaymentType.SENT
+                ActivityTab.RECEIVED -> activity.txType() == PaymentType.RECEIVED
+                else -> true
+            }
+            val matchesSearch = filters.searchText.isEmpty() ||
+                activity.rawId().contains(filters.searchText, ignoreCase = true)
+            val timestamp = activity.timestamp()
+            val matchesDate = (minTimestamp == null || timestamp >= minTimestamp) &&
+                (maxTimestamp == null || timestamp <= maxTimestamp)
+            matchesTab && matchesSearch && matchesDate
         }
     }
 
