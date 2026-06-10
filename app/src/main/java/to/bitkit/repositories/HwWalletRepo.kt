@@ -76,18 +76,29 @@ class HwWalletRepo @Inject constructor(
         trezorRepo.state,
         _watcherData,
     ) { data, trezorState, watcherData ->
-        data.knownDevices.map { device ->
-            val deviceWatchers = watcherData.values.filter { it.deviceId == device.id }
-            HwWallet(
-                id = device.id,
-                name = device.displayName,
-                model = device.model,
-                transportType = device.transportType,
-                isConnected = trezorState.connectedDeviceId == device.id,
-                balanceSats = deviceWatchers.fold(0uL) { acc, watcher -> acc + watcher.balanceSats },
-                activities = deviceWatchers.flatMap { it.activities }.toImmutableList(),
-            )
-        }.toImmutableList()
+        // The same physical device paired over both bluetooth and usb is stored as two
+        // entries with different transport-level ids; its xpubs are the cross-transport
+        // identity, so group by them to show one wallet and count its balance once.
+        data.knownDevices
+            .groupBy { it.walletKey }
+            .map { (_, devices) ->
+                val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId }
+                val device = connectedDevice ?: devices.maxBy { it.lastConnectedAt }
+                val ids = devices.map { it.id }.toSet()
+                val deviceWatchers = watcherData.values.filter { it.deviceId in ids }
+                HwWallet(
+                    id = device.id,
+                    name = device.displayName,
+                    model = device.model,
+                    transportType = device.transportType,
+                    isConnected = connectedDevice != null,
+                    balanceSats = deviceWatchers.fold(0uL) { acc, watcher -> acc + watcher.balanceSats },
+                    activities = deviceWatchers.flatMap { it.activities }
+                        .distinctBy { it.rawId() }
+                        .toImmutableList(),
+                )
+            }
+            .toImmutableList()
     }.stateIn(scope, SharingStarted.Eagerly, persistentListOf())
 
     val totalSats: StateFlow<ULong> = wallets
@@ -140,11 +151,12 @@ class HwWalletRepo @Inject constructor(
                 // Only watch the address types the user monitors (Settings > Advanced > Address Type),
                 // mirroring the on-chain wallet. Xpubs for all types are still captured on connect, so
                 // toggling a type on later starts its watcher without reconnecting the device.
+                // Device entries sharing an xpub (same device on bluetooth and usb) watch it only once.
                 val filtered = knownDevices.flatMap { device ->
                     device.xpubs
                         .filterKeys { it in monitoredTypes }
                         .map { (addressType, xpub) -> WatcherSpec(device.id, addressType, xpub) }
-                }
+                }.distinctBy { it.addressType to it.xpub }
                 val filteredIds = filtered.map { it.watcherId }.toSet()
 
                 filtered.forEach { spec ->
@@ -196,6 +208,14 @@ class HwWalletRepo @Inject constructor(
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 }
+
+/**
+ * Cross-transport identity of the wallet a device entry tracks: entries created by
+ * pairing the same physical device over different transports share the same xpubs.
+ * Entries without captured xpubs fall back to their own transport-level id.
+ */
+private val KnownDevice.walletKey: String
+    get() = xpubs.values.sorted().joinToString().ifEmpty { id }
 
 /**
  * The label is the user-set name stored on the device itself; without one (or with the

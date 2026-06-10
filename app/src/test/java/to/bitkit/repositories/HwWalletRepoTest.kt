@@ -252,6 +252,53 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `shows one wallet without double counting when paired over bluetooth and usb`() = test {
+        val bleEntry = device.copy(id = "ble1", lastConnectedAt = 1L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
+        val usbEntry = bleEntry.copy(id = "usb1", transportType = HwTransportType.USB, lastConnectedAt = 2L)
+        storeData.value = HwWalletData(knownDevices = listOf(bleEntry, usbEntry))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+
+        val sut = createRepo()
+
+        verify(trezorRepo).startWatcher(eq("ble1|nativeSegwit"), any(), any(), any(), anyOrNull())
+        verify(trezorRepo, never()).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull())
+
+        watcherEvents.emit(
+            "ble1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 421_900uL),
+                transactions = listOf(receivedTransaction(amount = 421_900uL)),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        val wallet = sut.wallets.value.single()
+        assertEquals(421_900uL, wallet.balanceSats)
+        assertEquals(421_900uL, sut.totalSats.value)
+        assertEquals(1, wallet.activities.size)
+        assertEquals(HwTransportType.USB, wallet.transportType)
+    }
+
+    @Test
+    fun `connected entry wins identity for a wallet paired over both transports`() = test {
+        val bleEntry = device.copy(id = "ble1", lastConnectedAt = 2L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
+        val usbEntry = bleEntry.copy(id = "usb1", transportType = HwTransportType.USB, lastConnectedAt = 1L)
+        storeData.value = HwWalletData(knownDevices = listOf(bleEntry, usbEntry))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "usb1", features = mock()),
+        )
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+
+        val sut = createRepo()
+
+        val wallet = sut.wallets.value.single()
+        assertEquals("usb1", wallet.id)
+        assertEquals(HwTransportType.USB, wallet.transportType)
+        assertEquals(true, wallet.isConnected)
+    }
+
+    @Test
     fun `starts watchers on the network configured in Env`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
