@@ -14,6 +14,8 @@ import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.theme.Insets
 import to.bitkit.ui.theme.TopBarHeight
 
+private val TOOLBAR_CLEARANCE = 16.dp
+
 fun Modifier.sheetHeight(
     size: SheetSize = SheetSize.LARGE,
     isModal: Boolean = false,
@@ -21,7 +23,9 @@ fun Modifier.sheetHeight(
     // Bottom safe-area belongs in sheet content padding; including it here moves
     // non-modal sheet tops down on devices with larger navigation-bar insets.
     val modalBottomPadding = if (isModal) Insets.Bottom + Insets.Bottom else 0.dp
-    val topPadding = Insets.Top + modalBottomPadding + TopBarHeight - 6.dp
+    // Reserve the full home toolbar block plus clearance so sheets open below it,
+    // keeping the toolbar visible instead of overlapping its bottom edge.
+    val topPadding = Insets.Top + modalBottomPadding + TopBarHeight + TOOLBAR_CLEARANCE
 
     val height = when (size) {
         SheetSize.LARGE -> screenHeight(minus = topPadding) // topbar visible
