@@ -63,7 +63,7 @@ private fun HardwareIntro(onClose: () -> Unit) {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             BodyM(text = "Hardware wallet connect flow is not yet implemented.", color = Colors.White64)
             VerticalSpacer(24.dp)
-            PrimaryButton(text = "Close", onClick = onClose)
+            PrimaryButton(text = stringResource(R.string.common__cancel), onClick = onClose)
             VerticalSpacer(16.dp)
         }
     }
