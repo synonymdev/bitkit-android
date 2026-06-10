@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.PrimaryButton
@@ -57,7 +59,7 @@ fun HardwareSheet(
 @Composable
 private fun HardwareIntro(onClose: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        SheetTopBar(titleText = "Connect Hardware", onBack = onClose)
+        SheetTopBar(titleText = stringResource(R.string.hardware__connect_title), onBack = onClose)
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             BodyM(text = "Hardware wallet connect flow is not yet implemented.", color = Colors.White64)
             VerticalSpacer(24.dp)
