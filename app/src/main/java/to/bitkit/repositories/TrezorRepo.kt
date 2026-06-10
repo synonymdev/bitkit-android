@@ -489,7 +489,10 @@ class TrezorRepo @Inject constructor(
 
     fun hasKnownDevices(): Boolean = _state.value.knownDevices.isNotEmpty()
 
-    suspend fun autoReconnect(walletIndex: Int = 0): Result<TrezorFeatures> = withContext(ioDispatcher) {
+    suspend fun autoReconnect(
+        walletIndex: Int = 0,
+        preferredTransport: TransportType? = null,
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
         if (isConnectInProgress()) {
             // A live handshake looks like a stale session (transport connected,
             // features pending), so resetting here would drop the session the
@@ -523,7 +526,15 @@ class TrezorRepo @Inject constructor(
                 val idMatch = knownDevices.firstNotNullOfOrNull { known ->
                     scannedDevices.find { it.id == known.id }
                 }
-                val match = idMatch ?: usbDevice ?: throw AppError("No known device found nearby")
+                // Prefer the transport that just came back, so e.g. a USB replug does
+                // not reconnect over BLE when the same device is known on both.
+                val preferredMatch = preferredTransport?.let { preferred ->
+                    scannedDevices.find {
+                        it.id in knownIds && it.transportType.toTransportType() == preferred
+                    }
+                }
+                val match = preferredMatch ?: idMatch ?: usbDevice
+                    ?: throw AppError("No known device found nearby")
                 connect(match.id).getOrThrow()
             }
         }.onSuccess {
@@ -679,7 +690,7 @@ class TrezorRepo @Inject constructor(
      */
     private fun observeTransportRestored() {
         trezorTransport.transportRestored.onEach {
-            launchTransportReconnect()
+            launchTransportReconnect(it)
         }.launchIn(scope)
     }
 
@@ -688,7 +699,7 @@ class TrezorRepo @Inject constructor(
      * e.g. the USB attach intent the OS app picker routes to the activity (attach is
      * not broadcast to receivers, unlike detach).
      */
-    fun onTransportRestored() = launchTransportReconnect()
+    fun onTransportRestored(transportType: TransportType) = launchTransportReconnect(transportType)
 
     /**
      * Serializes reconnect triggers into one in-flight retry loop. A Trezor
@@ -696,9 +707,9 @@ class TrezorRepo @Inject constructor(
      * attach intents; letting each spawn its own loop staggers connect attempts for
      * many seconds, and every attempt restarts the device's PIN entry.
      */
-    private fun launchTransportReconnect() {
+    private fun launchTransportReconnect(transportType: TransportType) {
         if (transportReconnectJob?.isActive == true) return
-        transportReconnectJob = scope.launch { retryAutoReconnect() }
+        transportReconnectJob = scope.launch { retryAutoReconnect(transportType) }
     }
 
     /**
@@ -706,14 +717,14 @@ class TrezorRepo @Inject constructor(
      * Trezor takes a few seconds to advertise again), so retry the silent reconnect
      * with growing delays instead of giving up on the first empty scan.
      */
-    private suspend fun retryAutoReconnect() {
+    private suspend fun retryAutoReconnect(transportType: TransportType) {
         repeat(TRANSPORT_RESTORED_MAX_ATTEMPTS) { attempt ->
             if (_state.value.connected != null || isConnectInProgress()) return
             delay(TRANSPORT_RESTORED_RECONNECT_DELAY * (attempt + 1))
             // A connect may have started while this attempt was waiting.
             if (_state.value.connected != null || isConnectInProgress()) return
             Logger.info("Attempting auto-reconnect after transport restored, attempt '${attempt + 1}'", context = TAG)
-            if (autoReconnect().isSuccess) return
+            if (autoReconnect(preferredTransport = transportType).isSuccess) return
         }
     }
 

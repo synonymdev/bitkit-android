@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
+import to.bitkit.models.TransportType
 import to.bitkit.utils.Logger
 import java.io.File
 import java.util.UUID
@@ -119,10 +120,10 @@ class TrezorTransport @Inject constructor(
     private val _externalDisconnect = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val externalDisconnect: SharedFlow<String> = _externalDisconnect
 
-    private val _transportRestored = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val _transportRestored = MutableSharedFlow<TransportType>(extraBufferCapacity = 1)
 
-    /** Emits when a transport becomes available again: Bluetooth back on or a Trezor plugged in. */
-    val transportRestored: SharedFlow<Unit> = _transportRestored
+    /** Emits the transport that became available again: Bluetooth back on or a Trezor plugged in. */
+    val transportRestored: SharedFlow<TransportType> = _transportRestored
 
     @Volatile
     private var espMigrated = false
@@ -175,12 +176,12 @@ class TrezorTransport @Inject constructor(
                 emitExternalDisconnect(path)
             }
         },
-        onBluetoothOn = { _transportRestored.tryEmit(Unit) },
+        onBluetoothOn = { _transportRestored.tryEmit(TransportType.BLUETOOTH) },
         onUsbDetached = { path ->
             if (path in usbConnections.keys) emitExternalDisconnect(path)
         },
         onUsbAttached = { device ->
-            if (isTrezorDevice(device)) _transportRestored.tryEmit(Unit)
+            if (isTrezorDevice(device)) _transportRestored.tryEmit(TransportType.USB)
         },
     )
 

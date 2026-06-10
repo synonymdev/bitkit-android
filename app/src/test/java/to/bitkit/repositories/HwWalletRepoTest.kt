@@ -332,9 +332,9 @@ class HwWalletRepoTest : BaseUnitTest() {
     fun `forwards transport restored to the trezor repo`() = test {
         val sut = createRepo()
 
-        sut.onTransportRestored()
+        sut.onTransportRestored(TransportType.USB)
 
-        verify(trezorRepo).onTransportRestored()
+        verify(trezorRepo).onTransportRestored(TransportType.USB)
     }
 
     @Test

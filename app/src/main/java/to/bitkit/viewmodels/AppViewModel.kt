@@ -110,6 +110,7 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
+import to.bitkit.models.TransportType
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
@@ -3058,7 +3059,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun onUsbDeviceAttached() = hwWalletRepo.onTransportRestored()
+    fun onUsbDeviceAttached() = hwWalletRepo.onTransportRestored(TransportType.USB)
 
     fun submitPairingCode(code: String) = hwWalletRepo.submitPairingCode(code)
 

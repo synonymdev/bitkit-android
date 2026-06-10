@@ -41,6 +41,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
+@Suppress("LargeClass")
 class TrezorRepoTest : BaseUnitTest() {
 
     companion object Fixtures {
@@ -120,17 +121,19 @@ class TrezorRepoTest : BaseUnitTest() {
         on { this.model }.thenReturn(model)
     }
 
+    @Suppress("LongParameterList")
     private fun mockKnownDevice(
         id: String = DEVICE_ID,
         name: String? = DEVICE_NAME,
         path: String = DEVICE_PATH,
         label: String? = DEVICE_LABEL,
         model: String? = DEVICE_MODEL,
+        transportType: TransportType = TransportType.USB,
     ) = KnownDevice(
         id = id,
         name = name,
         path = path,
-        transportType = TransportType.USB,
+        transportType = transportType,
         label = label,
         model = model,
         lastConnectedAt = 123L,
@@ -214,7 +217,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
     @Test
     fun `transport restored auto-reconnects to a known device`() = test {
-        val transportRestored = MutableSharedFlow<Unit>()
+        val transportRestored = MutableSharedFlow<TransportType>()
         val features = mockFeatures()
         val device = mockDeviceInfo()
         whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
@@ -224,7 +227,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         sut = createSut()
 
-        transportRestored.emit(Unit)
+        transportRestored.emit(TransportType.USB)
         advanceUntilIdle()
 
         assertNotNull(sut.state.value.connected)
@@ -232,7 +235,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
     @Test
     fun `transport restored retries reconnect until the device is discoverable`() = test {
-        val transportRestored = MutableSharedFlow<Unit>()
+        val transportRestored = MutableSharedFlow<TransportType>()
         val features = mockFeatures()
         val device = mockDeviceInfo()
         whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
@@ -243,11 +246,34 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         sut = createSut()
 
-        transportRestored.emit(Unit)
+        transportRestored.emit(TransportType.USB)
         advanceUntilIdle()
 
         assertNotNull(sut.state.value.connected)
         verify(trezorService, times(2)).scan()
+    }
+
+    @Test
+    fun `reconnect prefers the transport that came back`() = test {
+        val features = mockFeatures()
+        val bleDevice = mockDeviceInfo(id = "ble-1", transportType = TrezorTransportType.BLUETOOTH, path = "ble-path")
+        val usbDevice = mockDeviceInfo(id = "usb-1", transportType = TrezorTransportType.USB, path = "usb-path")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(
+            listOf(
+                mockKnownDevice(id = "ble-1", transportType = TransportType.BLUETOOTH),
+                mockKnownDevice(id = "usb-1"),
+            ),
+        )
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(bleDevice, usbDevice))
+        whenever(trezorService.connect(eq("usb-1"), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.onTransportRestored(TransportType.USB)
+        advanceUntilIdle()
+
+        verify(trezorService).connect(eq("usb-1"), any())
+        verify(trezorService, never()).connect(eq("ble-1"), any())
     }
 
     @Test
@@ -260,7 +286,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         sut = createSut()
 
-        repeat(3) { sut.onTransportRestored() }
+        repeat(3) { sut.onTransportRestored(TransportType.USB) }
         advanceUntilIdle()
 
         assertNotNull(sut.state.value.connected)
@@ -283,13 +309,13 @@ class TrezorRepoTest : BaseUnitTest() {
 
     @Test
     fun `transport restored skips reconnect while device awaits pairing code`() = test {
-        val transportRestored = MutableSharedFlow<Unit>()
+        val transportRestored = MutableSharedFlow<TransportType>()
         whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
         whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(true))
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
         sut = createSut()
 
-        transportRestored.emit(Unit)
+        transportRestored.emit(TransportType.USB)
         advanceUntilIdle()
 
         verify(trezorService, never()).disconnect()
@@ -306,7 +332,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         sut = createSut()
 
-        sut.onTransportRestored()
+        sut.onTransportRestored(TransportType.USB)
         advanceUntilIdle()
 
         assertNotNull(sut.state.value.connected)
@@ -333,7 +359,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
     @Test
     fun `transport restored does not reconnect when a device is already connected`() = test {
-        val transportRestored = MutableSharedFlow<Unit>()
+        val transportRestored = MutableSharedFlow<TransportType>()
         val features = mockFeatures()
         val device = mockDeviceInfo()
         whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
@@ -343,7 +369,7 @@ class TrezorRepoTest : BaseUnitTest() {
         sut.scan()
         sut.connect(DEVICE_ID)
 
-        transportRestored.emit(Unit)
+        transportRestored.emit(TransportType.USB)
         advanceUntilIdle()
 
         verify(trezorService, times(1)).scan()

@@ -42,6 +42,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.TransportType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -255,7 +256,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `onUsbDeviceAttached forwards to the hardware wallet repo`() = test {
         sut.onUsbDeviceAttached()
 
-        verify(hwWalletRepo).onTransportRestored()
+        verify(hwWalletRepo).onTransportRestored(TransportType.USB)
     }
 
     @Test

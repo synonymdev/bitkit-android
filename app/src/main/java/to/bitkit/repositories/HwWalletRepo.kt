@@ -32,6 +32,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.rawId
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.TransportType
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
@@ -72,7 +73,7 @@ class HwWalletRepo @Inject constructor(
     val receivedTxs: SharedFlow<HwWalletReceivedTx> = _receivedTxs.asSharedFlow()
 
     /** Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. */
-    fun onTransportRestored() = trezorRepo.onTransportRestored()
+    fun onTransportRestored(transportType: TransportType) = trezorRepo.onTransportRestored(transportType)
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
     val needsPairingCode = trezorRepo.needsPairingCode
