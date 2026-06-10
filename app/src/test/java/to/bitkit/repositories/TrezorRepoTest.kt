@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.WalletSelection
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -74,6 +75,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(prefsEditor.putString(any(), any())).thenReturn(prefsEditor)
         whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(false))
         whenever(trezorTransport.externalDisconnect).thenReturn(MutableSharedFlow())
+        whenever(trezorTransport.transportRestored).thenReturn(MutableSharedFlow())
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(context.filesDir).thenReturn(tempFolder.root)
@@ -208,6 +210,42 @@ class TrezorRepoTest : BaseUnitTest() {
     // endregion
 
     // region connect
+
+    @Test
+    fun `transport restored auto-reconnects to a known device`() = test {
+        val transportRestored = MutableSharedFlow<Unit>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        transportRestored.emit(Unit)
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `transport restored does not reconnect when a device is already connected`() = test {
+        val transportRestored = MutableSharedFlow<Unit>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+
+        transportRestored.emit(Unit)
+        advanceUntilIdle()
+
+        verify(trezorService, times(1)).scan()
+    }
 
     @Test
     fun `external disconnect clears the connected device while no screen observes it`() = test {

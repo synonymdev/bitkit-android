@@ -65,6 +65,7 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
@@ -86,6 +87,7 @@ class TrezorRepo @Inject constructor(
         private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
         private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
         private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
+        private val TRANSPORT_RESTORED_RECONNECT_DELAY = 1.seconds
     }
 
     private val _state = MutableStateFlow(TrezorState())
@@ -95,6 +97,7 @@ class TrezorRepo @Inject constructor(
 
     init {
         observeExternalDisconnects()
+        observeTransportRestored()
     }
 
     private val _watcherEvents = MutableSharedFlow<Pair<String, WatcherEvent>>(extraBufferCapacity = 64)
@@ -649,6 +652,21 @@ class TrezorRepo @Inject constructor(
                     it.copy(connected = null, error = "Device disconnected")
                 }
             }
+        }.launchIn(scope)
+    }
+
+    /**
+     * Silently reconnects to a known device when its transport comes back: stored THP
+     * credentials make the connect prompt-free, so the link indicator recovers on its
+     * own after Bluetooth is re-enabled or the device is plugged back in.
+     */
+    private fun observeTransportRestored() {
+        trezorTransport.transportRestored.onEach {
+            val current = _state.value
+            if (current.connected != null || current.isConnecting || current.isAutoReconnecting) return@onEach
+            delay(TRANSPORT_RESTORED_RECONNECT_DELAY)
+            Logger.info("Detected transport restored, attempting auto-reconnect", context = TAG)
+            autoReconnect()
         }.launchIn(scope)
     }
 

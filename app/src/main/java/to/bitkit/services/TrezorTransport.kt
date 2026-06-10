@@ -121,6 +121,11 @@ class TrezorTransport @Inject constructor(
     private val _externalDisconnect = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val externalDisconnect: SharedFlow<String> = _externalDisconnect
 
+    private val _transportRestored = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Emits when a transport becomes available again: Bluetooth back on or a Trezor plugged in. */
+    val transportRestored: SharedFlow<Unit> = _transportRestored
+
     @Volatile
     private var espMigrated = false
 
@@ -162,7 +167,8 @@ class TrezorTransport @Inject constructor(
     /**
      * Feeds Bluetooth-off and USB-unplug events into the same [externalDisconnect]
      * flow so the repo clears the connected device and the UI connection indicator
-     * reflects reality in real time.
+     * reflects reality in real time. Bluetooth coming back on or a Trezor being
+     * plugged in emits [transportRestored] so the repo can silently reconnect.
      */
     private val connectionStateReceiver = ConnectionStateReceiver(
         onBluetoothOff = {
@@ -171,8 +177,12 @@ class TrezorTransport @Inject constructor(
                 emitExternalDisconnect(path)
             }
         },
+        onBluetoothOn = { _transportRestored.tryEmit(Unit) },
         onUsbDetached = { path ->
             if (path in usbConnections.keys) emitExternalDisconnect(path)
+        },
+        onUsbAttached = { device ->
+            if (isTrezorDevice(device)) _transportRestored.tryEmit(Unit)
         },
     )
 
