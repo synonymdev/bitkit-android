@@ -2,6 +2,7 @@ package to.bitkit.ui.sheets
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -22,9 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -173,14 +172,21 @@ private fun HardwarePairing(
         ) {
             BodyM(stringResource(R.string.hardware__pairing_text), color = Colors.White64)
             FillHeight()
-            Display(
-                buildAnnotatedString {
-                    append(code)
-                    withStyle(SpanStyle(color = Colors.White32)) {
-                        repeat(PAIRING_CODE_LENGTH - code.length) { append('•') }
+            // Fixed-width cells so digits replace dots without the row shifting.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(PAIRING_CODE_LENGTH) { index ->
+                    val digit = code.getOrNull(index)?.toString()
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.width(PAIRING_CELL_WIDTH)
+                    ) {
+                        Display(
+                            text = digit ?: "•",
+                            color = if (digit != null) Colors.White else Colors.White32,
+                        )
                     }
                 }
-            )
+            }
             FillHeight()
         }
         NumberPad(
@@ -210,6 +216,7 @@ sealed interface HardwareRoute {
 }
 
 private const val PAIRING_CODE_LENGTH = 6
+private val PAIRING_CELL_WIDTH = 32.dp
 
 // Proportions taken from the 375dp-wide Figma frame: 256dp visuals bleeding
 // 84dp off the left edge and 53dp off the right, staggered by 12dp vertically.

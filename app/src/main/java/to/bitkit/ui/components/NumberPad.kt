@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
@@ -51,11 +52,14 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 const val KEY_DELETE = "delete"
 const val KEY_000 = "000"
 const val KEY_DECIMAL = "."
 private val defaultHeight = 300.dp
+private const val FOCUS_RETRY_COUNT = 10
+private val FOCUS_RETRY_DELAY = 50.milliseconds
 private val idealButtonHeight = 75.dp
 private val minButtonHeight = 50.dp
 private const val ROWS = 4
@@ -79,7 +83,14 @@ fun NumberPad(
     onDeleteLongPress: (() -> Unit)? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) {
+        // Composing mid sheet/nav transition can drop the initial request, leaving
+        // hardware keyboard input dead; retry briefly until the focus node takes it.
+        repeat(FOCUS_RETRY_COUNT) {
+            if (runCatching { focusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
+            delay(FOCUS_RETRY_DELAY)
+        }
+    }
     val safeAreaModifier = if (includeNavigationBarsPadding) {
         modifier.navigationBarsPadding()
     } else {
