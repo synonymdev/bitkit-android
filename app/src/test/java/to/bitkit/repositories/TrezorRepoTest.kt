@@ -251,6 +251,24 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `repeated transport restored triggers run a single reconnect`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        repeat(3) { sut.onTransportRestored() }
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+        verify(trezorService, times(1)).scan()
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
     fun `autoReconnect bails while device awaits pin entry`() = test {
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(true))
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))

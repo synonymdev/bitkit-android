@@ -31,6 +31,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -95,6 +96,9 @@ class TrezorRepo @Inject constructor(
     val state = _state.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+
+    @Volatile
+    private var transportReconnectJob: Job? = null
 
     init {
         observeExternalDisconnects()
@@ -675,7 +679,7 @@ class TrezorRepo @Inject constructor(
      */
     private fun observeTransportRestored() {
         trezorTransport.transportRestored.onEach {
-            retryAutoReconnect()
+            launchTransportReconnect()
         }.launchIn(scope)
     }
 
@@ -684,8 +688,17 @@ class TrezorRepo @Inject constructor(
      * e.g. the USB attach intent the OS app picker routes to the activity (attach is
      * not broadcast to receivers, unlike detach).
      */
-    fun onTransportRestored() {
-        scope.launch { retryAutoReconnect() }
+    fun onTransportRestored() = launchTransportReconnect()
+
+    /**
+     * Serializes reconnect triggers into one in-flight retry loop. A Trezor
+     * re-enumerates USB during its unlock flow, so a single replug delivers several
+     * attach intents; letting each spawn its own loop staggers connect attempts for
+     * many seconds, and every attempt restarts the device's PIN entry.
+     */
+    private fun launchTransportReconnect() {
+        if (transportReconnectJob?.isActive == true) return
+        transportReconnectJob = scope.launch { retryAutoReconnect() }
     }
 
     /**
