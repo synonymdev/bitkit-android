@@ -2,7 +2,7 @@ package to.bitkit.ui.sheets
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -73,26 +73,28 @@ fun HardwareSheet(
 private fun HardwareIntro(onClose: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         SheetTopBar(titleText = stringResource(R.string.hardware__intro_title))
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
+            val imageSize = maxWidth * INTRO_IMAGE_SIZE_RATIO
+            val staggerY = maxWidth * INTRO_IMAGE_STAGGER_RATIO
             Image(
                 painter = painterResource(R.drawable.trezor),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(256.dp)
+                    .size(imageSize)
                     .align(Alignment.CenterStart)
-                    .offset(x = (-84).dp, y = 12.dp)
+                    .offset(x = -maxWidth * INTRO_TREZOR_BLEED_RATIO, y = staggerY)
             )
             Image(
                 painter = painterResource(R.drawable.ledger),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(256.dp)
+                    .size(imageSize)
                     .align(Alignment.CenterEnd)
-                    .offset(x = 53.dp, y = (-12).dp)
+                    .offset(x = maxWidth * INTRO_LEDGER_BLEED_RATIO, y = -staggerY)
             )
         }
         Column(
@@ -130,6 +132,13 @@ sealed interface HardwareRoute {
     @Serializable
     data object Intro : HardwareRoute
 }
+
+// Proportions taken from the 375dp-wide Figma frame: 256dp visuals bleeding
+// 84dp off the left edge and 53dp off the right, staggered by 12dp vertically.
+private const val INTRO_IMAGE_SIZE_RATIO = 256f / 375f
+private const val INTRO_TREZOR_BLEED_RATIO = 84f / 375f
+private const val INTRO_LEDGER_BLEED_RATIO = 53f / 375f
+private const val INTRO_IMAGE_STAGGER_RATIO = 12f / 375f
 
 @Preview(showSystemUi = true)
 @Composable
