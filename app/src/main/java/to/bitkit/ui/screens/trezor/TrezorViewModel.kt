@@ -121,13 +121,6 @@ class TrezorViewModel @Inject constructor(
     val trezorState = trezorRepo.state
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), trezorRepo.state.value)
 
-    /**
-     * Flow indicating when a pairing code is needed.
-     * UI should show a dialog when this is true.
-     */
-    val needsPairingCode = trezorRepo.needsPairingCode
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     val needsPinEntry = trezorRepo.needsPinEntry
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -815,20 +808,6 @@ class TrezorViewModel @Inject constructor(
 
     fun clearError() {
         trezorRepo.clearError()
-    }
-
-    /**
-     * Submit the pairing code entered by the user.
-     */
-    fun submitPairingCode(code: String) {
-        trezorRepo.submitPairingCode(code)
-    }
-
-    /**
-     * Cancel pairing code entry.
-     */
-    fun cancelPairingCode() {
-        trezorRepo.cancelPairingCode()
     }
 
     fun submitPin(pin: String) {

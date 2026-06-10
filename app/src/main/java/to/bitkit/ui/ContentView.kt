@@ -468,6 +468,8 @@ fun ContentView(
                         is Sheet.Hardware -> HardwareSheet(
                             sheet = sheet,
                             onDismiss = { appViewModel.hideSheet() },
+                            onSubmitPairingCode = appViewModel::submitPairingCode,
+                            onCancelPairingCode = appViewModel::cancelPairingCode,
                         )
                         is Sheet.Widgets -> {
                             WidgetsSheet(

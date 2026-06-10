@@ -338,6 +338,17 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forwards pairing code calls to the trezor repo`() = test {
+        val sut = createRepo()
+
+        sut.submitPairingCode("123456")
+        sut.cancelPairingCode()
+
+        verify(trezorRepo).submitPairingCode("123456")
+        verify(trezorRepo).cancelPairingCode()
+    }
+
+    @Test
     fun `starts watchers on the network configured in Env`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))

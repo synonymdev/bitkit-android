@@ -34,7 +34,6 @@ class TrezorViewModelTest : BaseUnitTest() {
 
     private val trezorRepo: TrezorRepo = mock()
     private val trezorStateFlow = MutableStateFlow(TrezorState())
-    private val needsPairingCodeFlow = MutableStateFlow(false)
     private val needsPinEntryFlow = MutableStateFlow(false)
     private val walletModeFlow = MutableStateFlow(TrezorWalletMode.STANDARD)
     private val watcherEventsFlow = MutableSharedFlow<Pair<String, WatcherEvent>>()
@@ -44,7 +43,6 @@ class TrezorViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(trezorRepo.state).thenReturn(trezorStateFlow)
-        whenever(trezorRepo.needsPairingCode).thenReturn(needsPairingCodeFlow)
         whenever(trezorRepo.needsPinEntry).thenReturn(needsPinEntryFlow)
         whenever(trezorRepo.walletMode).thenReturn(walletModeFlow)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEventsFlow)
@@ -494,21 +492,6 @@ class TrezorViewModelTest : BaseUnitTest() {
         sut.clearError()
 
         verify(trezorRepo).clearError()
-    }
-
-    @Test
-    fun `submitPairingCode should call trezorRepo submitPairingCode`() {
-        val code = "123456"
-        sut.submitPairingCode(code)
-
-        verify(trezorRepo).submitPairingCode(code)
-    }
-
-    @Test
-    fun `cancelPairingCode should call trezorRepo cancelPairingCode`() {
-        sut.cancelPairingCode()
-
-        verify(trezorRepo).cancelPairingCode()
     }
 
     @Test

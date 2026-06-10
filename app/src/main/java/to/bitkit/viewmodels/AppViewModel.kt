@@ -144,6 +144,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.sheets.HardwareRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
@@ -328,6 +329,17 @@ class AppViewModel @Inject constructor(
                         sats = tx.sats.toLong(),
                     ),
                 )
+            }
+        }
+        viewModelScope.launch {
+            hwWalletRepo.needsPairingCode.collect { needsCode ->
+                if (needsCode) {
+                    showPairingCodeSheet()
+                } else {
+                    _currentSheet.update { sheet ->
+                        if (sheet is Sheet.Hardware && sheet.route == HardwareRoute.PairingCode) null else sheet
+                    }
+                }
             }
         }
         viewModelScope.launch {
@@ -3047,6 +3059,28 @@ class AppViewModel @Inject constructor(
     }
 
     fun onUsbDeviceAttached() = hwWalletRepo.onTransportRestored()
+
+    fun submitPairingCode(code: String) = hwWalletRepo.submitPairingCode(code)
+
+    fun cancelPairingCode() = hwWalletRepo.cancelPairingCode()
+
+    /**
+     * The device asks for its one-time pairing code mid-connect, which can happen on
+     * any screen via silent reconnects, so the sheet is shown app-wide. High-priority
+     * sheets are not interrupted: reconnect retries re-raise the request shortly after.
+     */
+    private fun showPairingCodeSheet() {
+        val current = _currentSheet.value
+        val isHighPrioritySheetShowing = current is Sheet.Gift ||
+            current is Sheet.Send ||
+            current is Sheet.BTCPayConnection ||
+            current is Sheet.LnurlAuth ||
+            current is Sheet.Pin ||
+            current is Sheet.PubkyAuth
+        if (!isHighPrioritySheetShowing) {
+            showSheet(Sheet.Hardware(route = HardwareRoute.PairingCode))
+        }
+    }
 
     fun clearPendingPubkyImport() {
         viewModelScope.launch {

@@ -74,6 +74,13 @@ class HwWalletRepo @Inject constructor(
     /** Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. */
     fun onTransportRestored() = trezorRepo.onTransportRestored()
 
+    /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
+    val needsPairingCode = trezorRepo.needsPairingCode
+
+    fun submitPairingCode(code: String) = trezorRepo.submitPairingCode(code)
+
+    fun cancelPairingCode() = trezorRepo.cancelPairingCode()
+
     val wallets: StateFlow<ImmutableList<HwWallet>> = combine(
         hwWalletStore.data,
         trezorRepo.state,

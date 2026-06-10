@@ -12,11 +12,19 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -26,6 +34,9 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.KEY_DELETE
+import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Sheet
@@ -41,13 +52,16 @@ import to.bitkit.ui.utils.withAccent
 
 /**
  * Entry point for the hardware-wallet connect flow opened from the home suggestion
- * card. The intro step is final; the remaining connect steps land in the dedicated
+ * card, and host of the Pair Device screen shown app-wide when the device asks for
+ * its one-time pairing code. The remaining connect steps land in the dedicated
  * connect-flow subtask, which enables the Continue button.
  */
 @Composable
 fun HardwareSheet(
     sheet: Sheet.Hardware,
     onDismiss: () -> Unit,
+    onSubmitPairingCode: (String) -> Unit,
+    onCancelPairingCode: () -> Unit,
 ) {
     val navController = rememberNavController()
 
@@ -64,6 +78,12 @@ fun HardwareSheet(
         ) {
             composableWithDefaultTransitions<HardwareRoute.Intro> {
                 HardwareIntro(onClose = onDismiss)
+            }
+            composableWithDefaultTransitions<HardwareRoute.PairingCode> {
+                HardwarePairing(
+                    onSubmit = onSubmitPairingCode,
+                    onCancel = onCancelPairingCode,
+                )
             }
         }
     }
@@ -128,10 +148,68 @@ private fun HardwareIntro(onClose: () -> Unit) {
     }
 }
 
+@Composable
+private fun HardwarePairing(
+    onSubmit: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var code by remember { mutableStateOf("") }
+    var submitted by remember { mutableStateOf(false) }
+
+    // Dismissing the sheet without submitting (e.g. swipe down) cancels the pending
+    // pairing request so the connect attempt does not hang until its timeout.
+    DisposableEffect(Unit) {
+        onDispose { if (!submitted) onCancel() }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        SheetTopBar(titleText = stringResource(R.string.hardware__pairing_title))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 32.dp)
+        ) {
+            BodyM(stringResource(R.string.hardware__pairing_text), color = Colors.White64)
+            FillHeight()
+            Display(
+                buildAnnotatedString {
+                    append(code)
+                    withStyle(SpanStyle(color = Colors.White32)) {
+                        repeat(PAIRING_CODE_LENGTH - code.length) { append('•') }
+                    }
+                }
+            )
+            FillHeight()
+        }
+        NumberPad(
+            onPress = { key ->
+                when {
+                    key == KEY_DELETE -> code = code.dropLast(1)
+                    code.length < PAIRING_CODE_LENGTH -> {
+                        code += key
+                        if (code.length == PAIRING_CODE_LENGTH) {
+                            submitted = true
+                            onSubmit(code)
+                        }
+                    }
+                }
+            },
+            includeNavigationBarsPadding = true,
+        )
+    }
+}
+
 sealed interface HardwareRoute {
     @Serializable
     data object Intro : HardwareRoute
+
+    @Serializable
+    data object PairingCode : HardwareRoute
 }
+
+private const val PAIRING_CODE_LENGTH = 6
 
 // Proportions taken from the 375dp-wide Figma frame: 256dp visuals bleeding
 // 84dp off the left edge and 53dp off the right, staggered by 12dp vertically.
@@ -152,6 +230,23 @@ private fun Preview() {
                     .gradientBackground()
             ) {
                 HardwareIntro(onClose = {})
+            }
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PairingPreview() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .sheetHeight(SheetSize.LARGE, isModal = true)
+                    .gradientBackground()
+            ) {
+                HardwarePairing(onSubmit = {}, onCancel = {})
             }
         }
     }

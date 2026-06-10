@@ -73,6 +73,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastQueueManager
+import to.bitkit.ui.sheets.HardwareRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.AppError
@@ -123,6 +124,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val toastManager = mock<ToastQueueManager>()
 
     private val balanceState = MutableStateFlow(BalanceState())
+    private val needsPairingCode = MutableStateFlow(false)
     private val settingsData = MutableStateFlow(SettingsData())
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
@@ -148,6 +150,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(hwWalletRepo.receivedTxs).thenReturn(MutableSharedFlow())
+        whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
         whenever(coreService.activity).thenReturn(activityService)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
@@ -253,6 +256,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onUsbDeviceAttached()
 
         verify(hwWalletRepo).onTransportRestored()
+    }
+
+    @Test
+    fun `pairing code request shows and hides the pair device sheet`() = test {
+        needsPairingCode.value = true
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairingCode), sut.currentSheet.value)
+
+        needsPairingCode.value = false
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pairing code request does not interrupt a high priority sheet`() = test {
+        sut.showSheet(Sheet.Pin())
+        advanceUntilIdle()
+
+        needsPairingCode.value = true
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Pin(), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `submitPairingCode forwards to the hardware wallet repo`() = test {
+        sut.submitPairingCode("123456")
+
+        verify(hwWalletRepo).submitPairingCode("123456")
+    }
+
+    @Test
+    fun `cancelPairingCode forwards to the hardware wallet repo`() = test {
+        sut.cancelPairingCode()
+
+        verify(hwWalletRepo).cancelPairingCode()
     }
 
     @Test
