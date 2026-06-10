@@ -6,17 +6,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 
@@ -36,6 +40,7 @@ fun HardwareSheet(
         modifier = Modifier
             .fillMaxWidth()
             .sheetHeight(SheetSize.MEDIUM)
+            .gradientBackground()
             .testTag("hardware_sheet")
     ) {
         NavHost(
@@ -65,4 +70,21 @@ private fun HardwareIntro(onClose: () -> Unit) {
 sealed interface HardwareRoute {
     @Serializable
     data object Intro : HardwareRoute
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .sheetHeight(SheetSize.MEDIUM, isModal = true)
+                    .gradientBackground()
+            ) {
+                HardwareIntro(onClose = {})
+            }
+        }
+    }
 }
