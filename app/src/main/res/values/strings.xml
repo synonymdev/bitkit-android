@@ -163,6 +163,8 @@
     <string name="fee__slow__description">±1-2 hours</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Slow</string>
+    <string name="hardware__intro_header">Add your &lt;accent&gt;hardware wallet&lt;/accent&gt;</string>
+    <string name="hardware__intro_text">Connect your hardware device to watch or manage your long-term funds.</string>
     <string name="hardware__intro_title">Hardware Wallet</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>

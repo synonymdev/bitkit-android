@@ -23,7 +23,7 @@ enum class Suggestion(
         title = R.string.cards__hardware__title,
         description = R.string.cards__hardware__description,
         color = Colors.Blue24,
-        icon = R.drawable.trezor_device,
+        icon = R.drawable.trezor,
     ),
     LIGHTNING(
         title = R.string.cards__lightning__title,
