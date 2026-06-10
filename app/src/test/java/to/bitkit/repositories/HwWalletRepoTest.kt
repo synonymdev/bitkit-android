@@ -80,6 +80,24 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `uses vendor-prefixed model as name when device label is missing`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(label = null, model = "Safe 7")))
+
+        val sut = createRepo()
+
+        assertEquals("Trezor Safe 7", sut.wallets.value.single().name)
+    }
+
+    @Test
+    fun `uses vendor-prefixed model as name when device label is the factory default`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(label = "Safe 7", model = "Safe 7")))
+
+        val sut = createRepo()
+
+        assertEquals("Trezor Safe 7", sut.wallets.value.single().name)
+    }
+
+    @Test
     fun `transactions changed event sets device balance and maps activity`() = test {
         val sut = createRepo()
 

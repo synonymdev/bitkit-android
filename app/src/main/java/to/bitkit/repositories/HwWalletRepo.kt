@@ -80,7 +80,7 @@ class HwWalletRepo @Inject constructor(
             val deviceWatchers = watcherData.values.filter { it.deviceId == device.id }
             HwWallet(
                 id = device.id,
-                name = device.label ?: device.model ?: "Trezor",
+                name = device.displayName,
                 model = device.model,
                 transportType = device.transportType,
                 isConnected = trezorState.connectedDeviceId == device.id,
@@ -196,6 +196,18 @@ class HwWalletRepo @Inject constructor(
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 }
+
+/**
+ * The label is the user-set name stored on the device itself; without one (or with the
+ * factory default that just mirrors the model), fall back to the vendor-prefixed model
+ * (e.g. "Safe 7" reads as "Trezor Safe 7").
+ */
+private val KnownDevice.displayName: String
+    get() {
+        label?.takeIf { it != model }?.let { return it }
+        val model = model ?: return "Trezor"
+        return if (model.startsWith("Trezor")) model else "Trezor $model"
+    }
 
 private data class HwWatcherData(
     val deviceId: String,

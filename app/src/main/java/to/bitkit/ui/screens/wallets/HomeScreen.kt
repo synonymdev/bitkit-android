@@ -740,31 +740,41 @@ private fun BalancesSection(
             )
         }
 
-        // Hardware wallets flow into a 2-column grid: a second device fills the
-        // bottom-right column, additional devices wrap onto new rows.
-        hardwareWallets.chunked(2).forEach { rowWallets ->
-            VerticalSpacer(16.dp)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-            ) {
-                HardwareWalletCell(wallet = rowWallets[0], onClick = onClickHardwareWallet)
-                VerticalDivider(color = Colors.Gray4)
-                HorizontalSpacer(16.dp)
-                val second = rowWallets.getOrNull(1)
-                if (second != null) {
-                    HardwareWalletCell(wallet = second, onClick = onClickHardwareWallet)
-                } else {
-                    FillWidth()
-                }
+        HwDevices(wallets = hardwareWallets, onClick = onClickHardwareWallet)
+    }
+}
+
+/**
+ * Hardware wallets flow into a 2-column grid below the Savings/Spending tiles:
+ * a second device fills the bottom-right column, additional devices wrap onto new rows.
+ */
+@Composable
+private fun HwDevices(
+    wallets: ImmutableList<HwWallet>,
+    onClick: () -> Unit,
+) {
+    wallets.chunked(2).forEach { rowWallets ->
+        VerticalSpacer(16.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            HwDeviceCell(wallet = rowWallets[0], onClick = onClick)
+            VerticalDivider(color = Colors.Gray4)
+            HorizontalSpacer(16.dp)
+            val second = rowWallets.getOrNull(1)
+            if (second != null) {
+                HwDeviceCell(wallet = second, onClick = onClick)
+            } else {
+                FillWidth()
             }
         }
     }
 }
 
 @Composable
-private fun RowScope.HardwareWalletCell(
+private fun RowScope.HwDeviceCell(
     wallet: HwWallet,
     onClick: () -> Unit,
 ) {
