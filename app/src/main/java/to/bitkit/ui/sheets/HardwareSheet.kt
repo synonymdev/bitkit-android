@@ -59,7 +59,7 @@ fun HardwareSheet(
 @Composable
 private fun HardwareIntro(onClose: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        SheetTopBar(titleText = stringResource(R.string.hardware__connect_title), onBack = onClose)
+        SheetTopBar(titleText = stringResource(R.string.hardware__intro_title), onBack = onClose)
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             BodyM(text = "Hardware wallet connect flow is not yet implemented.", color = Colors.White64)
             VerticalSpacer(24.dp)
