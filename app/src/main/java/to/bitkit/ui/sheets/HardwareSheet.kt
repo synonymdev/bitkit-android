@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -82,22 +83,23 @@ private fun HardwareIntro(onClose: () -> Unit) {
                 contentDescription = null,
                 modifier = Modifier
                     .size(256.dp)
-                    .align(Alignment.TopStart)
-                    .offset(x = (-84).dp, y = 24.dp)
+                    .align(Alignment.CenterStart)
+                    .offset(x = (-84).dp, y = 12.dp)
             )
             Image(
                 painter = painterResource(R.drawable.ledger),
                 contentDescription = null,
                 modifier = Modifier
                     .size(256.dp)
-                    .align(Alignment.TopEnd)
-                    .offset(x = 53.dp)
+                    .align(Alignment.CenterEnd)
+                    .offset(x = 53.dp, y = (-12).dp)
             )
         }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
+                .navigationBarsPadding()
         ) {
             Display(stringResource(R.string.hardware__intro_header).withAccent(accentColor = Colors.Blue))
             VerticalSpacer(8.dp)
