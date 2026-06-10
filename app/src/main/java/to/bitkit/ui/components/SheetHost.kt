@@ -34,7 +34,7 @@ import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
-import to.bitkit.ui.sheets.ConnectRoute
+import to.bitkit.ui.sheets.HardwareRoute
 import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.WidgetsRoute
@@ -58,7 +58,7 @@ sealed interface Sheet {
     data object ChangePin : Sheet
     data object DisablePin : Sheet
     data class Backup(val route: BackupRoute = BackupRoute.ShowMnemonic) : Sheet
-    data class Connect(val route: ConnectRoute = ConnectRoute.Intro) : Sheet
+    data class Hardware(val route: HardwareRoute = HardwareRoute.Intro) : Sheet
     data class Widgets(val route: WidgetsRoute = WidgetsRoute.Gallery) : Sheet
     data object ActivityDateRangeSelector : Sheet
     data object ActivityTagSelector : Sheet

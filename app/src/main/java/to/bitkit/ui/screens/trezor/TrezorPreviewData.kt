@@ -19,7 +19,7 @@ import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import to.bitkit.models.HwTransportType
+import to.bitkit.models.TransportType
 import to.bitkit.repositories.ConnectedTrezorDevice
 import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
@@ -61,7 +61,7 @@ internal object TrezorPreviewData {
         id = "usb-1",
         name = "Trezor Safe 5",
         path = "/dev/usb/001",
-        transportType = HwTransportType.USB,
+        transportType = TransportType.USB,
         label = "My Savings",
         model = "Safe 5",
         lastConnectedAt = 1_700_000_000_000L,
@@ -71,7 +71,7 @@ internal object TrezorPreviewData {
         id = "ble-1",
         name = "Trezor Safe 7",
         path = "AA:BB:CC:DD:EE:FF",
-        transportType = HwTransportType.BLUETOOTH,
+        transportType = TransportType.BLUETOOTH,
         label = "Daily Wallet",
         model = "Safe 7",
         lastConnectedAt = 1_700_000_000_000L,

@@ -181,7 +181,7 @@ import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
-import to.bitkit.ui.sheets.ConnectSheet
+import to.bitkit.ui.sheets.HardwareSheet
 import to.bitkit.ui.sheets.ChangePinSheet
 import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.DisablePinSheet
@@ -465,7 +465,7 @@ fun ContentView(
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
-                        is Sheet.Connect -> ConnectSheet(
+                        is Sheet.Hardware -> HardwareSheet(
                             sheet = sheet,
                             onDismiss = { appViewModel.hideSheet() },
                         )

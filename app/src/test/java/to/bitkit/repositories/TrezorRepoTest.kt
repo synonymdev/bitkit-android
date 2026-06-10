@@ -25,7 +25,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.HwWalletStore
 import to.bitkit.env.Env
-import to.bitkit.models.HwTransportType
+import to.bitkit.models.TransportType
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
@@ -127,7 +127,7 @@ class TrezorRepoTest : BaseUnitTest() {
         id = id,
         name = name,
         path = path,
-        transportType = HwTransportType.USB,
+        transportType = TransportType.USB,
         label = label,
         model = model,
         lastConnectedAt = 123L,
@@ -264,7 +264,7 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(hwWalletStore).saveKnownDevices(captor.capture())
         val saved = captor.firstValue.single()
         assertEquals(DEVICE_ID, saved.id)
-        assertEquals(HwTransportType.USB, saved.transportType)
+        assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
     }

@@ -26,8 +26,8 @@ import to.bitkit.ui.utils.composableWithDefaultTransitions
  * real steps land in the dedicated connect-flow subtask.
  */
 @Composable
-fun ConnectSheet(
-    sheet: Sheet.Connect,
+fun HardwareSheet(
+    sheet: Sheet.Hardware,
     onDismiss: () -> Unit,
 ) {
     val navController = rememberNavController()
@@ -36,21 +36,21 @@ fun ConnectSheet(
         modifier = Modifier
             .fillMaxWidth()
             .sheetHeight(SheetSize.MEDIUM)
-            .testTag("connect_sheet")
+            .testTag("hardware_sheet")
     ) {
         NavHost(
             navController = navController,
             startDestination = sheet.route,
         ) {
-            composableWithDefaultTransitions<ConnectRoute.Intro> {
-                ConnectIntro(onClose = onDismiss)
+            composableWithDefaultTransitions<HardwareRoute.Intro> {
+                HardwareIntro(onClose = onDismiss)
             }
         }
     }
 }
 
 @Composable
-private fun ConnectIntro(onClose: () -> Unit) {
+private fun HardwareIntro(onClose: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SheetTopBar(titleText = "Connect Hardware", onBack = onClose)
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -62,7 +62,7 @@ private fun ConnectIntro(onClose: () -> Unit) {
     }
 }
 
-sealed interface ConnectRoute {
+sealed interface HardwareRoute {
     @Serializable
-    data object Intro : ConnectRoute
+    data object Intro : HardwareRoute
 }

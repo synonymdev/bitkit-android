@@ -49,7 +49,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowMs
 import to.bitkit.models.ALL_ADDRESS_TYPES
-import to.bitkit.models.HwTransportType
+import to.bitkit.models.TransportType
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
@@ -659,7 +659,7 @@ class TrezorRepo @Inject constructor(
             id = deviceInfo.id,
             name = deviceInfo.name,
             path = deviceInfo.path,
-            transportType = deviceInfo.transportType.toHwTransportType(),
+            transportType = deviceInfo.transportType.toTransportType(),
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = clock.nowMs(),
@@ -810,7 +810,7 @@ data class KnownDevice(
     val id: String,
     val name: String?,
     val path: String,
-    val transportType: HwTransportType,
+    val transportType: TransportType,
     val label: String?,
     val model: String?,
     val lastConnectedAt: Long,
@@ -818,12 +818,12 @@ data class KnownDevice(
     val xpubs: Map<String, String> = emptyMap(),
 )
 
-private fun TrezorTransportType.toHwTransportType(): HwTransportType = when (this) {
-    TrezorTransportType.BLUETOOTH -> HwTransportType.BLUETOOTH
-    TrezorTransportType.USB -> HwTransportType.USB
+private fun TrezorTransportType.toTransportType(): TransportType = when (this) {
+    TrezorTransportType.BLUETOOTH -> TransportType.BLUETOOTH
+    TrezorTransportType.USB -> TransportType.USB
 }
 
-private fun HwTransportType.toCoreTransportType(): TrezorTransportType = when (this) {
-    HwTransportType.BLUETOOTH -> TrezorTransportType.BLUETOOTH
-    HwTransportType.USB -> TrezorTransportType.USB
+private fun TransportType.toCoreTransportType(): TrezorTransportType = when (this) {
+    TransportType.BLUETOOTH -> TrezorTransportType.BLUETOOTH
+    TransportType.USB -> TrezorTransportType.USB
 }

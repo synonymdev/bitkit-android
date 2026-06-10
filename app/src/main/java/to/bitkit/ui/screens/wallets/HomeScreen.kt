@@ -116,7 +116,7 @@ import to.bitkit.ext.rawId
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
-import to.bitkit.models.HwTransportType
+import to.bitkit.models.TransportType
 import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
 import to.bitkit.models.Suggestion
@@ -289,7 +289,7 @@ fun HomeScreen(
                 }
 
                 Suggestion.HARDWARE -> {
-                    appViewModel.showSheet(Sheet.Connect())
+                    appViewModel.showSheet(Sheet.Hardware())
                 }
 
                 Suggestion.LIGHTNING -> {
@@ -385,7 +385,7 @@ fun HomeScreen(
             scope.launch {
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
-                    title = "Hardware Overview not yet implemented.",
+                    title = "Hardware wallet overview not yet implemented.",
                 )
             }
         },
@@ -791,8 +791,8 @@ private fun RowScope.HwDeviceCell(
         Icon(
             painter = painterResource(
                 id = when (wallet.transportType) {
-                    HwTransportType.BLUETOOTH -> R.drawable.ic_bluetooth_connected
-                    HwTransportType.USB -> R.drawable.ic_usb_connected
+                    TransportType.BLUETOOTH -> R.drawable.ic_bluetooth_connected
+                    TransportType.USB -> R.drawable.ic_usb_connected
                 }
             ),
             contentDescription = null,
@@ -1492,7 +1492,7 @@ private val previewHardwareWalletBt = HwWallet(
     id = "trezor-1",
     name = "Trezor Safe 5",
     model = "Safe 5",
-    transportType = HwTransportType.BLUETOOTH,
+    transportType = TransportType.BLUETOOTH,
     isConnected = true,
     balanceSats = 10_562_411uL,
     activities = persistentListOf(),
@@ -1501,7 +1501,7 @@ private val previewHardwareWalletUsb = HwWallet(
     id = "trezor-2",
     name = "Trezor Model T",
     model = "Model T",
-    transportType = HwTransportType.USB,
+    transportType = TransportType.USB,
     isConnected = false,
     balanceSats = 2_735_180uL,
     activities = persistentListOf(),
@@ -1510,7 +1510,7 @@ private val previewHardwareWalletThird = HwWallet(
     id = "trezor-3",
     name = "Trezor Safe 3",
     model = "Safe 3",
-    transportType = HwTransportType.BLUETOOTH,
+    transportType = TransportType.BLUETOOTH,
     isConnected = true,
     balanceSats = 500_000uL,
     activities = persistentListOf(),

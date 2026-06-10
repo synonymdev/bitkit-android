@@ -23,8 +23,8 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
-import to.bitkit.models.HwTransportType
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -48,7 +48,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         id = "dev1",
         name = null,
         path = "ble:AA:BB",
-        transportType = HwTransportType.BLUETOOTH,
+        transportType = TransportType.BLUETOOTH,
         label = "Trezor",
         model = "Safe 5",
         lastConnectedAt = 0L,
@@ -254,7 +254,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Test
     fun `shows one wallet without double counting when paired over bluetooth and usb`() = test {
         val bleEntry = device.copy(id = "ble1", lastConnectedAt = 1L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
-        val usbEntry = bleEntry.copy(id = "usb1", transportType = HwTransportType.USB, lastConnectedAt = 2L)
+        val usbEntry = bleEntry.copy(id = "usb1", transportType = TransportType.USB, lastConnectedAt = 2L)
         storeData.value = HwWalletData(knownDevices = listOf(bleEntry, usbEntry))
         whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
 
@@ -277,13 +277,13 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(421_900uL, wallet.balanceSats)
         assertEquals(421_900uL, sut.totalSats.value)
         assertEquals(1, wallet.activities.size)
-        assertEquals(HwTransportType.USB, wallet.transportType)
+        assertEquals(TransportType.USB, wallet.transportType)
     }
 
     @Test
     fun `connected entry wins identity for a wallet paired over both transports`() = test {
         val bleEntry = device.copy(id = "ble1", lastConnectedAt = 2L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
-        val usbEntry = bleEntry.copy(id = "usb1", transportType = HwTransportType.USB, lastConnectedAt = 1L)
+        val usbEntry = bleEntry.copy(id = "usb1", transportType = TransportType.USB, lastConnectedAt = 1L)
         storeData.value = HwWalletData(knownDevices = listOf(bleEntry, usbEntry))
         trezorState.value = TrezorState(
             connected = ConnectedTrezorDevice(id = "usb1", features = mock()),
@@ -294,7 +294,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val wallet = sut.wallets.value.single()
         assertEquals("usb1", wallet.id)
-        assertEquals(HwTransportType.USB, wallet.transportType)
+        assertEquals(TransportType.USB, wallet.transportType)
         assertEquals(true, wallet.isConnected)
     }
 
