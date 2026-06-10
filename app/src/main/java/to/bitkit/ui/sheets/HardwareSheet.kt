@@ -72,7 +72,7 @@ fun HardwareSheet(
 @Composable
 private fun HardwareIntro(onClose: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
-        SheetTopBar(titleText = stringResource(R.string.hardware__intro_title), onBack = onClose)
+        SheetTopBar(titleText = stringResource(R.string.hardware__intro_title))
         Box(
             modifier = Modifier
                 .fillMaxWidth()

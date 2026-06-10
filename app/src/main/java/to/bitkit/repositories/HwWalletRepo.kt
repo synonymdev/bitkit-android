@@ -169,10 +169,13 @@ class HwWalletRepo @Inject constructor(
                     ).onSuccess { activeWatchers += spec.watcherId }
                 }
 
+                // A failed stop stays active so the next sync retries it; dropping it here
+                // would leave the orphaned watcher feeding _watcherData as a ghost balance.
                 (activeWatchers - filteredIds).forEach { staleId ->
-                    activeWatchers -= staleId
-                    trezorRepo.stopWatcher(staleId)
-                    _watcherData.update { it - staleId }
+                    trezorRepo.stopWatcher(staleId).onSuccess {
+                        activeWatchers -= staleId
+                        _watcherData.update { it - staleId }
+                    }
                 }
             }
         }

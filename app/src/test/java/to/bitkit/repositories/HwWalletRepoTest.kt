@@ -27,6 +27,7 @@ import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -296,6 +297,35 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals("usb1", wallet.id)
         assertEquals(TransportType.USB, wallet.transportType)
         assertEquals(true, wallet.isConnected)
+    }
+
+    @Test
+    fun `keeps a stale watcher until stopping it succeeds`() = test {
+        storeData.value = HwWalletData(
+            knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
+        )
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.failure(AppError("stop failed")))
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = emptyList(),
+                txCount = 0u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        // Stop fails: the watcher data must survive so the balance is not silently wrong.
+        settingsData.value = SettingsData(addressTypesToMonitor = emptyList())
+        assertEquals(100uL, sut.totalSats.value)
+
+        // Stop succeeds on a later sync: the watcher data is finally dropped.
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        settingsData.value = SettingsData(addressTypesToMonitor = listOf("taproot"))
+        assertEquals(0uL, sut.totalSats.value)
     }
 
     @Test
