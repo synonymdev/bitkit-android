@@ -91,7 +91,7 @@ class TrezorRepo @Inject constructor(
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
 
-    private val repoScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     init {
         observeExternalDisconnects()
@@ -622,7 +622,7 @@ class TrezorRepo @Inject constructor(
     }
 
     fun stopWatcherOnCleared(watcherId: String) {
-        repoScope.launch { stopWatcher(watcherId) }
+        scope.launch { stopWatcher(watcherId) }
     }
 
     suspend fun stopAllWatchers(): Result<Unit> = withContext(ioDispatcher) {
@@ -649,7 +649,7 @@ class TrezorRepo @Inject constructor(
                     it.copy(connected = null, error = "Device disconnected")
                 }
             }
-        }.launchIn(repoScope)
+        }.launchIn(scope)
     }
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
