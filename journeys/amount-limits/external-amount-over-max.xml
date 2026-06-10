@@ -1,0 +1,29 @@
+<journey name="external node amount over max is blocked">
+  <description>
+    Verifies the external node funding amount number pad blocks input exceeding the maximum, shows the
+    "Spending Balance Maximum" warning toast, and still allows deleting digits while at the cap.
+
+    Precondition: onboarded dev wallet with a POSITIVE on-chain Savings balance and a reachable
+    external Lightning node to peer with — the staging LSP node works (id
+    028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc, host 34.65.86.104, port 9400;
+    see `./lsp GET /info`). Start on the wallet home screen.
+
+    Do NOT assert that Continue is disabled at the over-max input: the input is capped (never left in
+    an over-max state), so the capped value is valid and Continue stays enabled.
+  </description>
+  <actions>
+    <action>Open Settings, then the "Advanced" tab, then "Lightning Connections"</action>
+    <action>Tap "Get Started" to open the funding options screen</action>
+    <action>Tap "Manual Setup" (testTag "FundManual")</action>
+    <action>Type the node id into the node id field (testTag "NodeIdInput")</action>
+    <action>Type the host into the host field (testTag "HostInput")</action>
+    <action>Type the port into the port field (testTag "PortInput")</action>
+    <action>Tap Continue (testTag "ExternalContinue") and wait for the peer connection to succeed</action>
+    <action>Verify the external node amount screen (testTag "ExternalAmount") is visible and an available amount is displayed</action>
+    <action>Tap the "9" key (testTag "N9") nine times to enter an amount far larger than the maximum allowed</action>
+    <action>Verify a "Spending Balance Maximum" warning toast appears</action>
+    <action>Verify the amount in the input field (testTag "ExternalAmountNumberField") does not exceed the displayed maximum</action>
+    <action>Tap the delete key (testTag "NRemove") once</action>
+    <action>Verify the amount in the input field (testTag "ExternalAmountNumberField") decreased after the delete</action>
+  </actions>
+</journey>

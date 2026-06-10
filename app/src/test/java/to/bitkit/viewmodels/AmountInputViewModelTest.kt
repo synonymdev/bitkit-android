@@ -3,7 +3,9 @@ package to.bitkit.viewmodels
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -917,6 +919,205 @@ class AmountInputViewModelTest : BaseUnitTest() {
 
         // Verify toggle doesn't crash (basic functionality test)
         assertTrue("Toggle operation should complete without error", true)
+    }
+
+    // MARK: - Max Amount Enforcement Tests
+
+    @Test
+    fun `max amount blocks input when exceeded`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(500)
+
+        // Type 50 - should succeed
+        viewModel.handleNumberPadInput("5", currency)
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals(50L, viewModel.uiState.value.sats)
+
+        // Type 0 to make 500 - should succeed
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals(500L, viewModel.uiState.value.sats)
+
+        // Type 0 to make 5000 - should be blocked
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals(500L, viewModel.uiState.value.sats)
+        assertNotNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
+    fun `max amount blocks fiat input when exceeded`() = test {
+        val currency = mockCurrency(PrimaryDisplay.FIAT)
+
+        viewModel.setMaxAmount(1_000)
+
+        viewModel.handleNumberPadInput("1", currency)
+        assertEquals("1", viewModel.uiState.value.text)
+        assertEquals(868L, viewModel.uiState.value.sats)
+
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals("1", viewModel.uiState.value.text)
+        assertEquals(868L, viewModel.uiState.value.sats)
+        assertNotNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
+    fun `max exceeded effect is emitted when dynamic limit is hit`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(100)
+
+        // Type 100 - should succeed
+        "100".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(100L, viewModel.uiState.value.sats)
+
+        // Collect effect
+        var effectReceived = false
+        val job = backgroundScope.launch(testDispatcher) {
+            viewModel.effect.collect {
+                if (it is AmountInputEffect.MaxExceeded) effectReceived = true
+            }
+        }
+
+        // Type 0 to make 1000 - should be blocked and emit effect
+        viewModel.handleNumberPadInput("0", currency)
+        assertTrue(effectReceived)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `no max exceeded effect when hitting global MAX_AMOUNT`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        // Don't set a custom max - use default MAX_AMOUNT
+
+        // Type max amount
+        "999999999".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(AmountInputViewModel.MAX_AMOUNT, viewModel.uiState.value.sats)
+
+        // Collect effect
+        var effectReceived = false
+        val job = backgroundScope.launch(testDispatcher) {
+            viewModel.effect.collect {
+                if (it is AmountInputEffect.MaxExceeded) effectReceived = true
+            }
+        }
+
+        // Try to exceed - should be blocked but NOT emit MaxExceeded
+        viewModel.handleNumberPadInput("0", currency)
+        assertFalse(effectReceived)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `clearInput resets max amount to default`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(100)
+        viewModel.handleNumberPadInput("5", currency)
+        viewModel.clearInput()
+
+        // After clear, max should be reset to MAX_AMOUNT
+        // Type amount above old max (100) but below MAX_AMOUNT
+        "500".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(500L, viewModel.uiState.value.sats)
+    }
+
+    @Test
+    fun `dynamic max amount update is respected mid-input`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(1000)
+
+        // Type 500 - should succeed
+        "500".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(500L, viewModel.uiState.value.sats)
+
+        // Lower the max to 300
+        viewModel.setMaxAmount(300)
+
+        // Type 0 to make 5000 - should be blocked (above new max of 300)
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals(500L, viewModel.uiState.value.sats)
+        assertNotNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
+    fun `delete is allowed when amount is above the cap`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        // Type 50000 under a high cap
+        "50000".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(50000L, viewModel.uiState.value.sats)
+
+        // Cap drops below the current amount
+        viewModel.setMaxAmount(30000)
+
+        // Adding a digit is still blocked
+        viewModel.handleNumberPadInput("0", currency)
+        assertEquals(50000L, viewModel.uiState.value.sats)
+        assertNotNull(viewModel.uiState.value.errorKey)
+
+        // Deleting is allowed even though the result is still above the cap
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(5000L, viewModel.uiState.value.sats)
+        assertNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
+    fun `no max exceeded effect emitted on delete above cap`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        "50000".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        viewModel.setMaxAmount(30000)
+
+        var effectReceived = false
+        val job = backgroundScope.launch(testDispatcher) {
+            viewModel.effect.collect {
+                if (it is AmountInputEffect.MaxExceeded) effectReceived = true
+            }
+        }
+
+        // Deleting an over-cap amount must not emit MaxExceeded
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(5000L, viewModel.uiState.value.sats)
+        assertFalse(effectReceived)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `setMaxAmount with zero keeps input usable`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(0)
+
+        var effectReceived = false
+        val job = backgroundScope.launch(testDispatcher) {
+            viewModel.effect.collect {
+                if (it is AmountInputEffect.MaxExceeded) effectReceived = true
+            }
+        }
+
+        // A zero cap means no cap - input is accepted, no MaxExceeded effect
+        "500".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(500L, viewModel.uiState.value.sats)
+        assertNull(viewModel.uiState.value.errorKey)
+        assertFalse(effectReceived)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `setMaxAmount with negative value keeps input usable`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setMaxAmount(-1)
+
+        "500".forEach { viewModel.handleNumberPadInput(it.toString(), currency) }
+        assertEquals(500L, viewModel.uiState.value.sats)
+        assertNull(viewModel.uiState.value.errorKey)
     }
 
     @Test

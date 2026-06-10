@@ -42,6 +42,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 import kotlin.math.min
@@ -61,6 +62,18 @@ fun ExternalAmountScreen(
 
     LaunchedEffect(amountUiState.sats) {
         viewModel.onAmountChange(amountUiState.sats)
+    }
+
+    LaunchedEffect(uiState.amount.max) {
+        amountInputViewModel.setMaxAmount(uiState.amount.max)
+    }
+
+    LaunchedEffect(Unit) {
+        amountInputViewModel.effect.collect {
+            when (it) {
+                AmountInputEffect.MaxExceeded -> viewModel.onMaxExceeded()
+            }
+        }
     }
 
     Content(
@@ -167,7 +180,7 @@ private fun Content(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = { onContinueClick() },
-                enabled = amountUiState.sats != 0L,
+                enabled = amountUiState.sats in 1..amountState.max,
                 modifier = Modifier.testTag("ExternalAmountContinue")
             )
 

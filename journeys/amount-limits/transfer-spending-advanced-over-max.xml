@@ -1,0 +1,26 @@
+<journey name="receiving capacity amount over max is blocked">
+  <description>
+    Verifies the receiving capacity (advanced) number pad blocks input exceeding the maximum LSP
+    balance, shows the "Receiving Capacity Maximum" warning toast, and still allows deleting digits
+    while at the cap.
+
+    Precondition: onboarded dev wallet with a POSITIVE on-chain Savings balance and a running node
+    connected to the LSP. Start on the wallet home screen. The advanced screen is reached by first
+    setting a valid spending amount and continuing to the confirm screen.
+  </description>
+  <actions>
+    <action>Tap the Spending balance card on the home screen</action>
+    <action>Tap "Transfer from Savings"</action>
+    <action>If a transfer intro screen appears, tap "Get Started"</action>
+    <action>Wait until the spending amount screen (testTag "SpendingAmount") has loaded a positive maximum (testTag "SpendingAmountAvailable")</action>
+    <action>Tap "25%" (testTag "SpendingAmountQuarter") to set a valid amount within range</action>
+    <action>Tap Continue (testTag "SpendingAmountContinue")</action>
+    <action>On the confirm screen, tap "Advanced"</action>
+    <action>Verify the receiving capacity screen (testTag "SpendingAdvanced") is visible</action>
+    <action>Tap the "9" key (testTag "N9") nine times to enter a capacity far larger than the maximum allowed</action>
+    <action>Verify a "Receiving Capacity Maximum" warning toast appears</action>
+    <action>Verify the amount in the input field (testTag "SpendingAdvancedNumberField") does not exceed the maximum receiving capacity</action>
+    <action>Tap the delete key (testTag "NRemove") once</action>
+    <action>Verify the amount in the input field (testTag "SpendingAdvancedNumberField") decreased after the delete</action>
+  </actions>
+</journey>

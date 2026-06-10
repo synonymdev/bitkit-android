@@ -1,0 +1,24 @@
+<journey name="send amount over balance is blocked">
+  <description>
+    Verifies the Send amount number pad blocks input exceeding the available balance, shows an
+    "Insufficient balance" warning toast, and still allows deleting digits while at the cap.
+
+    Precondition: onboarded dev wallet with a known POSITIVE on-chain (Savings) balance — without a
+    positive balance the max falls back to the global cap and nothing is blocked. Fund ~100 000 sats
+    via the lsp regtest deposit + mine and wait for it to sync (see README.md). Have a valid regtest
+    bitcoin address ready to type. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Send button (testTag "Send")</action>
+    <action>If a camera permission dialog appears, dismiss it by choosing "Don't allow"</action>
+    <action>Tap "Enter Manually" (testTag "RecipientManual")</action>
+    <action>Type a valid regtest bitcoin address into the recipient field (testTag "RecipientInput")</action>
+    <action>Tap Continue (testTag "AddressContinue")</action>
+    <action>Verify the Send amount screen (testTag "send_amount_screen") is visible and the available balance (testTag "available_balance") is displayed</action>
+    <action>Tap the "9" key (testTag "N9") nine times to enter an amount far larger than the available balance</action>
+    <action>Verify an "Insufficient balance" warning toast appears</action>
+    <action>Verify the amount in the input field (testTag "SendNumberField") does not exceed the available balance</action>
+    <action>Tap the delete key (testTag "NRemove") once</action>
+    <action>Verify the amount in the input field (testTag "SendNumberField") decreased after the delete</action>
+  </actions>
+</journey>
