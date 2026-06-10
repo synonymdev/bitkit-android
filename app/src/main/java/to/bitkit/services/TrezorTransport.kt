@@ -24,7 +24,6 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
-import android.hardware.usb.UsbRequest
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
@@ -45,7 +44,6 @@ import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
 import to.bitkit.utils.Logger
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -702,39 +700,27 @@ class TrezorTransport @Inject constructor(
                     error = "Device not open: $path",
                 )
 
-            val buffer = ByteBuffer.allocate(USB_CHUNK_SIZE)
-            val request = UsbRequest()
-            try {
-                if (!request.initialize(openDevice.connection, openDevice.readEndpoint)) {
-                    return TrezorTransportReadResult(
-                        success = false,
-                        data = byteArrayOf(),
-                        error = "Failed to initialize USB read request",
-                    )
-                }
-                if (!request.queue(buffer)) {
-                    return TrezorTransportReadResult(
-                        success = false,
-                        data = byteArrayOf(),
-                        error = "Failed to queue USB read request",
-                    )
-                }
-                openDevice.connection.requestWait(READ_TIMEOUT_MS.toLong())
-                    ?: return TrezorTransportReadResult(
-                        success = false,
-                        data = byteArrayOf(),
-                        error = "USB read timed out",
-                    )
-
-                buffer.flip()
-                val bytesRead = buffer.remaining()
-                val data = ByteArray(bytesRead)
-                buffer.get(data)
-                Logger.debug("USB read '$bytesRead' bytes from '$path'", context = TAG)
-                TrezorTransportReadResult(success = true, data = data, error = "")
-            } finally {
-                request.close()
+            // Synchronous transfer on purpose: the async UsbRequest API requires
+            // cancelling and reaping a timed-out request before closing it; closing
+            // with the URB still queued frees memory the kernel later writes into
+            // (native SIGSEGV in libusbhost once the device finally responds).
+            val buffer = ByteArray(USB_CHUNK_SIZE)
+            val bytesRead = openDevice.connection.bulkTransfer(
+                openDevice.readEndpoint,
+                buffer,
+                buffer.size,
+                READ_TIMEOUT_MS,
+            )
+            if (bytesRead < 0) {
+                return TrezorTransportReadResult(
+                    success = false,
+                    data = byteArrayOf(),
+                    error = "USB read timed out",
+                )
             }
+
+            Logger.debug("USB read '$bytesRead' bytes from '$path'", context = TAG)
+            TrezorTransportReadResult(success = true, data = buffer.copyOf(bytesRead), error = "")
         } catch (e: Exception) {
             Logger.error("USB read failed", e, context = TAG)
             TrezorTransportReadResult(success = false, data = byteArrayOf(), error = e.message ?: "Unknown error")
@@ -747,29 +733,18 @@ class TrezorTransport @Inject constructor(
             val openDevice = usbConnections[path]
                 ?: return TrezorTransportWriteResult(success = false, error = "Device not open: $path")
 
-            val buffer = ByteBuffer.wrap(data)
-            val request = UsbRequest()
-            try {
-                if (!request.initialize(openDevice.connection, openDevice.writeEndpoint)) {
-                    return TrezorTransportWriteResult(
-                        success = false,
-                        error = "Failed to initialize USB write request",
-                    )
-                }
-                if (!request.queue(buffer)) {
-                    return TrezorTransportWriteResult(
-                        success = false,
-                        error = "Failed to queue USB write request",
-                    )
-                }
-                openDevice.connection.requestWait(WRITE_TIMEOUT_MS.toLong())
-                    ?: return TrezorTransportWriteResult(success = false, error = "USB write timed out")
-
-                Logger.debug("USB wrote '${data.size}' bytes to '$path'", context = TAG)
-                TrezorTransportWriteResult(success = true, error = "")
-            } finally {
-                request.close()
+            val bytesWritten = openDevice.connection.bulkTransfer(
+                openDevice.writeEndpoint,
+                data,
+                data.size,
+                WRITE_TIMEOUT_MS,
+            )
+            if (bytesWritten != data.size) {
+                return TrezorTransportWriteResult(success = false, error = "USB write timed out")
             }
+
+            Logger.debug("USB wrote '${data.size}' bytes to '$path'", context = TAG)
+            TrezorTransportWriteResult(success = true, error = "")
         } catch (e: Exception) {
             Logger.error("USB write failed", e, context = TAG)
             TrezorTransportWriteResult(success = false, error = e.message ?: "Unknown error")
