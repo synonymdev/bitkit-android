@@ -21,6 +21,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -247,6 +248,34 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertNotNull(sut.state.value.connected)
         verify(trezorService, times(2)).scan()
+    }
+
+    @Test
+    fun `autoReconnect bails while device awaits pin entry`() = test {
+        whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(true))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        val result = sut.autoReconnect()
+
+        assertTrue(result.isFailure)
+        verify(trezorService, never()).disconnect()
+        verify(trezorService, never()).scan()
+    }
+
+    @Test
+    fun `transport restored skips reconnect while device awaits pairing code`() = test {
+        val transportRestored = MutableSharedFlow<Unit>()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(true))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        transportRestored.emit(Unit)
+        advanceUntilIdle()
+
+        verify(trezorService, never()).disconnect()
+        verify(trezorService, never()).scan()
     }
 
     @Test

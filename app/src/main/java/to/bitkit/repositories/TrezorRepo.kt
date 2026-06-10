@@ -486,6 +486,12 @@ class TrezorRepo @Inject constructor(
     fun hasKnownDevices(): Boolean = _state.value.knownDevices.isNotEmpty()
 
     suspend fun autoReconnect(walletIndex: Int = 0): Result<TrezorFeatures> = withContext(ioDispatcher) {
+        if (isConnectInProgress()) {
+            // A live handshake looks like a stale session (transport connected,
+            // features pending), so resetting here would drop the session the
+            // user is entering their PIN or pairing code into.
+            return@withContext Result.failure(AppError("Connect already in progress"))
+        }
         val knownDevices = _state.value.knownDevices.ifEmpty { loadKnownDevices() }
         if (knownDevices.isEmpty()) {
             return@withContext Result.failure(AppError("No known devices"))
@@ -689,12 +695,21 @@ class TrezorRepo @Inject constructor(
      */
     private suspend fun retryAutoReconnect() {
         repeat(TRANSPORT_RESTORED_MAX_ATTEMPTS) { attempt ->
-            val current = _state.value
-            if (current.connected != null || current.isConnecting || current.isAutoReconnecting) return
+            if (_state.value.connected != null || isConnectInProgress()) return
             delay(TRANSPORT_RESTORED_RECONNECT_DELAY * (attempt + 1))
+            // A connect may have started while this attempt was waiting.
+            if (_state.value.connected != null || isConnectInProgress()) return
             Logger.info("Attempting auto-reconnect after transport restored, attempt '${attempt + 1}'", context = TAG)
             if (autoReconnect().isSuccess) return
         }
+    }
+
+    private fun isConnectInProgress(): Boolean = run {
+        val current = _state.value
+        current.isConnecting ||
+            current.isAutoReconnecting ||
+            needsPinEntry.value ||
+            needsPairingCode.value
     }
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
