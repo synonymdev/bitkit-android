@@ -1,0 +1,46 @@
+<journey name="HW Connect and Home Tile">
+  <description>
+    Pairs the Bridge Trezor emulator through the dev Trezor screen, then verifies the
+    home-screen hardware wallet tile: name, connection indicator, balance, and the
+    not-yet-implemented overview notice. Requires the bitkit-docker Trezor User Env
+    running and a Bridge-enabled build (see README.md).
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and dismiss any onboarding or authentication prompts if a wallet already exists
+    </action>
+    <action>
+      Open the menu via the avatar or header, then navigate to Settings, then Dev Settings
+    </action>
+    <action>
+      Tap the "Trezor" row under the HARDWARE WALLET section
+    </action>
+    <action>
+      Tap the "Scan" button
+    </action>
+    <action>
+      Verify a device named "Bitkit Test Trezor" or "Trezor" appears in the device list within 10 seconds
+    </action>
+    <action>
+      Tap the listed device to connect
+    </action>
+    <action>
+      Verify a toast or status shows the device as connected within 15 seconds, with no PIN or pairing prompt
+    </action>
+    <action>
+      Navigate back to the wallet home screen
+    </action>
+    <action>
+      Verify a hardware wallet tile is shown beneath the SAVINGS and SPENDING tiles, labelled with the device name in caps (e.g. "BITKIT TEST TREZOR")
+    </action>
+    <action>
+      Verify the hardware tile shows a green connection indicator icon next to its name and a blue bitcoin icon with a sats amount
+    </action>
+    <action>
+      Tap the hardware wallet tile
+    </action>
+    <action>
+      Verify a notice appears saying "Hardware wallet overview not yet implemented."
+    </action>
+  </actions>
+</journey>

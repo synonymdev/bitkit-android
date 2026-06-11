@@ -1,0 +1,32 @@
+<journey name="HW USB Reconnect">
+  <description>
+    Verifies the disconnect indicator and the USB-attach auto-reconnect chain by
+    injecting the OS attach intent, with the Bridge emulator standing in for the
+    transport. Covers MainActivity intent handling, the serialized reconnect retry
+    loop, and the prompt-free reconnect. Requires a paired Bridge emulator (run
+    hw-connect-home-tile.journey.xml first).
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app, open the menu, navigate to Settings, then Dev Settings, then tap the "Trezor" row
+    </action>
+    <action>
+      Verify the connected device is shown, then tap the "Disconnect" button
+    </action>
+    <action>
+      Navigate back to the wallet home screen
+    </action>
+    <action>
+      Verify the hardware wallet tile still shows its name and balance but the connection indicator icon is grey
+    </action>
+    <action>
+      adb: adb shell am start -a android.hardware.usb.action.USB_DEVICE_ATTACHED -n to.bitkit.dev/to.bitkit.ui.MainActivity
+    </action>
+    <action>
+      Verify the app comes to the foreground on the wallet home screen
+    </action>
+    <action>
+      Verify the hardware tile connection indicator turns green within 15 seconds, with no PIN or pairing prompt shown
+    </action>
+  </actions>
+</journey>
