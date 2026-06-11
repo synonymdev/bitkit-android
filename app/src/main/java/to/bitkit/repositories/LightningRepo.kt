@@ -61,6 +61,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -99,6 +100,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 @Singleton
 @Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
@@ -1629,6 +1631,7 @@ class LightningRepo @Inject constructor(
      * Returns the device epoch seconds captured after the VSS deletes and before the node restart,
      * so callers can require any scores sync timestamp to be strictly newer to prove a post-reset download.
      */
+    @OptIn(ExperimentalTime::class)
     suspend fun resetPathfindingScores(walletIndex: Int = 0): Result<Long> = withContext(bgDispatcher) {
         Logger.info("Resetting pathfinding scores", context = TAG)
 
@@ -1654,7 +1657,7 @@ class LightningRepo @Inject constructor(
             return@withContext Result.failure(it)
         }
 
-        val resetAtSecs = System.currentTimeMillis() / 1000
+        val resetAtSecs = nowMillis() / 1000
 
         start(walletIndex = walletIndex, shouldRetry = false)
             .map { resetAtSecs }
