@@ -516,6 +516,10 @@ fun ContentView(
                                                 notificationPermissionLauncher.launch(
                                                     Manifest.permission.POST_NOTIFICATIONS
                                                 )
+                                            } else {
+                                                // Pre-13 has no runtime permission dialog; open the
+                                                // in-app background payments settings instead.
+                                                navController.navigateTo(Routes.BackgroundPaymentsSettings)
                                             }
                                         },
                                     )
