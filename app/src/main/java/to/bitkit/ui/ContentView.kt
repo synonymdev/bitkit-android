@@ -1382,10 +1382,18 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
     }
 
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
+        val notificationPermissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            settingsViewModel.setNotificationPreference(granted)
+        }
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
             onLater = { navController.popBackStack() },
             onEnable = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
                 navController.navigateTo(Routes.BackgroundPaymentsSettings)
             },
         )
