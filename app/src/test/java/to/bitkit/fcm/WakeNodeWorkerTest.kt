@@ -1,0 +1,193 @@
+package to.bitkit.fcm
+
+import android.Manifest
+import android.app.Activity
+import android.app.Application
+import android.app.Notification
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.work.ListenableWorker
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import com.synonym.bitkitcore.IcJitEntry
+import kotlinx.coroutines.flow.flowOf
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
+import org.robolectric.annotation.Config
+import to.bitkit.App
+import to.bitkit.CurrentActivity
+import to.bitkit.R
+import to.bitkit.androidServices.LightningNodeService
+import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
+import to.bitkit.ext.createChannelDetails
+import to.bitkit.ext.mock
+import to.bitkit.ext.notificationManager
+import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.BlocktankNotificationType
+import to.bitkit.models.formatToModernDisplay
+import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.LightningRepo
+import to.bitkit.services.NodeEventHandler
+import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+@Config(sdk = [34])
+@RunWith(RobolectricTestRunner::class)
+class WakeNodeWorkerTest : BaseUnitTest() {
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val workerParams = mock<WorkerParameters>()
+    private val lightningRepo = mock<LightningRepo>()
+    private val blocktankRepo = mock<BlocktankRepo>()
+    private val activityRepo = mock<ActivityRepo>()
+    private val settingsStore = mock<SettingsStore>()
+    private val cacheStore = mock<CacheStore>()
+
+    private val channelId = "channel-1"
+    private val viaNewChannel by lazy { context.getString(R.string.notification__received__body_channel) }
+
+    @Before
+    fun setUp() {
+        whenever(workerParams.inputData).thenReturn(
+            workDataOf("type" to BlocktankNotificationType.cjitPaymentArrived.name),
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(showNotificationDetails = true)))
+
+        val app = context as Application
+        Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+
+        // Default: app killed (no foreground activity), no foreground service running
+        App.currentActivity = CurrentActivity()
+        LightningNodeService.isRunning = false
+    }
+
+    @After
+    fun tearDown() {
+        App.currentActivity = null
+        LightningNodeService.isRunning = false
+    }
+
+    @Test
+    fun `cjit channel ready formats amount with thousands separators`() = test {
+        val channel = cjitChannel(sats = 48_064)
+        stubChannel(channel, cjitEntry = IcJitEntry.mock())
+        stubStartFiring(channelReadyEvent())
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        val notification = findNotification(viaNewChannel)
+        assertNotNull(notification, "CJIT notification should be delivered when app is killed")
+        assertEquals(
+            "$BITCOIN_SYMBOL ${48_064L.formatToModernDisplay()}",
+            notification?.extras?.getString(Notification.EXTRA_TITLE),
+        )
+        // sanity: a thousands separator is actually present
+        assertTrue(48_064L.formatToModernDisplay().contains(' '), "amount should be grouped")
+        verify(activityRepo).insertActivityFromCjit(any(), any())
+    }
+
+    @Test
+    fun `non-cjit channel ready delivers no payment notification`() = test {
+        val channel = cjitChannel(sats = 45_000)
+        stubChannel(channel, cjitEntry = null)
+        stubStartFiring(channelReadyEvent())
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertNull(findNotification(viaNewChannel), "A non-CJIT channel must not show a 'via new channel' notification")
+        verify(activityRepo, never()).insertActivityFromCjit(any(), any())
+        verify(cacheStore, never()).setBackgroundReceive(any())
+    }
+
+    @Test
+    fun `cjit channel ready skips notification when foreground service is running`() = test {
+        LightningNodeService.isRunning = true
+        val channel = cjitChannel(sats = 48_064)
+        stubChannel(channel, cjitEntry = IcJitEntry.mock())
+        stubStartFiring(channelReadyEvent())
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertNull(findNotification(viaNewChannel), "Notification is deduped when the foreground service handles it")
+        // Activity is still recorded so the receive is not lost
+        verify(activityRepo).insertActivityFromCjit(any(), any())
+    }
+
+    @Test
+    fun `cjit channel ready skips notification when app is in foreground`() = test {
+        App.currentActivity?.onActivityStarted(mock<Activity>())
+        val channel = cjitChannel(sats = 48_064)
+        stubChannel(channel, cjitEntry = IcJitEntry.mock())
+        stubStartFiring(channelReadyEvent())
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertNull(findNotification(viaNewChannel), "Notification is deduped when the in-app UI handles it")
+        verify(activityRepo).insertActivityFromCjit(any(), any())
+    }
+
+    private fun worker() = WakeNodeWorker(
+        appContext = context,
+        workerParams = workerParams,
+        lightningRepo = lightningRepo,
+        blocktankRepo = blocktankRepo,
+        activityRepo = activityRepo,
+        settingsStore = settingsStore,
+        cacheStore = cacheStore,
+    )
+
+    private fun channelReadyEvent() = mock<Event.ChannelReady> {
+        on { this.channelId } doReturn this@WakeNodeWorkerTest.channelId
+    }
+
+    private fun cjitChannel(sats: Long) = createChannelDetails().copy(
+        channelId = channelId,
+        outboundCapacityMsat = (sats * 1000).toULong(),
+        unspendablePunishmentReserve = 0u,
+    )
+
+    private suspend fun stubChannel(channel: ChannelDetails, cjitEntry: IcJitEntry?) {
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(channel))
+        whenever(blocktankRepo.getCjitEntry(channel)).thenReturn(cjitEntry)
+        whenever(activityRepo.insertActivityFromCjit(any(), any())).thenReturn(Result.success(Unit))
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+    }
+
+    private fun stubStartFiring(event: Event) {
+        whenever {
+            lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        }.doSuspendableAnswer {
+            val handler = it.getArgument<NodeEventHandler?>(5)
+            handler?.invoke(event)
+            Result.success(Unit)
+        }
+    }
+
+    private fun findNotification(body: String): Notification? {
+        val shadows = Shadows.shadowOf(context.notificationManager)
+        return shadows.allNotifications.find { it.extras.getString(Notification.EXTRA_TEXT) == body }
+    }
+}

@@ -50,6 +50,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.di.DbModule
 import to.bitkit.di.DispatchersModule
 import to.bitkit.di.ViewModelModule
+import to.bitkit.domain.commands.NotifyChannelReady
+import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.domain.commands.NotifyPendingPaymentResolved
@@ -97,6 +99,9 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
     @BindValue
     val notifyPaymentReceivedHandler = mock<NotifyPaymentReceivedHandler>()
+
+    @BindValue
+    val notifyChannelReadyHandler = mock<NotifyChannelReadyHandler>()
 
     @BindValue
     val notifyPendingPaymentResolvedHandler = mock<NotifyPendingPaymentResolvedHandler>()
@@ -150,6 +155,10 @@ class LightningNodeServiceTest : BaseUnitTest() {
         whenever(notifyPaymentReceivedHandler.invoke(any()))
             .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowNotification(sheet, notification)))
 
+        // Default: not a CJIT channel ready unless a test overrides it
+        whenever(notifyChannelReadyHandler.invoke(any()))
+            .thenReturn(Result.success(NotifyChannelReady.Result.Skip))
+
         // Grant permissions for notifications
         val app = context as Application
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
@@ -161,6 +170,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
     @After
     fun tearDown() {
         App.currentActivity = null
+        LightningNodeService.isRunning = false
     }
 
     @Test
@@ -489,6 +499,111 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
         }
         assertNull(notification, "Non-pending payment should NOT trigger notification")
+    }
+
+    @Test
+    fun `cjit channel ready in background shows notification`() = test {
+        val cjitTitle = context.getString(R.string.notification__received__title)
+        val sheet = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            sats = 48064L,
+        )
+        whenever(notifyChannelReadyHandler.invoke(any())).thenReturn(
+            Result.success(
+                NotifyChannelReady.Result.ShowNotification(
+                    sheet = sheet,
+                    notification = NotificationDetails(title = cjitTitle, body = $$"Received ₿ 48 064 ($30.79)"),
+                )
+            )
+        )
+
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.ChannelReady(
+            channelId = "channel-1",
+            userChannelId = "u1",
+            counterpartyNodeId = null,
+            fundingTxo = null,
+        )
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == cjitTitle
+        }
+        assertNotNull(notification, "CJIT channel ready notification should be present")
+        assertEquals($$"Received ₿ 48 064 ($30.79)", notification?.extras?.getString(Notification.EXTRA_TEXT))
+        verify(cacheStore).setBackgroundReceive(sheet)
+    }
+
+    @Test
+    fun `non-cjit channel ready shows no notification`() = test {
+        whenever(notifyChannelReadyHandler.invoke(any()))
+            .thenReturn(Result.success(NotifyChannelReady.Result.Skip))
+
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.ChannelReady(
+            channelId = "channel-1",
+            userChannelId = "u1",
+            counterpartyNodeId = null,
+            fundingTxo = null,
+        )
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+        val cjitTitle = context.getString(R.string.notification__received__title)
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == cjitTitle
+        }
+        assertNull(notification, "Non-CJIT channel ready should NOT trigger a notification")
+        verify(cacheStore, never()).setBackgroundReceive(any())
+    }
+
+    @Test
+    fun `cjit channel ready in foreground shows no notification`() = test {
+        val mockActivity: Activity = mock()
+        App.currentActivity?.onActivityStarted(mockActivity)
+
+        val cjitTitle = context.getString(R.string.notification__received__title)
+        whenever(notifyChannelReadyHandler.invoke(any())).thenReturn(
+            Result.success(
+                NotifyChannelReady.Result.ShowNotification(
+                    sheet = NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.LIGHTNING,
+                        direction = NewTransactionSheetDirection.RECEIVED,
+                        sats = 48064L,
+                    ),
+                    notification = NotificationDetails(title = cjitTitle, body = "body"),
+                )
+            )
+        )
+
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.ChannelReady(
+            channelId = "channel-1",
+            userChannelId = "u1",
+            counterpartyNodeId = null,
+            fundingTxo = null,
+        )
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == cjitTitle
+        }
+        assertNull(notification, "CJIT notification should NOT be present in foreground")
     }
 
     @Test

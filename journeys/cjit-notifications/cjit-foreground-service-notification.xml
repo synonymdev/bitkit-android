@@ -1,0 +1,25 @@
+<journey name="cjit notification via foreground service is single and formatted">
+  <description>
+    Reproduces PR #787 issues #1 (missing thousands separators) and #2 (double notification).
+
+    With background notifications (the LightningNodeService foreground service) enabled and the app
+    in the background, a CJIT payment that opens a JIT channel must produce EXACTLY ONE "Payment
+    Received" notification, with a space-grouped amount (e.g. "Received ₿ 48 064 (...)"), NOT a raw
+    "₿ 48064" and NOT a second "Via new channel" notification from WakeNodeWorker.
+
+    Precondition: onboarded regtest wallet connected to the LSP. A funded CJIT entry is ready to pay
+    (see README.md). Background notifications enabled in Settings → Notifications. No Lightning
+    channel open yet (this is the first, channel-opening payment).
+  </description>
+  <actions>
+    <action>Confirm background notifications are enabled (Settings → Notifications → background/foreground service toggle ON), then go back to the wallet home screen</action>
+    <action>Send the device to the background (press Home) so no Bitkit activity is in the foreground but the foreground service keeps running</action>
+    <action>Pay the CJIT invoice via the lsp skill: ./lsp POST /regtest/lightning/pay '{"invoice":"&lt;bolt11&gt;"}'</action>
+    <action>Wait ~5s for the ChannelReady event and notification delivery</action>
+    <action>Dump notifications: adb shell dumpsys notification --noredact | grep -A3 -i "to.bitkit"</action>
+    <action>Verify EXACTLY ONE Bitkit payment notification is posted for this channel opening (not two)</action>
+    <action>Verify its amount uses a thousands separator space, e.g. "₿ 48 064" — NOT "₿ 48064"</action>
+    <action>Verify there is NO separate notification whose body is "Via new channel" alongside the payment notification</action>
+    <action>Tap the notification, bring the app to the foreground, and verify the received-transaction sheet shows the correct amount</action>
+  </actions>
+</journey>

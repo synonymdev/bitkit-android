@@ -19,6 +19,7 @@ import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
+import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
@@ -35,6 +36,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -204,7 +206,7 @@ class WakeNodeWorker @AssistedInject constructor(
                 sats = sats.toLong(),
             )
         )
-        val content = if (showDetails) "$BITCOIN_SYMBOL $sats" else hiddenBody
+        val content = if (showDetails) "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}" else hiddenBody
         bestAttemptContent = NotificationDetails(
             title = appContext.getString(R.string.notification__received__title),
             body = content,
@@ -219,41 +221,61 @@ class WakeNodeWorker @AssistedInject constructor(
         showDetails: Boolean,
         hiddenBody: String,
     ) {
-        val viaNewChannel = appContext.getString(R.string.notification__received__body_channel)
-        if (notificationType == cjitPaymentArrived) {
-            bestAttemptContent = NotificationDetails(
-                title = appContext.getString(R.string.notification__received__title),
-                body = viaNewChannel,
-            )
+        when (notificationType) {
+            cjitPaymentArrived -> onCjitChannelReady(event, showDetails, hiddenBody)
 
-            lightningRepo.getChannels()?.find { it.channelId == event.channelId }?.let { channel ->
-                val sats = channel.amountOnClose
-                val content = if (showDetails) "$BITCOIN_SYMBOL $sats" else hiddenBody
-                bestAttemptContent = NotificationDetails(
-                    title = content,
-                    body = viaNewChannel,
-                )
-                val cjitEntry = channel.let { blocktankRepo.getCjitEntry(it) }
-                if (cjitEntry != null) {
-                    // Save for UI to pick up
-                    cacheStore.setBackgroundReceive(
-                        NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.LIGHTNING,
-                            direction = NewTransactionSheetDirection.RECEIVED,
-                            sats = sats.toLong(),
-                        )
-                    )
-                    activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
-                }
-            }
-        } else if (notificationType == orderPaymentConfirmed) {
-            bestAttemptContent = NotificationDetails(
+            orderPaymentConfirmed -> bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification__channel_opened_title),
                 body = appContext.getString(R.string.notification__channel_ready_body),
             )
+
+            else -> Unit
         }
         deliver()
     }
+
+    private suspend fun onCjitChannelReady(
+        event: Event.ChannelReady,
+        showDetails: Boolean,
+        hiddenBody: String,
+    ) {
+        val channel = lightningRepo.getChannels()?.find { it.channelId == event.channelId }
+        val cjitEntry = channel?.let { blocktankRepo.getCjitEntry(it) }
+
+        // A regular (non-CJIT) channel opening must not be reported as a received payment
+        if (channel == null || cjitEntry == null) {
+            Logger.debug("Skipping CJIT notification: no cjit entry for channel '${event.channelId}'", context = TAG)
+            bestAttemptContent = null
+            return
+        }
+
+        val sats = channel.amountOnClose
+        // Save for UI to pick up
+        cacheStore.setBackgroundReceive(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                sats = sats.toLong(),
+            )
+        )
+        activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
+
+        // The in-app UI or foreground service shows a richer notification for this event; avoid duplicating it
+        if (isHandledInProcess()) {
+            Logger.debug("Skipping CJIT notification: handled in-process", context = TAG)
+            bestAttemptContent = null
+            return
+        }
+
+        val content = if (showDetails) "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}" else hiddenBody
+        bestAttemptContent = NotificationDetails(
+            title = content,
+            body = appContext.getString(R.string.notification__received__body_channel),
+        )
+    }
+
+    private fun isHandledInProcess(): Boolean =
+        App.currentActivity?.value != null || LightningNodeService.isRunning
 
     private suspend fun deliver() {
         // Send notification first

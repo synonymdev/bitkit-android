@@ -184,7 +184,10 @@ class LightningNodeService : Service() {
                 serviceScope.launch { lightningRepo.stop() }
             }
 
-            ACTION_START_SERVICE -> if (promoteToForeground(startId)) setupService()
+            ACTION_START_SERVICE -> if (promoteToForeground(startId)) {
+                isRunning = true
+                setupService()
+            }
             else -> stop(startId) { Logger.warn("Stopped service for unsupported action '$action'", context = TAG) }
         }
         return START_NOT_STICKY
@@ -224,6 +227,7 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
+        isRunning = false
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
         serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()
@@ -240,6 +244,10 @@ class LightningNodeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        @Volatile
+        var isRunning = false
+            internal set
+
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
         const val ACTION_START_SERVICE = "to.bitkit.androidServices.action.START_SERVICE"
