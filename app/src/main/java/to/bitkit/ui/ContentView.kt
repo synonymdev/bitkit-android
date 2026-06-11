@@ -2,7 +2,11 @@
 
 package to.bitkit.ui
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerState
@@ -236,6 +240,12 @@ fun ContentView(
     val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
     val walletExists = walletUiState.walletExists
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        settingsViewModel.setNotificationPreference(granted)
+    }
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
     DisposableEffect(lifecycle) {
@@ -501,8 +511,12 @@ fun ContentView(
                                         },
                                         onEnable = {
                                             appViewModel.dismissTimedSheet()
-                                            navController.navigateTo(Routes.BackgroundPaymentsSettings)
                                             settingsViewModel.setBgPaymentsIntroSeen(true)
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                notificationPermissionLauncher.launch(
+                                                    Manifest.permission.POST_NOTIFICATIONS
+                                                )
+                                            }
                                         },
                                     )
                                 }
@@ -896,8 +910,10 @@ private fun NavGraphBuilder.home(
         val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
         val hazeState = rememberHazeState()
 
+        // Only keep notification permission state in sync; the system dialog is requested
+        // from the background payments intro sheet, not automatically on the home screen.
         RequestNotificationPermissions(
-            showPermissionDialog = !isRecoveryMode,
+            showPermissionDialog = false,
             onPermissionChange = { granted ->
                 settingsViewModel.setNotificationPreference(granted)
             }
